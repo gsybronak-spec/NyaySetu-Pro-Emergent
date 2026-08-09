@@ -37,6 +37,7 @@ Indian Advocates (Gujarat focus) needing routine court documents (adjournment, c
 - [x] **Structured Court & Police Station pickers** — /api/catalog/courts?district_id= (district-specific + generic) and /api/catalog/police-stations?district_id=; case stores court_id/police_station_id (+custom "Other"); labels resolved GU/EN and used in generated docs
 - [x] **Case sorting** — /api/cases?sort=updated|name|type; My Cases Sort modal (Recently Updated / Name A-Z / Case Type)
 - [x] **Court Favourites** — per-user pinned courts (/api/favourites/courts add/remove); favourited courts show a gold star and are grouped to the top of the Court picker
+- [x] **Document engine correctness (Preview == PDF == Word)** — deterministic `build_blocks()` shared by preview/PDF/DOCX (fixes numbered-point "Point 3 bold/centered" bug); Gujarati font switched to bundled **Lohit Gujarati** (Times New Roman for English); central DOC_SETTINGS (A4 + margins + fonts + spacing); Certified Copy `order_date` made optional; verified via 104/104 backend tests + real PDF/DOCX inspection
 
 ## Backlog (P1/P2)
 - P1: Live Razorpay (backend order+verify + web checkout) — awaiting user's Razorpay Key ID + Secret; mock active until then
