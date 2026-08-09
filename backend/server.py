@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 import jwt
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
-from doc_generator import generate_pdf, generate_docx, render_template
+from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -596,7 +596,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     ctx = await build_render_context(user, case, req.values, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
-    return {"content": rendered, "language": req.language, "template_id": t["id"]}
+    blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
+    return {"content": rendered, "blocks": blocks, "language": req.language, "template_id": t["id"]}
 
 
 @api.post("/applications/download")
@@ -616,12 +617,13 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     ctx = await build_render_context(user, case, req.values, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
+    blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
 
     if req.format == "docx":
-        b64 = generate_docx(rendered, req.language)
+        b64 = generate_docx(blocks, req.language)
         mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     else:
-        b64 = generate_pdf(rendered, req.language)
+        b64 = generate_pdf(blocks, req.language)
         mime = "application/pdf"
 
     # Consume credit atomically

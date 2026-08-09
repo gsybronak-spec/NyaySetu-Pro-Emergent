@@ -215,7 +215,7 @@ Advocate for the Applicant
         "aliases": ["certified copy", "certified copy application", "pramanit nakal", "પ્રમાણિત નકલ", "certified", "copy"],
         "fields": [
             {"key": "document_desc", "label_en": "Document/Order Description", "label_gu": "દસ્તાવેજ / હુકમનું વર્ણન", "type": "textarea", "required": True},
-            {"key": "order_date", "label_en": "Order Date", "label_gu": "હુકમની તારીખ", "type": "date", "required": True},
+            {"key": "order_date", "label_en": "Order Date (optional)", "label_gu": "હુકમની તારીખ (વૈકલ્પિક)", "type": "date", "required": False},
         ],
         "content_en": """IN THE COURT OF {{court}}, {{district}}
 

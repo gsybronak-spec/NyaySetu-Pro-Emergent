@@ -1,21 +1,42 @@
-"""Document generation for NyaySetu Pro - PDF via ReportLab, DOCX via python-docx."""
+"""Document generation for NyaySetu Pro.
+
+Single source of truth: `build_blocks()` converts template content into a list of
+structured blocks {text, align, bold}. Preview, PDF and DOCX ALL consume the same
+blocks so the final files match the preview exactly.
+"""
 
 import io
+import re
 import base64
-import os
 from pathlib import Path
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib.units import cm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
 from docx import Document
 from docx.shared import Cm, Pt
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 FONT_DIR = Path(__file__).parent / "fonts"
+
+# ---- Central document settings (Admin-configurable later) ----
+DOC_SETTINGS = {
+    "page_size": "A4",
+    "margin_top_cm": 2.5,
+    "margin_bottom_cm": 2.5,
+    "margin_left_cm": 2.5,
+    "margin_right_cm": 2.5,
+    "gujarati_font": "LohitGujarati",   # Lohit Gujarati (bundled)
+    "english_font": "Times-Roman",       # Times New Roman family
+    "english_font_docx": "Times New Roman",
+    "gujarati_font_docx": "Lohit Gujarati",
+    "body_size": 12,
+    "heading_size": 13,
+    "line_spacing": 18,
+}
 
 _fonts_registered = False
 
@@ -24,112 +45,138 @@ def register_fonts():
     global _fonts_registered
     if _fonts_registered:
         return
-    reg = FONT_DIR / "NotoSansGujarati-Regular.ttf"
-    bold = FONT_DIR / "NotoSansGujarati-Bold.ttf"
-    if reg.exists():
-        pdfmetrics.registerFont(TTFont("NotoGujarati", str(reg)))
-    if bold.exists():
-        pdfmetrics.registerFont(TTFont("NotoGujarati-Bold", str(bold)))
+    lohit = FONT_DIR / "Lohit-Gujarati.ttf"
+    if lohit.exists():
+        pdfmetrics.registerFont(TTFont("LohitGujarati", str(lohit)))
+        # No separate bold file for Lohit; map bold to the same face so glyphs
+        # never fall back to a boxed/placeholder font.
+        pdfmetrics.registerFont(TTFont("LohitGujarati-Bold", str(lohit)))
     _fonts_registered = True
 
 
-def generate_pdf(content: str, language: str = "en") -> str:
-    """Return base64-encoded PDF."""
+# English section headings we intentionally center + bold.
+_EN_HEADING_WORDS = ("APPLICATION", "AFFIDAVIT", "VERIFICATION", "VAKALATNAMA", "BAIL")
+
+
+def build_blocks(content: str, title_en: str = "", title_gu: str = "") -> list:
+    """Deterministically classify each line. Returns [{text, align, bold}].
+
+    Rules (explicit, NOT fuzzy — this is what fixes numbered points turning bold):
+      * Court heading line -> center + bold
+      * Exact template title line (GU or EN) -> center + bold
+      * Fully UPPERCASE Latin heading containing a heading keyword -> center + bold
+      * Everything else (incl. all numbered legal points) -> left + normal
+    """
+    blocks = []
+    t_en = (title_en or "").strip()
+    t_gu = (title_gu or "").strip()
+    for raw in content.split("\n"):
+        line = raw.strip()
+        if not line:
+            blocks.append({"text": "", "align": "left", "bold": False})
+            continue
+        is_court = line.startswith("IN THE COURT OF") or line.startswith("માનનીય ન્યાયાલય")
+        is_title = (t_en and line == t_en) or (t_gu and line == t_gu)
+        # English uppercase heading (e.g. "APPLICATION FOR ADJOURNMENT", "AFFIDAVIT")
+        latin = re.sub(r"[^A-Za-z]", "", line)
+        is_upper_en = (
+            len(latin) >= 3
+            and line == line.upper()
+            and not re.search(r"[\u0A80-\u0AFF]", line)  # no Gujarati chars
+            and any(w in line for w in _EN_HEADING_WORDS)
+            and len(line) < 70
+        )
+        if is_court or is_title or is_upper_en:
+            blocks.append({"text": line, "align": "center", "bold": True})
+        else:
+            blocks.append({"text": line, "align": "left", "bold": False})
+    return blocks
+
+
+def render_template(content_template: str, values: dict) -> str:
+    result = content_template
+    for k, v in (values or {}).items():
+        result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
+    result = re.sub(r"\{\{[^}]+\}\}", "____", result)
+    return result
+
+
+def _pdf_align(a: str) -> int:
+    return 1 if a == "center" else 0  # 0=left, 1=center
+
+
+def generate_pdf(blocks: list, language: str = "en") -> str:
     register_fonts()
     buf = io.BytesIO()
-
+    s = DOC_SETTINGS
     doc = SimpleDocTemplate(
-        buf,
-        pagesize=A4,
-        topMargin=2.5 * cm,
-        bottomMargin=2.5 * cm,
-        leftMargin=2.5 * cm,
-        rightMargin=2.5 * cm,
+        buf, pagesize=A4,
+        topMargin=s["margin_top_cm"] * 28.35,
+        bottomMargin=s["margin_bottom_cm"] * 28.35,
+        leftMargin=s["margin_left_cm"] * 28.35,
+        rightMargin=s["margin_right_cm"] * 28.35,
     )
-
-    font_name = "NotoGujarati" if language == "gu" else "Times-Roman"
-    font_bold = "NotoGujarati-Bold" if language == "gu" else "Times-Bold"
-
-    body_style = ParagraphStyle(
-        "body",
-        fontName=font_name,
-        fontSize=12,
-        leading=18,
-        spaceAfter=6,
-    )
-    heading_style = ParagraphStyle(
-        "heading",
-        fontName=font_bold,
-        fontSize=13,
-        leading=20,
-        alignment=1,
-        spaceAfter=10,
-    )
+    if language == "gu":
+        font_normal = s["gujarati_font"]
+        font_bold = "LohitGujarati-Bold"
+    else:
+        font_normal = "Times-Roman"
+        font_bold = "Times-Bold"
 
     story = []
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if not stripped:
+    for b in blocks:
+        if not b["text"]:
             story.append(Spacer(1, 6))
             continue
-        # Escape XML special chars
-        safe = stripped.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        # Center-align uppercase titles and application headings
-        is_heading = (
-            safe.isupper() and len(safe) < 100
-        ) or "COURT OF" in safe or "માનનીય ન્યાયાલય" in safe or "અરજી" in safe and len(safe) < 60
-        style = heading_style if is_heading else body_style
+        safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        style = ParagraphStyle(
+            "p",
+            fontName=font_bold if b["bold"] else font_normal,
+            fontSize=s["heading_size"] if b["bold"] else s["body_size"],
+            leading=s["line_spacing"] + (2 if b["bold"] else 0),
+            alignment=_pdf_align(b["align"]),
+            spaceAfter=6,
+        )
         story.append(Paragraph(safe, style))
-
     doc.build(story)
     buf.seek(0)
     return base64.b64encode(buf.read()).decode("utf-8")
 
 
-def generate_docx(content: str, language: str = "en") -> str:
-    """Return base64-encoded DOCX."""
+def generate_docx(blocks: list, language: str = "en") -> str:
     doc = Document()
-
-    # Configure page margins
+    s = DOC_SETTINGS
     for section in doc.sections:
-        section.top_margin = Cm(2.5)
-        section.bottom_margin = Cm(2.5)
-        section.left_margin = Cm(2.5)
-        section.right_margin = Cm(2.5)
+        section.top_margin = Cm(s["margin_top_cm"])
+        section.bottom_margin = Cm(s["margin_bottom_cm"])
+        section.left_margin = Cm(s["margin_left_cm"])
+        section.right_margin = Cm(s["margin_right_cm"])
 
-    style = doc.styles["Normal"]
-    font = style.font
-    if language == "gu":
-        font.name = "Nirmala UI"
-    else:
-        font.name = "Times New Roman"
-    font.size = Pt(12)
+    font_name = s["gujarati_font_docx"] if language == "gu" else s["english_font_docx"]
+    normal = doc.styles["Normal"]
+    normal.font.name = font_name
+    normal.font.size = Pt(s["body_size"])
 
-    for line in content.split("\n"):
-        stripped = line.strip()
-        if not stripped:
+    for b in blocks:
+        if not b["text"]:
             doc.add_paragraph("")
             continue
-        p = doc.add_paragraph(stripped)
-        # Center for headings
-        if (stripped.isupper() and len(stripped) < 100) or "COURT OF" in stripped or "માનનીય ન્યાયાલય" in stripped:
-            p.alignment = 1
-            for run in p.runs:
-                run.bold = True
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER if b["align"] == "center" else WD_ALIGN_PARAGRAPH.LEFT
+        run = p.add_run(b["text"])
+        run.font.name = font_name
+        # ensure complex-script (Gujarati) also uses the font
+        try:
+            from docx.oxml.ns import qn
+            run._element.rPr.rFonts.set(qn("w:cs"), font_name)
+            run._element.rPr.rFonts.set(qn("w:ascii"), font_name)
+            run._element.rPr.rFonts.set(qn("w:hAnsi"), font_name)
+        except Exception:
+            pass
+        run.font.size = Pt(s["heading_size"] if b["bold"] else s["body_size"])
+        run.bold = b["bold"]
 
     buf = io.BytesIO()
     doc.save(buf)
     buf.seek(0)
     return base64.b64encode(buf.read()).decode("utf-8")
-
-
-def render_template(content_template: str, values: dict) -> str:
-    """Replace {{field}} with values."""
-    result = content_template
-    for k, v in values.items():
-        placeholder = "{{" + k + "}}"
-        result = result.replace(placeholder, str(v) if v is not None else "")
-    # Remove any remaining unfilled placeholders
-    import re
-    result = re.sub(r"\{\{[^}]+\}\}", "____", result)
-    return result

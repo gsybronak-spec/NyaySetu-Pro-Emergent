@@ -37,6 +37,7 @@ export default function TemplateApplication() {
   const [values, setValues] = useState<Record<string, any>>({});
   const [step, setStep] = useState<Step>("fields");
   const [preview, setPreview] = useState("");
+  const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [datePickerFor, setDatePickerFor] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export default function TemplateApplication() {
     try {
       const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values });
       setPreview(res.content);
+      setBlocks(res.blocks || []);
       setStep("preview");
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -304,10 +306,24 @@ export default function TemplateApplication() {
 
         {step === "preview" && (
           <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }}>
-            <View style={[styles.doc, { backgroundColor: "#FFFFFF", borderColor: colors.border }]}>
-              <Text style={styles.docText} selectable>
-                {preview}
-              </Text>
+            <View style={[styles.doc, { backgroundColor: "#FFFFFF", borderColor: colors.border }]} testID="preview-doc">
+              {blocks.map((b, i) => (
+                <Text
+                  key={i}
+                  selectable
+                  style={[
+                    styles.docText,
+                    {
+                      textAlign: b.align === "center" ? "center" : "left",
+                      fontWeight: b.bold ? "700" : "400",
+                      fontSize: b.bold ? 15 : 13,
+                      marginBottom: b.text ? 6 : 10,
+                    },
+                  ]}
+                >
+                  {b.text || " "}
+                </Text>
+              ))}
             </View>
             <Pressable testID="edit-btn" onPress={() => setStep("fields")} style={[styles.editRow, { borderColor: colors.brandPrimary }]}>
               <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
