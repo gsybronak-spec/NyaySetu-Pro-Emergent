@@ -1,0 +1,44 @@
+{
+  "summary": "NyaySetu Pro MVP tested end-to-end. Backend: 31/31 pytest cases passed against the public preview URL — auth (mock OTP, JWT, is_new flag, protection), profile, catalog (case-types, laws+sections, districts, plans, quote), case CRUD + search, template list/search/category filter, multilingual alias search ('mudat' -> adjournment), preview (EN + GU content), download PDF (valid %PDF header) + DOCX (valid PK/zip header), atomic credit consumption (5 -> 4 after one download, 402 when balance hits 0), mock purchase adds correct plan credits, transactions, draft upsert/list, draft auto-delete after successful download, and global multilingual search. Frontend: mobile viewport smoke test confirmed login -> OTP(123456) -> new-user routing -> home dashboard renders (greeting, quote, wallet chip, Add New Case / My Cases action cards, Civil/Criminal category tiles, Most Used Templates list with EN+GU names). Add New Case screen renders with language toggle (English/ગુજરાતી) and dependent-dropdown scaffolding (Case Type, District, Court). One React Native Web deprecation warning observed: 'props.pointerEvents is deprecated. Use style.pointerEvents' — see action items.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Bottom tab bar", "issue": "Bottom tabs (Templates/Plans/Profile) are not visible on stacked screens like /case/new (expected as they are inside (tabs) group). No bug — flagged only because it caused test click failures until we returned via back button.", "testID": "N/A", "priority": "LOW"},
+      {"component": "TextInput floating label (OTP + Login mobile)", "issue": "Floating label appears with very low contrast/opacity behind the input value (e.g. 'Enter OTP' rendering looks like 'Buii OTP' behind the digits). Minor accessibility/contrast issue.", "testID": "otp-input / login-mobile-input", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "OTP / Login", "issues": ["Floating input labels have too-low opacity and get partially covered by the value text; consider darker label or moving label above the input for readability."]}
+    ],
+    "react_native_issues": [
+      {"component": "React Native Web (unknown component using props.pointerEvents)", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Likely a <View pointerEvents='...'> prop that must move into style. Grep the frontend for `pointerEvents=` and migrate to `style={{ pointerEvents: '...' }}`. Reference: seen in browser console during flow through /home."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_nyaysetu_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Migrate any `pointerEvents` prop usages on View/Pressable/TouchableOpacity to `style={{ pointerEvents: 'none'|'auto' }}` to silence React Native Web deprecation warning.",
+    "Improve floating-label contrast on TextInput (Login mobile, OTP): the label currently sits behind the value with low opacity — bump label color or move it above the input for readability/accessibility.",
+    "(Optional) Assert stronger content in Gujarati preview endpoint (e.g., include mandatory Gujarati keyword) — currently already asserted but consider adding 'મુદત અરજી' header presence.",
+    "(Optional) Provide UI feedback when wallet balance hits 0 before opening the download step — currently 402 is only surfaced at download time."
+  ],
+  "critical_code_review_comments": [
+    "server.py is a single 568-line file — approaching the 700-line soft cap. Consider splitting into routers/{auth,profile,catalog,cases,templates,applications,wallet,drafts,search}.py before it grows further.",
+    "GET /api/wallet auto-creates a wallet with 5 credits on read if missing — this can silently top up a user whose wallet was manually deleted. Consider tying wallet creation strictly to verify-otp/first-signup path.",
+    "download endpoint checks balance and then increments inside a second atomic update. The pre-check is fine as a fast-fail, but the true atomic guard is the {balance:{$gte:1}} filter — good. Content is already generated before the credit decrement; if the decrement fails after PDF/DOCX generation, we waste CPU but no credit is charged (safe).",
+    "JWT_SECRET falls back to a hardcoded string when env is missing. Fine for MVP; add an assertion in production before deploy.",
+    "In build_render_context the setdefault chain assumes case exists; for case=None branch the case-related fields still fallback to '' — good. Confirmed via English/Gujarati preview tests.",
+    "Case list search does substring match on nickname/case_number/party_name/case_type_id — case_type_id search matches the raw id rather than the localized label (e.g. 'ni_act') — reasonable but may confuse UI-driven searches; consider mapping to case_type_en/gu label."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_nyaysetu_api.py (new)"
+  ],
+  "success_rate": {"backend": "100% (31/31)", "frontend": "smoke pass — login, OTP, home dashboard, and new-case screen verified; download PDF/DOCX + subscription purchase + dark-mode toggle not exercised in UI (backend equivalents all passed)"},
+  "seed_data_creation": "No manual seeding required — CASE_TYPES/LAWS/DISTRICTS/TEMPLATES/PLANS/QUOTES are in seed_data.py. Test users created dynamically via unique timestamp mobile numbers; TEST_-prefixed cases/nicknames used for cleanup identification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Public URL: https://nyay-setu-pro.preview.emergentagent.com. Backend tests live in /app/backend/tests/test_nyaysetu_api.py — run with `EXPO_PUBLIC_BACKEND_URL=<url> pytest -n 0 tests/test_nyaysetu_api.py` (pytest.ini enforces xdist -n 2 by default; use -n 0 for the module-scoped fixtures because is_new + case_id state are shared across tests within a class). Every fresh 10-digit mobile creates a new user with 5 credits; OTP is always 123456. If wallet is empty for mobile 9876543210 in the preview DB (already consumed by prior test runs), use a different 10-digit mobile.",
+  "rca_of_issue": "N/A — no bugs blocking. Two low-priority polish issues: (1) React Native Web `pointerEvents` prop deprecation warning; (2) Low-contrast floating labels on TextInput in Login/OTP screens."
+}
