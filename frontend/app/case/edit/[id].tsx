@@ -27,9 +27,11 @@ export default function EditCase() {
         complaint_custom: c.complaint_custom || "",
         party_name: c.party_name || "",
         opposite_party: c.opposite_party || "",
-        court: c.court || "",
+        court_id: c.court_id || null,
+        court_custom: c.court_custom || c.court || "",
         district_id: c.district_id || null,
-        police_station: c.police_station || "",
+        police_station_id: c.police_station_id || null,
+        police_station_custom: c.police_station_custom || c.police_station || "",
         notes: c.notes || "",
       });
     }).catch((e) => Alert.alert("Error", e.message));

@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -9,6 +9,11 @@ import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 
 const FILTERS = ["All", "Civil", "Criminal", "Other"];
+const SORTS: { id: string; label: string; icon: any }[] = [
+  { id: "updated", label: "Recently Updated", icon: "time-outline" },
+  { id: "name", label: "Name (A-Z)", icon: "text-outline" },
+  { id: "type", label: "Case Type", icon: "pricetag-outline" },
+];
 
 function timeAgo(iso?: string) {
   if (!iso) return "";
@@ -26,15 +31,18 @@ export default function Cases() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("All");
   const [showArchived, setShowArchived] = useState(false);
+  const [sort, setSort] = useState("updated");
+  const [sortOpen, setSortOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (query: string, cat: string, archived: boolean) => {
+  const load = useCallback(async (query: string, cat: string, archived: boolean, sortBy: string) => {
     setLoading(true);
     try {
       const c = await api.listCases({
         q: query || undefined,
         category: cat !== "All" ? cat : undefined,
         status: archived ? "archived" : "active",
+        sort: sortBy,
       });
       setCases(c);
     } finally {
@@ -42,7 +50,7 @@ export default function Cases() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(q, filter, showArchived); }, [load, q, filter, showArchived]));
+  useFocusEffect(useCallback(() => { load(q, filter, showArchived, sort); }, [load, q, filter, showArchived, sort]));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
@@ -78,29 +86,62 @@ export default function Cases() {
         />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={{ maxHeight: 56 }}
-        contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingVertical: Spacing.sm }}
-      >
-        {FILTERS.map((f) => {
-          const active = filter === f;
-          return (
-            <Pressable
-              key={f}
-              testID={`filter-${f.toLowerCase()}`}
-              onPress={() => setFilter(f)}
-              style={[
-                styles.chip,
-                { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border, flexShrink: 0 },
-              ]}
-            >
-              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{f}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingLeft: Spacing.lg, gap: Spacing.sm, paddingVertical: Spacing.sm }}
+        >
+          {FILTERS.map((f) => {
+            const active = filter === f;
+            return (
+              <Pressable
+                key={f}
+                testID={`filter-${f.toLowerCase()}`}
+                onPress={() => setFilter(f)}
+                style={[
+                  styles.chip,
+                  { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border, flexShrink: 0 },
+                ]}
+              >
+                <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{f}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable
+          testID="sort-btn"
+          onPress={() => setSortOpen(true)}
+          style={[styles.sortBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+        >
+          <Ionicons name="swap-vertical" size={16} color={colors.onSurface} />
+          <Text style={{ color: colors.onSurface, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>Sort</Text>
+        </Pressable>
+      </View>
+
+      <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setSortOpen(false)}>
+          <Pressable style={[styles.sortSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={(e) => e.stopPropagation()}>
+            <Text style={[styles.sortTitle, { color: colors.onSurface }]}>Sort Cases By</Text>
+            {SORTS.map((s) => {
+              const active = sort === s.id;
+              return (
+                <Pressable
+                  key={s.id}
+                  testID={`sort-${s.id}`}
+                  onPress={() => { setSort(s.id); setSortOpen(false); }}
+                  style={[styles.sortOpt, { borderBottomColor: colors.divider }]}
+                >
+                  <Ionicons name={s.icon} size={18} color={active ? colors.brandPrimary : colors.muted} />
+                  <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: active ? "700" : "500", flex: 1, marginLeft: Spacing.md }}>{s.label}</Text>
+                  {active ? <Ionicons name="checkmark" size={20} color={colors.brandPrimary} /> : null}
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <FlatList
         data={cases}
@@ -192,6 +233,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md, height: 44, borderRadius: Radius.md, borderWidth: 1,
   },
   chip: { height: 36, paddingHorizontal: Spacing.lg, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  filterRow: { flexDirection: "row", alignItems: "center", maxHeight: 56 },
+  sortBtn: {
+    flexDirection: "row", alignItems: "center", height: 36, paddingHorizontal: Spacing.md,
+    borderRadius: 999, borderWidth: 1, marginRight: Spacing.lg, marginLeft: Spacing.sm, flexShrink: 0,
+  },
+  backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
+  sortSheet: { borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg, borderWidth: 1, padding: Spacing.lg, paddingBottom: 32 },
+  sortTitle: { fontSize: 16, fontWeight: "700", marginBottom: Spacing.md },
+  sortOpt: { flexDirection: "row", alignItems: "center", paddingVertical: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth },
   card: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   cardTop: { flexDirection: "row", alignItems: "center" },
   cardBottom: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginTop: Spacing.sm },

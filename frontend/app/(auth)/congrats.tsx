@@ -21,7 +21,7 @@ export default function Congrats() {
 
         <View style={styles.rowStats}>
           <Stat label="Free Credits" value="5" />
-          <Stat label="Templates" value="12+" />
+          <Stat label="Templates" value="23+" />
           <Stat label="Languages" value="EN / GU" />
         </View>
 

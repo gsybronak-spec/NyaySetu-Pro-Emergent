@@ -47,14 +47,17 @@ export const api = {
   laws: () => request("/catalog/laws"),
   lawSections: (id: string) => request(`/catalog/laws/${id}/sections`),
   districts: () => request("/catalog/districts"),
+  courts: (district_id?: string) => request(`/catalog/courts${district_id ? `?district_id=${district_id}` : ""}`),
+  policeStations: (district_id?: string) => request(`/catalog/police-stations${district_id ? `?district_id=${district_id}` : ""}`),
   plans: () => request("/catalog/plans"),
   quote: () => request("/catalog/quote"),
   createCase: (data: any) => request("/cases", "POST", data),
-  listCases: (params?: { q?: string; status?: string; category?: string }) => {
+  listCases: (params?: { q?: string; status?: string; category?: string; sort?: string }) => {
     const p = new URLSearchParams();
     if (params?.q) p.set("q", params.q);
     if (params?.status) p.set("status", params.status);
     if (params?.category) p.set("category", params.category);
+    if (params?.sort) p.set("sort", params.sort);
     const qs = p.toString();
     return request(`/cases${qs ? `?${qs}` : ""}`);
   },

@@ -24,9 +24,11 @@ export interface CaseFormValues {
   complaint_custom?: string;
   party_name: string;
   opposite_party: string;
-  court: string;
+  court_id: string | null;
+  court_custom: string;
   district_id: string | null;
-  police_station: string;
+  police_station_id: string | null;
+  police_station_custom: string;
   notes: string;
 }
 
@@ -43,9 +45,11 @@ const DEFAULTS: CaseFormValues = {
   complaint_custom: "",
   party_name: "",
   opposite_party: "",
-  court: "",
+  court_id: null,
+  court_custom: "",
   district_id: null,
-  police_station: "",
+  police_station_id: null,
+  police_station_custom: "",
   notes: "",
 };
 
@@ -64,6 +68,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [laws, setLaws] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
+  const [courts, setCourts] = useState<any[]>([]);
+  const [policeStations, setPoliceStations] = useState<any[]>([]);
 
   useEffect(() => {
     api.caseTypes().then(setCaseTypes).catch(() => {});
@@ -78,6 +84,11 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       setSections([]);
     }
   }, [form.law_id]);
+
+  useEffect(() => {
+    api.courts(form.district_id || undefined).then((r) => setCourts(r || [])).catch(() => {});
+    api.policeStations(form.district_id || undefined).then((r) => setPoliceStations(r || [])).catch(() => {});
+  }, [form.district_id]);
 
   const language = form.language;
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
@@ -186,7 +197,23 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           )}
 
           {form.complaint_type === "police" && (
-            <Field testID="police-station" label="Police Station" placeholder="e.g. Naranpura P.S." value={form.police_station} onChangeText={(v) => update("police_station", v)} />
+            <>
+              <Dropdown
+                testID="police-station"
+                label="Police Station"
+                placeholder="Select police station"
+                searchable
+                value={form.police_station_id}
+                options={[
+                  ...policeStations.map((p) => ({ id: p.id, label: language === "gu" ? p.gu : p.en })),
+                  { id: "other", label: "Other (type manually)" },
+                ]}
+                onChange={(v) => update("police_station_id", v)}
+              />
+              {form.police_station_id === "other" && (
+                <Field testID="police-station-custom" label="Enter Police Station" value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
+              )}
+            </>
           )}
 
           {showOther && (
@@ -206,7 +233,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
             onChange={(v) => update("district_id", v)}
           />
-          <Field testID="court" label="Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court} onChangeText={(v) => update("court", v)} />
+          <Dropdown
+            testID="court"
+            label="Court"
+            placeholder="Select court"
+            searchable
+            value={form.court_id}
+            options={[
+              ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en })),
+              { id: "other", label: "Other (type manually)" },
+            ]}
+            onChange={(v) => update("court_id", v)}
+          />
+          {form.court_id === "other" && (
+            <Field testID="court-custom" label="Enter Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court_custom} onChangeText={(v) => update("court_custom", v)} />
+          )}
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>

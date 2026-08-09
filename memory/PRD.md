@@ -33,6 +33,9 @@ Indian Advocates (Gujarat focus) needing routine court documents (adjournment, c
 - [x] **Google Sign-In (Emergent-managed OAuth)** — /api/auth/google-session, upsert user by email, issues app JWT (login screen "Continue with Google")
 - [x] **Referral Rewards** — unique referral_code per user, +10 credits to referrer on new signup (OTP or Google), anti-abuse (no self-referral, one reward per referred user), /api/referral/me stats, dedicated /referral screen with copy + share
 - [x] **Case Management module (enhanced)** — searchable dropdowns (case type/law/district/section); refined bilingual case-type catalog (23 types) + laws (incl. family/property) with dependent sections; server-enriched case labels (category/type/law/section/district/complaint) with GU/EN display; My Cases with filter chips (All/Civil/Criminal/Other) + search + archived toggle; shared CaseForm for create/edit; case detail with Edit/Archive/Restore/Delete (delete confirmed, archive reversible); case→application reference model with application_count
+- [x] **Template Library (23 templates)** — expanded to 23 bilingual court applications with multilingual aliases; direct-use from Templates tab
+- [x] **Structured Court & Police Station pickers** — /api/catalog/courts?district_id= (district-specific + generic) and /api/catalog/police-stations?district_id=; case stores court_id/police_station_id (+custom "Other"); labels resolved GU/EN and used in generated docs
+- [x] **Case sorting** — /api/cases?sort=updated|name|type; My Cases Sort modal (Recently Updated / Name A-Z / Case Type)
 
 ## Backlog (P1/P2)
 - P1: Live Razorpay (backend order+verify + web checkout) — awaiting user's Razorpay Key ID + Secret; mock active until then

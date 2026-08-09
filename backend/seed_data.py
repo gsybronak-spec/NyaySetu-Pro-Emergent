@@ -117,6 +117,34 @@ DISTRICTS = [
     {"id": "patan", "en": "Patan", "gu": "પાટણ"},
 ]
 
+# Courts scoped by district_id. "generic" courts appear for every district.
+COURTS = [
+    {"id": "gen_district", "district_id": "generic", "en": "District Court", "gu": "જિલ્લા ન્યાયાલય"},
+    {"id": "gen_sessions", "district_id": "generic", "en": "Sessions Court", "gu": "સેશન્સ ન્યાયાલય"},
+    {"id": "gen_jmfc", "district_id": "generic", "en": "Court of JMFC", "gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+    {"id": "gen_civil_senior", "district_id": "generic", "en": "Principal Senior Civil Judge", "gu": "મુખ્ય વરિષ્ઠ સિવિલ જજ"},
+    {"id": "gen_civil_junior", "district_id": "generic", "en": "Civil Judge (Junior Division)", "gu": "સિવિલ જજ (જુનિયર ડિવિઝન)"},
+    {"id": "gen_family", "district_id": "generic", "en": "Family Court", "gu": "ફેમિલી કોર્ટ"},
+    {"id": "ahd_metro", "district_id": "ahmedabad", "en": "Metropolitan Magistrate Court, Ahmedabad", "gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ કોર્ટ, અમદાવાદ"},
+    {"id": "ahd_city_civil", "district_id": "ahmedabad", "en": "City Civil Court, Ahmedabad", "gu": "સિટી સિવિલ કોર્ટ, અમદાવાદ"},
+    {"id": "surat_district", "district_id": "surat", "en": "District & Sessions Court, Surat", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, સુરત"},
+    {"id": "vad_district", "district_id": "vadodara", "en": "District & Sessions Court, Vadodara", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા"},
+    {"id": "rajkot_district", "district_id": "rajkot", "en": "District & Sessions Court, Rajkot", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ"},
+]
+
+# Police stations scoped by district_id.
+POLICE_STATIONS = [
+    {"id": "ahd_naranpura", "district_id": "ahmedabad", "en": "Naranpura P.S.", "gu": "નારણપુરા પોલીસ સ્ટેશન"},
+    {"id": "ahd_navrangpura", "district_id": "ahmedabad", "en": "Navrangpura P.S.", "gu": "નવરંગપુરા પોલીસ સ્ટેશન"},
+    {"id": "ahd_satellite", "district_id": "ahmedabad", "en": "Satellite P.S.", "gu": "સેટેલાઇટ પોલીસ સ્ટેશન"},
+    {"id": "ahd_vastrapur", "district_id": "ahmedabad", "en": "Vastrapur P.S.", "gu": "વસ્ત્રાપુર પોલીસ સ્ટેશન"},
+    {"id": "surat_adajan", "district_id": "surat", "en": "Adajan P.S.", "gu": "અડાજણ પોલીસ સ્ટેશન"},
+    {"id": "surat_varachha", "district_id": "surat", "en": "Varachha P.S.", "gu": "વરાછા પોલીસ સ્ટેશન"},
+    {"id": "vad_gotri", "district_id": "vadodara", "en": "Gotri P.S.", "gu": "ગોત્રી પોલીસ સ્ટેશન"},
+    {"id": "rajkot_gandhigram", "district_id": "rajkot", "en": "Gandhigram P.S.", "gu": "ગાંધીગ્રામ પોલીસ સ્ટેશન"},
+    {"id": "gnr_sector21", "district_id": "gandhinagar", "en": "Sector 21 P.S.", "gu": "સેક્ટર ૨૧ પોલીસ સ્ટેશન"},
+]
+
 # Templates use placeholder {{field}} for substitution.
 # fields: list of {key, label_en, label_gu, type, required}
 TEMPLATES = [
@@ -760,6 +788,558 @@ DEPONENT
 {{district}} ખાતે આજ રોજ {{today}} ના રોજ ઉપરોક્ત સોગંદનામામાં જણાવેલ બાબતો સાચી અને યોગ્ય છે તેમ પ્રમાણિત કરું છું.
 
 ડિપોનન્ટ
+""",
+    },
+    {
+        "id": "restoration",
+        "name_en": "Restoration Application",
+        "name_gu": "કેસ પુનઃસ્થાપન અરજી",
+        "category": "General",
+        "aliases": ["restoration", "restore", "punah sthapan", "પુનઃસ્થાપન", "restore case"],
+        "fields": [
+            {"key": "dismiss_date", "label_en": "Date of Dismissal", "label_gu": "કેસ કાઢી નાખ્યાની તારીખ", "type": "date", "required": True},
+            {"key": "reason", "label_en": "Reason for Absence", "label_gu": "ગેરહાજરીનું કારણ", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR RESTORATION
+
+Most Respectfully Sheweth:
+
+1. The above matter was dismissed for default on {{dismiss_date}}.
+
+2. The applicant could not remain present due to {{reason}}.
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to restore the above matter to its original file in the interest of justice.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+કેસ પુનઃસ્થાપન અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. ઉપરોક્ત કેસ {{dismiss_date}} ના રોજ ગેરહાજરીના કારણે કાઢી નાખવામાં આવેલ છે.
+
+૨. {{reason}} ના કારણે અરજદાર હાજર રહી શકેલ ન હતા.
+
+૩. તેથી ન્યાયના હિતમાં ઉપરોક્ત કેસ મૂળ ફાઈલ પર પુનઃસ્થાપિત કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "condonation_delay",
+        "name_en": "Condonation of Delay Application",
+        "name_gu": "વિલંબ માફી અરજી",
+        "category": "General",
+        "aliases": ["condonation", "delay", "vilamb", "વિલંબ", "condone delay"],
+        "fields": [
+            {"key": "days_delay", "label_en": "Days of Delay", "label_gu": "વિલંબના દિવસો", "type": "number", "required": True},
+            {"key": "reason", "label_en": "Reason for Delay", "label_gu": "વિલંબનું કારણ", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR CONDONATION OF DELAY
+
+Most Respectfully Sheweth:
+
+1. There has been a delay of {{days_delay}} days in filing the above matter/application.
+
+2. The said delay occurred due to {{reason}} and was neither intentional nor deliberate.
+
+3. It is therefore prayed that the delay of {{days_delay}} days be condoned in the interest of justice.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+વિલંબ માફી અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. ઉપરોક્ત કેસ / અરજી દાખલ કરવામાં {{days_delay}} દિવસનો વિલંબ થયેલ છે.
+
+૨. આ વિલંબ {{reason}} ના કારણે થયેલ છે અને તે ઈરાદાપૂર્વકનો ન હતો.
+
+૩. તેથી ન્યાયના હિતમાં {{days_delay}} દિવસનો વિલંબ માફ કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "interim_injunction",
+        "name_en": "Interim Injunction Application",
+        "name_gu": "વચગાળાનો મનાઈહુકમ અરજી",
+        "category": "Civil",
+        "aliases": ["injunction", "interim injunction", "manai hukam", "મનાઈહુકમ", "stay"],
+        "fields": [
+            {"key": "relief", "label_en": "Injunction Sought", "label_gu": "માંગેલ મનાઈહુકમ", "type": "textarea", "required": True},
+            {"key": "grounds", "label_en": "Grounds", "label_gu": "કારણો", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR INTERIM INJUNCTION
+
+Most Respectfully Sheweth:
+
+1. The applicant seeks the following interim relief: {{relief}}
+
+2. Grounds: {{grounds}}
+
+3. The applicant has a prima facie case and the balance of convenience lies in favour of the applicant. Irreparable loss will be caused if injunction is not granted.
+
+4. It is therefore prayed that this Hon'ble Court may be pleased to grant the above interim injunction pending final disposal.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+વચગાળાનો મનાઈહુકમ અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. અરજદાર નીચે મુજબનો વચગાળાનો રાહત માંગે છે: {{relief}}
+
+૨. કારણો: {{grounds}}
+
+૩. અરજદારનો પ્રથમદર્શી કેસ છે અને સગવડનું સંતુલન અરજદારની તરફેણમાં છે. મનાઈહુકમ ન આપવામાં આવે તો ન ભરપાઈ થાય તેવું નુકસાન થશે.
+
+૪. તેથી કેસના આખરી નિકાલ સુધી ઉપરોક્ત વચગાળાનો મનાઈહુકમ આપવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "vakalatnama",
+        "name_en": "Vakalatnama",
+        "name_gu": "વકાલતનામું",
+        "category": "General",
+        "aliases": ["vakalatnama", "vakalat", "વકાલતનામું", "power of attorney", "appointment of advocate"],
+        "fields": [
+            {"key": "client_name", "label_en": "Client Name", "label_gu": "અસીલનું નામ", "type": "text", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+VAKALATNAMA
+
+I, {{client_name}}, do hereby appoint and retain {{advocate_name}}, Advocate, to appear, act and plead on my behalf in the above matter.
+
+I authorise the said Advocate to file and receive documents, to make statements, to compromise, and to do all acts necessary for the conduct of the case.
+
+Place: {{district}}
+Date: {{today}}
+
+Signature of Client
+{{client_name}}
+
+Accepted
+{{advocate_name}}, Advocate
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+વકાલતનામું
+
+હું, {{client_name}}, આથી {{advocate_name}}, વકીલ ને ઉપરોક્ત કેસમાં મારા વતી હાજર રહેવા, કાર્યવાહી કરવા અને દલીલ કરવા નિમણૂક કરું છું.
+
+હું ઉક્ત વકીલને દસ્તાવેજો દાખલ કરવા અને મેળવવા, નિવેદન કરવા, સમાધાન કરવા અને કેસ ચલાવવા માટે જરૂરી તમામ કાર્ય કરવા અધિકૃત કરું છું.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અસીલની સહી
+{{client_name}}
+
+સ્વીકૃત
+{{advocate_name}}, વકીલ
+""",
+    },
+    {
+        "id": "return_documents",
+        "name_en": "Application for Return of Documents",
+        "name_gu": "દસ્તાવેજ પરત મેળવવા અરજી",
+        "category": "General",
+        "aliases": ["return document", "return of documents", "dastavej pariat", "દસ્તાવેજ પરત"],
+        "fields": [
+            {"key": "document_list", "label_en": "Documents to Return", "label_gu": "પરત મેળવવાના દસ્તાવેજો", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR RETURN OF DOCUMENTS
+
+Most Respectfully Sheweth:
+
+1. The following original documents were produced on record: {{document_list}}
+
+2. The said documents are now required by the applicant.
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to return the said original documents after retaining certified copies on record.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+દસ્તાવેજ પરત મેળવવા અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. નીચેના મૂળ દસ્તાવેજો રેકોર્ડ પર રજૂ કરવામાં આવેલ છે: {{document_list}}
+
+૨. આ દસ્તાવેજો હવે અરજદારને જરૂરી છે.
+
+૩. તેથી પ્રમાણિત નકલ રેકોર્ડ પર રાખીને ઉક્ત મૂળ દસ્તાવેજો પરત આપવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "inspection",
+        "name_en": "Application for Inspection of Records",
+        "name_gu": "રેકોર્ડ તપાસ અરજી",
+        "category": "General",
+        "aliases": ["inspection", "record inspection", "record tapas", "રેકોર્ડ તપાસ"],
+        "fields": [
+            {"key": "record_desc", "label_en": "Records to Inspect", "label_gu": "તપાસવાના રેકોર્ડ", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR INSPECTION OF RECORDS
+
+Most Respectfully Sheweth:
+
+1. The applicant seeks inspection of the following records: {{record_desc}}
+
+2. Such inspection is necessary for the proper conduct of the case.
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to grant inspection of the said records.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+રેકોર્ડ તપાસ અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. અરજદાર નીચેના રેકોર્ડની તપાસ કરવા વિનંતી કરે છે: {{record_desc}}
+
+૨. કેસના યોગ્ય સંચાલન માટે આ તપાસ જરૂરી છે.
+
+૩. તેથી ઉક્ત રેકોર્ડની તપાસ કરવાની પરવાનગી આપવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "compromise",
+        "name_en": "Compromise / Settlement Application",
+        "name_gu": "સમાધાન અરજી",
+        "category": "General",
+        "aliases": ["compromise", "settlement", "samadhan", "સમાધાન", "consent"],
+        "fields": [
+            {"key": "terms", "label_en": "Terms of Compromise", "label_gu": "સમાધાનની શરતો", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+COMPROMISE / SETTLEMENT APPLICATION
+
+Most Respectfully Sheweth:
+
+1. The parties have amicably settled the dispute on the following terms: {{terms}}
+
+2. The parties pray that the above matter be disposed of in terms of the said compromise.
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to record the compromise and dispose of the matter accordingly.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+સમાધાન અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. પક્ષકારોએ નીચેની શરતો પર સૌહાર્દપૂર્ણ સમાધાન કરેલ છે: {{terms}}
+
+૨. પક્ષકારો ઉપરોક્ત કેસ ઉક્ત સમાધાનની શરતો મુજબ નિકાલ કરવા વિનંતી કરે છે.
+
+૩. તેથી સમાધાન નોંધીને કેસનો તદનુસાર નિકાલ કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "withdrawal",
+        "name_en": "Withdrawal of Case Application",
+        "name_gu": "કેસ પાછો ખેંચવા અરજી",
+        "category": "General",
+        "aliases": ["withdrawal", "withdraw case", "kes pacho", "કેસ પાછો"],
+        "fields": [
+            {"key": "reason", "label_en": "Reason for Withdrawal", "label_gu": "પાછો ખેંચવાનું કારણ", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR WITHDRAWAL OF CASE
+
+Most Respectfully Sheweth:
+
+1. The applicant does not wish to prosecute the above matter further for the following reason: {{reason}}
+
+2. It is therefore prayed that this Hon'ble Court may be pleased to permit the applicant to withdraw the above matter.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+કેસ પાછો ખેંચવા અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. અરજદાર નીચેના કારણોસર ઉપરોક્ત કેસ આગળ ચલાવવા ઇચ્છતા નથી: {{reason}}
+
+૨. તેથી અરજદારને ઉપરોક્ત કેસ પાછો ખેંચવાની પરવાનગી આપવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "amendment",
+        "name_en": "Amendment Application",
+        "name_gu": "સુધારા અરજી",
+        "category": "General",
+        "aliases": ["amendment", "amend", "sudhara", "સુધારા"],
+        "fields": [
+            {"key": "amendment_desc", "label_en": "Proposed Amendment", "label_gu": "સૂચિત સુધારો", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+AMENDMENT APPLICATION
+
+Most Respectfully Sheweth:
+
+1. The applicant seeks to amend the pleadings as under: {{amendment_desc}}
+
+2. The proposed amendment is necessary for determining the real questions in controversy and will not prejudice the opposite party.
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to allow the above amendment.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+સુધારા અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. અરજદાર નીચે મુજબ પ્લીડિંગમાં સુધારો કરવા ઇચ્છે છે: {{amendment_desc}}
+
+૨. વિવાદના ખરા પ્રશ્નો નક્કી કરવા આ સુધારો જરૂરી છે અને તેથી સામાવાળા પક્ષને કોઈ નુકસાન થશે નહીં.
+
+૩. તેથી ઉપરોક્ત સુધારો મંજૂર કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "surety",
+        "name_en": "Surety / Bail Bond Application",
+        "name_gu": "જામીનખત અરજી",
+        "category": "Criminal",
+        "aliases": ["surety", "bail bond", "jaminkhat", "જામીનખત"],
+        "fields": [
+            {"key": "surety_name", "label_en": "Surety Name", "label_gu": "જામીનદારનું નામ", "type": "text", "required": True},
+            {"key": "amount", "label_en": "Bond Amount", "label_gu": "જામીનની રકમ", "type": "text", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+SURETY / BAIL BOND APPLICATION
+
+Most Respectfully Sheweth:
+
+1. {{surety_name}} offers to stand as surety for the accused for an amount of Rs. {{amount}}.
+
+2. The surety is solvent and willing to abide by the conditions imposed by this Hon'ble Court.
+
+3. It is therefore prayed that the surety be accepted and the accused be released accordingly.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+જામીનખત અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. {{surety_name}} આરોપી માટે રૂ. {{amount}} ની રકમના જામીનદાર તરીકે ઊભા રહેવા તૈયાર છે.
+
+૨. જામીનદાર સધ્ધર છે અને માનનીય ન્યાયાલયની શરતોનું પાલન કરવા તૈયાર છે.
+
+૩. તેથી જામીન સ્વીકારીને આરોપીને તદનુસાર મુક્ત કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
+""",
+    },
+    {
+        "id": "early_hearing",
+        "name_en": "Application for Early Hearing",
+        "name_gu": "વહેલી સુનાવણી અરજી",
+        "category": "General",
+        "aliases": ["early hearing", "urgent hearing", "vaheli sunavani", "વહેલી સુનાવણી", "expedite"],
+        "fields": [
+            {"key": "reason", "label_en": "Reason for Urgency", "label_gu": "તાકીદનું કારણ", "type": "textarea", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}}, {{district}}
+
+{{case_type}} No. {{case_number}}
+
+APPLICATION FOR EARLY HEARING
+
+Most Respectfully Sheweth:
+
+1. The above matter is pending before this Hon'ble Court.
+
+2. Early hearing is required for the following urgent reason: {{reason}}
+
+3. It is therefore prayed that this Hon'ble Court may be pleased to grant an early hearing of the above matter.
+
+Place: {{district}}
+Date: {{today}}
+
+Advocate for the Applicant
+{{advocate_name}}
+""",
+        "content_gu": """માનનીય ન્યાયાલય {{court}}, {{district}}
+
+{{case_type}} નં. {{case_number}}
+
+વહેલી સુનાવણી અરજી
+
+નમ્રપણે વિનંતી છે કે:
+
+૧. ઉપરોક્ત કેસ આ માનનીય ન્યાયાલય સમક્ષ ચાલુ છે.
+
+૨. નીચેના તાકીદના કારણોસર વહેલી સુનાવણી જરૂરી છે: {{reason}}
+
+૩. તેથી ઉપરોક્ત કેસની વહેલી સુનાવણી કરવા વિનંતી છે.
+
+સ્થળ: {{district}}
+તારીખ: {{today}}
+
+અરજદારના વકીલ
+{{advocate_name}}
 """,
     },
 ]

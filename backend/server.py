@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
 
-from seed_data import CASE_TYPES, LAWS, DISTRICTS, TEMPLATES, PLANS, QUOTES
+from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from doc_generator import generate_pdf, generate_docx, render_template
 
 ROOT_DIR = Path(__file__).parent
@@ -73,8 +73,13 @@ class CaseCreate(BaseModel):
     party_name: Optional[str] = None
     opposite_party: Optional[str] = None
     court: Optional[str] = None
+    court_id: Optional[str] = None
+    court_custom: Optional[str] = None
     district_id: Optional[str] = None
     police_station: Optional[str] = None
+    police_station_id: Optional[str] = None
+    police_station_custom: Optional[str] = None
+    complaint_custom: Optional[str] = None
     notes: Optional[str] = None
 
 class CaseUpdate(CaseCreate):
@@ -328,6 +333,20 @@ async def law_sections(law_id: str):
 async def districts():
     return DISTRICTS
 
+@api.get("/catalog/courts")
+async def courts(district_id: Optional[str] = None):
+    generic = [c for c in COURTS if c["district_id"] == "generic"]
+    if district_id:
+        specific = [c for c in COURTS if c["district_id"] == district_id]
+        return specific + generic
+    return COURTS
+
+@api.get("/catalog/police-stations")
+async def police_stations(district_id: Optional[str] = None):
+    if district_id:
+        return [p for p in POLICE_STATIONS if p["district_id"] == district_id]
+    return POLICE_STATIONS
+
 @api.get("/catalog/plans")
 async def plans():
     return PLANS
@@ -345,6 +364,8 @@ async def daily_quote():
 _CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
 _LAW_MAP = {l["id"]: l for l in LAWS}
 _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
+_COURT_MAP = {c["id"]: c for c in COURTS}
+_PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
 _COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
 
 
@@ -354,6 +375,8 @@ def enrich_case(c: dict) -> dict:
     ct = _CASE_TYPE_MAP.get(c.get("case_type_id"))
     law = _LAW_MAP.get(c.get("law_id"))
     dist = _DISTRICT_MAP.get(c.get("district_id"))
+    court = _COURT_MAP.get(c.get("court_id"))
+    ps = _PS_MAP.get(c.get("police_station_id"))
     section = None
     if law and c.get("section_id"):
         section = next((s for s in law["sections"] if s["id"] == c.get("section_id")), None)
@@ -367,6 +390,14 @@ def enrich_case(c: dict) -> dict:
     c["law_label"] = (law["gu"] if lang == "gu" else law["en"]) if law else (c.get("law_custom") or None)
     c["section_label"] = section["label"] if section else None
     c["district_label"] = (dist["gu"] if lang == "gu" else dist["en"]) if dist else None
+    if court:
+        c["court_label"] = court["gu"] if lang == "gu" else court["en"]
+    else:
+        c["court_label"] = c.get("court_custom") or c.get("court") or None
+    if ps:
+        c["police_station_label"] = ps["gu"] if lang == "gu" else ps["en"]
+    else:
+        c["police_station_label"] = c.get("police_station_custom") or c.get("police_station") or None
     c["complaint_label"] = _COMPLAINT_LABELS.get(c.get("complaint_type")) if c.get("complaint_type") else None
     return c
 
@@ -391,7 +422,8 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
 
 @api.get("/cases")
 async def list_cases(user=Depends(get_user), q: Optional[str] = None,
-                     status: str = "active", category: Optional[str] = None):
+                     status: str = "active", category: Optional[str] = None,
+                     sort: str = "updated"):
     query: dict = {"user_id": user["id"]}
     if status != "all":
         # Treat missing status as active (legacy docs)
@@ -412,6 +444,11 @@ async def list_cases(user=Depends(get_user), q: Optional[str] = None,
                  or ql in (c.get("party_name") or "").lower()
                  or ql in (c.get("case_type_label") or "").lower()
                  or ql in (c.get("case_type_id") or "").lower()]
+    if sort == "name":
+        items.sort(key=lambda c: (c.get("nickname") or c.get("party_name") or c.get("case_type_label") or "").lower())
+    elif sort == "type":
+        items.sort(key=lambda c: (c.get("case_type_label") or "").lower())
+    # default "updated" already sorted by query
     return items
 
 
@@ -523,7 +560,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         if d:
             district_name = d["gu"] if language == "gu" else d["en"]
         ctx.setdefault("district", district_name or case.get("district_id") or "")
-        ctx.setdefault("court", case.get("court") or "")
+        court_obj = _COURT_MAP.get(case.get("court_id"))
+        if court_obj:
+            court_name = court_obj["gu"] if language == "gu" else court_obj["en"]
+        else:
+            court_name = case.get("court_custom") or case.get("court") or ""
+        ctx.setdefault("court", court_name)
         ctx.setdefault("case_number", case.get("case_number") or "")
         # case type
         ct = next((x for x in CASE_TYPES if x["id"] == case.get("case_type_id")), None)
