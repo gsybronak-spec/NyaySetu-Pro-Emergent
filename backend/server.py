@@ -168,6 +168,7 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         "theme_pref": "light",
         "referral_code": code,
         "referred_by": None,
+        "favourite_courts": [],
         "created_at": now().isoformat(),
     }
     await db.users.insert_one(user.copy())
@@ -727,6 +728,32 @@ async def referral_me(user=Depends(get_user)):
         "total_reward_credits": total_reward,
         "referrals": refs,
     }
+
+
+# ============================================================
+# COURT FAVOURITES
+# ============================================================
+
+@api.get("/favourites/courts")
+async def get_fav_courts(user=Depends(get_user)):
+    return {"favourite_courts": user.get("favourite_courts") or []}
+
+
+@api.post("/favourites/courts/{court_id}")
+async def add_fav_court(court_id: str, user=Depends(get_user)):
+    if court_id not in _COURT_MAP:
+        raise HTTPException(404, "Court not found")
+    await db.users.update_one({"id": user["id"]}, {"$addToSet": {"favourite_courts": court_id}})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"favourite_courts": u.get("favourite_courts") or []}
+
+
+@api.delete("/favourites/courts/{court_id}")
+async def remove_fav_court(court_id: str, user=Depends(get_user)):
+    await db.users.update_one({"id": user["id"]}, {"$pull": {"favourite_courts": court_id}})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"favourite_courts": u.get("favourite_courts") or []}
+
 
 
 # ============================================================

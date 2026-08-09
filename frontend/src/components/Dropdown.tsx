@@ -8,6 +8,7 @@ interface Option {
   id: string;
   label: string;
   sublabel?: string;
+  pinnable?: boolean;
 }
 
 interface Props {
@@ -19,19 +20,32 @@ interface Props {
   testID?: string;
   disabled?: boolean;
   searchable?: boolean;
+  favouriteIds?: string[];
+  onToggleFavourite?: (id: string) => void;
 }
 
-export function Dropdown({ label, placeholder = "Select...", value, options, onChange, testID, disabled, searchable }: Props) {
+export function Dropdown({ label, placeholder = "Select...", value, options, onChange, testID, disabled, searchable, favouriteIds, onToggleFavourite }: Props) {
   const { colors } = useTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selected = options.find((o) => o.id === value);
 
   const filtered = useMemo(() => {
-    if (!searchable || !query.trim()) return options;
-    const q = query.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(q) || (o.sublabel || "").toLowerCase().includes(q));
-  }, [options, query, searchable]);
+    let list = options;
+    if (searchable && query.trim()) {
+      const q = query.toLowerCase();
+      list = options.filter((o) => o.label.toLowerCase().includes(q) || (o.sublabel || "").toLowerCase().includes(q));
+    }
+    if (favouriteIds && favouriteIds.length) {
+      const favSetLocal = new Set(favouriteIds);
+      const favs = list.filter((o) => favSetLocal.has(o.id));
+      const rest = list.filter((o) => !favSetLocal.has(o.id));
+      list = [...favs, ...rest];
+    }
+    return list;
+  }, [options, query, searchable, favouriteIds]);
+
+  const favSet = new Set(favouriteIds || []);
 
   const close = () => {
     setOpen(false);
@@ -91,28 +105,45 @@ export function Dropdown({ label, placeholder = "Select...", value, options, onC
               {filtered.length === 0 ? (
                 <Text style={{ color: colors.muted, textAlign: "center", padding: Spacing.xl }}>No matches</Text>
               ) : null}
-              {filtered.map((o) => (
-                <Pressable
-                  key={o.id}
-                  testID={`${testID}-opt-${o.id}`}
-                  onPress={() => {
-                    onChange(o.id);
-                    close();
-                  }}
-                  style={({ pressed }) => [
-                    styles.opt,
-                    { borderBottomColor: colors.divider, backgroundColor: pressed ? colors.surfaceSecondary : "transparent" },
-                  ]}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.onSurface, fontSize: 15 }}>{o.label}</Text>
-                    {o.sublabel ? (
-                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{o.sublabel}</Text>
+              {filtered.map((o) => {
+                const isFav = favSet.has(o.id);
+                const showStar = onToggleFavourite && o.pinnable !== false && o.id !== "other";
+                return (
+                  <Pressable
+                    key={o.id}
+                    testID={`${testID}-opt-${o.id}`}
+                    onPress={() => {
+                      onChange(o.id);
+                      close();
+                    }}
+                    style={({ pressed }) => [
+                      styles.opt,
+                      { borderBottomColor: colors.divider, backgroundColor: pressed ? colors.surfaceSecondary : "transparent" },
+                    ]}
+                  >
+                    {showStar ? (
+                      <Pressable
+                        testID={`${testID}-fav-${o.id}`}
+                        hitSlop={10}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          onToggleFavourite!(o.id);
+                        }}
+                        style={{ marginRight: Spacing.sm }}
+                      >
+                        <Ionicons name={isFav ? "star" : "star-outline"} size={18} color={isFav ? colors.brandPrimary : colors.muted} />
+                      </Pressable>
                     ) : null}
-                  </View>
-                  {value === o.id ? <Ionicons name="checkmark" size={20} color={colors.brandPrimary} /> : null}
-                </Pressable>
-              ))}
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.onSurface, fontSize: 15 }}>{o.label}</Text>
+                      {o.sublabel ? (
+                        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{o.sublabel}</Text>
+                      ) : null}
+                    </View>
+                    {value === o.id ? <Ionicons name="checkmark" size={20} color={colors.brandPrimary} /> : null}
+                  </Pressable>
+                );
+              })}
             </ScrollView>
           </Pressable>
         </Pressable>

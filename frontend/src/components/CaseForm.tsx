@@ -70,11 +70,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [districts, setDistricts] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [policeStations, setPoliceStations] = useState<any[]>([]);
+  const [favCourts, setFavCourts] = useState<string[]>([]);
 
   useEffect(() => {
     api.caseTypes().then(setCaseTypes).catch(() => {});
     api.laws().then(setLaws).catch(() => {});
     api.districts().then(setDistricts).catch(() => {});
+    api.favCourts().then((r) => setFavCourts(r.favourite_courts || [])).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -92,6 +94,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
   const language = form.language;
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
+
+  const toggleFavCourt = (id: string) => {
+    const isFav = favCourts.includes(id);
+    setFavCourts((prev) => (isFav ? prev.filter((x) => x !== id) : [...prev, id]));
+    (isFav ? api.removeFavCourt(id) : api.addFavCourt(id))
+      .then((r) => setFavCourts(r.favourite_courts || []))
+      .catch(() => {});
+  };
 
   const showComplaint = !!form.case_type_id;
   const showLaw = form.complaint_type === "private";
@@ -239,9 +249,11 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             placeholder="Select court"
             searchable
             value={form.court_id}
+            favouriteIds={favCourts}
+            onToggleFavourite={toggleFavCourt}
             options={[
               ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en })),
-              { id: "other", label: "Other (type manually)" },
+              { id: "other", label: "Other (type manually)", pinnable: false },
             ]}
             onChange={(v) => update("court_id", v)}
           />

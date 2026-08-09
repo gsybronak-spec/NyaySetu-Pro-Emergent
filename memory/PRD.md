@@ -36,6 +36,7 @@ Indian Advocates (Gujarat focus) needing routine court documents (adjournment, c
 - [x] **Template Library (23 templates)** — expanded to 23 bilingual court applications with multilingual aliases; direct-use from Templates tab
 - [x] **Structured Court & Police Station pickers** — /api/catalog/courts?district_id= (district-specific + generic) and /api/catalog/police-stations?district_id=; case stores court_id/police_station_id (+custom "Other"); labels resolved GU/EN and used in generated docs
 - [x] **Case sorting** — /api/cases?sort=updated|name|type; My Cases Sort modal (Recently Updated / Name A-Z / Case Type)
+- [x] **Court Favourites** — per-user pinned courts (/api/favourites/courts add/remove); favourited courts show a gold star and are grouped to the top of the Court picker
 
 ## Backlog (P1/P2)
 - P1: Live Razorpay (backend order+verify + web checkout) — awaiting user's Razorpay Key ID + Secret; mock active until then
