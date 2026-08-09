@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || '';
+const BASE = import.meta.env.VITE_API_BASE || 'https://nyaysetu-pro-emergent-1.onrender.com';
 
 async function request(path: string, method = 'GET', body?: unknown) {
   const token = localStorage.getItem('admin_token');
