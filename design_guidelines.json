@@ -1,0 +1,194 @@
+{
+  "app_name": "NyaySetu Pro",
+  "personality": "3 Editorial Mobile LIGHT with 6 Glass / Luxe DARK surfaces",
+  "personality_one_liner": "A highly authoritative, premium, and trustworthy legal assistant that balances editorial clarity in light mode with cinematic, expensive depth in dark mode.",
+  "color": {
+    "light": {
+      "surface": "#FFFFFF",
+      "onSurface": "#0B1B3D",
+      "surfaceSecondary": "#F4F6F9",
+      "onSurfaceSecondary": "#1D2D50",
+      "surfaceTertiary": "#E5E9F0",
+      "onSurfaceTertiary": "#3B4A6B",
+      "surfaceInverse": "#061024",
+      "onSurfaceInverse": "#FDFDFD",
+      "brand": "#0B1B3D",
+      "brandPrimary": "#C5A059",
+      "onBrandPrimary": "#FFFFFF",
+      "brandSecondary": "#112240",
+      "onBrandSecondary": "#FFFFFF",
+      "brandTertiary": "#EAE5D9",
+      "onBrandTertiary": "#8C6A29",
+      "success": "#1E4620",
+      "onSuccess": "#FFFFFF",
+      "warning": "#8C6A29",
+      "onWarning": "#FFFFFF",
+      "error": "#7A1C1C",
+      "onError": "#FFFFFF",
+      "info": "#1D2D50",
+      "onInfo": "#FFFFFF",
+      "border": "#E1E5ED",
+      "borderStrong": "#A6B1C2",
+      "divider": "#E1E5ED"
+    },
+    "dark": {
+      "surface": "#061024",
+      "onSurface": "#FDFDFD",
+      "surfaceSecondary": "#12203B",
+      "onSurfaceSecondary": "#D1D8E5",
+      "surfaceTertiary": "#1B2A49",
+      "onSurfaceTertiary": "#A6B1C2",
+      "surfaceInverse": "#FFFFFF",
+      "onSurfaceInverse": "#061024",
+      "brand": "#0B1B3D",
+      "brandPrimary": "#C5A059",
+      "onBrandPrimary": "#061024",
+      "brandSecondary": "#253452",
+      "onBrandSecondary": "#FDFDFD",
+      "brandTertiary": "#312613",
+      "onBrandTertiary": "#E0C387",
+      "success": "#2D5C30",
+      "onSuccess": "#FFFFFF",
+      "warning": "#C5A059",
+      "onWarning": "#061024",
+      "error": "#A32A2A",
+      "onError": "#FFFFFF",
+      "info": "#3B4A6B",
+      "onInfo": "#FFFFFF",
+      "border": "#253452",
+      "borderStrong": "#4A5A7B",
+      "divider": "#253452"
+    }
+  },
+  "typography": {
+    "displayFontFamily": "Libre Baskerville",
+    "textFontFamily": "Plus Jakarta Sans",
+    "scale": {
+      "sm": 12,
+      "base": 14,
+      "lg": 16,
+      "xl": 20,
+      "2xl": 24
+    }
+  },
+  "spacing": {
+    "rule": "Generous vertical breathing room for high legibility of legal documents. Card elements sit with 'lg' margins. Forms use single-column layouts with strong visual hierarchy.",
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48
+  },
+  "radius_tokens": {
+    "sm": 6,
+    "md": 12,
+    "lg": 20,
+    "pill": 999
+  },
+  "shadow_tier": 1,
+  "navigation": "bottom_tabs",
+  "icon_set": "Phosphor",
+  "glassmorphism": {
+    "enabled": true,
+    "do's": [
+      "Use subtle glass over deep blue backgrounds for premium dashboard cards.",
+      "Bottom tab bar and sticky headers in list/document views.",
+      "Modal scrims and premium subscription plan highlights."
+    ],
+    "dont's": [
+      "Avoid on form inputs or dense legal document texts.",
+      "Do not over-blur; keep text readability WCAG AA compliant."
+    ]
+  },
+  "platform_libraries": {
+    "glass": {
+      "ios": "expo-glass-effect",
+      "android": "expo-blur",
+      "low_end_android_fallback": "solid surfaceSecondary"
+    },
+    "image": "expo-image",
+    "blur": "expo-blur",
+    "bottom_sheet": "@gorhom/bottom-sheet",
+    "animation": "react-native-reanimated",
+    "gesture": "react-native-gesture-handler"
+  },
+  "screens": [
+    {
+      "name": "Splash",
+      "purpose": "Establish immediate authority with the 'The New Era of Advocacy' tagline and brand logo.",
+      "states": {
+        "loading": "Full bleed premium dark blue texture with gold logo fading in.",
+        "empty": "N/A",
+        "error": "N/A"
+      },
+      "layout": "Full-bleed background using the dark navy premium texture image, centered logo and serif tagline at the bottom. A subtle top-down gradient scrim ensures text contrast."
+    },
+    {
+      "name": "Dashboard (Home)",
+      "purpose": "Provide a high-level summary of advocate matters and direct entry points to key flows.",
+      "states": {
+        "loading": "Skeleton cards with soft shimmer.",
+        "empty": "No cases yet - clean illustration of a legal desk.",
+        "error": "Unable to load dashboard. Retry button."
+      },
+      "layout": "Top area: compact header with advocate name and global search. Primary summary: Welcome card with an inspiring legal quote. Secondary action grid: 2-column layout for 'Add Case', 'My Cases', and 'Continue Drafting'. Below this: Horizontal scroll for Categories (Civil/Criminal) and a 2-column grid of Most Used Templates. Tab bar fixed at bottom."
+    },
+    {
+      "name": "Case Creation Flow",
+      "purpose": "Capture case details sequentially using dependent dropdowns for complaint type/laws.",
+      "states": {
+        "loading": "Loading dropdown options (spinner).",
+        "empty": "N/A",
+        "error": "Validation errors on inputs or failed to save."
+      },
+      "layout": "Wizard pattern. Step 1: Language toggle (Gujarati/English), Case Nickname, Case Number. Step 2: Case Type dropdown. Step 3: Complaint Type (dependent on Step 2), Applicable Law, Section. Floating sticky CTA 'Next/Save' at the bottom. Progress train at the top."
+    },
+    {
+      "name": "Application Generation Wizard",
+      "purpose": "Draft, review, and finalize legal applications securely.",
+      "states": {
+        "loading": "Generating document preview.",
+        "empty": "No template selected.",
+        "error": "Failed to generate PDF/Word."
+      },
+      "layout": "Step 1: Auto-fill review (data from case). Step 2: Missing fields input (with Date picker). Step 3: WYSIWYG/Markdown preview of the document. Step 4: Output selection (PDF/Word), rename, save, and share. Uses a sticky bottom CTA to progress through steps."
+    },
+    {
+      "name": "Subscription & Wallet",
+      "purpose": "Drive monetization through tier selection and credit usage visibility.",
+      "states": {
+        "loading": "Fetching Razorpay plans.",
+        "empty": "No active plan.",
+        "error": "Payment failed state with retry."
+      },
+      "layout": "Hero section showing Credit Wallet (e.g., 'Remaining templates: 5'). Below: 3 tier cards styled with glassmorphism over a dark background for premium feel (₹299, ₹499, ₹999). Each card details benefits. 'Pay ₹9 for single template' as a subtle secondary link. Sticky 'Upgrade Now' button."
+    }
+  ],
+  "images": {
+    "splash_background": {
+      "url": "https://images.unsplash.com/photo-1597773150796-e5c14ebecbf5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHByZW1pdW0lMjBuYXZ5JTIwYmx1ZSUyMHRleHR1cmV8ZW58MHx8fHwxNzg2MjY0ODAyfDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1597773150796-e5c14ebecbf5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHByZW1pdW0lMjBuYXZ5JTIwYmx1ZSUyMHRleHR1cmV8ZW58MHx8fHwxNzg2MjY0ODAyfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "abstract premium navy blue texture"
+    },
+    "template_empty_state": {
+      "url": "https://images.unsplash.com/photo-1585119192382-71236d43b689?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxsZWdhbCUyMGRvY3VtZW50JTIwcGFwZXJzJTIwZGVzayUyMG1pbmltYWxpc3R8ZW58MHx8fHwxNzg2MjY0ODAyfDA&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1585119192382-71236d43b689?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxsZWdhbCUyMGRvY3VtZW50JTIwcGFwZXJzJTIwZGVzayUyMG1pbmltYWxpc3R8ZW58MHx8fHwxNzg2MjY0ODAyfDA&ixlib=rb-4.1.0&q=85",
+      "alt": "minimalist legal document on desk"
+    },
+    "premium_backdrop": {
+      "url": "https://images.unsplash.com/photo-1644345239317-f0cd165d60fc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGxhdyUyMHNjYWxlJTIwZ29sZCUyMGRhcmslMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4NjI2NDgwMnww&ixlib=rb-4.1.0&q=85",
+      "dark": "https://images.unsplash.com/photo-1644345239317-f0cd165d60fc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODl8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGxhdyUyMHNjYWxlJTIwZ29sZCUyMGRhcmslMjBiYWNrZ3JvdW5kfGVufDB8fHx8MTc4NjI2NDgwMnww&ixlib=rb-4.1.0&q=85",
+      "alt": "abstract gold legal balance scales on dark background"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Adopt the user's explicit request for Deep Court Blue and Royal Gold palettes. Ensure the exact hexes from the 'color' block are used.",
+    "Utilize 'Libre Baskerville' for display headers to establish legal gravitas and 'Plus Jakarta Sans' for high legibility in body/data texts.",
+    "For complex flows like 'Case Creation' and 'Application Generation', implement a clear Step-by-Step Wizard UI with dependent dropdowns updating reactively.",
+    "Implement multilingual support (Gujarati/English) via a clean toggle switch in the forms and global search.",
+    "In the Premium Subscription screen, use the 'premium_backdrop' image with a heavy gradient scrim behind glassmorphic pricing tier cards.",
+    "Enforce sticky primary CTA buttons at the bottom (respecting Safe Area) across all scrolling forms to ensure high conversion and ease-of-use."
+  ]
+}
