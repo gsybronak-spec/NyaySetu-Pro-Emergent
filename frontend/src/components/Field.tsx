@@ -7,13 +7,14 @@ interface Props extends TextInputProps {
   label?: string;
   error?: string;
   multiline?: boolean;
+  labelColor?: string;
 }
 
-export function Field({ label, error, style, multiline, ...rest }: Props) {
+export function Field({ label, error, style, multiline, labelColor, ...rest }: Props) {
   const { colors } = useTheme();
   return (
     <View style={{ marginBottom: Spacing.md }}>
-      {label ? <Text style={[styles.label, { color: colors.onSurfaceSecondary }]}>{label}</Text> : null}
+      {label ? <Text style={[styles.label, { color: labelColor || colors.onSurfaceSecondary }]}>{label}</Text> : null}
       <TextInput
         placeholderTextColor={colors.muted}
         {...rest}

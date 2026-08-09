@@ -46,6 +46,7 @@ export default function Otp() {
             <Field
               testID="otp-input"
               label="Enter OTP"
+              labelColor="#D1D8E5"
               placeholder="123456"
               keyboardType="number-pad"
               maxLength={6}

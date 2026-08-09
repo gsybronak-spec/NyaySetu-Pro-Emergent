@@ -51,6 +51,7 @@ export default function Login() {
             <Field
               testID="login-mobile-input"
               label="Mobile Number"
+              labelColor="#D1D8E5"
               placeholder="10-digit mobile"
               keyboardType="number-pad"
               maxLength={10}
