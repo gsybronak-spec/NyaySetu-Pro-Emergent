@@ -358,7 +358,9 @@ def enrich_case(c: dict) -> dict:
     if law and c.get("section_id"):
         section = next((s for s in law["sections"] if s["id"] == c.get("section_id")), None)
     c["category"] = ct["cat"] if ct else "Other"
-    if ct:
+    if c.get("case_type_id") == "other" and c.get("case_type_custom"):
+        c["case_type_label"] = c.get("case_type_custom")
+    elif ct:
         c["case_type_label"] = ct["gu"] if lang == "gu" else ct["en"]
     else:
         c["case_type_label"] = c.get("case_type_custom") or None
