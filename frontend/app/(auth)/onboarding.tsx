@@ -25,7 +25,7 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    api.districts().then(setDistricts).catch(() => {});
+    api.districts().then((r) => setDistricts(Array.isArray(r) ? r : [])).catch(() => setDistricts([]));
   }, []);
 
   const save = async (goCongrats = true) => {

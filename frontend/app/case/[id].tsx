@@ -18,7 +18,7 @@ export default function CaseDetail() {
     try {
       const [cs, tpls] = await Promise.all([api.getCase(String(id)), api.templates()]);
       setC(cs);
-      setTemplates(tpls);
+      setTemplates(Array.isArray(tpls) ? tpls : []);
     } catch {}
   }, [id]);
 

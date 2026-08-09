@@ -3,18 +3,44 @@ archive/restore, enriched labels, delete, catalog additions) + regression on aut
 import os
 import time
 import pytest
-import requests
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL",
-                          "https://nyay-setu-pro.preview.emergentagent.com").rstrip("/")
-API = f"{BASE_URL}/api"
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("DB_NAME", "nyaysetu_test_cm")
+
+import mongomock_motor
+mock_client = mongomock_motor.AsyncMongoMockClient()
+mock_db = mock_client["nyaysetu_test_cm"]
+
+import server
+server.db = mock_db
+
+from starlette.testclient import TestClient
+app_client = TestClient(server.app)
+
+class TestClientWrapper:
+    def get(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.get(url, **kwargs)
+    def post(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.post(url, **kwargs)
+    def put(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.put(url, **kwargs)
+    def delete(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.delete(url, **kwargs)
+
+requests = TestClientWrapper()
+API = "/api"
 
 
 @pytest.fixture(scope="module")
 def s():
-    sess = requests.Session()
-    sess.headers.update({"Content-Type": "application/json"})
-    return sess
+    return requests
 
 
 def _new_user(sess, referral_code=None):

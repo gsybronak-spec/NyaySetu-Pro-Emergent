@@ -2,18 +2,48 @@
 import os
 import time
 import base64
+import os
+import time
+import base64
 import pytest
-import requests
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://nyay-setu-pro.preview.emergentagent.com").rstrip("/")
-API = f"{BASE_URL}/api"
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("DB_NAME", "nyaysetu_test_iter4")
+
+import mongomock_motor
+mock_client = mongomock_motor.AsyncMongoMockClient()
+mock_db = mock_client["nyaysetu_test_iter4"]
+
+import server
+server.db = mock_db
+
+from starlette.testclient import TestClient
+app_client = TestClient(server.app)
+
+class TestClientWrapper:
+    def get(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.get(url, **kwargs)
+    def post(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.post(url, **kwargs)
+    def put(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.put(url, **kwargs)
+    def delete(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.delete(url, **kwargs)
+
+requests = TestClientWrapper()
+API = "/api"
 
 
 @pytest.fixture(scope="module")
 def session():
-    s = requests.Session()
-    s.headers.update({"Content-Type": "application/json"})
-    return s
+    return requests
 
 
 @pytest.fixture(scope="module")
@@ -201,7 +231,7 @@ class TestCaseSorting:
         payloads = [
             {"nickname": "Zebra_case", "case_type_id": "civil_suit", "party_name": "PZ"},
             {"nickname": "Alpha_case", "case_type_id": "criminal_complaint", "party_name": "PA"},
-            {"nickname": "Mango_case", "case_type_id": "family_matter", "party_name": "PM"},
+            {"nickname": "Mango_case", "case_type_id": "other_civil", "party_name": "PM"},
         ]
         ids = []
         for p in payloads:

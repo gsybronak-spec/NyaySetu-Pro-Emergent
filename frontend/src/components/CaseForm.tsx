@@ -73,10 +73,10 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [favCourts, setFavCourts] = useState<string[]>([]);
 
   useEffect(() => {
-    api.caseTypes().then(setCaseTypes).catch(() => {});
-    api.laws().then(setLaws).catch(() => {});
-    api.districts().then(setDistricts).catch(() => {});
-    api.favCourts().then((r) => setFavCourts(r.favourite_courts || [])).catch(() => {});
+    api.caseTypes().then((r) => setCaseTypes(Array.isArray(r) ? r : [])).catch(() => setCaseTypes([]));
+    api.laws().then((r) => setLaws(Array.isArray(r) ? r : [])).catch(() => setLaws([]));
+    api.districts().then((r) => setDistricts(Array.isArray(r) ? r : [])).catch(() => setDistricts([]));
+    api.favCourts().then((r) => setFavCourts(Array.isArray(r?.favourite_courts) ? r.favourite_courts : [])).catch(() => setFavCourts([]));
   }, []);
 
   useEffect(() => {

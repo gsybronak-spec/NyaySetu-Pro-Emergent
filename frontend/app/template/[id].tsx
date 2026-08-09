@@ -235,8 +235,8 @@ export default function TemplateApplication() {
                   {[
                     caseData.case_number && `Case: ${caseData.case_number}`,
                     caseData.party_name && `Party: ${caseData.party_name}`,
-                    caseData.court && `Court: ${caseData.court}`,
-                    caseData.district_id && `Dist: ${caseData.district_id}`,
+                    (caseData.court_label || caseData.court) && `Court: ${caseData.court_label || caseData.court}`,
+                    (caseData.district_label || caseData.district_id) && `Dist: ${caseData.district_label || caseData.district_id}`,
                   ].filter(Boolean).map((chip: any) => (
                     <View key={chip} style={[styles.autoChip, { backgroundColor: colors.surface }]}>
                       <Text style={{ color: colors.onSurface, fontSize: 11 }}>{chip}</Text>

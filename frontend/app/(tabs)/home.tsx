@@ -27,10 +27,10 @@ export default function Home() {
         api.templates().catch(() => []),
         api.drafts().catch(() => []),
       ]);
-      setQuote(q.quote);
-      setWallet(w);
-      setTemplates((tpls as any[]).slice(0, 10));
-      setDrafts(drs as any[]);
+      if (q?.quote) setQuote(q.quote);
+      if (w && typeof w === "object") setWallet(w);
+      setTemplates(Array.isArray(tpls) ? tpls.slice(0, 10) : []);
+      setDrafts(Array.isArray(drs) ? drs : []);
     } catch {}
   }, []);
 

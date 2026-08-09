@@ -3,22 +3,34 @@ import os
 import time
 import base64
 import pytest
-import requests
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-BASE_URL = os.environ.get("EXPO_PUBLIC_BACKEND_URL", "https://nyay-setu-pro.preview.emergentagent.com").rstrip("/")
-API = f"{BASE_URL}/api"
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("DB_NAME", "nyaysetu_test_api")
+
+import mongomock_motor
+mock_client = mongomock_motor.AsyncMongoMockClient()
+mock_db = mock_client["nyaysetu_test_api"]
+
+import server
+server.db = mock_db
+
+from starlette.testclient import TestClient
+app_client = TestClient(server.app)
+
+API = "/api"
 
 
 @pytest.fixture(scope="module")
 def session():
-    s = requests.Session()
-    s.headers.update({"Content-Type": "application/json"})
-    return s
+    return app_client
 
 
 @pytest.fixture(scope="module")
 def user_ctx(session):
-    """Create fresh user + token."""
+    """Create fresh user + token + initial test case."""
     mobile = f"9{int(time.time()) % 1000000000:09d}"
     r = session.post(f"{API}/auth/send-otp", json={"mobile": mobile})
     assert r.status_code == 200
@@ -27,7 +39,23 @@ def user_ctx(session):
     data = r.json()
     assert data["is_new"] is True
     assert "token" in data and "user" in data
-    return {"token": data["token"], "mobile": mobile, "user_id": data["user"]["id"]}
+    token = data["token"]
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    case_res = session.post(f"{API}/cases", headers=headers, json={
+        "language": "en",
+        "nickname": "TEST_CaseA",
+        "case_number": "12/2026",
+        "case_type_id": "criminal_complaint",
+        "complaint_type": "private",
+        "law_id": "ni_act",
+        "section_id": "138",
+        "party_name": "TEST Party",
+        "opposite_party": "TEST Opposite",
+        "district_id": "ahmedabad",
+        "court": "JMFC Ahmedabad",
+    })
+    case_id = case_res.json()["id"] if case_res.status_code == 200 else None
+    return {"token": token, "mobile": mobile, "user_id": data["user"]["id"], "case_id": case_id}
 
 
 def H(user_ctx):

@@ -16,9 +16,16 @@ export default function Subscription() {
   const [buying, setBuying] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [p, w] = await Promise.all([api.plans(), api.wallet().catch(() => wallet)]);
-    setPlans(p);
-    setWallet(w);
+    try {
+      const [p, w] = await Promise.all([
+        api.plans().catch(() => []),
+        api.wallet().catch(() => ({ balance: 0, total_used: 0 })),
+      ]);
+      setPlans(Array.isArray(p) ? p : []);
+      if (w && typeof w === "object") setWallet(w);
+    } catch {
+      setPlans([]);
+    }
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));

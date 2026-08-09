@@ -16,13 +16,17 @@ export default function Templates() {
   const [items, setItems] = useState<any[]>([]);
 
   const load = useCallback(async () => {
-    const res = await api.templates(q || undefined, cat || undefined);
-    setItems(res);
+    try {
+      const res = await api.templates(q || undefined, cat || undefined);
+      setItems(Array.isArray(res) ? res : []);
+    } catch {
+      setItems([]);
+    }
   }, [q, cat]);
 
   useEffect(() => { load(); }, [load]);
 
-  const cats = ["All", "Civil", "Criminal", "General"];
+  const cats = ["All", "Civil", "Criminal", "General", "Bail", "Family", "Revenue"];
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>

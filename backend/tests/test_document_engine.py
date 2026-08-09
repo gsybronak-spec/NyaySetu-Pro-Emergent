@@ -12,21 +12,50 @@ import io
 import os
 import re
 import time
-
 import pytest
-import requests
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from pdfminer.high_level import extract_text
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-BASE = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/") + "/api"
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("DB_NAME", "nyaysetu_test_doc")
+
+import mongomock_motor
+mock_client = mongomock_motor.AsyncMongoMockClient()
+mock_db = mock_client["nyaysetu_test_doc"]
+
+import server
+server.db = mock_db
+
+from starlette.testclient import TestClient
+app_client = TestClient(server.app)
+
+class TestClientWrapper:
+    def get(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.get(url, **kwargs)
+    def post(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.post(url, **kwargs)
+    def put(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.put(url, **kwargs)
+    def delete(self, url, **kwargs):
+        kwargs.pop("timeout", None)
+        return app_client.delete(url, **kwargs)
+
+requests = TestClientWrapper()
+BASE = "/api"
 
 
 # --------- helpers ---------
 def _login(mobile: str) -> str:
-    r = requests.post(f"{BASE}/auth/send-otp", json={"mobile": mobile}, timeout=15)
+    r = app_client.post(f"{BASE}/auth/send-otp", json={"mobile": mobile})
     assert r.status_code == 200, r.text
-    r = requests.post(f"{BASE}/auth/verify-otp", json={"mobile": mobile, "otp": "123456"}, timeout=15)
+    r = app_client.post(f"{BASE}/auth/verify-otp", json={"mobile": mobile, "otp": "123456"})
     assert r.status_code == 200, r.text
     return r.json()["token"]
 
@@ -242,6 +271,103 @@ class TestDocxGeneration:
                 assert p.alignment in (WD_ALIGN_PARAGRAPH.LEFT, None)
                 for run in p.runs:
                     assert not run.bold
+
+
+# --------- PHASE A DOCUMENT ENGINE FOUNDATION TESTS ---------
+class TestPhaseADocumentEngine:
+    def test_custom_margins_settings_override(self):
+        from doc_generator import generate_pdf, generate_docx, get_doc_settings
+        custom_settings = {
+            "margin_top_cm": 3.5,
+            "margin_bottom_cm": 3.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 2.0,
+            "heading_size": 14,
+            "body_size": 12,
+        }
+        merged = get_doc_settings(custom_settings)
+        assert merged["margin_top_cm"] == 3.5
+        assert merged["margin_left_cm"] == 4.0
+
+        blocks = [
+            {"text": "IN THE COURT OF JMFC", "align": "center", "bold": True},
+            {"text": "1. That the applicant submits this application.", "align": "left", "bold": False},
+        ]
+        pdf_b64 = generate_pdf(blocks, language="en", settings=custom_settings)
+        assert len(pdf_b64) > 100
+        raw_pdf = base64.b64decode(pdf_b64)
+        assert raw_pdf[:4] == b"%PDF"
+
+        docx_b64 = generate_docx(blocks, language="en", settings=custom_settings)
+        assert len(docx_b64) > 100
+        raw_docx = base64.b64decode(docx_b64)
+        doc = Document(io.BytesIO(raw_docx))
+        assert round(doc.sections[0].left_margin.cm, 1) == 4.0
+
+    def test_gujarati_character_pipeline(self):
+        from doc_generator import generate_pdf, generate_docx
+        guj_text = "અરજી માનનીય ન્યાયાલય વિગત મુદત સ્વિકાર સ્પેશિયલ પ્રમાણિત"
+        blocks = [
+            {"text": "માનનીય ન્યાયાલય અમદાવાદ", "align": "center", "bold": True},
+            {"text": f"૧. {guj_text}", "align": "left", "bold": False},
+        ]
+        pdf_b64 = generate_pdf(blocks, language="gu")
+        raw_pdf = base64.b64decode(pdf_b64)
+        pdf_text = extract_text(io.BytesIO(raw_pdf))
+        assert "અરજી" in pdf_text
+        assert "મુદત" in pdf_text
+        assert "ન્યાયાલય" in pdf_text
+
+        docx_b64 = generate_docx(blocks, language="gu")
+        raw_docx = base64.b64decode(docx_b64)
+        doc = Document(io.BytesIO(raw_docx))
+        assert any("ન્યાયાલય" in p.text for p in doc.paragraphs)
+
+    def test_harfbuzz_shaping_exact_words(self):
+        from doc_generator import generate_pdf, generate_pdf_playwright
+        exact_words = [
+            "અરજી", "વિગત", "મુદત", "સ્વીકાર", "વિશેષ", "પ્રમાણિત",
+            "પ્રતિઉત્તર", "સ્વપ્રમાણિત", "પ્રતિનિધિત્વ", "ક્ષતિ", "જ્ઞાપન", "ન્યાયાધીશ"
+        ]
+        blocks = [{"text": w, "align": "left", "bold": False} for w in exact_words]
+
+        # Generate PDF using Chromium engine
+        pdf_b64 = generate_pdf(blocks, language="gu")
+        assert len(pdf_b64) > 200
+        raw_pdf = base64.b64decode(pdf_b64)
+        assert raw_pdf[:4] == b"%PDF"
+
+        # Verify PDF contains extractable text
+        pdf_text = extract_text(io.BytesIO(raw_pdf))
+        assert len(pdf_text.strip()) > 20
+
+    def test_english_times_font_configuration(self):
+        from doc_generator import generate_pdf, FONT_DIR, get_doc_settings
+        times_ttf = FONT_DIR / "TimesNewRoman.ttf"
+        settings = get_doc_settings()
+        blocks = [{"text": "TEST IN THE COURT OF SESSIONS", "align": "center", "bold": True}]
+        pdf_b64 = generate_pdf(blocks, language="en")
+        raw_pdf = base64.b64decode(pdf_b64)
+        pdf_text = extract_text(io.BytesIO(raw_pdf))
+        assert "SESSIONS" in pdf_text
+
+        if not times_ttf.exists():
+            # Standard ReportLab Times-Roman PostScript font is used (not an embedded TTF)
+            assert settings["english_font"] == "Times-Roman"
+
+    def test_formatting_preservation(self):
+        from doc_generator import build_blocks
+        content = (
+            "IN THE COURT OF SESSIONS JUDGE AHMEDABAD\n\n"
+            "APPLICATION FOR BAIL\n\n"
+            "1. First point of application.\n"
+            "2. Second point of application.\n"
+        )
+        blocks = build_blocks(content, title_en="APPLICATION FOR BAIL")
+        assert blocks[0]["align"] == "center" and blocks[0]["bold"] is True
+        assert blocks[2]["align"] == "center" and blocks[2]["bold"] is True
+        assert blocks[4]["align"] == "left" and blocks[4]["bold"] is False
+        assert blocks[5]["align"] == "left" and blocks[5]["bold"] is False
 
 
 # --------- PDF vs DOCX consistency ---------

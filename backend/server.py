@@ -1,6 +1,7 @@
 """NyaySetu Pro - FastAPI backend."""
 
 import os
+import re
 import uuid
 import logging
 import secrets
@@ -15,6 +16,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
+import bcrypt
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
@@ -25,6 +27,10 @@ load_dotenv(ROOT_DIR / ".env")
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 JWT_SECRET = os.environ.get("JWT_SECRET", "nyaysetu-dev-secret-please-change")
+
+# Admin seed — loaded from env, NEVER hard-coded
+ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL")
+ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD")
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -41,72 +47,72 @@ logger = logging.getLogger("nyaysetu")
 # ============================================================
 
 class SendOtpReq(BaseModel):
-    mobile: str
+    mobile: str = Field(..., max_length=15)
 
 class VerifyOtpReq(BaseModel):
-    mobile: str
-    otp: str
-    referral_code: Optional[str] = None
+    mobile: str = Field(..., max_length=15)
+    otp: str = Field(..., max_length=10)
+    referral_code: Optional[str] = Field(None, max_length=20)
 
 class GoogleSessionReq(BaseModel):
-    session_id: str
-    referral_code: Optional[str] = None
+    session_id: str = Field(..., max_length=500)
+    referral_code: Optional[str] = Field(None, max_length=20)
 
 class ProfileUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    bar_council_no: Optional[str] = None
-    state: Optional[str] = None
-    district: Optional[str] = None
-    court: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)
+    email: Optional[str] = Field(None, max_length=200)
+    bar_council_no: Optional[str] = Field(None, max_length=50)
+    state: Optional[str] = Field(None, max_length=100)
+    district: Optional[str] = Field(None, max_length=100)
+    court: Optional[str] = Field(None, max_length=200)
 
 class CaseCreate(BaseModel):
     language: str = "en"
-    nickname: Optional[str] = None
-    case_number: Optional[str] = None
-    case_type_id: Optional[str] = None
-    case_type_custom: Optional[str] = None
-    complaint_type: Optional[str] = None  # private/police/other
-    law_id: Optional[str] = None
-    law_custom: Optional[str] = None
-    section_id: Optional[str] = None
-    party_name: Optional[str] = None
-    opposite_party: Optional[str] = None
-    court: Optional[str] = None
-    court_id: Optional[str] = None
-    court_custom: Optional[str] = None
-    district_id: Optional[str] = None
-    police_station: Optional[str] = None
-    police_station_id: Optional[str] = None
-    police_station_custom: Optional[str] = None
-    complaint_custom: Optional[str] = None
-    notes: Optional[str] = None
+    nickname: Optional[str] = Field(None, max_length=200)
+    case_number: Optional[str] = Field(None, max_length=100)
+    case_type_id: Optional[str] = Field(None, max_length=50)
+    case_type_custom: Optional[str] = Field(None, max_length=200)
+    complaint_type: Optional[str] = Field(None, max_length=20)  # private/police/other
+    law_id: Optional[str] = Field(None, max_length=50)
+    law_custom: Optional[str] = Field(None, max_length=200)
+    section_id: Optional[str] = Field(None, max_length=50)
+    party_name: Optional[str] = Field(None, max_length=500)
+    opposite_party: Optional[str] = Field(None, max_length=500)
+    court: Optional[str] = Field(None, max_length=200)
+    court_id: Optional[str] = Field(None, max_length=50)
+    court_custom: Optional[str] = Field(None, max_length=200)
+    district_id: Optional[str] = Field(None, max_length=50)
+    police_station: Optional[str] = Field(None, max_length=200)
+    police_station_id: Optional[str] = Field(None, max_length=50)
+    police_station_custom: Optional[str] = Field(None, max_length=200)
+    complaint_custom: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = Field(None, max_length=2000)
 
 class CaseUpdate(CaseCreate):
     pass
 
 class GenerateReq(BaseModel):
-    template_id: str
-    case_id: Optional[str] = None
+    template_id: str = Field(..., max_length=50)
+    case_id: Optional[str] = Field(None, max_length=50)
     language: str = "en"
     values: dict = {}
-    filename: Optional[str] = None
+    filename: Optional[str] = Field(None, max_length=200)
 
 class DownloadReq(BaseModel):
-    template_id: str
-    case_id: Optional[str] = None
+    template_id: str = Field(..., max_length=50)
+    case_id: Optional[str] = Field(None, max_length=50)
     language: str = "en"
     values: dict = {}
     format: str = "pdf"  # pdf | docx
-    filename: Optional[str] = None
-    consume_credit: bool = True
+    filename: Optional[str] = Field(None, max_length=200)
+    consume_credit: bool = True  # DEPRECATED: ignored server-side — always consumes 1 credit
 
 class PurchaseReq(BaseModel):
-    plan_id: str
+    plan_id: str = Field(..., max_length=50)
 
 class DraftSave(BaseModel):
-    template_id: str
-    case_id: Optional[str] = None
+    template_id: str = Field(..., max_length=50)
+    case_id: Optional[str] = Field(None, max_length=50)
     language: str = "en"
     values: dict = {}
 
@@ -236,8 +242,9 @@ async def send_otp(req: SendOtpReq):
 async def verify_otp(req: VerifyOtpReq):
     mobile = req.mobile.strip()
     otp = req.otp.strip()
-    # Accept 123456 or any 6-digit code for mock
-    if not (otp == "123456" or (len(otp) == 6 and otp.isdigit())):
+    # DEVELOPMENT/MOCK: Only accept fixed OTP 123456.
+    # Replace with real SMS provider verification for production.
+    if otp != "123456":
         raise HTTPException(400, "Invalid OTP")
 
     user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
@@ -403,8 +410,57 @@ def enrich_case(c: dict) -> dict:
     return c
 
 
+# ============================================================
+# REFERENCE VALIDATION
+# ============================================================
+
+_VALID_CASE_TYPE_IDS = {c["id"] for c in CASE_TYPES}
+_VALID_LAW_IDS = {l["id"] for l in LAWS}
+_VALID_DISTRICT_IDS = {d["id"] for d in DISTRICTS}
+_VALID_COURT_IDS = {c["id"] for c in COURTS}
+_VALID_PS_IDS = {p["id"] for p in POLICE_STATIONS}
+
+MAX_TEMPLATE_VALUES_TOTAL = 100_000  # max total chars in template values dict
+
+
+def validate_case_refs(data: dict):
+    """Validate catalog reference IDs. Raises HTTPException on invalid."""
+    cid = data.get("case_type_id")
+    if cid and cid != "other" and cid not in _VALID_CASE_TYPE_IDS:
+        raise HTTPException(400, f"Invalid case_type_id: {cid}")
+    lid = data.get("law_id")
+    if lid and lid != "other_law" and lid not in _VALID_LAW_IDS:
+        raise HTTPException(400, f"Invalid law_id: {lid}")
+    did = data.get("district_id")
+    if did and did not in _VALID_DISTRICT_IDS:
+        raise HTTPException(400, f"Invalid district_id: {did}")
+    court = data.get("court_id")
+    if court and court != "other" and court not in _VALID_COURT_IDS:
+        raise HTTPException(400, f"Invalid court_id: {court}")
+    if court == "other" and not (data.get("court_custom") or data.get("court")):
+        raise HTTPException(400, "court_custom is required when court_id is 'other'")
+    psid = data.get("police_station_id")
+    if psid and psid != "other" and psid not in _VALID_PS_IDS:
+        raise HTTPException(400, f"Invalid police_station_id: {psid}")
+    if psid == "other" and not (data.get("police_station_custom") or data.get("police_station")):
+        raise HTTPException(400, "police_station_custom is required when police_station_id is 'other'")
+
+
+def validate_values_size(values: dict):
+    """Prevent payload abuse via extremely large template values."""
+    if len(values) > 100:
+        raise HTTPException(400, "Too many template fields (max 100)")
+    for k, v in values.items():
+        if isinstance(v, str) and len(v) > 5000:
+            raise HTTPException(400, f"Field '{k}' too long (max 5000 chars)")
+    total = sum(len(str(k)) + len(str(v)) for k, v in values.items())
+    if total > MAX_TEMPLATE_VALUES_TOTAL:
+        raise HTTPException(400, "Template values payload too large")
+
+
 @api.post("/cases")
 async def create_case(req: CaseCreate, user=Depends(get_user)):
+    validate_case_refs(req.model_dump())
     case_id = str(uuid.uuid4())
     doc = {
         "id": case_id,
@@ -464,11 +520,12 @@ async def get_case(case_id: str, user=Depends(get_user)):
 @api.put("/cases/{case_id}")
 async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    validate_case_refs(updates)
     updates["updated_at"] = now().isoformat()
     r = await db.cases.update_one({"id": case_id, "user_id": user["id"]}, {"$set": updates})
     if r.matched_count == 0:
         raise HTTPException(404, "Case not found")
-    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    c = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
     return enrich_case(c)
 
 
@@ -505,34 +562,96 @@ async def delete_case(case_id: str, user=Depends(get_user)):
 # ============================================================
 # TEMPLATES
 # ============================================================
+_AUTO_FILL_FIELDS = {"advocate_name", "today", "district", "court", "case_number", "case_type", "party_name", "opposite_party"}
 
 def public_template(t: dict) -> dict:
-    return {
+    """Return the public-facing template shape (unchanged for backward compat)."""
+    fields = t.get("fields", [])
+    clean_fields = []
+    for f in fields:
+        field_dict = {
+            "key": f["key"],
+            "label_en": f.get("label_en", ""),
+            "label_gu": f.get("label_gu", ""),
+            "type": f.get("type", "text"),
+            "required": f.get("required", True),
+        }
+        if "options" in f and f["options"]:
+            field_dict["options"] = f["options"]
+        if "default_value" in f and f["default_value"] is not None:
+            field_dict["default_value"] = f["default_value"]
+        clean_fields.append(field_dict)
+    res = {
         "id": t["id"],
         "name_en": t["name_en"],
         "name_gu": t["name_gu"],
         "category": t["category"],
-        "fields": t["fields"],
+        "fields": clean_fields,
     }
+    for opt_key in ["sub_category", "description", "tags", "case_types", "courts", "jurisdiction", "settings"]:
+        if opt_key in t and t[opt_key]:
+            res[opt_key] = t[opt_key]
+    return res
+
+
+async def _get_published_templates() -> list:
+    """Return published templates. Merges DB published templates with seed templates (DB overrides seed by ID).
+    Hides archived templates."""
+    db_templates = await db.templates.find({}, {"_id": 0}).to_list(500)
+    db_by_id = {t["id"]: t for t in db_templates}
+
+    merged = []
+    # Add seed templates if not overridden or if published in DB
+    for seed_t in TEMPLATES:
+        t_id = seed_t["id"]
+        if t_id in db_by_id:
+            db_t = db_by_id[t_id]
+            if db_t.get("status") == "published":
+                merged.append(db_t)
+            # If draft or archived, hide from public lawyer templates list
+        else:
+            # Not in DB yet -> seed template is active by default
+            merged.append(seed_t)
+
+    # Add newly created templates from DB that are published and not in seed
+    seed_ids = {t["id"] for t in TEMPLATES}
+    for db_t in db_templates:
+        if db_t["id"] not in seed_ids and db_t.get("status") == "published":
+            merged.append(db_t)
+
+    return sorted(merged, key=lambda x: x.get("category", ""))
+
+
+async def _get_template_by_id(template_id: str) -> Optional[dict]:
+    """Get a single published template by ID. DB-first, seed fallback."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if t:
+        if t.get("status") == "published":
+            return t
+        return None  # Draft or archived in DB -> hidden from public lawyer API
+    return next((x for x in TEMPLATES if x["id"] == template_id), None)
+
 
 @api.get("/templates")
 async def list_templates(q: Optional[str] = None, category: Optional[str] = None):
-    items = [public_template(t) for t in TEMPLATES]
+    all_templates = await _get_published_templates()
+    items = [public_template(t) for t in all_templates]
     if category:
         items = [t for t in items if t["category"].lower() == category.lower()]
     if q:
         ql = q.lower().strip()
         matched = []
-        for t in TEMPLATES:
+        for t in all_templates:
             all_aliases = [t["name_en"].lower(), t["name_gu"].lower()] + [a.lower() for a in t.get("aliases", [])]
             if any(ql in a for a in all_aliases):
                 matched.append(public_template(t))
         items = matched
     return items
 
+
 @api.get("/templates/{template_id}")
 async def get_template(template_id: str):
-    t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+    t = await _get_template_by_id(template_id)
     if not t:
         raise HTTPException(404, "Template not found")
     return {
@@ -575,6 +694,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
+        ctx.setdefault("opposite_party", case.get("opposite_party") or "")
     else:
         d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
         ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
@@ -582,12 +702,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx.setdefault("case_number", "")
         ctx.setdefault("case_type", "")
         ctx.setdefault("party_name", "")
+        ctx.setdefault("opposite_party", "")
     return ctx
 
 
 @api.post("/applications/preview")
 async def preview_application(req: GenerateReq, user=Depends(get_user)):
-    t = next((x for x in TEMPLATES if x["id"] == req.template_id), None)
+    validate_values_size(req.values)
+    t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
     case = None
@@ -602,38 +724,49 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 
 @api.post("/applications/download")
 async def download_application(req: DownloadReq, user=Depends(get_user)):
-    t = next((x for x in TEMPLATES if x["id"] == req.template_id), None)
+    validate_values_size(req.values)
+    t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
 
-    # Check wallet
+    # SERVER-CONTROLLED: Always consume exactly 1 credit for final downloads.
+    # The consume_credit client flag is IGNORED for security.
     wallet = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
-    if req.consume_credit and (not wallet or wallet.get("balance", 0) < 1):
+    if not wallet or wallet.get("balance", 0) < 1:
         raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
 
-    case = None
-    if req.case_id:
-        case = await db.cases.find_one({"id": req.case_id, "user_id": user["id"]}, {"_id": 0})
-    ctx = await build_render_context(user, case, req.values, req.language)
-    tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
-    rendered = render_template(tpl, ctx)
-    blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
+    # Atomic credit deduction FIRST (check-and-decrement prevents negative balance)
+    r = await db.wallets.update_one(
+        {"user_id": user["id"], "balance": {"$gte": 1}},
+        {"$inc": {"balance": -1, "total_used": 1}, "$set": {"updated_at": now().isoformat()}},
+    )
+    if r.modified_count == 0:
+        raise HTTPException(402, "Insufficient credits")
 
-    if req.format == "docx":
-        b64 = generate_docx(blocks, req.language)
-        mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    else:
-        b64 = generate_pdf(blocks, req.language)
-        mime = "application/pdf"
+    # Generate document — if this fails, refund the credit
+    try:
+        case = None
+        if req.case_id:
+            case = await db.cases.find_one({"id": req.case_id, "user_id": user["id"]}, {"_id": 0})
+        ctx = await build_render_context(user, case, req.values, req.language)
+        tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
+        rendered = render_template(tpl, ctx)
+        blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
 
-    # Consume credit atomically
-    if req.consume_credit:
-        r = await db.wallets.update_one(
-            {"user_id": user["id"], "balance": {"$gte": 1}},
-            {"$inc": {"balance": -1, "total_used": 1}, "$set": {"updated_at": now().isoformat()}},
+        if req.format == "docx":
+            b64 = generate_docx(blocks, req.language)
+            mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            b64 = generate_pdf(blocks, req.language)
+            mime = "application/pdf"
+    except Exception as e:
+        # Refund credit on generation failure — user must not be unfairly charged
+        await db.wallets.update_one(
+            {"user_id": user["id"]},
+            {"$inc": {"balance": 1, "total_used": -1}, "$set": {"updated_at": now().isoformat()}},
         )
-        if r.modified_count == 0:
-            raise HTTPException(402, "Insufficient credits")
+        logger.error(f"Document generation failed, credit refunded: {e}")
+        raise HTTPException(500, "Document generation failed. Your credit has been refunded.")
 
     # Log usage
     filename = req.filename or f"{t['id']}_{now().strftime('%Y%m%d_%H%M%S')}.{req.format}"
@@ -674,7 +807,11 @@ async def application_history(user=Depends(get_user)):
 async def get_wallet(user=Depends(get_user)):
     w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
     if not w:
-        w = {"user_id": user["id"], "balance": 5, "free_credits_granted": 5, "total_used": 0}
+        # Wallet missing — recreate with ZERO balance (not 5).
+        # Initial 5 free credits are granted only once via create_new_user() at signup.
+        # Re-creating with 5 would allow infinite free credits by deleting the wallet.
+        w = {"user_id": user["id"], "balance": 0, "free_credits_granted": 0, "total_used": 0,
+             "updated_at": now().isoformat()}
         await db.wallets.insert_one(w.copy())
     return {"balance": w.get("balance", 0), "total_used": w.get("total_used", 0)}
 
@@ -800,6 +937,8 @@ async def delete_draft(draft_id: str, user=Depends(get_user)):
 
 @api.get("/search")
 async def global_search(q: str, user=Depends(get_user)):
+    if len(q) > 200:
+        raise HTTPException(400, "Search query too long (max 200 characters)")
     ql = q.lower().strip()
     # Templates
     tpls = []
@@ -825,7 +964,772 @@ async def root():
     return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0"}
 
 
+# ============================================================
+# ADMIN PORTAL — MODELS
+# ============================================================
+
+class AdminLoginReq(BaseModel):
+    email: str = Field(..., max_length=200)
+    password: str = Field(..., max_length=200)
+
+class FieldOptionDef(BaseModel):
+    label_en: str = Field("", max_length=200)
+    label_gu: str = Field("", max_length=200)
+    value: str = Field(..., max_length=200)
+
+class TemplateFieldDef(BaseModel):
+    key: str = Field(..., max_length=50)
+    label_en: str = Field(..., max_length=200)
+    label_gu: str = Field(..., max_length=200)
+    type: str = Field(default="text", max_length=30)  # text|textarea|number|date|select|radio|checkbox
+    required: bool = True
+    order: int = 0
+    default_value: Optional[str] = None
+    options: list[FieldOptionDef] = []
+    validation: Optional[dict] = None
+
+class AdminTemplateCreate(BaseModel):
+    id: Optional[str] = Field(None, max_length=50)
+    name_en: str = Field(..., max_length=200)
+    name_gu: str = Field(..., max_length=200)
+    category: str = Field(default="General", max_length=50)
+    sub_category: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    tags: list[str] = []
+    aliases: list[str] = []
+    case_types: list[str] = []
+    courts: list[str] = []
+    jurisdiction: Optional[str] = Field(None, max_length=200)
+    fields: list[TemplateFieldDef] = []
+    content_en: str = ""
+    content_gu: str = ""
+    settings: Optional[dict] = None
+
+class AdminTemplateUpdate(BaseModel):
+    name_en: Optional[str] = Field(None, max_length=200)
+    name_gu: Optional[str] = Field(None, max_length=200)
+    category: Optional[str] = Field(None, max_length=50)
+    sub_category: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    tags: Optional[list[str]] = None
+    aliases: Optional[list[str]] = None
+    case_types: Optional[list[str]] = None
+    courts: Optional[list[str]] = None
+    jurisdiction: Optional[str] = Field(None, max_length=200)
+    fields: Optional[list[TemplateFieldDef]] = None
+    content_en: Optional[str] = None
+    content_gu: Optional[str] = None
+    settings: Optional[dict] = None
+
+class AdminCloneReq(BaseModel):
+    as_new_template: bool = False
+    new_id: Optional[str] = Field(None, max_length=50)
+    new_name_en: Optional[str] = Field(None, max_length=200)
+    new_name_gu: Optional[str] = Field(None, max_length=200)
+
+class AdminPreviewReq(BaseModel):
+    values: Optional[dict] = {}
+    content_en: Optional[str] = None
+    content_gu: Optional[str] = None
+    name_en: Optional[str] = None
+    name_gu: Optional[str] = None
+    fields: Optional[list[TemplateFieldDef]] = None
+    settings: Optional[dict] = None
+
+
+# ============================================================
+# ADMIN PORTAL — JWT & AUTH HELPERS
+# ============================================================
+
+ADMIN_TOKEN_EXPIRY_HOURS = 8
+
+
+def make_admin_token(admin_id: str, email: str, role: str) -> str:
+    """Create a JWT for admin users. Contains token_type='admin' to distinguish from lawyer JWTs."""
+    payload = {
+        "sub": admin_id,
+        "email": email,
+        "role": role,
+        "token_type": "admin",
+        "iat": int(now().timestamp()),
+        "exp": int((now() + timedelta(hours=ADMIN_TOKEN_EXPIRY_HOURS)).timestamp()),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+async def get_admin(authorization: Optional[str] = Header(None)) -> dict:
+    """FastAPI dependency: validate admin JWT and return admin record.
+    Rejects lawyer JWTs, expired tokens, and inactive admins."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing admin auth token")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Admin token expired")
+    except Exception:
+        raise HTTPException(401, "Invalid admin token")
+    # Reject non-admin tokens (e.g. lawyer JWTs)
+    if payload.get("token_type") != "admin":
+        raise HTTPException(401, "Not an admin token")
+    admin_id = payload.get("sub")
+    if not admin_id:
+        raise HTTPException(401, "Invalid admin token")
+    admin = await db.admin_users.find_one({"id": admin_id}, {"_id": 0})
+    if not admin:
+        raise HTTPException(401, "Admin not found")
+    if not admin.get("active", False):
+        raise HTTPException(401, "Admin account is disabled")
+    return admin
+
+
+async def require_super_admin(authorization: Optional[str] = Header(None)) -> dict:
+    """FastAPI dependency: like get_admin() but only allows super_admin role."""
+    admin = await get_admin(authorization)
+    if admin.get("role") != "super_admin":
+        raise HTTPException(403, "Super admin access required")
+    return admin
+
+
+def admin_public(admin: dict) -> dict:
+    """Return admin record without sensitive fields."""
+    return {k: v for k, v in admin.items() if k not in ("_id", "password_hash")}
+
+
+# ============================================================
+# ADMIN PORTAL — API ROUTER
+# ============================================================
+
+admin_api = APIRouter(prefix="/api/admin")
+
+
+@admin_api.post("/auth/login")
+async def admin_login(req: AdminLoginReq):
+    """Admin login with email + password → JWT."""
+    email = req.email.strip().lower()
+    if not email:
+        raise HTTPException(400, "Email is required")
+    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    if not admin:
+        raise HTTPException(401, "Invalid email or password")
+    if not admin.get("active", False):
+        raise HTTPException(401, "Admin account is disabled")
+    # Verify password
+    stored_hash = admin.get("password_hash", "")
+    if not stored_hash or not bcrypt.checkpw(req.password.encode("utf-8"), stored_hash.encode("utf-8")):
+        raise HTTPException(401, "Invalid email or password")
+    # Update last_login
+    await db.admin_users.update_one(
+        {"id": admin["id"]},
+        {"$set": {"last_login": now().isoformat()}},
+    )
+    token = make_admin_token(admin["id"], admin["email"], admin["role"])
+    return {"token": token, "admin": admin_public(admin)}
+
+
+@admin_api.get("/auth/me")
+async def admin_me(admin=Depends(get_admin)):
+    """Return the currently authenticated admin's profile."""
+    return admin_public(admin)
+
+
+@admin_api.post("/auth/logout")
+async def admin_logout(admin=Depends(get_admin)):
+    """Logout is client-side (clear JWT). Server acknowledges."""
+    return {"success": True, "message": "Logged out"}
+
+
+@admin_api.get("/dashboard/stats")
+async def admin_dashboard_stats(admin=Depends(get_admin)):
+    """Aggregate real statistics from MongoDB for the admin dashboard."""
+    # Total users
+    total_users = await db.users.count_documents({})
+
+    # Active users (users who have at least one case or application)
+    # Simple proxy: users created in the last 30 days
+    thirty_days_ago = (now() - timedelta(days=30)).isoformat()
+    recent_users_count = await db.users.count_documents(
+        {"created_at": {"$gte": thirty_days_ago}}
+    )
+
+    # Total cases
+    total_cases = await db.cases.count_documents({})
+
+    # Total documents generated (applications collection)
+    total_documents = await db.applications.count_documents({})
+
+    # Total credits consumed — sum of total_used across all wallets
+    credits_pipeline = [
+        {"$group": {"_id": None, "total": {"$sum": "$total_used"}}}
+    ]
+    credits_result = await db.wallets.aggregate(credits_pipeline).to_list(1)
+    total_credits_consumed = credits_result[0]["total"] if credits_result else 0
+
+    # Total transactions
+    total_transactions = await db.transactions.count_documents({})
+
+    # Recent users (last 10)
+    recent_users_cursor = db.users.find(
+        {}, {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "created_at": 1, "provider": 1}
+    ).sort("created_at", -1).limit(10)
+    recent_users = await recent_users_cursor.to_list(10)
+
+    # Recent applications (last 10)
+    recent_apps_cursor = db.applications.find(
+        {}, {"_id": 0, "id": 1, "user_id": 1, "template_name": 1, "language": 1, "format": 1, "created_at": 1}
+    ).sort("created_at", -1).limit(10)
+    recent_applications = await recent_apps_cursor.to_list(10)
+
+    return {
+        "total_users": total_users,
+        "recent_users_30d": recent_users_count,
+        "total_cases": total_cases,
+        "total_documents_generated": total_documents,
+        "total_credits_consumed": total_credits_consumed,
+        "total_transactions": total_transactions,
+        "recent_users": recent_users,
+        "recent_applications": recent_applications,
+    }
+
+
+def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
+    """Validate that all placeholders in content match known fields.
+    Returns {valid: bool, unknown: [...], unused: [...], duplicate_keys: [...]}. """
+    declared_keys = {f["key"] for f in template_fields if "key" in f} | _AUTO_FILL_FIELDS
+    found_en = set(re.findall(r"\{\{(\w+)\}\}", content_en or ""))
+    found_gu = set(re.findall(r"\{\{(\w+)\}\}", content_gu or ""))
+    all_found = found_en | found_gu
+    unknown = all_found - declared_keys
+    
+    # Check duplicate field keys
+    field_keys = [f["key"] for f in template_fields if "key" in f]
+    seen = set()
+    duplicate_keys = set()
+    for k in field_keys:
+        if k in seen:
+            duplicate_keys.add(k)
+        seen.add(k)
+        
+    unused = set(field_keys) - all_found
+    is_valid = len(unknown) == 0 and len(duplicate_keys) == 0
+    return {
+        "valid": is_valid,
+        "unknown": sorted(unknown),
+        "unused": sorted(unused),
+        "duplicate_keys": sorted(duplicate_keys),
+    }
+
+
+@admin_api.get("/templates")
+async def admin_list_templates(
+    status: Optional[str] = None,
+    category: Optional[str] = None,
+    q: Optional[str] = None,
+    admin=Depends(get_admin),
+):
+    """List all templates (all statuses) for admin management."""
+    query = {}
+    if status:
+        query["status"] = status
+    if category:
+        query["category"] = category
+    templates = await db.templates.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    if not templates and not status:
+        templates = [
+            {**t, "status": "seed", "version": 0, "source": "seed", "locked": False}
+            for t in TEMPLATES
+        ]
+    if q:
+        ql = q.lower().strip()
+        templates = [
+            t for t in templates
+            if ql in t.get("name_en", "").lower()
+            or ql in t.get("name_gu", "").lower()
+            or ql in t.get("id", "").lower()
+        ]
+    return templates
+
+
+@admin_api.get("/templates/{template_id}")
+async def admin_get_template(template_id: str, admin=Depends(get_admin)):
+    """Get full template details for admin editing."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not t:
+        t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        if t:
+            t = {
+                **t,
+                "status": "seed",
+                "version": 0,
+                "source": "seed",
+                "locked": False,
+                "settings": {
+                    "margin_top_cm": 2.5,
+                    "margin_bottom_cm": 2.5,
+                    "margin_left_cm": 2.5,
+                    "margin_right_cm": 2.5,
+                    "gujarati_font": "LohitGujarati",
+                    "english_font": "Times-Roman",
+                    "body_size": 12,
+                    "heading_size": 13,
+                    "line_spacing": 18,
+                    "paragraph_spacing": 6,
+                },
+            }
+    if not t:
+        raise HTTPException(404, "Template not found")
+    return t
+
+
+@admin_api.post("/templates")
+async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admin)):
+    """Create a new template as draft."""
+    template_id = req.id or re.sub(r"[^a-z0-9_]", "_", req.name_en.lower().strip().replace(" ", "_"))[:50]
+    existing = await db.templates.find_one({"id": template_id})
+    if existing:
+        raise HTTPException(409, f"Template with id '{template_id}' already exists")
+    ts = now().isoformat()
+    template_doc = {
+        "id": template_id,
+        "slug": template_id,
+        "name_en": req.name_en,
+        "name_gu": req.name_gu,
+        "category": req.category,
+        "sub_category": req.sub_category,
+        "description": req.description,
+        "tags": req.tags,
+        "aliases": req.aliases,
+        "case_types": req.case_types,
+        "courts": req.courts,
+        "jurisdiction": req.jurisdiction,
+        "fields": [f.model_dump() for f in req.fields],
+        "content_en": req.content_en,
+        "content_gu": req.content_gu,
+        "settings": req.settings or {
+            "margin_top_cm": 2.5,
+            "margin_bottom_cm": 2.5,
+            "margin_left_cm": 2.5,
+            "margin_right_cm": 2.5,
+            "gujarati_font": "LohitGujarati",
+            "english_font": "Times-Roman",
+            "body_size": 12,
+            "heading_size": 13,
+            "line_spacing": 18,
+            "paragraph_spacing": 6,
+        },
+        "status": "draft",
+        "version": 1,
+        "locked": False,
+        "source": "admin_created",
+        "created_by": admin["id"],
+        "updated_by": admin["id"],
+        "created_at": ts,
+        "updated_at": ts,
+        "published_at": None,
+    }
+    await db.templates.insert_one(template_doc.copy())
+    template_doc.pop("_id", None)
+    return template_doc
+
+
+@admin_api.put("/templates/{template_id}")
+async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admin=Depends(get_admin)):
+    """Update a draft template. Published/locked templates cannot be directly modified."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not t:
+        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        if seed_t:
+            # Seed template being edited for first time -> auto-initialize as draft in DB
+            t = {
+                **seed_t,
+                "status": "draft",
+                "version": 1,
+                "locked": False,
+                "source": "admin_edited",
+            }
+            await db.templates.insert_one({**t, "created_at": now().isoformat(), "updated_at": now().isoformat()})
+        else:
+            raise HTTPException(404, "Template not found")
+    
+    if t.get("locked") or t.get("status") == "published":
+        raise HTTPException(403, "Published templates cannot be directly modified. Clone or edit to create a new draft version.")
+
+    updates = {}
+    for key in ["name_en", "name_gu", "category", "sub_category", "description", "tags", "aliases", "case_types", "courts", "jurisdiction", "content_en", "content_gu", "settings"]:
+        val = getattr(req, key, None)
+        if val is not None:
+            updates[key] = val
+    if req.fields is not None:
+        updates["fields"] = [f.model_dump() for f in req.fields]
+    if updates:
+        updates["updated_by"] = admin["id"]
+        updates["updated_at"] = now().isoformat()
+        updates["source"] = "admin_edited" if t.get("source") != "admin_created" else t["source"]
+        await db.templates.update_one({"id": template_id}, {"$set": updates})
+    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    return updated
+
+
+@admin_api.post("/templates/{template_id}/publish")
+async def admin_publish_template(template_id: str, admin=Depends(get_admin)):
+    """Publish a draft template (makes it visible to lawyers)."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not t:
+        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        if seed_t:
+            t = {**seed_t, "status": "draft", "version": 1, "locked": False, "source": "admin_edited"}
+            await db.templates.insert_one({**t, "created_at": now().isoformat(), "updated_at": now().isoformat()})
+        else:
+            raise HTTPException(404, "Template not found")
+            
+    if t.get("status") == "published" and t.get("locked"):
+        raise HTTPException(400, "Template is already published and locked")
+        
+    validation = _validate_placeholders(
+        t.get("content_en", ""), t.get("content_gu", ""), t.get("fields", [])
+    )
+    if not validation["valid"]:
+        errors = []
+        if validation.get("unknown"):
+            errors.append(f"unknown placeholders: {', '.join(validation['unknown'])}")
+        if validation.get("duplicate_keys"):
+            errors.append(f"duplicate field keys: {', '.join(validation['duplicate_keys'])}")
+        raise HTTPException(
+            400,
+            f"Cannot publish: {'; '.join(errors)}. Please resolve these issues before publishing."
+        )
+
+    ts = now().isoformat()
+    current_version = t.get("version", 1) or 1
+    version_doc = {
+        "id": str(uuid.uuid4()),
+        "template_id": template_id,
+        "version": current_version,
+        "name_en": t["name_en"],
+        "name_gu": t["name_gu"],
+        "category": t.get("category", "General"),
+        "sub_category": t.get("sub_category"),
+        "description": t.get("description"),
+        "tags": t.get("tags", []),
+        "aliases": t.get("aliases", []),
+        "case_types": t.get("case_types", []),
+        "courts": t.get("courts", []),
+        "jurisdiction": t.get("jurisdiction"),
+        "fields": t.get("fields", []),
+        "content_en": t.get("content_en", ""),
+        "content_gu": t.get("content_gu", ""),
+        "settings": t.get("settings"),
+        "created_by": admin["id"],
+        "created_at": ts,
+    }
+    await db.template_versions.update_one(
+        {"template_id": template_id, "version": current_version},
+        {"$set": version_doc},
+        upsert=True,
+    )
+    await db.templates.update_one(
+        {"id": template_id},
+        {"$set": {
+            "status": "published",
+            "version": current_version,
+            "locked": True,
+            "published_at": ts,
+            "updated_at": ts,
+            "updated_by": admin["id"],
+        }},
+    )
+    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    return {"success": True, "template": updated, "validation": validation}
+
+
+@admin_api.post("/templates/{template_id}/archive")
+async def admin_archive_template(template_id: str, admin=Depends(get_admin)):
+    """Archive a template (hides from lawyers, preserves in DB)."""
+    t = await db.templates.find_one({"id": template_id})
+    if not t:
+        raise HTTPException(404, "Template not found")
+    await db.templates.update_one(
+        {"id": template_id},
+        {"$set": {"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}},
+    )
+    return {"success": True, "status": "archived"}
+
+
+@admin_api.post("/templates/{template_id}/clone")
+async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = None, admin=Depends(get_admin)):
+    """Clone a template:
+    1. If req.as_new_template=True -> creates a completely new separate template.
+    2. Otherwise -> branches published/archived/seed template into an editable new Draft version (version N+1)."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not t:
+        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        if not seed_t:
+            raise HTTPException(404, "Template not found")
+        t = {**seed_t, "version": 0, "source": "seed"}
+
+    ts = now().isoformat()
+    as_new = req.as_new_template if req else False
+
+    if as_new:
+        # Create a separate, new template
+        new_id = (req.new_id if req and req.new_id else None) or f"{template_id}_copy_{int(now().timestamp())}"
+        new_name_en = (req.new_name_en if req and req.new_name_en else None) or f"{t.get('name_en', '')} (Copy)"
+        new_name_gu = (req.new_name_gu if req and req.new_name_gu else None) or f"{t.get('name_gu', '')} (નકલ)"
+        
+        new_doc = {
+            "id": new_id,
+            "slug": new_id,
+            "name_en": new_name_en,
+            "name_gu": new_name_gu,
+            "category": t.get("category", "General"),
+            "sub_category": t.get("sub_category"),
+            "description": t.get("description"),
+            "tags": t.get("tags", []),
+            "aliases": t.get("aliases", []),
+            "case_types": t.get("case_types", []),
+            "courts": t.get("courts", []),
+            "jurisdiction": t.get("jurisdiction"),
+            "fields": t.get("fields", []),
+            "content_en": t.get("content_en", ""),
+            "content_gu": t.get("content_gu", ""),
+            "settings": t.get("settings"),
+            "status": "draft",
+            "version": 1,
+            "locked": False,
+            "source": "admin_created",
+            "created_by": admin["id"],
+            "updated_by": admin["id"],
+            "created_at": ts,
+            "updated_at": ts,
+            "published_at": None,
+        }
+        await db.templates.insert_one(new_doc.copy())
+        new_doc.pop("_id", None)
+        return {"success": True, "template": new_doc, "new_version": 1}
+
+    # Version branch of existing template
+    if t.get("status") == "draft" and not t.get("locked"):
+        raise HTTPException(400, "Template is already a draft. Edit it directly.")
+
+    new_version = (t.get("version") or 0) + 1
+    # Save previous version to template_versions if not already archived
+    if t.get("version", 0) > 0:
+        prev_version_doc = {
+            "id": str(uuid.uuid4()),
+            "template_id": template_id,
+            "version": t["version"],
+            "name_en": t["name_en"],
+            "name_gu": t["name_gu"],
+            "category": t.get("category", "General"),
+            "fields": t.get("fields", []),
+            "content_en": t.get("content_en", ""),
+            "content_gu": t.get("content_gu", ""),
+            "settings": t.get("settings"),
+            "created_by": admin["id"],
+            "created_at": ts,
+        }
+        await db.template_versions.update_one(
+            {"template_id": template_id, "version": t["version"]},
+            {"$set": prev_version_doc},
+            upsert=True,
+        )
+
+    await db.templates.update_one(
+        {"id": template_id},
+        {"$set": {
+            "status": "draft",
+            "version": new_version,
+            "locked": False,
+            "source": "admin_edited",
+            "updated_by": admin["id"],
+            "updated_at": ts,
+        }},
+        upsert=True,
+    )
+    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    return {"success": True, "template": updated, "new_version": new_version}
+
+
+@admin_api.get("/templates/{template_id}/versions")
+async def admin_template_versions(template_id: str, admin=Depends(get_admin)):
+    """List all historical versions of a template."""
+    versions = await db.template_versions.find(
+        {"template_id": template_id}, {"_id": 0}
+    ).sort("version", -1).to_list(100)
+    return versions
+
+
+@admin_api.post("/templates/{template_id}/preview")
+async def admin_preview_template(template_id: str, req: Optional[AdminPreviewReq] = None, admin=Depends(get_admin)):
+    """Preview a template with sample data. Supports live unsaved overrides from editor."""
+    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not t:
+        t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+    if not t and not (req and req.content_en):
+        raise HTTPException(404, "Template not found")
+    if not t:
+        t = {}
+
+    content_en = req.content_en if (req and req.content_en is not None) else t.get("content_en", "")
+    content_gu = req.content_gu if (req and req.content_gu is not None) else t.get("content_gu", "")
+    name_en = req.name_en if (req and req.name_en is not None) else t.get("name_en", "Document")
+    name_gu = req.name_gu if (req and req.name_gu is not None) else t.get("name_gu", "દસ્તાવેજ")
+    fields = [f.model_dump() for f in req.fields] if (req and req.fields is not None) else t.get("fields", [])
+
+    sample_values = {
+        "advocate_name": "Advocate Ramesh Patel",
+        "today": now().strftime("%d-%m-%Y"),
+        "district": "Ahmedabad",
+        "court": "City Civil Court, Ahmedabad",
+        "case_number": "CMA/104/2026",
+        "case_type": "Civil Suit",
+        "party_name": "Rajesh Kumar",
+        "opposite_party": "State of Gujarat",
+    }
+    if req and req.values:
+        sample_values.update({k: v for k, v in req.values.items() if v is not None})
+
+    for f in fields:
+        key = f.get("key")
+        if key and key not in sample_values:
+            ftype = f.get("type", "text")
+            if ftype == "date":
+                sample_values[key] = now().strftime("%d-%m-%Y")
+            elif ftype == "number":
+                sample_values[key] = "100"
+            elif ftype in ("select", "radio") and f.get("options"):
+                sample_values[key] = f["options"][0].get("value", "")
+            elif ftype == "checkbox":
+                sample_values[key] = "Yes"
+            else:
+                sample_values[key] = f.get("default_value") or f.get("label_en", key)
+
+    rendered_en = render_template(content_en, sample_values)
+    blocks_en = build_blocks(rendered_en, name_en, name_gu)
+
+    rendered_gu = render_template(content_gu, sample_values)
+    blocks_gu = build_blocks(rendered_gu, name_en, name_gu)
+
+    validation = _validate_placeholders(content_en, content_gu, fields)
+    return {
+        "preview": {
+            "en": {"content": rendered_en, "blocks": blocks_en},
+            "gu": {"content": rendered_gu, "blocks": blocks_gu},
+        },
+        "validation": validation,
+    }
+
+
+@admin_api.post("/templates/migrate-seed")
+async def admin_migrate_seed(admin=Depends(require_super_admin)):
+    """One-time migration: copy all 23 seed templates into MongoDB.
+    Idempotent — does NOT overwrite existing templates."""
+    created = []
+    skipped = []
+    errors = []
+    ts = now().isoformat()
+    for t in TEMPLATES:
+        try:
+            existing = await db.templates.find_one({"id": t["id"]})
+            if existing:
+                skipped.append(t["id"])
+                continue
+            template_doc = {
+                "id": t["id"],
+                "slug": t["id"],
+                "name_en": t["name_en"],
+                "name_gu": t["name_gu"],
+                "category": t["category"],
+                "aliases": t.get("aliases", []),
+                "fields": [
+                    {
+                        "key": f["key"],
+                        "label_en": f.get("label_en", ""),
+                        "label_gu": f.get("label_gu", ""),
+                        "type": f.get("type", "text"),
+                        "required": f.get("required", True),
+                        "order": idx,
+                    }
+                    for idx, f in enumerate(t.get("fields", []))
+                ],
+                "content_en": t.get("content_en", ""),
+                "content_gu": t.get("content_gu", ""),
+                "status": "published",
+                "version": 1,
+                "locked": True,
+                "source": "seed",
+                "created_by": None,
+                "updated_by": None,
+                "created_at": ts,
+                "updated_at": ts,
+                "published_at": ts,
+            }
+            await db.templates.insert_one(template_doc.copy())
+            version_doc = {
+                "id": str(uuid.uuid4()),
+                "template_id": t["id"],
+                "version": 1,
+                "name_en": t["name_en"],
+                "name_gu": t["name_gu"],
+                "category": t["category"],
+                "fields": template_doc["fields"],
+                "content_en": t.get("content_en", ""),
+                "content_gu": t.get("content_gu", ""),
+                "created_by": None,
+                "created_at": ts,
+            }
+            await db.template_versions.insert_one(version_doc.copy())
+            created.append(t["id"])
+        except Exception as e:
+            errors.append({"id": t["id"], "error": str(e)})
+    return {
+        "total_seed_templates": len(TEMPLATES),
+        "created": len(created),
+        "skipped": len(skipped),
+        "errors": len(errors),
+        "created_ids": created,
+        "skipped_ids": skipped,
+        "error_details": errors,
+    }
+
+
+# ============================================================
+# ADMIN SEED HELPER
+# ============================================================
+
+async def seed_super_admin():
+    """Idempotently create the first super_admin from environment variables.
+    Does NOT overwrite an existing admin with the same email."""
+    if not ADMIN_SEED_EMAIL or not ADMIN_SEED_PASSWORD:
+        logger.info("ADMIN_SEED_EMAIL / ADMIN_SEED_PASSWORD not set — skipping admin seed.")
+        return
+    email = ADMIN_SEED_EMAIL.strip().lower()
+    existing = await db.admin_users.find_one({"email": email})
+    if existing:
+        logger.info(f"Admin seed skipped — admin with email '{email}' already exists.")
+        return
+    hashed = bcrypt.hashpw(ADMIN_SEED_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    admin_doc = {
+        "id": str(uuid.uuid4()),
+        "email": email,
+        "password_hash": hashed,
+        "name": "Super Admin",
+        "role": "super_admin",
+        "active": True,
+        "last_login": None,
+        "created_at": now().isoformat(),
+        "updated_at": now().isoformat(),
+    }
+    await db.admin_users.insert_one(admin_doc.copy())
+    logger.info(f"Super admin seeded: {email}")
+
+
+# ============================================================
+# APP WIRING
+# ============================================================
+
 app.include_router(api)
+app.include_router(admin_api)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -833,6 +1737,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+async def create_indexes():
+    """Create MongoDB indexes idempotently on startup."""
+    # Users
+    await db.users.create_index("id", unique=True)
+    await db.users.create_index("mobile", unique=True, sparse=True)
+    await db.users.create_index("email", unique=True, sparse=True)
+    await db.users.create_index("referral_code", unique=True, sparse=True)
+    # Cases
+    await db.cases.create_index("user_id")
+    await db.cases.create_index([("user_id", 1), ("status", 1)])
+    await db.cases.create_index([("user_id", 1), ("updated_at", -1)])
+    # Wallets
+    await db.wallets.create_index("user_id", unique=True)
+    # Applications
+    await db.applications.create_index("user_id")
+    await db.applications.create_index([("user_id", 1), ("created_at", -1)])
+    # Drafts
+    await db.drafts.create_index("user_id")
+    await db.drafts.create_index([("user_id", 1), ("template_id", 1), ("case_id", 1)])
+    # Transactions
+    await db.transactions.create_index("user_id")
+    await db.transactions.create_index([("user_id", 1), ("created_at", -1)])
+    # Referrals
+    await db.referrals.create_index("referrer_id")
+    await db.referrals.create_index("referred_user_id", unique=True)
+    # Admin users
+    await db.admin_users.create_index("id", unique=True)
+    await db.admin_users.create_index("email", unique=True)
+    await db.templates.create_index("id", unique=True)
+    await db.templates.create_index("slug", unique=True)
+    await db.templates.create_index([("status", 1), ("category", 1)])
+    await db.template_versions.create_index([("template_id", 1), ("version", 1)], unique=True)
+    logger.info("MongoDB indexes ensured.")
+    # Seed super admin from env vars
+    await seed_super_admin()
 
 
 @app.on_event("shutdown")

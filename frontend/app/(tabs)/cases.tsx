@@ -44,7 +44,9 @@ export default function Cases() {
         status: archived ? "archived" : "active",
         sort: sortBy,
       });
-      setCases(c);
+      setCases(Array.isArray(c) ? c : []);
+    } catch {
+      setCases([]);
     } finally {
       setLoading(false);
     }

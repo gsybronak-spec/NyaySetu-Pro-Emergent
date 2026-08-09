@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "http://localhost:8000";
 const TOKEN_KEY = "nyaysetu_token";
 
 export async function setToken(t: string | null) {
