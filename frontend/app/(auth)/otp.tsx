@@ -10,7 +10,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function Otp() {
-  const { mobile } = useLocalSearchParams<{ mobile: string }>();
+  const { mobile, referral } = useLocalSearchParams<{ mobile: string; referral?: string }>();
   const { verifyOtp, loading } = useAuth();
   const [otp, setOtp] = useState("");
   const [err, setErr] = useState<string>();
@@ -22,7 +22,7 @@ export default function Otp() {
       return;
     }
     try {
-      const { is_new } = await verifyOtp(String(mobile), otp);
+      const { is_new } = await verifyOtp(String(mobile), otp, referral ? String(referral) : undefined);
       router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
     } catch (e: any) {
       setErr(e.message);

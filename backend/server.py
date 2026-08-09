@@ -3,10 +3,12 @@
 import os
 import uuid
 import logging
+import secrets
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional
 
+import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -44,6 +46,11 @@ class SendOtpReq(BaseModel):
 class VerifyOtpReq(BaseModel):
     mobile: str
     otp: str
+    referral_code: Optional[str] = None
+
+class GoogleSessionReq(BaseModel):
+    session_id: str
+    referral_code: Optional[str] = None
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = None
@@ -125,8 +132,88 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 
+async def gen_referral_code() -> str:
+    """Generate a unique short referral code."""
+    for _ in range(10):
+        code = "NS" + secrets.token_hex(3).upper()
+        exists = await db.users.find_one({"referral_code": code}, {"_id": 1})
+        if not exists:
+            return code
+    return "NS" + secrets.token_hex(4).upper()
+
+
+async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] = None,
+                          name: Optional[str] = None, picture: Optional[str] = None,
+                          provider: str = "mobile") -> dict:
+    """Create a user + wallet with 5 free credits and a referral code."""
+    user_id = str(uuid.uuid4())
+    code = await gen_referral_code()
+    user = {
+        "id": user_id,
+        "mobile": mobile,
+        "email": email,
+        "name": name,
+        "picture": picture,
+        "provider": provider,
+        "bar_council_no": None,
+        "state": None,
+        "district": None,
+        "court": None,
+        "language_pref": "en",
+        "theme_pref": "light",
+        "referral_code": code,
+        "referred_by": None,
+        "created_at": now().isoformat(),
+    }
+    await db.users.insert_one(user.copy())
+    await db.wallets.insert_one({
+        "user_id": user_id,
+        "balance": 5,
+        "free_credits_granted": 5,
+        "total_used": 0,
+        "updated_at": now().isoformat(),
+    })
+    return user
+
+
+REFERRAL_REWARD = 10
+
+
+async def apply_referral(referral_code: Optional[str], new_user: dict):
+    """Reward the referrer with free templates. Anti-abuse: no self-referral,
+    one reward per referred user."""
+    if not referral_code:
+        return
+    code = referral_code.strip().upper()
+    referrer = await db.users.find_one({"referral_code": code}, {"_id": 0})
+    if not referrer:
+        return
+    # Prevent self-referral
+    if referrer["id"] == new_user["id"]:
+        return
+    # Prevent duplicate reward for the same referred user
+    existing = await db.referrals.find_one({"referred_user_id": new_user["id"]}, {"_id": 1})
+    if existing:
+        return
+    await db.referrals.insert_one({
+        "id": str(uuid.uuid4()),
+        "referrer_id": referrer["id"],
+        "referrer_code": code,
+        "referred_user_id": new_user["id"],
+        "reward": REFERRAL_REWARD,
+        "status": "rewarded",
+        "created_at": now().isoformat(),
+    })
+    await db.wallets.update_one(
+        {"user_id": referrer["id"]},
+        {"$inc": {"balance": REFERRAL_REWARD}, "$set": {"updated_at": now().isoformat()}},
+        upsert=True,
+    )
+    await db.users.update_one({"id": new_user["id"]}, {"$set": {"referred_by": referrer["id"]}})
+
+
 # ============================================================
-# AUTH (MOCK OTP)
+# AUTH (MOCK OTP + GOOGLE)
 # ============================================================
 
 @api.post("/auth/send-otp")
@@ -137,6 +224,7 @@ async def send_otp(req: SendOtpReq):
     # Mock: log OTP (always 123456)
     logger.info(f"[MOCK-OTP] mobile={mobile} otp=123456")
     return {"success": True, "message": "OTP sent successfully", "hint": "Use 123456 for testing"}
+
 
 @api.post("/auth/verify-otp")
 async def verify_otp(req: VerifyOtpReq):
@@ -150,29 +238,50 @@ async def verify_otp(req: VerifyOtpReq):
     is_new = False
     if not user:
         is_new = True
-        user_id = str(uuid.uuid4())
-        user = {
-            "id": user_id,
-            "mobile": mobile,
-            "name": None,
-            "email": None,
-            "bar_council_no": None,
-            "state": None,
-            "district": None,
-            "court": None,
-            "language_pref": "en",
-            "theme_pref": "light",
-            "created_at": now().isoformat(),
-        }
-        await db.users.insert_one(user.copy())
-        # Init wallet with 5 free templates
-        await db.wallets.insert_one({
-            "user_id": user_id,
-            "balance": 5,
-            "free_credits_granted": 5,
-            "total_used": 0,
-            "updated_at": now().isoformat(),
-        })
+        user = await create_new_user(mobile=mobile, provider="mobile")
+        await apply_referral(req.referral_code, user)
+
+    user_clean = {k: v for k, v in user.items() if k != "_id"}
+    token = make_token(user["id"])
+    return {"token": token, "user": user_clean, "is_new": is_new}
+
+
+EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+
+
+@api.post("/auth/google-session")
+async def google_session(req: GoogleSessionReq):
+    """Exchange an Emergent OAuth session_id for our JWT. Upsert user by email."""
+    async with httpx.AsyncClient(timeout=15) as http:
+        try:
+            r = await http.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": req.session_id})
+        except Exception:
+            raise HTTPException(401, "Auth service unavailable")
+    if r.status_code != 200:
+        raise HTTPException(401, "Invalid or expired session")
+    data = r.json()
+    email = (data.get("email") or "").strip().lower()
+    name = data.get("name")
+    picture = data.get("picture")
+    if not email:
+        raise HTTPException(401, "Email not provided by Google")
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    is_new = False
+    if not user:
+        is_new = True
+        user = await create_new_user(email=email, name=name, picture=picture, provider="google")
+        await apply_referral(req.referral_code, user)
+    else:
+        # Keep profile fresh
+        updates = {}
+        if name and not user.get("name"):
+            updates["name"] = name
+        if picture:
+            updates["picture"] = picture
+        if updates:
+            await db.users.update_one({"id": user["id"]}, {"$set": updates})
+            user.update(updates)
 
     user_clean = {k: v for k, v in user.items() if k != "_id"}
     token = make_token(user["id"])
@@ -483,6 +592,27 @@ async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
 async def transactions(user=Depends(get_user)):
     items = await db.transactions.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return items
+
+
+# ============================================================
+# REFERRAL
+# ============================================================
+
+@api.get("/referral/me")
+async def referral_me(user=Depends(get_user)):
+    code = user.get("referral_code")
+    if not code:
+        code = await gen_referral_code()
+        await db.users.update_one({"id": user["id"]}, {"$set": {"referral_code": code}})
+    refs = await db.referrals.find({"referrer_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    total_reward = sum(r.get("reward", 0) for r in refs)
+    return {
+        "referral_code": code,
+        "reward_per_referral": REFERRAL_REWARD,
+        "total_referred": len(refs),
+        "total_reward_credits": total_reward,
+        "referrals": refs,
+    }
 
 
 # ============================================================

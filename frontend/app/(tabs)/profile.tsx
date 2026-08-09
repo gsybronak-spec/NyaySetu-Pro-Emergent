@@ -29,7 +29,7 @@ export default function Profile() {
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/(auth)/onboarding") },
     { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates`, onPress: () => router.push("/(tabs)/subscription") },
     { icon: "receipt-outline", label: "Transaction History", onPress: () => Alert.alert("Coming soon", "Transaction history view will be available shortly.") },
-    { icon: "share-social-outline", label: "Refer & Earn", onPress: () => Alert.alert("Referral", "Share NyaySetu Pro with an Advocate. When they join, you get 10 free templates!") },
+    { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral") },
     {
       icon: "moon-outline",
       label: "Dark Mode",

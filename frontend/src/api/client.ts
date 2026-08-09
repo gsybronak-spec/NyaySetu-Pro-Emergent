@@ -37,7 +37,10 @@ async function request(path: string, method = "GET", body?: any) {
 
 export const api = {
   sendOtp: (mobile: string) => request("/auth/send-otp", "POST", { mobile }),
-  verifyOtp: (mobile: string, otp: string) => request("/auth/verify-otp", "POST", { mobile, otp }),
+  verifyOtp: (mobile: string, otp: string, referral_code?: string) =>
+    request("/auth/verify-otp", "POST", { mobile, otp, referral_code }),
+  googleSession: (session_id: string, referral_code?: string) =>
+    request("/auth/google-session", "POST", { session_id, referral_code }),
   me: () => request("/profile/me"),
   updateProfile: (data: any) => request("/profile/update", "PUT", data),
   caseTypes: () => request("/catalog/case-types"),
@@ -65,6 +68,7 @@ export const api = {
   wallet: () => request("/wallet"),
   purchase: (plan_id: string) => request("/purchase/mock", "POST", { plan_id }),
   transactions: () => request("/transactions"),
+  referral: () => request("/referral/me"),
   saveDraft: (data: any) => request("/drafts", "POST", data),
   drafts: () => request("/drafts"),
   search: (q: string) => request(`/search?q=${encodeURIComponent(q)}`),

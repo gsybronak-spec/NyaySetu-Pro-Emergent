@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 2 focused on the two new features: Referral Rewards + Google Sign-In. Backend: 9/9 new pytest cases passed against the public preview URL, covering (a) new OTP user object contains referral_code, (b) referring user A goes 5 -> 15 when user B signs up with A's code, (c) no double reward on repeated verify-otp by B, (d) self-referral is a no-op (balance stays 5), (e) invalid/unknown referral code is silently ignored and B still gets 5 free credits, (f) GET /api/referral/me returns referral_code, reward_per_referral=10, total_referred, total_reward_credits and referrals[] for user A after 2 sign-ups, (g) POST /api/auth/google-session with an invalid session_id returns 401, (h) missing session_id returns 422, (i) regression: profile/me and template download still work. Frontend (mobile viewport 390x844): login screen renders mobile input, 'Have a referral code?' toggle expands to reveal referral input, 'Continue with Google' button renders and is tappable (Google OAuth full flow NOT exercised - only presence + no crash verified). Full OTP login with referral code entered navigated correctly: Login -> OTP screen -> onboarding (for new user). For existing user A, login skipped onboarding and landed on home showing '15 Templates Remaining' (5 free + 10 referral). Profile tab -> Refer & Earn navigates to /referral screen and displays: referral code (e.g. NSFA91BB), 'Give & Get 10 Templates' hero, Copy + Share buttons, and stats (1 Advocates Invited, 10 Templates Earned). Copy button flips to 'Copied' state on tap. Deprecated packages detected: NONE. SafeAreaView issues detected: NONE.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_referral_google.py",
+    "/app/test_reports/pytest/referral_google_results.xml",
+    "/app/backend/tests/test_nyaysetu_api.py"
+  ],
+  "action_items": [
+    "None blocking. Optional: The Google OAuth 'success' path (valid session_id) was not exercised headlessly — verify manually with a real Emergent-managed Google account before shipping to confirm new-user creation via provider='google', is_new flag, and that a referral_code passed from the login screen actually reaches /api/auth/google-session (currently useGoogleAuth passes it — spot-check on device).",
+    "Prior-iteration polish items still open: React Native Web `pointerEvents` prop deprecation warning + low-contrast floating labels on Login/OTP TextInput."
+  ],
+  "critical_code_review_comments": [
+    "apply_referral() correctly guards against self-referral (referrer.id == new_user.id) and duplicate reward (referrals collection lookup by referred_user_id). Rewards are $inc atomic and idempotent — good.",
+    "gen_referral_code() retries up to 10 times before falling back to a 4-byte code — collision-safe.",
+    "GET /api/referral/me back-fills a referral_code for legacy users on first read via update_one — good migration strategy.",
+    "google-session upserts on lowercased email and passes referral_code to apply_referral only for new users — correct behavior. Note that if a returning Google user retries with a friend's code, that code is silently dropped (by design — matches OTP behaviour where re-login doesn't award).",
+    "server.py is now 698 lines (was 568). It has crossed the 700-line soft cap threshold and should be split into routers/{auth,referral,catalog,cases,templates,applications,wallet,drafts}.py in a future refactor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_referral_google.py (new)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + prior 31/31 regression suite still exists)", "frontend": "100% for exercised flows — login screen render, referral toggle, OTP referral pass-through, referral screen render + code + copy + share + stats. Google OAuth success path not headlessly testable (Emergent-managed)."},
+  "seed_data_creation": "None manually seeded. Test users created dynamically via unique 10-digit mobile numbers per test. Cleanup relies on TEST_ prefixing and per-user isolation.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Referral flow verified end-to-end: A's wallet goes 5 -> 15 when B signs up with A's code; UI reflects '15 Templates Remaining' on home. Public URL: https://nyay-setu-pro.preview.emergentagent.com. Run new tests via `cd /app/backend && python -m pytest tests/test_referral_google.py -v -o addopts=''`. For UI, use viewport 390x844 and testIDs: login-mobile-input, login-referral-toggle, login-referral-input, login-google-button, login-send-otp-button, otp-input, otp-verify-button, referral-copy, referral-share, referral-back. Google OAuth success path requires a real Emergent session and cannot be automated headlessly — only 401 on invalid session is testable.",
+  "rca_of_issue": "N/A — no bugs found in the new referral or Google endpoints."
+}

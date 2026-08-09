@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -7,12 +7,16 @@ import { router } from "expo-router";
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
+import { useGoogleAuth } from "@/src/hooks/useGoogleAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function Login() {
   const [mobile, setMobile] = useState("");
+  const [referral, setReferral] = useState("");
+  const [showReferral, setShowReferral] = useState(false);
   const [err, setErr] = useState<string>();
   const { signInOtp, loading } = useAuth();
+  const { startGoogleLogin, googleBusy } = useGoogleAuth();
 
   const submit = async () => {
     setErr(undefined);
@@ -23,7 +27,7 @@ export default function Login() {
     }
     try {
       await signInOtp(m);
-      router.push({ pathname: "/(auth)/otp", params: { mobile: m } });
+      router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim() } });
     } catch (e: any) {
       setErr(e.message);
     }
@@ -60,7 +64,40 @@ export default function Login() {
               error={err}
             />
 
+            {showReferral ? (
+              <Field
+                testID="login-referral-input"
+                label="Referral Code (optional)"
+                labelColor="#D1D8E5"
+                placeholder="e.g. NSA1B2C3"
+                autoCapitalize="characters"
+                value={referral}
+                onChangeText={setReferral}
+              />
+            ) : (
+              <Pressable testID="login-referral-toggle" onPress={() => setShowReferral(true)} style={{ marginBottom: Spacing.md }}>
+                <Text style={{ color: "#C5A059", fontSize: 13, fontWeight: "600" }}>Have a referral code?</Text>
+              </Pressable>
+            )}
+
             <Button testID="login-send-otp-button" title="Send OTP" loading={loading} onPress={submit} />
+
+            <View style={styles.dividerRow}>
+              <View style={styles.divLine} />
+              <Text style={styles.divTxt}>OR</Text>
+              <View style={styles.divLine} />
+            </View>
+
+            <Pressable
+              testID="login-google-button"
+              onPress={() => startGoogleLogin(referral.trim() || undefined)}
+              disabled={googleBusy}
+              style={[styles.googleBtn, googleBusy && { opacity: 0.6 }]}
+            >
+              <Ionicons name="logo-google" size={20} color="#0B1B3D" />
+              <Text style={styles.googleTxt}>{googleBusy ? "Connecting..." : "Continue with Google"}</Text>
+            </Pressable>
+
             <Text style={styles.hint}>By continuing, you agree to our Terms and Privacy Policy.</Text>
           </View>
         </ScrollView>
@@ -93,5 +130,13 @@ const styles = StyleSheet.create({
   },
   cardTitle: { color: "#FDFDFD", fontSize: 22, fontWeight: "700", marginBottom: 4 },
   cardSub: { color: "#A6B1C2", fontSize: 13, marginBottom: Spacing.lg },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: Spacing.lg },
+  divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255,255,255,0.2)" },
+  divTxt: { color: "#A6B1C2", fontSize: 12, marginHorizontal: Spacing.md, fontWeight: "600" },
+  googleBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: Spacing.sm,
+    minHeight: 52, borderRadius: 12, backgroundColor: "#FFFFFF",
+  },
+  googleTxt: { color: "#0B1B3D", fontSize: 16, fontWeight: "700" },
   hint: { color: "#A6B1C2", fontSize: 11, textAlign: "center", marginTop: Spacing.lg },
 });
