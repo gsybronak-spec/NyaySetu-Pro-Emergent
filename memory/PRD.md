@@ -30,11 +30,13 @@ Indian Advocates (Gujarat focus) needing routine court documents (adjournment, c
 - [x] Server-side PDF (Gujarati font) + DOCX generation
 - [x] Credit wallet + atomic consumption, mock purchase
 - [x] Dark mode toggle, profile with legal pages
+- [x] **Google Sign-In (Emergent-managed OAuth)** — /api/auth/google-session, upsert user by email, issues app JWT (login screen "Continue with Google")
+- [x] **Referral Rewards** — unique referral_code per user, +10 credits to referrer on new signup (OTP or Google), anti-abuse (no self-referral, one reward per referred user), /api/referral/me stats, dedicated /referral screen with copy + share
 
 ## Backlog (P1/P2)
-- P1: Real Razorpay integration (needs keys), Google Sign-In, transaction history screen, template usage analytics screen
-- P1: Rich-text preview editing (currently form-edit re-generates preview)
-- P2: Admin panel (template/pricing/margin management), referral tracking backend, support ticketing, WhatsApp/email direct share targets
+- P1: Live Razorpay (backend order+verify + web checkout) — awaiting user's Razorpay Key ID + Secret; mock active until then
+- P1: Transaction history screen, template usage analytics screen
+- P2: Admin panel (template/pricing/margin management), support ticketing
 - P2: More templates (20-25), transliteration search improvements
 
 ## Next Tasks
