@@ -2,24 +2,27 @@
 
 CASE_TYPES = [
     {"id": "civil_suit", "en": "Civil Suit", "gu": "સિવિલ સૂટ", "cat": "Civil"},
-    {"id": "special_civil_suit", "en": "Special Civil Suit", "gu": "સ્પેશિયલ સિવિલ સૂટ", "cat": "Civil"},
     {"id": "regular_civil_suit", "en": "Regular Civil Suit", "gu": "રેગ્યુલર સિવિલ સૂટ", "cat": "Civil"},
+    {"id": "special_civil_suit", "en": "Special Civil Suit", "gu": "સ્પેશિયલ સિવિલ સૂટ", "cat": "Civil"},
     {"id": "commercial_suit", "en": "Commercial Suit", "gu": "કોમર્શિયલ સૂટ", "cat": "Civil"},
-    {"id": "misc_civil_app", "en": "Miscellaneous Civil Application", "gu": "મિસલેનિયસ સિવિલ અરજી", "cat": "Civil"},
+    {"id": "civil_appeal", "en": "Civil Appeal", "gu": "સિવિલ અપીલ", "cat": "Civil"},
+    {"id": "civil_revision", "en": "Civil Revision", "gu": "સિવિલ રિવિઝન", "cat": "Civil"},
     {"id": "execution", "en": "Execution", "gu": "એક્ઝિક્યુશન", "cat": "Civil"},
-    {"id": "appeal", "en": "Appeal", "gu": "અપીલ", "cat": "Civil"},
-    {"id": "revision", "en": "Revision", "gu": "રિવિઝન", "cat": "Civil"},
+    {"id": "misc_civil_app", "en": "Miscellaneous Civil Application", "gu": "મિસલેનિયસ સિવિલ અરજી", "cat": "Civil"},
     {"id": "interim_app", "en": "Interim Application", "gu": "ઇન્ટરિમ અરજી", "cat": "Civil"},
+    {"id": "other_civil", "en": "Other Civil Matter", "gu": "અન્ય સિવિલ બાબત", "cat": "Civil"},
     {"id": "criminal_case", "en": "Criminal Case", "gu": "ક્રિમિનલ કેસ", "cat": "Criminal"},
     {"id": "criminal_complaint", "en": "Criminal Complaint", "gu": "ક્રિમિનલ ફરિયાદ", "cat": "Criminal"},
-    {"id": "criminal_misc_app", "en": "Criminal Miscellaneous Application", "gu": "ક્રિમિનલ મિસ. અરજી", "cat": "Criminal"},
     {"id": "criminal_appeal", "en": "Criminal Appeal", "gu": "ક્રિમિનલ અપીલ", "cat": "Criminal"},
+    {"id": "criminal_revision", "en": "Criminal Revision", "gu": "ક્રિમિનલ રિવિઝન", "cat": "Criminal"},
+    {"id": "criminal_misc_app", "en": "Criminal Miscellaneous Application", "gu": "ક્રિમિનલ મિસ. અરજી", "cat": "Criminal"},
     {"id": "bail_application", "en": "Bail Application", "gu": "જામીન અરજી", "cat": "Criminal"},
-    {"id": "anticipatory_bail", "en": "Anticipatory Bail", "gu": "એન્ટિસિપેટરી બેલ", "cat": "Criminal"},
     {"id": "regular_bail", "en": "Regular Bail", "gu": "રેગ્યુલર બેલ", "cat": "Criminal"},
+    {"id": "anticipatory_bail", "en": "Anticipatory Bail", "gu": "એન્ટિસિપેટરી બેલ", "cat": "Criminal"},
     {"id": "sessions_case", "en": "Sessions Case", "gu": "સેશન્સ કેસ", "cat": "Criminal"},
     {"id": "summons_case", "en": "Summons Case", "gu": "સમન્સ કેસ", "cat": "Criminal"},
     {"id": "warrant_case", "en": "Warrant Case", "gu": "વોરંટ કેસ", "cat": "Criminal"},
+    {"id": "other_criminal", "en": "Other Criminal Matter", "gu": "અન્ય ક્રિમિનલ બાબત", "cat": "Criminal"},
     {"id": "other", "en": "Other", "gu": "અન્ય", "cat": "Other"},
 ]
 
@@ -69,6 +72,26 @@ LAWS = [
         "gu": "મેન્ટેનન્સ",
         "sections": [
             {"id": "125", "label": "Section 125 CrPC - Maintenance of wife/children"},
+        ],
+    },
+    {
+        "id": "family_related",
+        "en": "Family Related",
+        "gu": "કૌટુંબિક બાબત",
+        "sections": [
+            {"id": "hma_9", "label": "Section 9 HMA - Restitution of conjugal rights"},
+            {"id": "hma_13", "label": "Section 13 HMA - Divorce"},
+            {"id": "hma_26", "label": "Section 26 HMA - Custody of children"},
+        ],
+    },
+    {
+        "id": "property_related",
+        "en": "Property Related",
+        "gu": "મિલકત સંબંધિત",
+        "sections": [
+            {"id": "spa_5", "label": "Section 5 SRA - Recovery of possession"},
+            {"id": "tpa_54", "label": "Section 54 TPA - Sale of property"},
+            {"id": "cpc_o39", "label": "Order 39 CPC - Temporary injunction"},
         ],
     },
     {

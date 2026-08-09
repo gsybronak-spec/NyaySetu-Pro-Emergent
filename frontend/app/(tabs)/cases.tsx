@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -8,42 +8,69 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 
+const FILTERS = ["All", "Civil", "Criminal", "Other"];
+
+function timeAgo(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return d.toLocaleDateString();
+}
+
 export default function Cases() {
   const { colors } = useTheme();
   const [cases, setCases] = useState<any[]>([]);
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("All");
+  const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const load = useCallback(async (query = "") => {
+  const load = useCallback(async (query: string, cat: string, archived: boolean) => {
     setLoading(true);
     try {
-      const c = await api.listCases(query || undefined);
+      const c = await api.listCases({
+        q: query || undefined,
+        category: cat !== "All" ? cat : undefined,
+        status: archived ? "archived" : "active",
+      });
       setCases(c);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(q); }, [load, q]));
+  useFocusEffect(useCallback(() => { load(q, filter, showArchived); }, [load, q, filter, showArchived]));
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.h1, { color: colors.onSurface }]}>My Cases</Text>
-        <Pressable
-          testID="new-case-btn"
-          onPress={() => router.push("/case/new")}
-          style={[styles.iconBtn, { backgroundColor: colors.brandPrimary }]}
-        >
-          <Ionicons name="add" size={22} color={colors.onBrandPrimary} />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: Spacing.sm }}>
+          <Pressable
+            testID="archive-toggle"
+            onPress={() => setShowArchived((s) => !s)}
+            style={[styles.iconBtnGhost, { borderColor: colors.border, backgroundColor: showArchived ? colors.brandTertiary : "transparent" }]}
+          >
+            <Ionicons name="archive-outline" size={20} color={showArchived ? colors.onBrandTertiary : colors.muted} />
+          </Pressable>
+          <Pressable
+            testID="new-case-btn"
+            onPress={() => router.push("/case/new")}
+            style={[styles.iconBtn, { backgroundColor: colors.brandPrimary }]}
+          >
+            <Ionicons name="add" size={22} color={colors.onBrandPrimary} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={[styles.searchBar, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           testID="cases-search-input"
-          placeholder="Search by nickname, party, case number..."
+          placeholder="Search by nickname, party, number, type..."
           placeholderTextColor={colors.muted}
           value={q}
           onChangeText={setQ}
@@ -51,26 +78,56 @@ export default function Cases() {
         />
       </View>
 
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ maxHeight: 56 }}
+        contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingVertical: Spacing.sm }}
+      >
+        {FILTERS.map((f) => {
+          const active = filter === f;
+          return (
+            <Pressable
+              key={f}
+              testID={`filter-${f.toLowerCase()}`}
+              onPress={() => setFilter(f)}
+              style={[
+                styles.chip,
+                { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border, flexShrink: 0 },
+              ]}
+            >
+              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{f}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
       <FlatList
         data={cases}
         keyExtractor={(c) => c.id}
-        contentContainerStyle={{ padding: Spacing.lg, paddingBottom: Spacing.xxxl }}
+        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.xxxl }}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
         ListEmptyComponent={
           !loading ? (
             <View style={styles.empty}>
-              <Ionicons name="folder-open-outline" size={44} color={colors.muted} />
-              <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>No cases yet</Text>
-              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center" }}>
-                Create your first case to start generating court applications.
+              <Ionicons name={showArchived ? "archive-outline" : "folder-open-outline"} size={44} color={colors.muted} />
+              <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>
+                {showArchived ? "No archived cases" : "No cases yet"}
               </Text>
-              <Pressable
-                testID="empty-add-case"
-                onPress={() => router.push("/case/new")}
-                style={[styles.emptyBtn, { backgroundColor: colors.brandPrimary }]}
-              >
-                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Add New Case</Text>
-              </Pressable>
+              {!showArchived && (
+                <>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center" }}>
+                    Create your first case to start generating court applications.
+                  </Text>
+                  <Pressable
+                    testID="empty-add-case"
+                    onPress={() => router.push("/case/new")}
+                    style={[styles.emptyBtn, { backgroundColor: colors.brandPrimary }]}
+                  >
+                    <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Add New Case</Text>
+                  </Pressable>
+                </>
+              )}
             </View>
           ) : null
         }
@@ -83,21 +140,36 @@ export default function Cases() {
             <View style={styles.cardTop}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }} numberOfLines={1}>
-                  {item.nickname || item.party_name || "Untitled Case"}
+                  {item.nickname || item.party_name || item.case_type_label || "Untitled Case"}
                 </Text>
-                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
-                  {item.case_number ? `${item.case_number} • ` : ""}{item.case_type_id || "Case"}
+                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                  {item.case_number ? `${item.case_number} • ` : ""}{item.case_type_label || "Case"}
                 </Text>
               </View>
-              <View style={[styles.pill, { backgroundColor: colors.brandTertiary }]}>
-                <Text style={{ color: colors.onBrandTertiary, fontSize: 10, fontWeight: "700" }}>
-                  {item.language === "gu" ? "ગુ" : "EN"}
+              <View style={[styles.catPill, { backgroundColor: item.category === "Criminal" ? "#7A1C1C20" : colors.brandTertiary }]}>
+                <Text style={{ color: item.category === "Criminal" ? "#7A1C1C" : colors.onBrandTertiary, fontSize: 10, fontWeight: "700" }}>
+                  {item.category || "Other"}
                 </Text>
               </View>
             </View>
+            <View style={styles.cardBottom}>
+              {item.party_name ? (
+                <View style={styles.metaItem}>
+                  <Ionicons name="person-outline" size={12} color={colors.muted} />
+                  <Text style={{ color: colors.muted, fontSize: 11, marginLeft: 4 }} numberOfLines={1}>{item.party_name}</Text>
+                </View>
+              ) : null}
+              <View style={styles.metaItem}>
+                <Ionicons name="time-outline" size={12} color={colors.muted} />
+                <Text style={{ color: colors.muted, fontSize: 11, marginLeft: 4 }}>{timeAgo(item.updated_at)}</Text>
+              </View>
+              <View style={[styles.langPill, { backgroundColor: colors.surfaceTertiary }]}>
+                <Text style={{ color: colors.onSurfaceTertiary, fontSize: 10, fontWeight: "700" }}>{item.language === "gu" ? "ગુ" : "EN"}</Text>
+              </View>
+            </View>
             {item.last_used_template ? (
-              <Text style={{ color: colors.muted, fontSize: 11, marginTop: Spacing.sm }}>
-                Last: {item.last_used_template}
+              <Text style={{ color: colors.brandPrimary, fontSize: 11, marginTop: Spacing.sm }} numberOfLines={1}>
+                Last application: {item.last_used_template}
               </Text>
             ) : null}
           </Pressable>
@@ -110,18 +182,22 @@ export default function Cases() {
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth,
   },
   h1: { fontSize: 22, fontWeight: "700", fontFamily: "serif" },
   iconBtn: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  iconBtnGhost: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", borderWidth: 1 },
   searchBar: {
-    flexDirection: "row", alignItems: "center", margin: Spacing.lg,
+    flexDirection: "row", alignItems: "center", marginHorizontal: Spacing.lg, marginTop: Spacing.lg,
     paddingHorizontal: Spacing.md, height: 44, borderRadius: Radius.md, borderWidth: 1,
   },
+  chip: { height: 36, paddingHorizontal: Spacing.lg, borderRadius: 999, borderWidth: 1, alignItems: "center", justifyContent: "center" },
   card: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   cardTop: { flexDirection: "row", alignItems: "center" },
-  pill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  cardBottom: { flexDirection: "row", alignItems: "center", gap: Spacing.md, marginTop: Spacing.sm },
+  metaItem: { flexDirection: "row", alignItems: "center", maxWidth: "45%" },
+  catPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  langPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, marginLeft: "auto" },
   empty: { alignItems: "center", marginTop: Spacing.xxxl, paddingHorizontal: Spacing.xl },
   emptyBtn: { marginTop: Spacing.xl, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: 999 },
 });

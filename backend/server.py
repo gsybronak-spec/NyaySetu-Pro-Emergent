@@ -342,40 +342,84 @@ async def daily_quote():
 # CASES
 # ============================================================
 
+_CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
+_LAW_MAP = {l["id"]: l for l in LAWS}
+_DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
+_COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
+
+
+def enrich_case(c: dict) -> dict:
+    """Attach human-readable labels + category so the frontend stays simple."""
+    lang = c.get("language", "en")
+    ct = _CASE_TYPE_MAP.get(c.get("case_type_id"))
+    law = _LAW_MAP.get(c.get("law_id"))
+    dist = _DISTRICT_MAP.get(c.get("district_id"))
+    section = None
+    if law and c.get("section_id"):
+        section = next((s for s in law["sections"] if s["id"] == c.get("section_id")), None)
+    c["category"] = ct["cat"] if ct else "Other"
+    if ct:
+        c["case_type_label"] = ct["gu"] if lang == "gu" else ct["en"]
+    else:
+        c["case_type_label"] = c.get("case_type_custom") or None
+    c["law_label"] = (law["gu"] if lang == "gu" else law["en"]) if law else (c.get("law_custom") or None)
+    c["section_label"] = section["label"] if section else None
+    c["district_label"] = (dist["gu"] if lang == "gu" else dist["en"]) if dist else None
+    c["complaint_label"] = _COMPLAINT_LABELS.get(c.get("complaint_type")) if c.get("complaint_type") else None
+    return c
+
+
 @api.post("/cases")
 async def create_case(req: CaseCreate, user=Depends(get_user)):
     case_id = str(uuid.uuid4())
     doc = {
         "id": case_id,
         "user_id": user["id"],
+        "status": "active",
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
         "last_used_template": None,
+        "application_count": 0,
         **req.model_dump(),
     }
     await db.cases.insert_one(doc.copy())
     doc.pop("_id", None)
-    return doc
+    return enrich_case(doc)
+
 
 @api.get("/cases")
-async def list_cases(user=Depends(get_user), q: Optional[str] = None):
-    cursor = db.cases.find({"user_id": user["id"]}, {"_id": 0}).sort("updated_at", -1)
+async def list_cases(user=Depends(get_user), q: Optional[str] = None,
+                     status: str = "active", category: Optional[str] = None):
+    query: dict = {"user_id": user["id"]}
+    if status != "all":
+        # Treat missing status as active (legacy docs)
+        if status == "active":
+            query["status"] = {"$ne": "archived"}
+        else:
+            query["status"] = status
+    cursor = db.cases.find(query, {"_id": 0}).sort("updated_at", -1)
     items = await cursor.to_list(500)
+    items = [enrich_case(c) for c in items]
+    if category and category != "All":
+        items = [c for c in items if c.get("category") == category]
     if q:
         ql = q.lower()
         items = [c for c in items if
                  ql in (c.get("nickname") or "").lower()
                  or ql in (c.get("case_number") or "").lower()
                  or ql in (c.get("party_name") or "").lower()
+                 or ql in (c.get("case_type_label") or "").lower()
                  or ql in (c.get("case_type_id") or "").lower()]
     return items
+
 
 @api.get("/cases/{case_id}")
 async def get_case(case_id: str, user=Depends(get_user)):
     c = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
     if not c:
         raise HTTPException(404, "Case not found")
-    return c
+    return enrich_case(c)
+
 
 @api.put("/cases/{case_id}")
 async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
@@ -385,11 +429,36 @@ async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
     if r.matched_count == 0:
         raise HTTPException(404, "Case not found")
     c = await db.cases.find_one({"id": case_id}, {"_id": 0})
-    return c
+    return enrich_case(c)
+
+
+@api.post("/cases/{case_id}/archive")
+async def archive_case(case_id: str, user=Depends(get_user)):
+    r = await db.cases.update_one(
+        {"id": case_id, "user_id": user["id"]},
+        {"$set": {"status": "archived", "updated_at": now().isoformat()}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Case not found")
+    return {"success": True, "status": "archived"}
+
+
+@api.post("/cases/{case_id}/restore")
+async def restore_case(case_id: str, user=Depends(get_user)):
+    r = await db.cases.update_one(
+        {"id": case_id, "user_id": user["id"]},
+        {"$set": {"status": "active", "updated_at": now().isoformat()}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Case not found")
+    return {"success": True, "status": "active"}
+
 
 @api.delete("/cases/{case_id}")
 async def delete_case(case_id: str, user=Depends(get_user)):
-    await db.cases.delete_one({"id": case_id, "user_id": user["id"]})
+    r = await db.cases.delete_one({"id": case_id, "user_id": user["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(404, "Case not found")
     return {"success": True}
 
 
@@ -535,7 +604,8 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     if req.case_id:
         await db.cases.update_one(
             {"id": req.case_id, "user_id": user["id"]},
-            {"$set": {"last_used_template": t["name_en"], "updated_at": now().isoformat()}},
+            {"$set": {"last_used_template": t["name_en"], "updated_at": now().isoformat()},
+             "$inc": {"application_count": 1}},
         )
     # Delete related draft
     await db.drafts.delete_many({"user_id": user["id"], "template_id": t["id"], "case_id": req.case_id})

@@ -50,9 +50,18 @@ export const api = {
   plans: () => request("/catalog/plans"),
   quote: () => request("/catalog/quote"),
   createCase: (data: any) => request("/cases", "POST", data),
-  listCases: (q?: string) => request(`/cases${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  listCases: (params?: { q?: string; status?: string; category?: string }) => {
+    const p = new URLSearchParams();
+    if (params?.q) p.set("q", params.q);
+    if (params?.status) p.set("status", params.status);
+    if (params?.category) p.set("category", params.category);
+    const qs = p.toString();
+    return request(`/cases${qs ? `?${qs}` : ""}`);
+  },
   getCase: (id: string) => request(`/cases/${id}`),
   updateCase: (id: string, data: any) => request(`/cases/${id}`, "PUT", data),
+  archiveCase: (id: string) => request(`/cases/${id}/archive`, "POST"),
+  restoreCase: (id: string) => request(`/cases/${id}/restore`, "POST"),
   deleteCase: (id: string) => request(`/cases/${id}`, "DELETE"),
   templates: (q?: string, category?: string) => {
     const params = new URLSearchParams();
