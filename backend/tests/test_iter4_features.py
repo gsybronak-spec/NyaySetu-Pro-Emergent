@@ -1,4 +1,4 @@
-"""Iteration 4 tests — 23 templates (bilingual aliases), catalog/courts, catalog/police-stations, case with court_id/police_station_id + resolved labels, sort=name/type/updated."""
+"""Iteration 4 tests — 24 templates (bilingual aliases), catalog/courts, catalog/police-stations, case with court_id/police_station_id + resolved labels, sort=name/type/updated."""
 import os
 import time
 import base64
@@ -65,7 +65,7 @@ class TestTemplatesExpanded:
         r = session.get(f"{API}/templates")
         assert r.status_code == 200
         items = r.json()
-        assert len(items) == 23, f"Expected 23 templates, got {len(items)}"
+        assert len(items) == 24, f"Expected 24 templates, got {len(items)}"
 
     def test_alias_vakalat(self, session):
         r = session.get(f"{API}/templates?q=vakalat")

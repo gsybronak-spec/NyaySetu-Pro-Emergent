@@ -1,7 +1,7 @@
 """Tests for NyaySetu Pro Admin Template Management — Phase 2A.
 
 Covers:
-- Seed migration creates 23 templates
+- Seed migration creates 24 templates
 - Seed migration is idempotent
 - Existing template is not overwritten
 - Lawyer template API reads published DB templates
@@ -156,6 +156,7 @@ EXPECTED_IDS = [
     "recall", "warrant_cancel", "bail_regular", "affidavit", "restoration",
     "condonation_delay", "interim_injunction", "vakalatnama", "return_documents",
     "inspection", "compromise", "withdrawal", "amendment", "surety", "early_hearing",
+    "document_return_application",
 ]
 
 
@@ -165,14 +166,14 @@ EXPECTED_IDS = [
 
 class TestSeedMigration:
     @pytest.mark.asyncio
-    async def test_migrate_creates_23_templates(self, client, clean_db):
-        """Seed migration must create exactly 23 templates."""
+    async def test_migrate_creates_24_templates(self, client, clean_db):
+        """Seed migration must create exactly 24 templates."""
         _, token = await create_super_admin()
         r = await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         assert r.status_code == 200
         data = r.json()
-        assert data["total_seed_templates"] == 23
-        assert data["created"] == 23
+        assert data["total_seed_templates"] == 24
+        assert data["created"] == 24
         assert data["skipped"] == 0
         assert data["errors"] == 0
         # Verify all IDs
@@ -188,7 +189,7 @@ class TestSeedMigration:
         assert r.status_code == 200
         data = r.json()
         assert data["created"] == 0
-        assert data["skipped"] == 23
+        assert data["skipped"] == 24
 
     @pytest.mark.asyncio
     async def test_migrate_does_not_overwrite_admin_edit(self, client, clean_db):
@@ -238,7 +239,7 @@ class TestLawyerTemplateAPI:
         r = await client.get("/api/templates")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 23
+        assert len(data) == 24
         ids = [t["id"] for t in data]
         for tid in EXPECTED_IDS:
             assert tid in ids
@@ -251,7 +252,7 @@ class TestLawyerTemplateAPI:
         r = await client.get("/api/templates")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 23
+        assert len(data) == 24
 
     @pytest.mark.asyncio
     async def test_get_template_by_id(self, client, clean_db):
@@ -334,7 +335,7 @@ class TestAdminTemplateCRUD:
         await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.get("/api/admin/templates", headers=auth(token))
         assert r.status_code == 200
-        assert len(r.json()) == 23
+        assert len(r.json()) == 24
 
     @pytest.mark.asyncio
     async def test_admin_list_with_status_filter(self, client, clean_db):
@@ -614,7 +615,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.asyncio
     async def test_template_ids_all_preserved(self, client, clean_db):
-        """All 23 template IDs must be accessible after migration."""
+        """All 24 template IDs must be accessible after migration."""
         _, token = await create_super_admin()
         await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         for tid in EXPECTED_IDS:

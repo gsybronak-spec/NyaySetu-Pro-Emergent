@@ -1342,6 +1342,228 @@ Advocate for the Applicant
 {{advocate_name}}
 """,
     },
+    {
+        "id": "document_return_application",
+        "name_en": "Application for Return of Document",
+        "name_gu": "દસ્તાવેજ પરત મેળવવાની અરજી",
+        "category": "Civil",
+        "aliases": ["document return", "return of document", "dastavej parat", "parat levani arji", "parat magavani arji", "દસ્તાવેજ પરત", "દસ્તાવેજ પરત મેળવવાની અરજી"],
+        "fields": [
+            {
+                "key": "court", "label_en": "Court Name", "label_gu": "કોર્ટનું નામ", "type": "select", "required": True,
+                "options": [
+                    {"value": "gen_district", "label_en": "District Court", "label_gu": "જિલ્લા ન્યાયાલય"},
+                    {"value": "gen_sessions", "label_en": "Sessions Court", "label_gu": "સેશન્સ ન્યાયાલય"},
+                    {"value": "gen_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+                    {"value": "gen_civil_senior", "label_en": "Principal Senior Civil Judge", "label_gu": "મુખ્ય વરિષ્ઠ સિવિલ જજ"},
+                    {"value": "gen_civil_junior", "label_en": "Civil Judge (Junior Division)", "label_gu": "સિવિલ જજ (જુનિયર ડિવિઝન)"},
+                    {"value": "gen_family", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "ahd_metro", "label_en": "Metropolitan Magistrate Court, Ahmedabad", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ કોર્ટ, અમદાવાદ"},
+                    {"value": "ahd_city_civil", "label_en": "City Civil Court, Ahmedabad", "label_gu": "સિટી સિવિલ કોર્ટ, અમદાવાદ"},
+                    {"value": "surat_district", "label_en": "District & Sessions Court, Surat", "label_gu": "જિલ્લા અને સેશન્સ કોર્ટ, સુરત"},
+                    {"value": "vad_district", "label_en": "District & Sessions Court, Vadodara", "label_gu": "જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા"},
+                    {"value": "rajkot_district", "label_en": "District & Sessions Court, Rajkot", "label_gu": "જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ"},
+                ],
+            },
+            {
+                "key": "district", "label_en": "District", "label_gu": "જિલ્લો", "type": "select", "required": True,
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                ],
+            },
+            {
+                "key": "taluka", "label_en": "Taluka (Optional)", "label_gu": "તાલુકો", "type": "select", "required": False,
+                "options": [
+                    {"value": "અમદાવાદ શહેર", "label_en": "Ahmedabad City", "label_gu": "અમદાવાદ શહેર", "district_id": "ahmedabad"},
+                    {"value": "બાવળા", "label_en": "Bavla", "label_gu": "બાવળા", "district_id": "ahmedabad"},
+                    {"value": "દાસક્રોઈ", "label_en": "Daskroi", "label_gu": "દાસક્રોઈ", "district_id": "ahmedabad"},
+                    {"value": "ધંધુકા", "label_en": "Dhandhuka", "label_gu": "ધંધુકા", "district_id": "ahmedabad"},
+                    {"value": "ધોળકા", "label_en": "Dholka", "label_gu": "ધોળકા", "district_id": "ahmedabad"},
+                    {"value": "સાણંદ", "label_en": "Sanand", "label_gu": "સાણંદ", "district_id": "ahmedabad"},
+                    {"value": "વિરમગામ", "label_en": "Viramgam", "label_gu": "વિરમગામ", "district_id": "ahmedabad"},
+                    {"value": "માંડલ", "label_en": "Mandal", "label_gu": "માંડલ", "district_id": "ahmedabad"},
+                    {"value": "ગાંધીનગર", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર", "district_id": "gandhinagar"},
+                    {"value": "કલોલ", "label_en": "Kalol", "label_gu": "કલોલ", "district_id": "gandhinagar"},
+                    {"value": "માણસા", "label_en": "Mansa", "label_gu": "માણસા", "district_id": "gandhinagar"},
+                    {"value": "દહેગામ", "label_en": "Dehgam", "label_gu": "દહેગામ", "district_id": "gandhinagar"},
+                    {"value": "સુરત શહેર", "label_en": "Surat City", "label_gu": "સુરત શહેર", "district_id": "surat"},
+                    {"value": "બારડોલી", "label_en": "Bardoli", "label_gu": "બારડોલી", "district_id": "surat"},
+                    {"value": "ચોર્યાસી", "label_en": "Choryasi", "label_gu": "ચોર્યાસી", "district_id": "surat"},
+                    {"value": "કામરેજ", "label_en": "Kamrej", "label_gu": "કામરેજ", "district_id": "surat"},
+                    {"value": "ઓલપાડ", "label_en": "Olpad", "label_gu": "ઓલપાડ", "district_id": "surat"},
+                    {"value": "પલસાણા", "label_en": "Palsana", "label_gu": "પલસાણા", "district_id": "surat"},
+                    {"value": "વડોદરા શહેર", "label_en": "Vadodara City", "label_gu": "વડોદરા શહેર", "district_id": "vadodara"},
+                    {"value": "પાદરા", "label_en": "Padra", "label_gu": "પાદરા", "district_id": "vadodara"},
+                    {"value": "સાવલી", "label_en": "Savli", "label_gu": "સાવલી", "district_id": "vadodara"},
+                    {"value": "વાઘોડિયા", "label_en": "Waghodia", "label_gu": "વાઘોડિયા", "district_id": "vadodara"},
+                    {"value": "કરજણ", "label_en": "Karjan", "label_gu": "કરજણ", "district_id": "vadodara"},
+                    {"value": "ડભોઈ", "label_en": "Dabhoi", "label_gu": "ડભોઈ", "district_id": "vadodara"},
+                    {"value": "રાજકોટ શહેર", "label_en": "Rajkot City", "label_gu": "રાજકોટ શહેર", "district_id": "rajkot"},
+                    {"value": "ગોંડલ", "label_en": "Gondal", "label_gu": "ગોંડલ", "district_id": "rajkot"},
+                    {"value": "જસદણ", "label_en": "Jasdan", "label_gu": "જસદણ", "district_id": "rajkot"},
+                    {"value": "જેતપુર", "label_en": "Jetpur", "label_gu": "જેતપુર", "district_id": "rajkot"},
+                    {"value": "ધોરાજી", "label_en": "Dhoraji", "label_gu": "ધોરાજી", "district_id": "rajkot"},
+                    {"value": "વાંકાનેર", "label_en": "Wankaner", "label_gu": "વાંકાનેર", "district_id": "rajkot"},
+                    {"value": "ભાવનગર શહેર", "label_en": "Bhavnagar City", "label_gu": "ભાવનગર શહેર", "district_id": "bhavnagar"},
+                    {"value": "સિહોર", "label_en": "Sihor", "label_gu": "સિહોર", "district_id": "bhavnagar"},
+                    {"value": "પાલીતાણા", "label_en": "Palitana", "label_gu": "પાલીતાણા", "district_id": "bhavnagar"},
+                    {"value": "તળાજા", "label_en": "Talaja", "label_gu": "તળાજા", "district_id": "bhavnagar"},
+                    {"value": "ગારીયાધાર", "label_en": "Gariadhar", "label_gu": "ગારીયાધાર", "district_id": "bhavnagar"},
+                    {"value": "જામનગર શહેર", "label_en": "Jamnagar City", "label_gu": "જામનગર શહેર", "district_id": "jamnagar"},
+                    {"value": "કાલાવડ", "label_en": "Kalavad", "label_gu": "કાલાવડ", "district_id": "jamnagar"},
+                    {"value": "ધ્રોલ", "label_en": "Dhrol", "label_gu": "ધ્રોલ", "district_id": "jamnagar"},
+                    {"value": "જામજોધપુર", "label_en": "Jamjodhpur", "label_gu": "જામજોધપુર", "district_id": "jamnagar"},
+                    {"value": "ખંભાળિયા", "label_en": "Khambhalia", "label_gu": "ખંભાળિયા", "district_id": "jamnagar"},
+                    {"value": "જૂનાગઢ શહેર", "label_en": "Junagadh City", "label_gu": "જૂનાગઢ શહેર", "district_id": "junagadh"},
+                    {"value": "કેશોદ", "label_en": "Keshod", "label_gu": "કેશોદ", "district_id": "junagadh"},
+                    {"value": "માણાવદર", "label_en": "Manavadar", "label_gu": "માણાવદર", "district_id": "junagadh"},
+                    {"value": "વંથલી", "label_en": "Vanthali", "label_gu": "વંથલી", "district_id": "junagadh"},
+                    {"value": "ભેસાણ", "label_en": "Bhesan", "label_gu": "ભેસાણ", "district_id": "junagadh"},
+                    {"value": "આણંદ", "label_en": "Anand", "label_gu": "આણંદ", "district_id": "anand"},
+                    {"value": "બોરસદ", "label_en": "Borsad", "label_gu": "બોરસદ", "district_id": "anand"},
+                    {"value": "ખંભાત", "label_en": "Khambhat", "label_gu": "ખંભાત", "district_id": "anand"},
+                    {"value": "પેટલાદ", "label_en": "Petlad", "label_gu": "પેટલાદ", "district_id": "anand"},
+                    {"value": "ઉમરેઠ", "label_en": "Umreth", "label_gu": "ઉમરેઠ", "district_id": "anand"},
+                    {"value": "ભુજ", "label_en": "Bhuj", "label_gu": "ભુજ", "district_id": "kutch"},
+                    {"value": "અંજાર", "label_en": "Anjar", "label_gu": "અંજાર", "district_id": "kutch"},
+                    {"value": "ભચાઉ", "label_en": "Bhachau", "label_gu": "ભચાઉ", "district_id": "kutch"},
+                    {"value": "ગાંધીધામ", "label_en": "Gandhidham", "label_gu": "ગાંધીધામ", "district_id": "kutch"},
+                    {"value": "મુંદ્રા", "label_en": "Mundra", "label_gu": "મુંદ્રા", "district_id": "kutch"},
+                    {"value": "રાપર", "label_en": "Rapar", "label_gu": "રાપર", "district_id": "kutch"},
+                    {"value": "મહેસાણા", "label_en": "Mehsana", "label_gu": "મહેસાણા", "district_id": "mehsana"},
+                    {"value": "વિસનગર", "label_en": "Visnagar", "label_gu": "વિસનગર", "district_id": "mehsana"},
+                    {"value": "કાડી", "label_en": "Kadi", "label_gu": "કાડી", "district_id": "mehsana"},
+                    {"value": "વિજાપુર", "label_en": "Vijapur", "label_gu": "વિજાપુર", "district_id": "mehsana"},
+                    {"value": "વડનગર", "label_en": "Vadnagar", "label_gu": "વડનગર", "district_id": "mehsana"},
+                    {"value": "ઉંઝા", "label_en": "Unjha", "label_gu": "ઉંઝા", "district_id": "mehsana"},
+                    {"value": "પાટણ", "label_en": "Patan", "label_gu": "પાટણ", "district_id": "patan"},
+                    {"value": "સિદ્ધપુર", "label_en": "Sidhpur", "label_gu": "સિદ્ધપુર", "district_id": "patan"},
+                    {"value": "ચાણસ્મા", "label_en": "Chanasma", "label_gu": "ચાણસ્મા", "district_id": "patan"},
+                    {"value": "રાધનપુર", "label_en": "Radhanpur", "label_gu": "રાધનપુર", "district_id": "patan"},
+                    {"value": "હરિજ", "label_en": "Harij", "label_gu": "હરિજ", "district_id": "patan"},
+                ],
+            },
+            {
+                "key": "case_type", "label_en": "Case Type", "label_gu": "કેસ પ્રકાર", "type": "select", "required": True,
+                "options": [
+                    {"value": "civil_suit", "label_en": "Civil Suit", "label_gu": "સિવિલ સૂટ"},
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર સિવિલ સૂટ"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ સિવિલ સૂટ"},
+                    {"value": "commercial_suit", "label_en": "Commercial Suit", "label_gu": "કોમર્શિયલ સૂટ"},
+                    {"value": "civil_appeal", "label_en": "Civil Appeal", "label_gu": "સિવિલ અપીલ"},
+                    {"value": "civil_revision", "label_en": "Civil Revision", "label_gu": "સિવિલ રિવિઝન"},
+                    {"value": "execution", "label_en": "Execution", "label_gu": "એક્ઝિક્યુશન"},
+                    {"value": "misc_civil_app", "label_en": "Miscellaneous Civil Application", "label_gu": "મિસલેનિયસ સિવિલ અરજી"},
+                    {"value": "interim_app", "label_en": "Interim Application", "label_gu": "ઇન્ટરિમ અરજી"},
+                    {"value": "other_civil", "label_en": "Other Civil Matter", "label_gu": "અન્ય સિવિલ બાબત"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "criminal_complaint", "label_en": "Criminal Complaint", "label_gu": "ક્રિમિનલ ફરિયાદ"},
+                    {"value": "criminal_appeal", "label_en": "Criminal Appeal", "label_gu": "ક્રિમિનલ અપીલ"},
+                    {"value": "criminal_revision", "label_en": "Criminal Revision", "label_gu": "ક્રિમિનલ રિવિઝન"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Miscellaneous Application", "label_gu": "ક્રિમિનલ મિસ. અરજી"},
+                    {"value": "bail_application", "label_en": "Bail Application", "label_gu": "જામીન અરજી"},
+                    {"value": "regular_bail", "label_en": "Regular Bail", "label_gu": "રેગ્યુલર બેલ"},
+                    {"value": "anticipatory_bail", "label_en": "Anticipatory Bail", "label_gu": "એન્ટિસિપેટરી બેલ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "summons_case", "label_en": "Summons Case", "label_gu": "સમન્સ કેસ"},
+                    {"value": "warrant_case", "label_en": "Warrant Case", "label_gu": "વોરંટ કેસ"},
+                    {"value": "other_criminal", "label_en": "Other Criminal Matter", "label_gu": "અન્ય ક્રિમિનલ બાબત"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {"key": "case_number", "label_en": "Case Number", "label_gu": "કેસ નંબર", "type": "text", "required": True},
+            {
+                "key": "applicant_role", "label_en": "Applicant-side Role", "label_gu": "ફરીયાદી / અરજદાર / વાદી", "type": "radio", "required": True,
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Farayadi (Complainant)", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Arjadaar (Applicant)", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Vaadi (Plaintiff)", "label_gu": "વાદી"},
+                ],
+            },
+            {"key": "party_name", "label_en": "Name", "label_gu": "નામ", "type": "text", "required": True},
+            {
+                "key": "opposite_party_role", "label_en": "Opposite-party Role", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી", "type": "radio", "required": True,
+                "options": [
+                    {"value": "આરોપી", "label_en": "Aaropi (Accused)", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Saamavaala (Opponent)", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Prativaadi (Defendant)", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {"key": "opposite_party", "label_en": "Name", "label_gu": "નામ", "type": "text", "required": True},
+            {"key": "advocate_name", "label_en": "Advocate For", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "options": []},
+            {
+                "key": "case_status", "label_en": "Case Status", "label_gu": "કેસ ચાલુ છે કે ડિસ્પોઝ્ડ થયેલ છે", "type": "select", "required": True,
+                "options": [
+                    {"value": "ચાલુ", "label_en": "Ongoing", "label_gu": "ચાલુ"},
+                    {"value": "ડિસ્પોઝ્ડ", "label_en": "Disposed", "label_gu": "ડિસ્પોઝ્ડ"},
+                ],
+            },
+            {"key": "document_name", "label_en": "Document Name / Description", "label_gu": "દસ્તાવેજનું નામ / વિગત", "type": "textarea", "required": True, "placeholder": "દા.ત. આંક ૧૯ મુજબનો મકાનનો દસ્તાવેજ / પાસપોર્ટ જમા થયેલ હોય તો પાસપોર્ટ"},
+            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {"key": "place", "label_en": "Place", "label_gu": "સ્થળ", "type": "text", "required": True},
+        ],
+        "content_en": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+
+{{taluka_place}}
+
+{{case_type}} નં. {{case_number}}
+
+{{applicant_role}}
+વિરુદ્ધ
+{{opposite_party_role}}
+
+દસ્તાવેજ પરત મેળવવાની અરજી
+
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+
+સદર કેસ {{case_status_clause}}.
+
+સદર કેસમાં {{document_name}} કામમાં રજૂ કરવામાં આવેલ {{tense}}.
+
+સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+{{selected_party_role}}ના એડવોકેટ
+""",
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+
+{{taluka_place}}
+
+{{case_type}} નં. {{case_number}}
+
+{{applicant_role}}
+વિરુદ્ધ
+{{opposite_party_role}}
+
+દસ્તાવેજ પરત મેળવવાની અરજી
+
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+
+સદર કેસ {{case_status_clause}}.
+
+સદર કેસમાં {{document_name}} કામમાં રજૂ કરવામાં આવેલ {{tense}}.
+
+સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+{{selected_party_role}}ના એડવોકેટ
+""",
+    },
 ]
 
 PLANS = [

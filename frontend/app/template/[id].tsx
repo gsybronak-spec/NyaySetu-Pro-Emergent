@@ -43,6 +43,7 @@ export default function TemplateApplication() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [filename, setFilename] = useState("");
+  const [extraOptions, setExtraOptions] = useState<Record<string, any[]>>({});
   const draftTimer = useRef<any>(null);
 
   useEffect(() => {
@@ -51,18 +52,20 @@ export default function TemplateApplication() {
         const t = await api.template(templateId);
         setTemplate(t);
         setFilename(`${t.name_en.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+        const initialValues: Record<string, any> = {};
         if (caseId) {
           const c = await api.getCase(caseId);
           setCaseData(c);
           if (c.language) setLanguage(c.language);
-          const initialValues: Record<string, any> = {};
-          // Case/party data (server-enriched labels only — never raw catalog ids)
+          // Case/party data — catalog selects autofill by catalog id so the dropdowns
+          // match and the backend resolves ids to the correct-language labels.
           if (c.party_name) initialValues["party_name"] = c.party_name;
           if (c.client_name || c.party_name) initialValues["client_name"] = c.client_name || c.party_name;
           if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
           if (c.case_number) initialValues["case_number"] = c.case_number;
-          if (c.district_label) initialValues["district"] = c.district_label;
-          if (c.court_label) initialValues["court"] = c.court_label;
+          if (c.district_id) initialValues["district"] = c.district_id;
+          if (c.court_id) initialValues["court"] = c.court_id;
+          if (c.case_type_id) initialValues["case_type"] = c.case_type_id;
           if (c.police_station_label) initialValues["police_station"] = c.police_station_label;
           if (c.client_mobile) initialValues["client_mobile"] = c.client_mobile;
           if (c.client_email) initialValues["client_email"] = c.client_email;
@@ -76,13 +79,26 @@ export default function TemplateApplication() {
             }
           }
           initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
-          setValues((prev) => ({ ...initialValues, ...prev }));
         }
+        // Advocate dropdown: single option from the logged-in advocate's profile
+        // (the app has no advocate catalog — the logged-in advocate drafts the document).
+        const me = await api.me().catch(() => null);
+        if (me?.name) {
+          setExtraOptions((p) => ({ ...p, advocate_name: [{ value: me.name, label_en: me.name, label_gu: me.name }] }));
+          if (!initialValues.advocate_name) initialValues["advocate_name"] = me.name;
+        }
+        // Date fields default to today when unset (still editable).
+        for (const f of t.fields || []) {
+          if (f.type === "date" && !initialValues[f.key]) initialValues[f.key] = new Date().toISOString().slice(0, 10);
+        }
+        setValues((prev) => ({ ...initialValues, ...prev }));
         if (params.draft === "1") {
           const drafts = await api.drafts();
           const d = drafts.find((x: any) => x.template_id === templateId && (x.case_id || undefined) === caseId);
           if (d) {
-            setValues(d.values || {});
+            // Merge draft over defaults so autofilled values (advocate, today's
+            // date) survive when the draft does not contain them.
+            setValues((prev) => ({ ...prev, ...(d.values || {}) }));
             setLanguage(d.language || "en");
           }
         }
@@ -303,7 +319,10 @@ export default function TemplateApplication() {
                 );
               }
               if (f.type === "select") {
-                const opts = (f.options || []).map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
+                const districtVal = values.district;
+                const opts = (extraOptions[f.key] || f.options || [])
+                  .filter((o: any) => !o.district_id || !districtVal || o.district_id === districtVal)
+                  .map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
                 return (
                   <Dropdown
                     key={f.key}
@@ -312,7 +331,18 @@ export default function TemplateApplication() {
                     placeholder="Select..."
                     value={fvalue || null}
                     options={opts}
-                    onChange={(v) => update(f.key, v)}
+                    onChange={(v) => {
+                      update(f.key, v);
+                      // Keep district <-> taluka association: drop a taluka that does
+                      // not belong to the newly selected district.
+                      if (f.key === "district" && values.taluka) {
+                        const talukaField = fields.find((x: any) => x.key === "taluka");
+                        const belongs = (talukaField?.options || []).some(
+                          (o: any) => o.value === values.taluka && o.district_id === v
+                        );
+                        if (!belongs) update("taluka", "");
+                      }
+                    }}
                   />
                 );
               }
@@ -403,6 +433,7 @@ export default function TemplateApplication() {
                   testID={`field-${f.key}`}
                   label={label}
                   multiline={f.type === "textarea"}
+                  placeholder={f.placeholder}
                   keyboardType={kt as any}
                   maxLength={f.type === "mobile" ? 15 : undefined}
                   autoCapitalize={f.type === "email" ? "none" : undefined}

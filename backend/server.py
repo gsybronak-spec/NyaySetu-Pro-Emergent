@@ -816,6 +816,8 @@ _AUTO_FILL_FIELDS = {
     "advocate_name", "today", "district", "court", "case_number", "case_type",
     "party_name", "opposite_party", "police_station", "law", "section",
     "client_name", "client_mobile", "client_email", "client_address", "client_district",
+    # Derived values for the document-return application (never user-entered)
+    "case_status_clause", "tense", "selected_party_role", "taluka_place",
 }
 
 def public_template(t: dict) -> dict:
@@ -834,6 +836,8 @@ def public_template(t: dict) -> dict:
             field_dict["options"] = f["options"]
         if "default_value" in f and f["default_value"] is not None:
             field_dict["default_value"] = f["default_value"]
+        if f.get("placeholder"):
+            field_dict["placeholder"] = f["placeholder"]
         clean_fields.append(field_dict)
     res = {
         "id": t["id"],
@@ -931,6 +935,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
         d = _DISTRICT_MAP[ctx["district"]]
         ctx["district"] = d["gu"] if language == "gu" else d["en"]
+    # Same guard for court / case_type raw catalog ids sent as select values
+    # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
+    if isinstance(ctx.get("court"), str) and ctx["court"] in _COURT_MAP:
+        cobj = _COURT_MAP[ctx["court"]]
+        ctx["court"] = cobj["gu"] if language == "gu" else cobj["en"]
+    if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
+        ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
+        ctx["case_type"] = ctobj["gu"] if language == "gu" else ctobj["en"]
     if case:
         did = case.get("district_id") or user.get("district")
         d = next((x for x in DISTRICTS if x["id"] == did), None)
@@ -990,6 +1002,24 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx.setdefault("police_station", "")
         if not ctx.get("client_name"):
             ctx["client_name"] = ""
+
+    # ---- Derived values for the document-return application (never user-entered) ----
+    # case_status -> conditional Gujarati clause + verb tense (required by the source spec)
+    status = ctx.get("case_status")
+    if status == "ચાલુ":
+        ctx["case_status_clause"] = "આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે"
+        ctx["tense"] = "છે"
+    elif status == "ડિસ્પોઝ્ડ":
+        ctx["case_status_clause"] = "આપની કોર્ટમાં ડિસ્પોઝ્ડ થયેલ છે"
+        ctx["tense"] = "હતો"
+    else:
+        ctx["case_status_clause"] = ""
+        ctx["tense"] = "છે"
+    # Signature/pleading role — applicant-side role, opposite-side as fallback
+    ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ""
+    # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર")
+    _tal = (ctx.get("taluka") or "").strip()
+    ctx["taluka_place"] = f"{_tal}, {ctx.get('district') or ''}" if _tal else (ctx.get("district") or "")
     return ctx
 
 
