@@ -27,10 +27,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
+    const handleUnauthorized = () => {
+      localStorage.removeItem('admin_token');
+      setAdmin(null);
+    };
+    window.addEventListener('admin:unauthorized', handleUnauthorized);
+
     const token = localStorage.getItem('admin_token');
     if (!token) {
       setReady(true);
-      return;
+      return () => window.removeEventListener('admin:unauthorized', handleUnauthorized);
     }
     adminApi.me()
       .then((data) => setAdmin(data))
@@ -39,6 +45,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAdmin(null);
       })
       .finally(() => setReady(true));
+
+    return () => window.removeEventListener('admin:unauthorized', handleUnauthorized);
   }, []);
 
   const login = async (email: string, password: string) => {

@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://nyaysetu-pro-emergent-1.onrender.com";
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://nyaysetu-backend-nwp2.onrender.com";
 const TOKEN_KEY = "nyaysetu_token";
 
 export async function setToken(t: string | null) {

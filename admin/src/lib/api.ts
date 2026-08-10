@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || 'https://nyaysetu-pro-emergent-1.onrender.com';
+const BASE = import.meta.env.VITE_API_BASE || 'https://nyaysetu-backend-nwp2.onrender.com';
 
 async function request(path: string, method = 'GET', body?: unknown) {
   const token = localStorage.getItem('admin_token');
@@ -20,6 +20,10 @@ async function request(path: string, method = 'GET', body?: unknown) {
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('admin_token');
+      window.dispatchEvent(new Event('admin:unauthorized'));
+    }
     const msg = json?.detail || json?.message || `HTTP ${res.status}`;
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }

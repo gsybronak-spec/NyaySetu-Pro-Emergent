@@ -709,7 +709,7 @@ export default function TemplateEditor() {
               {customPlaceholders.length > 0 && (
                 <div className="palette-section" style={{ marginTop: '8px' }}>
                   <span className="palette-title">Template Custom Fields:</span>
-                  {customPlaceholders.map(p => (
+                  {customPlaceholders.map((p: string) => (
                     <button key={p} className="palette-btn custom" onClick={() => insertPlaceholder(p)} disabled={isLocked} title={`Dynamic template field`}>
                       + {`{{${p}}}`}
                     </button>
