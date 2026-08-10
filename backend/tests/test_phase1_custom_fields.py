@@ -430,3 +430,83 @@ class TestDocumentAutofill:
         # credit consumed exactly once
         w = await client.get(f"{API}/wallet", headers=H(token))
         assert w.json()["balance"] == 3  # started at 5, two downloads
+
+
+# ============================================================
+# 5. Date fields — canonical YYYY-MM-DD round-trip + document rendering
+# ============================================================
+
+class TestDateFields:
+    @pytest.mark.asyncio
+    async def test_iso_date_in_custom_fields_round_trips(self, client, clean_db):
+        """A YYYY-MM-DD date selected in the picker survives create -> GET -> edit."""
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/cases", headers=H(token), json={
+            "nickname": "P1_date",
+            "case_type_id": "criminal_complaint",
+            "custom_fields": {"incident_date": "2026-02-15"},
+        })
+        assert r.status_code == 200, r.text
+        case_id = r.json()["id"]
+
+        g = await client.get(f"{API}/cases/{case_id}", headers=H(token))
+        cf = (g.json().get("custom_fields") or {})
+        assert cf.get("incident_date") == "2026-02-15", f"date lost on GET: {cf}"
+
+        # Update via the edit screen (full form resubmit with the date intact)
+        u = await client.put(f"{API}/cases/{case_id}", headers=H(token), json={
+            "nickname": "P1_date_edited",
+            "custom_fields": {"incident_date": "2026-02-16"},
+        })
+        assert u.status_code == 200, u.text
+        assert (u.json().get("custom_fields") or {}).get("incident_date") == "2026-02-16"
+
+    @pytest.mark.asyncio
+    async def test_date_from_case_reaches_document(self, client, clean_db):
+        """A case custom-field date (YYYY-MM-DD) flows into preview AND pdf/docx."""
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/cases", headers=H(token), json={
+            "nickname": "P1_date_doc",
+            "case_type_id": "criminal_complaint",
+            "party_name": "Hetal",
+            "custom_fields": {"arrest_date": "2026-03-01"},
+        })
+        case_id = r.json()["id"]
+
+        # Regular bail template references {{arrest_date}}
+        p = await client.post(f"{API}/applications/preview", headers=H(token), json={
+            "template_id": "bail_regular",
+            "case_id": case_id,
+            "language": "en",
+            "values": {},
+        })
+        assert p.status_code == 200, p.text
+        assert "2026-03-01" in p.json()["content"], "date missing from preview content"
+
+        d = await client.post(f"{API}/applications/download", headers=H(token), json={
+            "template_id": "bail_regular",
+            "case_id": case_id,
+            "language": "en",
+            "format": "pdf",
+            "values": {},
+        })
+        assert d.status_code == 200, d.text
+
+    @pytest.mark.asyncio
+    async def test_legacy_dmy_date_still_accepted(self, client, clean_db):
+        """Previously-saved DD-MM-YYYY values keep working (frontend tolerates + formats)."""
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/cases", headers=H(token), json={
+            "nickname": "P1_legacy_date",
+            "custom_fields": {"next_date": "20-01-2026"},
+        })
+        assert r.status_code == 200, r.text
+        case_id = r.json()["id"]
+        p = await client.post(f"{API}/applications/preview", headers=H(token), json={
+            "template_id": "adjournment",
+            "case_id": case_id,
+            "language": "en",
+            "values": {},
+        })
+        assert p.status_code == 200, p.text
+        assert "20-01-2026" in p.json()["content"]

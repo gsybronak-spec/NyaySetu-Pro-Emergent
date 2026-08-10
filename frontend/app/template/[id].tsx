@@ -13,13 +13,14 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { Dropdown } from "@/src/components/Dropdown";
+import { DateField } from "@/src/components/DateField";
+import { formatDateDisplay, isISODate } from "@/src/utils/date";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -41,7 +42,6 @@ export default function TemplateApplication() {
   const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [datePickerFor, setDatePickerFor] = useState<string | null>(null);
   const [filename, setFilename] = useState("");
   const draftTimer = useRef<any>(null);
 
@@ -106,6 +106,16 @@ export default function TemplateApplication() {
 
   const update = (k: string, v: any) => setValues((prev) => ({ ...prev, [k]: v }));
 
+  // Dates are stored internally as YYYY-MM-DD; documents render them in the
+  // app's existing legal style (DD-MM-YYYY). Convert before preview/download.
+  const toDocValues = (v: Record<string, any>) => {
+    const out: Record<string, any> = {};
+    for (const [k, val] of Object.entries(v)) {
+      out[k] = isISODate(val) ? formatDateDisplay(val) : val;
+    }
+    return out;
+  };
+
   const fields = template?.fields || [];
 
   const missingRequired = useMemo(
@@ -120,7 +130,7 @@ export default function TemplateApplication() {
     }
     setBusy(true);
     try {
-      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values });
+      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
       setPreview(res.content);
       setBlocks(res.blocks || []);
       setStep("preview");
@@ -138,7 +148,7 @@ export default function TemplateApplication() {
         template_id: templateId,
         case_id: caseId,
         language,
-        values,
+        values: toDocValues(values),
         format,
         filename: `${filename}.${format}`,
       });
@@ -282,19 +292,14 @@ export default function TemplateApplication() {
               const fvalue = values[f.key];
               if (f.type === "date") {
                 return (
-                  <View key={f.key} style={{ marginBottom: Spacing.md }}>
-                    <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
-                    <Pressable
-                      testID={`date-${f.key}`}
-                      onPress={() => setDatePickerFor(f.key)}
-                      style={[styles.dateField, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-                    >
-                      <Text style={{ color: fvalue ? colors.onSurface : colors.muted }}>
-                        {fvalue || "Select date"}
-                      </Text>
-                      <Ionicons name="calendar-outline" size={18} color={colors.muted} />
-                    </Pressable>
-                  </View>
+                  <DateField
+                    key={f.key}
+                    testID={`date-${f.key}`}
+                    label={label}
+                    value={fvalue}
+                    onChange={(v) => update(f.key, v)}
+                    placeholder="Select date"
+                  />
                 );
               }
               if (f.type === "select") {
@@ -407,22 +412,6 @@ export default function TemplateApplication() {
               );
             })}
 
-            {datePickerFor && (
-              <DateTimePicker
-                value={new Date()}
-                mode="date"
-                display={Platform.OS === "ios" ? "spinner" : "default"}
-                onChange={(e, d) => {
-                  setDatePickerFor(null);
-                  if (d) {
-                    const key = datePickerFor;
-                    const dd = String(d.getDate()).padStart(2, "0");
-                    const mm = String(d.getMonth() + 1).padStart(2, "0");
-                    update(key, `${dd}-${mm}-${d.getFullYear()}`);
-                  }
-                }}
-              />
-            )}
           </ScrollView>
         )}
 
@@ -533,10 +522,6 @@ const styles = StyleSheet.create({
   langChip: { flex: 1, height: 46, borderRadius: Radius.md, borderWidth: 1.5, alignItems: "center", justifyContent: "center" },
   autofill: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   autoChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  dateField: {
-    minHeight: 50, borderRadius: Radius.md, borderWidth: 1, paddingHorizontal: Spacing.md,
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-  },
   doc: { padding: Spacing.lg, borderRadius: Radius.md, borderWidth: 1 },
   docText: { color: "#111", fontSize: 13, lineHeight: 22 },
   editRow: {

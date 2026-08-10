@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { Dropdown } from "@/src/components/Dropdown";
+import { DateField } from "@/src/components/DateField";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -109,7 +109,6 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   // Dynamic Case Form Configuration from Admin API
   const [dynamicFields, setDynamicFields] = useState<any[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, any>>(initial?.custom_fields || {});
-  const [datePickerFor, setDatePickerFor] = useState<string | null>(null);
 
   useEffect(() => {
     api.caseTypes().then((r) => setCaseTypes(Array.isArray(r) ? r : [])).catch(() => setCaseTypes([]));
@@ -274,17 +273,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} keyboardType="email-address" autoCapitalize="none" placeholder={df.placeholder || "you@example.com"} value={value || ""} onChangeText={setVal} />;
       case "date":
         return (
-          <View key={df.key} style={{ marginBottom: Spacing.md }}>
-            <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600", marginBottom: Spacing.xs }}>{label}</Text>
-            <Pressable
-              testID={`dynamic-date-${df.key}`}
-              onPress={() => setDatePickerFor(df.key)}
-              style={[styles.dateField, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-            >
-              <Text style={{ color: value ? colors.onSurface : colors.muted }}>{value || "Select date"}</Text>
-              <Ionicons name="calendar-outline" size={18} color={colors.muted} />
-            </Pressable>
-          </View>
+          <DateField
+            key={df.key}
+            testID={`dynamic-date-${df.key}`}
+            label={label}
+            value={value}
+            onChange={setVal}
+            placeholder={df.placeholder || "Select date"}
+          />
         );
       case "select": {
         const opts = (df.options || []).map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
@@ -506,23 +502,6 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             </View>
           )}
 
-          {datePickerFor && (
-            <DateTimePicker
-              value={new Date()}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={(e, d) => {
-                setDatePickerFor(null);
-                if (d) {
-                  const key = datePickerFor;
-                  const dd = String(d.getDate()).padStart(2, "0");
-                  const mm = String(d.getMonth() + 1).padStart(2, "0");
-                  updateCustom(key, `${dd}-${mm}-${d.getFullYear()}`);
-                }
-              }}
-            />
-          )}
-
           {showComplaint && (
             <Dropdown
               testID="complaint-type"
@@ -644,15 +623,6 @@ const styles = StyleSheet.create({
   searchBtnText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
   statusBanner: { marginTop: Spacing.sm, padding: Spacing.sm, borderRadius: Radius.sm },
   dynamicSection: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, marginVertical: Spacing.md },
-  dateField: {
-    minHeight: 50,
-    borderRadius: Radius.md,
-    borderWidth: 1,
-    paddingHorizontal: Spacing.md,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   chip: {
     height: 36,
     paddingHorizontal: Spacing.lg,
