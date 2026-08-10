@@ -11,6 +11,21 @@ interface FieldConfig {
   placeholder?: string;
   default_value?: string;
   autofill_map?: string;
+  options?: { label_en: string; label_gu: string; value: string }[];
+}
+
+// Serialize options to a comma-separated list for editing.
+function optionsToCsv(field: FieldConfig): string {
+  return (field.options || []).map((o) => o.value).join(', ');
+}
+
+// Parse a comma-separated list into options (label defaults to the value).
+function csvToOptions(csv: string): { label_en: string; label_gu: string; value: string }[] {
+  return csv
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((v) => ({ label_en: v, label_gu: v, value: v }));
 }
 
 interface CaseFormConfig {
@@ -22,12 +37,29 @@ interface CaseFormConfig {
 }
 
 export default function CaseFormBuilder() {
+  // Real case-type catalog ids so Admin-configured forms actually apply to the
+  // lawyer app (which requests caseFormConfig(<real case_type_id>)).
   const [caseTypes, setCaseTypes] = useState<string[]>(['civil', 'bail', 'revenue', 'criminal', 'family', 'other']);
+  const [caseTypeLabels, setCaseTypeLabels] = useState<Record<string, string>>({});
   const [selectedType, setSelectedType] = useState<string>('civil');
   const [config, setConfig] = useState<CaseFormConfig | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const [msg, setMsg] = useState<string>('');
+
+  useEffect(() => {
+    adminApi.getCaseTypes()
+      .then((types: any[]) => {
+        if (Array.isArray(types) && types.length > 0) {
+          setCaseTypes(types.map((t) => t.id));
+          const labels: Record<string, string> = {};
+          for (const t of types) labels[t.id] = t.en || t.id;
+          setCaseTypeLabels(labels);
+          setSelectedType((prev) => (types.some((t) => t.id === prev) ? prev : types[0].id));
+        }
+      })
+      .catch(() => { /* fall back to the default list */ });
+  }, []);
 
   useEffect(() => {
     loadConfig(selectedType);
@@ -125,25 +157,25 @@ export default function CaseFormBuilder() {
         </div>
       )}
 
-      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
-        {caseTypes.map((t) => (
-          <button
-            key={t}
-            onClick={() => setSelectedType(t)}
-            style={{
-              padding: '8px 16px',
-              borderRadius: '6px',
-              border: selectedType === t ? '2px solid #2563eb' : '1px solid #cbd5e1',
-              backgroundColor: selectedType === t ? '#eff6ff' : '#ffffff',
-              color: selectedType === t ? '#1d4ed8' : '#334155',
-              cursor: 'pointer',
-              fontWeight: 500,
-              textTransform: 'capitalize',
-            }}
-          >
-            {t}
-          </button>
-        ))}
+      <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>            {caseTypes.map((t) => (
+              <button
+                key={t}
+                onClick={() => setSelectedType(t)}
+                title={caseTypeLabels[t] || t}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: selectedType === t ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  backgroundColor: selectedType === t ? '#eff6ff' : '#ffffff',
+                  color: selectedType === t ? '#1d4ed8' : '#334155',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  textTransform: 'capitalize',
+                }}
+              >
+                {caseTypeLabels[t] || t}
+              </button>
+            ))}
       </div>
 
       {loading || !config ? (
@@ -234,6 +266,8 @@ export default function CaseFormBuilder() {
                     <option value="email">Email</option>
                     <option value="date">Date</option>
                     <option value="select">Select</option>
+                    <option value="radio">Radio Buttons</option>
+                    <option value="checkbox">Checkbox</option>
                   </select>
                 </div>
                 <div>
@@ -251,6 +285,18 @@ export default function CaseFormBuilder() {
                     <option value="user.district">Client District (user.district)</option>
                   </select>
                 </div>
+                {['select', 'radio', 'checkbox'].includes(field.type) && (
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <span style={{ fontSize: '11px', color: '#64748b' }}>Options (comma-separated values)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. Yes, No, Pending"
+                      value={optionsToCsv(field)}
+                      onChange={(e) => updateField(idx, 'options', csvToOptions(e.target.value))}
+                      style={{ width: '100%', padding: '6px', fontSize: '13px', border: '1px solid #cbd5e1', borderRadius: '4px' }}
+                    />
+                  </div>
+                )}
                 <div style={{ textAlign: 'center' }}>
                   <span style={{ fontSize: '11px', color: '#64748b', display: 'block' }}>Req?</span>
                   <input

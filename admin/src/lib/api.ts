@@ -55,5 +55,6 @@ export const adminApi = {
   adminMigrateSeed: () => request('/templates/migrate-seed', 'POST'),
   getCaseForms: () => fetch(`${BASE}/api/catalog/case-forms`).then(r => r.json()),
   getCaseFormConfig: (id: string) => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json()),
+  getCaseTypes: () => fetch(`${BASE}/api/catalog/case-types`).then(r => r.json()),
   adminSaveCaseForm: (id: string, data: any) => request(`/case-forms/${id}`, 'POST', data),
 };

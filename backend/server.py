@@ -87,6 +87,14 @@ class CaseCreate(BaseModel):
     police_station_custom: Optional[str] = Field(None, max_length=200)
     complaint_custom: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=2000)
+    # Admin-configured case form values (dynamic fields) — persisted on the case.
+    custom_fields: Optional[dict] = None
+    # Flat client details (from Client Lookup autofill). D3: stored flat on the case.
+    client_name: Optional[str] = Field(None, max_length=500)
+    client_mobile: Optional[str] = Field(None, max_length=20)
+    client_email: Optional[str] = Field(None, max_length=200)
+    client_address: Optional[str] = Field(None, max_length=1000)
+    client_district: Optional[str] = Field(None, max_length=200)
 
 class CaseUpdate(CaseCreate):
     pass
@@ -174,15 +182,18 @@ async def gen_referral_code() -> str:
 async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] = None,
                           name: Optional[str] = None, picture: Optional[str] = None,
                           provider: str = "mobile") -> dict:
-    """Create a user + wallet with 5 free credits and a referral code."""
+    """Create a user + wallet with 5 free credits and a referral code.
+
+    IMPORTANT: absent optional identity fields (mobile/email/picture) are OMITTED
+    from the document rather than stored as null. The unique sparse indexes on
+    users.mobile / users.email index null values, so storing null for a field the
+    other provider doesn't set would make the SECOND user collide and 500.
+    """
     user_id = str(uuid.uuid4())
     code = await gen_referral_code()
     user = {
         "id": user_id,
-        "mobile": mobile,
-        "email": email,
         "name": name,
-        "picture": picture,
         "provider": provider,
         "bar_council_no": None,
         "state": None,
@@ -195,6 +206,12 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         "favourite_courts": [],
         "created_at": now().isoformat(),
     }
+    if mobile is not None:
+        user["mobile"] = mobile
+    if email is not None:
+        user["email"] = email
+    if picture is not None:
+        user["picture"] = picture
     await db.users.insert_one(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id,
@@ -436,18 +453,15 @@ async def get_case_form_config(case_type_id: str):
     if not cfg:
         cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
     if not cfg:
+        # No admin-configured form for this case type -> no dynamic fields.
+        # Client identity (name/mobile/email/address/district) is captured by the
+        # dedicated Client Details fields on the case, so no generic fallback here.
         return {
             "case_type_id": case_type_id,
             "name_en": case_type_id.replace("_", " ").title(),
             "name_gu": case_type_id,
             "category": "General",
-            "fields": [
-                {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-                {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-                {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
-                {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
-                {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
-            ]
+            "fields": [],
         }
     return cfg
 
@@ -587,9 +601,100 @@ def validate_values_size(values: dict):
         raise HTTPException(400, "Template values payload too large")
 
 
+MAX_CUSTOM_FIELDS = 200
+MAX_CUSTOM_FIELD_LEN = 5000
+
+
+def validate_custom_fields(custom: Optional[dict]) -> Optional[dict]:
+    """Validate admin-configured case form values. Returns {} for None input."""
+    if not custom:
+        return {}
+    if not isinstance(custom, dict):
+        raise HTTPException(400, "custom_fields must be an object")
+    if len(custom) > MAX_CUSTOM_FIELDS:
+        raise HTTPException(400, f"Too many custom fields (max {MAX_CUSTOM_FIELDS})")
+    for k, v in custom.items():
+        if not isinstance(k, str) or len(k) > 100:
+            raise HTTPException(400, "Invalid custom field key")
+        if isinstance(v, str) and len(v) > MAX_CUSTOM_FIELD_LEN:
+            raise HTTPException(400, f"Field '{k}' too long (max {MAX_CUSTOM_FIELD_LEN} chars)")
+        if isinstance(v, (dict, list)):
+            raise HTTPException(400, f"Field '{k}' must be a scalar value")
+    total = sum(len(str(k)) + len(str(v)) for k, v in custom.items())
+    if total > MAX_TEMPLATE_VALUES_TOTAL:
+        raise HTTPException(400, "Custom fields payload too large")
+    return custom
+
+
+# autofill_map subject keys are resolved against the CLIENT context (D1):
+# the looked-up client's name/mobile/email/address/district, NOT the advocate's user record.
+_AUTOFILL_CLIENT_KEYS = {"name", "mobile", "email", "address", "district"}
+
+
+def resolve_autofill_value(autofill_map: Optional[str], client_ctx: dict) -> Optional[str]:
+    """Resolve an autofill_map like 'user.name' against the client context."""
+    if not autofill_map:
+        return None
+    key = autofill_map.split(".", 1)[-1]
+    if key in _AUTOFILL_CLIENT_KEYS:
+        val = client_ctx.get(key)
+        return val if val not in (None, "") else None
+    return None
+
+
+def client_ctx_from(payload: dict) -> dict:
+    """Build the client autofill context from a case payload."""
+    district = payload.get("client_district")
+    did = payload.get("district_id")
+    if not district and did:
+        d = next((x for x in DISTRICTS if x["id"] == did), None)
+        district = d["en"] if d else None
+    return {
+        "name": payload.get("client_name") or payload.get("party_name"),
+        "mobile": payload.get("client_mobile"),
+        "email": payload.get("client_email"),
+        "address": payload.get("client_address"),
+        "district": district,
+    }
+
+
+async def resolve_custom_autofill(case_type_id: Optional[str], custom_fields: Optional[dict], client_ctx: dict) -> dict:
+    """Fill empty autofill-mapped custom fields from the client context.
+
+    Uses the admin-configured case form schema for the case type (DB first,
+    DEFAULT_CASE_FORMS fallback). Values the user already entered are never
+    overwritten. This is server-side enforcement so no data is silently dropped.
+    """
+    custom = dict(custom_fields or {})
+    if not case_type_id:
+        return custom
+    cfg = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    if not cfg:
+        cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
+    if not cfg:
+        return custom
+    for f in cfg.get("fields", []):
+        key = f.get("key")
+        if not key or key in custom and custom.get(key) not in (None, ""):
+            continue
+        val = resolve_autofill_value(f.get("autofill_map"), client_ctx)
+        if val is not None:
+            custom[key] = val
+    return custom
+
+
 @api.post("/cases")
 async def create_case(req: CaseCreate, user=Depends(get_user)):
-    validate_case_refs(req.model_dump())
+    payload = req.model_dump()
+    validate_case_refs(payload)
+    validate_custom_fields(payload.get("custom_fields"))
+    client_ctx = client_ctx_from(payload)
+    payload["custom_fields"] = await resolve_custom_autofill(
+        payload.get("case_type_id"), payload.get("custom_fields"), client_ctx
+    )
+    # Flat client fields: default client_name to the primary party name (D3).
+    if not payload.get("client_name"):
+        payload["client_name"] = payload.get("party_name")
     case_id = str(uuid.uuid4())
     doc = {
         "id": case_id,
@@ -599,7 +704,7 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
         "updated_at": now().isoformat(),
         "last_used_template": None,
         "application_count": 0,
-        **req.model_dump(),
+        **payload,
     }
     await db.cases.insert_one(doc.copy())
     doc.pop("_id", None)
@@ -650,6 +755,22 @@ async def get_case(case_id: str, user=Depends(get_user)):
 async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
     validate_case_refs(updates)
+    existing = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Case not found")
+    # custom_fields: merge into existing so admin-configured values are never lost.
+    if "custom_fields" in updates:
+        validate_custom_fields(updates["custom_fields"])
+        merged_custom = dict(existing.get("custom_fields") or {})
+        merged_custom.update(updates["custom_fields"] or {})
+        case_type_id = updates.get("case_type_id") or existing.get("case_type_id")
+        merged_payload = {**existing, **updates}
+        updates["custom_fields"] = await resolve_custom_autofill(
+            case_type_id, merged_custom, client_ctx_from(merged_payload)
+        )
+    # Flat client fields: default client_name to the primary party name (D3).
+    if "party_name" in updates and not updates.get("client_name"):
+        updates["client_name"] = updates["party_name"]
     updates["updated_at"] = now().isoformat()
     r = await db.cases.update_one({"id": case_id, "user_id": user["id"]}, {"$set": updates})
     if r.matched_count == 0:
@@ -691,7 +812,11 @@ async def delete_case(case_id: str, user=Depends(get_user)):
 # ============================================================
 # TEMPLATES
 # ============================================================
-_AUTO_FILL_FIELDS = {"advocate_name", "today", "district", "court", "case_number", "case_type", "party_name", "opposite_party"}
+_AUTO_FILL_FIELDS = {
+    "advocate_name", "today", "district", "court", "case_number", "case_type",
+    "party_name", "opposite_party", "police_station", "law", "section",
+    "client_name", "client_mobile", "client_email", "client_address", "client_district",
+}
 
 def public_template(t: dict) -> dict:
     """Return the public-facing template shape (unchanged for backward compat)."""
@@ -801,13 +926,18 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     ctx.setdefault("advocate_name", user.get("name") or "Advocate")
     # Today (formatted)
     ctx["today"] = now().strftime("%d-%m-%Y")
-    # District / court
-    district_name = ""
+    # Guard: if a client sent a raw district id (e.g. "ahmedabad") instead of a
+    # label, resolve it here so documents never print raw catalog ids.
+    if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
+        d = _DISTRICT_MAP[ctx["district"]]
+        ctx["district"] = d["gu"] if language == "gu" else d["en"]
     if case:
         did = case.get("district_id") or user.get("district")
         d = next((x for x in DISTRICTS if x["id"] == did), None)
         if d:
             district_name = d["gu"] if language == "gu" else d["en"]
+        else:
+            district_name = ""
         ctx.setdefault("district", district_name or case.get("district_id") or "")
         court_obj = _COURT_MAP.get(case.get("court_id"))
         if court_obj:
@@ -824,6 +954,31 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
         ctx.setdefault("opposite_party", case.get("opposite_party") or "")
+        # Police station (label or custom)
+        ps_obj = _PS_MAP.get(case.get("police_station_id"))
+        if ps_obj:
+            ctx.setdefault("police_station", ps_obj["gu"] if language == "gu" else ps_obj["en"])
+        else:
+            ctx.setdefault("police_station", case.get("police_station_custom") or case.get("police_station") or "")
+        # Law / section labels
+        law_obj = _LAW_MAP.get(case.get("law_id"))
+        if law_obj:
+            ctx.setdefault("law", law_obj["gu"] if language == "gu" else law_obj["en"])
+            sec = None
+            if case.get("section_id"):
+                sec = next((s for s in law_obj["sections"] if s["id"] == case.get("section_id")), None)
+            if sec:
+                ctx.setdefault("section", sec["label"])
+        # Flat client details (D3) — user-entered values win via setdefault.
+        for ck in ("client_name", "client_mobile", "client_email", "client_address", "client_district"):
+            if ck not in ctx and case.get(ck):
+                ctx[ck] = case[ck]
+        if not ctx.get("client_name"):
+            ctx["client_name"] = case.get("client_name") or case.get("party_name") or ""
+        # Admin-configured custom fields (D2) — merged so templates can reference {{custom_key}}.
+        for k, v in (case.get("custom_fields") or {}).items():
+            if k not in ctx and v not in (None, ""):
+                ctx[k] = str(v)
     else:
         d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
         ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
@@ -832,6 +987,9 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx.setdefault("case_type", "")
         ctx.setdefault("party_name", "")
         ctx.setdefault("opposite_party", "")
+        ctx.setdefault("police_station", "")
+        if not ctx.get("client_name"):
+            ctx["client_name"] = ""
     return ctx
 
 

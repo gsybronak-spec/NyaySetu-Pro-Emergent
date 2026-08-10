@@ -13,12 +13,27 @@ export default function CaseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
   const [templates, setTemplates] = useState<any[]>([]);
+  const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     try {
       const [cs, tpls] = await Promise.all([api.getCase(String(id)), api.templates()]);
       setC(cs);
       setTemplates(Array.isArray(tpls) ? tpls : []);
+      if (cs?.case_type_id) {
+        api
+          .caseFormConfig(cs.case_type_id)
+          .then((cfg) => {
+            if (cfg && Array.isArray(cfg.fields)) {
+              const map: Record<string, string> = {};
+              for (const f of cfg.fields) {
+                if (f?.key) map[f.key] = cs.language === "gu" ? f.label_gu || f.label_en : f.label_en;
+              }
+              setFieldLabels(map);
+            }
+          })
+          .catch(() => {});
+      }
     } catch {}
   }, [id]);
 
@@ -78,10 +93,13 @@ export default function CaseDetail() {
     ["Applicable Law", c.law_label],
     ["Section", c.section_label],
     ["Party / Client", c.party_name],
+    ["Client Mobile", c.client_mobile],
+    ["Client Email", c.client_email],
+    ["Client Address", c.client_address],
     ["Opposite Party", c.opposite_party],
-    ["Court", c.court],
+    ["Court", c.court_label || c.court],
     ["District", c.district_label],
-    ["Police Station", c.police_station],
+    ["Police Station", c.police_station_label || c.police_station],
     ["Language", c.language === "gu" ? "ગુજરાતી" : "English"],
     ["Applications Generated", c.application_count ? String(c.application_count) : null],
   ].filter(([, v]) => !!v) as any;
@@ -120,6 +138,21 @@ export default function CaseDetail() {
               <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{v}</Text>
             </View>
           ))}
+          {Object.keys(c.custom_fields || {}).length > 0 && (
+            <>
+              <View style={{ height: Spacing.sm }} />
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>ADMIN CONFIGURED FIELDS</Text>
+              {Object.entries(c.custom_fields).map(([k, v]) => {
+                const lbl = fieldLabels[k] || k;
+                return (
+                  <View key={k} style={styles.infoRow}>
+                    <Text style={{ color: colors.muted, fontSize: 12, flex: 1 }}>{lbl}</Text>
+                    <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{String(v)}</Text>
+                  </View>
+                );
+              })}
+            </>
+          )}
         </View>
 
         <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>Create Application</Text>

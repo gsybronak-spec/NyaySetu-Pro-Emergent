@@ -19,6 +19,7 @@ import * as Sharing from "expo-sharing";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
+import { Dropdown } from "@/src/components/Dropdown";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -55,12 +56,25 @@ export default function TemplateApplication() {
           setCaseData(c);
           if (c.language) setLanguage(c.language);
           const initialValues: Record<string, any> = {};
+          // Case/party data (server-enriched labels only — never raw catalog ids)
           if (c.party_name) initialValues["party_name"] = c.party_name;
+          if (c.client_name || c.party_name) initialValues["client_name"] = c.client_name || c.party_name;
           if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
           if (c.case_number) initialValues["case_number"] = c.case_number;
-          if (c.district_en || c.district_id) initialValues["district"] = c.district_en || c.district_id;
-          if (c.court_name || c.court_custom) initialValues["court"] = c.court_name || c.court_custom;
-          if (c.police_station_name || c.police_station_custom) initialValues["police_station"] = c.police_station_name || c.police_station_custom;
+          if (c.district_label) initialValues["district"] = c.district_label;
+          if (c.court_label) initialValues["court"] = c.court_label;
+          if (c.police_station_label) initialValues["police_station"] = c.police_station_label;
+          if (c.client_mobile) initialValues["client_mobile"] = c.client_mobile;
+          if (c.client_email) initialValues["client_email"] = c.client_email;
+          if (c.client_address) initialValues["client_address"] = c.client_address;
+          if (c.law_label) initialValues["law"] = c.law_label;
+          if (c.section_label) initialValues["section"] = c.section_label;
+          // Admin-configured custom fields (D2) — merged so templates can reference them
+          if (c.custom_fields) {
+            for (const [k, v] of Object.entries(c.custom_fields)) {
+              if (v !== null && v !== undefined && v !== "") initialValues[k] = v;
+            }
+          }
           initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
           setValues((prev) => ({ ...initialValues, ...prev }));
         }
@@ -264,6 +278,8 @@ export default function TemplateApplication() {
 
             {fields.map((f: any) => {
               const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
+              const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en);
+              const fvalue = values[f.key];
               if (f.type === "date") {
                 return (
                   <View key={f.key} style={{ marginBottom: Spacing.md }}>
@@ -273,22 +289,119 @@ export default function TemplateApplication() {
                       onPress={() => setDatePickerFor(f.key)}
                       style={[styles.dateField, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
                     >
-                      <Text style={{ color: values[f.key] ? colors.onSurface : colors.muted }}>
-                        {values[f.key] || "Select date"}
+                      <Text style={{ color: fvalue ? colors.onSurface : colors.muted }}>
+                        {fvalue || "Select date"}
                       </Text>
                       <Ionicons name="calendar-outline" size={18} color={colors.muted} />
                     </Pressable>
                   </View>
                 );
               }
+              if (f.type === "select") {
+                const opts = (f.options || []).map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
+                return (
+                  <Dropdown
+                    key={f.key}
+                    testID={`field-${f.key}`}
+                    label={label}
+                    placeholder="Select..."
+                    value={fvalue || null}
+                    options={opts}
+                    onChange={(v) => update(f.key, v)}
+                  />
+                );
+              }
+              if (f.type === "radio") {
+                const opts = f.options || [];
+                return (
+                  <View key={f.key} style={{ marginBottom: Spacing.md }}>
+                    <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm }}>
+                      {opts.map((o: any) => {
+                        const v = o.value ?? o.key;
+                        const active = fvalue === v;
+                        return (
+                          <Pressable
+                            key={v}
+                            testID={`field-${f.key}-opt-${v}`}
+                            onPress={() => update(f.key, v)}
+                            style={[
+                              styles.langChip,
+                              {
+                                backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
+                                borderColor: active ? colors.brandPrimary : colors.border,
+                                minHeight: 40,
+                              },
+                            ]}
+                          >
+                            <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{pickLabel(o)}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              }
+              if (f.type === "checkbox") {
+                const opts = f.options || [];
+                if (opts.length === 0) {
+                  const checked = fvalue === "Yes";
+                  return (
+                    <Pressable
+                      key={f.key}
+                      testID={`field-${f.key}`}
+                      onPress={() => update(f.key, checked ? "No" : "Yes")}
+                      style={[styles.autofill, { borderColor: colors.border, marginBottom: Spacing.md }]}
+                    >
+                      <Ionicons name={checked ? "checkbox" : "square-outline"} size={20} color={checked ? colors.brandPrimary : colors.muted} />
+                      <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{label}</Text>
+                    </Pressable>
+                  );
+                }
+                const selected = (fvalue ? String(fvalue).split(",") : []).filter(Boolean);
+                const toggle = (v: string) => {
+                  const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
+                  update(f.key, next.join(","));
+                };
+                return (
+                  <View key={f.key} style={{ marginBottom: Spacing.md }}>
+                    <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
+                    {opts.map((o: any) => {
+                      const v = o.value ?? o.key;
+                      const on = selected.includes(v);
+                      return (
+                        <Pressable
+                          key={v}
+                          testID={`field-${f.key}-opt-${v}`}
+                          onPress={() => toggle(v)}
+                          style={[styles.autofill, { borderColor: colors.border, marginBottom: Spacing.xs }]}
+                        >
+                          <Ionicons name={on ? "checkbox" : "square-outline"} size={20} color={on ? colors.brandPrimary : colors.muted} />
+                          <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{pickLabel(o)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                );
+              }
+              const kt =
+                f.type === "number"
+                  ? "number-pad"
+                  : f.type === "mobile"
+                  ? "phone-pad"
+                  : f.type === "email"
+                  ? "email-address"
+                  : "default";
               return (
                 <Field
                   key={f.key}
                   testID={`field-${f.key}`}
                   label={label}
                   multiline={f.type === "textarea"}
-                  keyboardType={f.type === "number" ? "number-pad" : "default"}
-                  value={values[f.key] || ""}
+                  keyboardType={kt as any}
+                  maxLength={f.type === "mobile" ? 15 : undefined}
+                  autoCapitalize={f.type === "email" ? "none" : undefined}
+                  value={fvalue || ""}
                   onChangeText={(v) => update(f.key, v)}
                 />
               );

@@ -34,6 +34,9 @@ export default function EditCase() {
         police_station_custom: c.police_station_custom || c.police_station || "",
         notes: c.notes || "",
         custom_fields: c.custom_fields || {},
+        client_mobile: c.client_mobile || "",
+        client_email: c.client_email || "",
+        client_address: c.client_address || "",
       });
     }).catch((e) => Alert.alert("Error", e.message));
   }, [id]);

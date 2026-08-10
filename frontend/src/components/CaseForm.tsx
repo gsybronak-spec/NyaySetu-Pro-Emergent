@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { router } from "expo-router";
 
 import { Button } from "@/src/components/Button";
@@ -31,6 +32,10 @@ export interface CaseFormValues {
   police_station_custom: string;
   notes: string;
   custom_fields?: Record<string, any>;
+  // Flat client details (D3) — captured here, stored on the case.
+  client_mobile: string;
+  client_email: string;
+  client_address: string;
 }
 
 const DEFAULTS: CaseFormValues = {
@@ -53,7 +58,29 @@ const DEFAULTS: CaseFormValues = {
   police_station_custom: "",
   notes: "",
   custom_fields: {},
+  client_mobile: "",
+  client_email: "",
+  client_address: "",
 };
+
+// autofill_map resolves against the CLIENT context (D1), not the advocate's user record.
+function resolveAutofill(map: string | undefined, ctx: Record<string, string | undefined>): string | undefined {
+  if (!map) return undefined;
+  const key = (map.split(".").pop() || "").toLowerCase();
+  const val = ctx[key];
+  return val ? String(val) : undefined;
+}
+
+function buildClientContext(form: CaseFormValues, districts: any[]): Record<string, string | undefined> {
+  const d = districts.find((x) => x.id === form.district_id);
+  return {
+    name: form.party_name || undefined,
+    mobile: form.client_mobile || undefined,
+    email: form.client_email || undefined,
+    address: form.client_address || undefined,
+    district: (form.language === "gu" ? d?.gu : d?.en) || d?.en || undefined,
+  };
+}
 
 interface Props {
   title: string;
@@ -82,6 +109,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   // Dynamic Case Form Configuration from Admin API
   const [dynamicFields, setDynamicFields] = useState<any[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, any>>(initial?.custom_fields || {});
+  const [datePickerFor, setDatePickerFor] = useState<string | null>(null);
 
   useEffect(() => {
     api.caseTypes().then((r) => setCaseTypes(Array.isArray(r) ? r : [])).catch(() => setCaseTypes([]));
@@ -131,16 +159,39 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     try {
       const res = await api.lookupClient(searchMobile.trim());
       if (res.found && res.client) {
+        const c = res.client;
         setLookupStatus({
           type: "success",
-          message: `Client found: ${res.client.name || "Registered User"} (${res.client.mobile})`,
+          message: `Client found: ${c.name || "Registered User"} (${c.mobile})`,
         });
-        // Autofill matching fields
-        if (res.client.name) update("party_name", res.client.name);
-        if (res.client.district) {
-          const matchedDistrict = districts.find((d) => d.en.toLowerCase() === res.client.district.toLowerCase() || d.id === res.client.district);
+        // Autofill matching core fields
+        if (c.name) update("party_name", c.name);
+        if (c.district) {
+          const matchedDistrict = districts.find((d) => d.en.toLowerCase() === c.district.toLowerCase() || d.id === c.district);
           if (matchedDistrict) update("district_id", matchedDistrict.id);
         }
+        // Flat client details (D3)
+        update("client_mobile", c.mobile || searchMobile.trim());
+        if (c.email) update("client_email", c.email);
+        // Prefill admin-configured fields via autofill_map against CLIENT context (D1)
+        const ctx: Record<string, string | undefined> = {
+          name: c.name || form.party_name || undefined,
+          mobile: c.mobile || searchMobile.trim() || undefined,
+          email: c.email || form.client_email || undefined,
+          address: form.client_address || undefined,
+          district: c.district || undefined,
+        };
+        setCustomValues((prev) => {
+          const next = { ...prev };
+          for (const df of dynamicFields) {
+            const am = df.autofill_map;
+            if (am && (next[df.key] === undefined || next[df.key] === "")) {
+              const val = resolveAutofill(am, ctx);
+              if (val) next[df.key] = val;
+            }
+          }
+          return next;
+        });
       } else {
         setLookupStatus({
           type: "warning",
@@ -166,11 +217,148 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const showLaw = form.complaint_type === "private";
   const showOther = form.complaint_type === "other";
 
+  // Keep stored custom field keys editable even if the admin form config changed (edit persistence).
+  const orphanCustomFields = useMemo(() => {
+    if (!initial?.custom_fields) return [];
+    const configKeys = new Set(dynamicFields.map((df) => df.key));
+    return Object.keys(initial.custom_fields)
+      .filter((k) => !configKeys.has(k))
+      .map((k) => ({ key: k, label_en: k, label_gu: k, type: "text", required: false, order: 99 }));
+  }, [dynamicFields, initial?.custom_fields]);
+
+  const allDynamicFields = useMemo(() => [...dynamicFields, ...orphanCustomFields], [dynamicFields, orphanCustomFields]);
+
   const handleFormSubmit = () => {
-    onSubmit({
+    // 1. Resolve autofill_map against client context for any empty mapped fields (D1).
+    const ctx = buildClientContext(form, districts);
+    const finalCustom: Record<string, any> = { ...customValues };
+    for (const df of dynamicFields) {
+      const am = df.autofill_map;
+      if (am && (finalCustom[df.key] === undefined || finalCustom[df.key] === "")) {
+        const val = resolveAutofill(am, ctx);
+        if (val) finalCustom[df.key] = val;
+      }
+    }
+    // 2. Enforce required admin-configured fields.
+    const missing = dynamicFields.filter((df) => df.required && (finalCustom[df.key] === undefined || String(finalCustom[df.key]).trim() === ""));
+    if (missing.length > 0) {
+      const names = missing.map((m) => (form.language === "gu" ? m.label_gu || m.label_en : m.label_en)).join(", ");
+      Alert.alert("Missing Information", `Please fill the required field(s): ${names}`);
+      return;
+    }
+    // 3. Flat client fields (D3). client_name/client_district are derived and
+    //    stored on the case (the API accepts them; they are not form state).
+    const d = districts.find((x) => x.id === form.district_id);
+    const payload: CaseFormValues & { client_name?: string; client_district?: string } = {
       ...form,
-      custom_fields: customValues,
-    });
+      client_name: form.party_name || undefined,
+      client_district: (form.language === "gu" ? d?.gu : d?.en) || d?.en || undefined,
+      custom_fields: finalCustom,
+    };
+    onSubmit(payload as CaseFormValues);
+  };
+
+  const renderDynamicField = (df: any) => {
+    const label = (form.language === "gu" ? df.label_gu || df.label_en : df.label_en) + (df.required ? " *" : "");
+    const value = customValues[df.key];
+    const setVal = (v: any) => updateCustom(df.key, v);
+    const pickLabel = (o: any) => (form.language === "gu" ? o.label_gu || o.label_en : o.label_en);
+    switch (df.type) {
+      case "textarea":
+        return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} multiline placeholder={df.placeholder || `Enter ${df.label_en}`} value={value || ""} onChangeText={setVal} />;
+      case "number":
+        return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} keyboardType="number-pad" placeholder={df.placeholder || `Enter ${df.label_en}`} value={value || ""} onChangeText={setVal} />;
+      case "mobile":
+        return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} keyboardType="phone-pad" maxLength={15} placeholder={df.placeholder || "10-digit mobile"} value={value || ""} onChangeText={setVal} />;
+      case "email":
+        return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} keyboardType="email-address" autoCapitalize="none" placeholder={df.placeholder || "you@example.com"} value={value || ""} onChangeText={setVal} />;
+      case "date":
+        return (
+          <View key={df.key} style={{ marginBottom: Spacing.md }}>
+            <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600", marginBottom: Spacing.xs }}>{label}</Text>
+            <Pressable
+              testID={`dynamic-date-${df.key}`}
+              onPress={() => setDatePickerFor(df.key)}
+              style={[styles.dateField, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+            >
+              <Text style={{ color: value ? colors.onSurface : colors.muted }}>{value || "Select date"}</Text>
+              <Ionicons name="calendar-outline" size={18} color={colors.muted} />
+            </Pressable>
+          </View>
+        );
+      case "select": {
+        const opts = (df.options || []).map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
+        return <Dropdown key={df.key} testID={`dynamic-select-${df.key}`} label={label} placeholder="Select..." value={value || null} options={opts} onChange={setVal} />;
+      }
+      case "radio": {
+        const opts = df.options || [];
+        return (
+          <View key={df.key} style={{ marginBottom: Spacing.md }}>
+            <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600", marginBottom: Spacing.xs }}>{label}</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm }}>
+              {opts.map((o: any) => {
+                const v = o.value ?? o.key;
+                const active = value === v;
+                return (
+                  <Pressable
+                    key={v}
+                    testID={`dynamic-radio-${df.key}-${v}`}
+                    onPress={() => setVal(v)}
+                    style={[styles.chip, { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border }]}
+                  >
+                    <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{pickLabel(o)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        );
+      }
+      case "checkbox": {
+        const opts = df.options || [];
+        if (opts.length === 0) {
+          const checked = value === "Yes";
+          return (
+            <Pressable
+              key={df.key}
+              testID={`dynamic-check-${df.key}`}
+              onPress={() => setVal(checked ? "No" : "Yes")}
+              style={[styles.checkRow, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+            >
+              <Ionicons name={checked ? "checkbox" : "square-outline"} size={20} color={checked ? colors.brandPrimary : colors.muted} />
+              <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{label}</Text>
+            </Pressable>
+          );
+        }
+        const selected = (value ? String(value).split(",") : []).filter(Boolean);
+        const toggle = (v: string) => {
+          const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
+          setVal(next.join(","));
+        };
+        return (
+          <View key={df.key} style={{ marginBottom: Spacing.md }}>
+            <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600", marginBottom: Spacing.xs }}>{label}</Text>
+            {opts.map((o: any) => {
+              const v = o.value ?? o.key;
+              const on = selected.includes(v);
+              return (
+                <Pressable
+                  key={v}
+                  testID={`dynamic-check-${df.key}-${v}`}
+                  onPress={() => toggle(v)}
+                  style={[styles.checkRow, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary, marginBottom: Spacing.xs }]}
+                >
+                  <Ionicons name={on ? "checkbox" : "square-outline"} size={20} color={on ? colors.brandPrimary : colors.muted} />
+                  <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{pickLabel(o)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        );
+      }
+      default:
+        return <Field key={df.key} testID={`dynamic-${df.key}`} label={label} placeholder={df.placeholder || `Enter ${df.label_en}`} value={value || ""} onChangeText={setVal} />;
+    }
   };
 
   return (
@@ -232,6 +420,40 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
           <View style={{ height: Spacing.lg }} />
 
+          {/* Client Details (flat fields, D3) — autofilled on lookup, editable */}
+          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Details</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -6 }}>
+            Auto-filled from client search. Name & district are set under Parties & Court below.
+          </Text>
+          <Field
+            testID="client-mobile"
+            label="Client Mobile"
+            placeholder="10-digit mobile"
+            keyboardType="phone-pad"
+            maxLength={15}
+            value={form.client_mobile}
+            onChangeText={(v) => update("client_mobile", v)}
+          />
+          <Field
+            testID="client-email"
+            label="Client Email (optional)"
+            placeholder="client@example.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={form.client_email}
+            onChangeText={(v) => update("client_email", v)}
+          />
+          <Field
+            testID="client-address"
+            label="Client Address (optional)"
+            placeholder="Full address"
+            multiline
+            value={form.client_address}
+            onChangeText={(v) => update("client_address", v)}
+          />
+
+          <View style={{ height: Spacing.lg }} />
+
           {/* Language toggle */}
           <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Document Language</Text>
           <View style={styles.langRow}>
@@ -277,20 +499,28 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           )}
 
           {/* Dynamic Admin Fields */}
-          {dynamicFields.length > 0 && (
+          {allDynamicFields.length > 0 && (
             <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
               <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
-              {dynamicFields.map((df) => (
-                <Field
-                  key={df.key}
-                  testID={`dynamic-${df.key}`}
-                  label={language === "gu" ? df.label_gu || df.label_en : df.label_en}
-                  placeholder={df.placeholder || `Enter ${df.label_en}`}
-                  value={customValues[df.key] || ""}
-                  onChangeText={(v) => updateCustom(df.key, v)}
-                />
-              ))}
+              {allDynamicFields.map((df) => renderDynamicField(df))}
             </View>
+          )}
+
+          {datePickerFor && (
+            <DateTimePicker
+              value={new Date()}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={(e, d) => {
+                setDatePickerFor(null);
+                if (d) {
+                  const key = datePickerFor;
+                  const dd = String(d.getDate()).padStart(2, "0");
+                  const mm = String(d.getMonth() + 1).padStart(2, "0");
+                  updateCustom(key, `${dd}-${mm}-${d.getFullYear()}`);
+                }
+              }}
+            />
           )}
 
           {showComplaint && (
@@ -414,5 +644,29 @@ const styles = StyleSheet.create({
   searchBtnText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
   statusBanner: { marginTop: Spacing.sm, padding: Spacing.sm, borderRadius: Radius.sm },
   dynamicSection: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, marginVertical: Spacing.md },
+  dateField: {
+    minHeight: 50,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    paddingHorizontal: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  chip: {
+    height: 36,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });
