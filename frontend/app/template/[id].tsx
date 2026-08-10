@@ -54,6 +54,15 @@ export default function TemplateApplication() {
           const c = await api.getCase(caseId);
           setCaseData(c);
           if (c.language) setLanguage(c.language);
+          const initialValues: Record<string, any> = {};
+          if (c.party_name) initialValues["party_name"] = c.party_name;
+          if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
+          if (c.case_number) initialValues["case_number"] = c.case_number;
+          if (c.district_en || c.district_id) initialValues["district"] = c.district_en || c.district_id;
+          if (c.court_name || c.court_custom) initialValues["court"] = c.court_name || c.court_custom;
+          if (c.police_station_name || c.police_station_custom) initialValues["police_station"] = c.police_station_name || c.police_station_custom;
+          initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+          setValues((prev) => ({ ...initialValues, ...prev }));
         }
         if (params.draft === "1") {
           const drafts = await api.drafts();

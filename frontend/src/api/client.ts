@@ -29,6 +29,9 @@ async function request(path: string, method = "GET", body?: any) {
     json = { raw: text };
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      setToken(null);
+    }
     const msg = json?.detail || json?.message || `HTTP ${res.status}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
@@ -43,6 +46,9 @@ export const api = {
     request("/auth/google-session", "POST", { session_id, referral_code }),
   me: () => request("/profile/me"),
   updateProfile: (data: any) => request("/profile/update", "PUT", data),
+  lookupClient: (mobile: string) => request(`/clients/lookup?mobile=${encodeURIComponent(mobile)}`),
+  caseFormConfig: (id: string) => request(`/catalog/case-forms/${id}`),
+  listCaseForms: () => request("/catalog/case-forms"),
   caseTypes: () => request("/catalog/case-types"),
   laws: () => request("/catalog/laws"),
   lawSections: (id: string) => request(`/catalog/laws/${id}/sections`),

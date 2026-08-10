@@ -33,6 +33,7 @@ export default function EditCase() {
         police_station_id: c.police_station_id || null,
         police_station_custom: c.police_station_custom || c.police_station || "",
         notes: c.notes || "",
+        custom_fields: c.custom_fields || {},
       });
     }).catch((e) => Alert.alert("Error", e.message));
   }, [id]);

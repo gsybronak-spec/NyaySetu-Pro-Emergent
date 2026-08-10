@@ -116,6 +116,24 @@ class DraftSave(BaseModel):
     language: str = "en"
     values: dict = {}
 
+class CaseFormFieldSchema(BaseModel):
+    key: str = Field(..., max_length=50)
+    label_en: str = Field(..., max_length=150)
+    label_gu: str = Field(..., max_length=150)
+    type: str = Field("text", max_length=30)
+    required: bool = True
+    order: int = 0
+    placeholder: Optional[str] = Field(None, max_length=150)
+    default_value: Optional[str] = Field(None, max_length=200)
+    options: Optional[List[dict]] = None
+    autofill_map: Optional[str] = Field(None, max_length=50)
+
+class CaseFormConfigReq(BaseModel):
+    name_en: str = Field(..., max_length=150)
+    name_gu: str = Field(..., max_length=150)
+    category: str = Field("General", max_length=50)
+    fields: List[CaseFormFieldSchema] = []
+
 
 # ============================================================
 # HELPERS
@@ -318,9 +336,120 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
     return u
 
 
+@api.get("/clients/lookup")
+async def lookup_client(mobile: str, user=Depends(get_user)):
+    """Search registered clients/users by mobile number."""
+    clean_mobile = re.sub(r"\D", "", mobile)
+    if clean_mobile.startswith("91") and len(clean_mobile) == 12:
+        clean_mobile = clean_mobile[2:]
+    if len(clean_mobile) < 10:
+        raise HTTPException(400, "Invalid mobile number. Please enter a 10-digit mobile number.")
+
+    client_user = await db.users.find_one({"mobile": clean_mobile}, {"_id": 0})
+    if not client_user:
+        client_user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
+
+    if client_user:
+        return {
+            "found": True,
+            "client": {
+                "id": client_user["id"],
+                "name": client_user.get("name"),
+                "mobile": client_user.get("mobile"),
+                "email": client_user.get("email"),
+                "state": client_user.get("state"),
+                "district": client_user.get("district"),
+                "court": client_user.get("court"),
+                "bar_council_no": client_user.get("bar_council_no"),
+            }
+        }
+    return {
+        "found": False,
+        "client": None,
+        "message": f"Client with mobile '{mobile}' not found. You can enter client details manually."
+    }
+
+
 # ============================================================
-# CATALOG
+# CATALOG & DYNAMIC CASE FORMS
 # ============================================================
+
+DEFAULT_CASE_FORMS = [
+    {
+        "case_type_id": "civil",
+        "name_en": "Civil Suit",
+        "name_gu": "દીવાની મુકદ્દમો",
+        "category": "Civil",
+        "fields": [
+            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
+            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
+            {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
+            {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
+            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
+            {"key": "property_value", "label_en": "Valuation of Suit (₹)", "label_gu": "દાવાની રકમ (રૂ.)", "type": "number", "required": False, "order": 5},
+            {"key": "relief_sought", "label_en": "Relief Sought", "label_gu": "માગેલ દાદ", "type": "textarea", "required": True, "order": 6},
+        ]
+    },
+    {
+        "case_type_id": "bail",
+        "name_en": "Bail Application",
+        "name_gu": "જામીન અરજી",
+        "category": "Bail",
+        "fields": [
+            {"key": "client_name", "label_en": "Accused / Client Name", "label_gu": "આરોપી / અરજદારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
+            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
+            {"key": "fir_number", "label_en": "FIR / Crime Number", "label_gu": "એફ.આઈ.આર. / ગુના નંબર", "type": "text", "required": True, "order": 2},
+            {"key": "police_station", "label_en": "Police Station", "label_gu": "પોલીસ સ્ટેશન", "type": "text", "required": True, "order": 3},
+            {"key": "sections", "label_en": "IPC / BNS Sections", "label_gu": "કલમો", "type": "text", "required": True, "order": 4},
+            {"key": "arrest_date", "label_en": "Arrest Date", "label_gu": "ધરપકડ તારીખ", "type": "date", "required": False, "order": 5},
+            {"key": "bail_grounds", "label_en": "Grounds for Bail", "label_gu": "જામીન મેળવવાના કારણો", "type": "textarea", "required": True, "order": 6},
+        ]
+    },
+    {
+        "case_type_id": "revenue",
+        "name_en": "Revenue / Land Matter",
+        "name_gu": "મહેસૂલી / જમીન કેસ",
+        "category": "Revenue",
+        "fields": [
+            {"key": "client_name", "label_en": "Applicant / Landholder Name", "label_gu": "અરજદાર / ખાતેદારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
+            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
+            {"key": "survey_number", "label_en": "Block / Survey Number", "label_gu": "બ્લોક / સરવે નંબર", "type": "text", "required": True, "order": 2},
+            {"key": "village", "label_en": "Village", "label_gu": "ગામ", "type": "text", "required": True, "order": 3},
+            {"key": "taluka", "label_en": "Taluka", "label_gu": "તાલુકો", "type": "text", "required": True, "order": 4},
+            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 5, "autofill_map": "user.district"},
+        ]
+    }
+]
+
+@api.get("/catalog/case-forms")
+async def get_all_case_forms():
+    """List all dynamic case form schemas."""
+    forms = await db.case_forms.find({}, {"_id": 0}).to_list(100)
+    if not forms:
+        return DEFAULT_CASE_FORMS
+    return forms
+
+@api.get("/catalog/case-forms/{case_type_id}")
+async def get_case_form_config(case_type_id: str):
+    """Get dynamic case form configuration for a specific case type."""
+    cfg = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    if not cfg:
+        cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
+    if not cfg:
+        return {
+            "case_type_id": case_type_id,
+            "name_en": case_type_id.replace("_", " ").title(),
+            "name_gu": case_type_id,
+            "category": "General",
+            "fields": [
+                {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
+                {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
+                {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
+                {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
+                {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
+            ]
+        }
+    return cfg
 
 @api.get("/catalog/case-types")
 async def case_types():
@@ -1220,6 +1349,23 @@ def _validate_placeholders(content_en: str, content_gu: str, template_fields: li
     }
 
 
+@admin_api.post("/case-forms/{case_type_id}")
+async def admin_save_case_form(case_type_id: str, req: CaseFormConfigReq, admin=Depends(get_admin)):
+    """Admin endpoint to create/update dynamic case form schema for a case type."""
+    doc = {
+        "case_type_id": case_type_id,
+        "name_en": req.name_en,
+        "name_gu": req.name_gu,
+        "category": req.category,
+        "fields": [f.model_dump() for f in req.fields],
+        "updated_at": now().isoformat(),
+        "updated_by": admin["id"],
+    }
+    await db.case_forms.update_one({"case_type_id": case_type_id}, {"$set": doc}, upsert=True)
+    res = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    return res
+
+
 @admin_api.get("/templates")
 async def admin_list_templates(
     status: Optional[str] = None,
@@ -1772,6 +1918,7 @@ async def create_indexes():
     await db.templates.create_index("slug", unique=True)
     await db.templates.create_index([("status", 1), ("category", 1)])
     await db.template_versions.create_index([("template_id", 1), ("version", 1)], unique=True)
+    await db.case_forms.create_index("case_type_id", unique=True)
     logger.info("MongoDB indexes ensured.")
     # Seed super admin from env vars
     await seed_super_admin()

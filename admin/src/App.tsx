@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard'
 import AdminLayout from './layouts/AdminLayout'
 import Templates from './pages/Templates'
 import TemplateEditor from './pages/TemplateEditor'
+import CaseFormBuilder from './pages/CaseFormBuilder'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { admin, ready } = useAdminAuth();
@@ -31,6 +32,7 @@ export default function App() {
           <Route path="templates" element={<Templates />} />
           <Route path="templates/new" element={<TemplateEditor />} />
           <Route path="templates/:id/edit" element={<TemplateEditor />} />
+          <Route path="case-forms" element={<CaseFormBuilder />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

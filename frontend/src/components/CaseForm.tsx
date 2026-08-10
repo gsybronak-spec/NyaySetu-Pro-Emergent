@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -30,6 +30,7 @@ export interface CaseFormValues {
   police_station_id: string | null;
   police_station_custom: string;
   notes: string;
+  custom_fields?: Record<string, any>;
 }
 
 const DEFAULTS: CaseFormValues = {
@@ -51,6 +52,7 @@ const DEFAULTS: CaseFormValues = {
   police_station_id: null,
   police_station_custom: "",
   notes: "",
+  custom_fields: {},
 };
 
 interface Props {
@@ -72,12 +74,35 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [policeStations, setPoliceStations] = useState<any[]>([]);
   const [favCourts, setFavCourts] = useState<string[]>([]);
 
+  // Mobile Lookup State
+  const [searchMobile, setSearchMobile] = useState<string>("");
+  const [lookupLoading, setLookupLoading] = useState<boolean>(false);
+  const [lookupStatus, setLookupStatus] = useState<{ type: "success" | "warning" | "error"; message: string } | null>(null);
+
+  // Dynamic Case Form Configuration from Admin API
+  const [dynamicFields, setDynamicFields] = useState<any[]>([]);
+  const [customValues, setCustomValues] = useState<Record<string, any>>(initial?.custom_fields || {});
+
   useEffect(() => {
     api.caseTypes().then((r) => setCaseTypes(Array.isArray(r) ? r : [])).catch(() => setCaseTypes([]));
     api.laws().then((r) => setLaws(Array.isArray(r) ? r : [])).catch(() => setLaws([]));
     api.districts().then((r) => setDistricts(Array.isArray(r) ? r : [])).catch(() => setDistricts([]));
     api.favCourts().then((r) => setFavCourts(Array.isArray(r?.favourite_courts) ? r.favourite_courts : [])).catch(() => setFavCourts([]));
   }, []);
+
+  useEffect(() => {
+    if (form.case_type_id) {
+      api.caseFormConfig(form.case_type_id)
+        .then((cfg) => {
+          if (cfg && Array.isArray(cfg.fields)) {
+            setDynamicFields(cfg.fields);
+          } else {
+            setDynamicFields([]);
+          }
+        })
+        .catch(() => setDynamicFields([]));
+    }
+  }, [form.case_type_id]);
 
   useEffect(() => {
     if (form.law_id && form.law_id !== "other_law") {
@@ -94,6 +119,40 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
   const language = form.language;
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const updateCustom = (k: string, v: any) => setCustomValues((prev) => ({ ...prev, [k]: v }));
+
+  const handleMobileLookup = async () => {
+    if (!searchMobile || searchMobile.trim().length < 10) {
+      setLookupStatus({ type: "error", message: "Please enter a valid 10-digit mobile number." });
+      return;
+    }
+    setLookupLoading(true);
+    setLookupStatus(null);
+    try {
+      const res = await api.lookupClient(searchMobile.trim());
+      if (res.found && res.client) {
+        setLookupStatus({
+          type: "success",
+          message: `Client found: ${res.client.name || "Registered User"} (${res.client.mobile})`,
+        });
+        // Autofill matching fields
+        if (res.client.name) update("party_name", res.client.name);
+        if (res.client.district) {
+          const matchedDistrict = districts.find((d) => d.en.toLowerCase() === res.client.district.toLowerCase() || d.id === res.client.district);
+          if (matchedDistrict) update("district_id", matchedDistrict.id);
+        }
+      } else {
+        setLookupStatus({
+          type: "warning",
+          message: res.message || `Client with mobile '${searchMobile}' not found. You can enter details manually.`,
+        });
+      }
+    } catch (e: any) {
+      setLookupStatus({ type: "error", message: e.message || "Client lookup failed." });
+    } finally {
+      setLookupLoading(false);
+    }
+  };
 
   const toggleFavCourt = (id: string) => {
     const isFav = favCourts.includes(id);
@@ -107,6 +166,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const showLaw = form.complaint_type === "private";
   const showOther = form.complaint_type === "other";
 
+  const handleFormSubmit = () => {
+    onSubmit({
+      ...form,
+      custom_fields: customValues,
+    });
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -119,12 +185,59 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         </View>
 
         <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+          {/* Client Mobile Lookup Header */}
+          <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+            <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
+            <View style={{ flexDirection: "row", gap: Spacing.sm, alignItems: "center" }}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  testID="client-mobile-search"
+                  label=""
+                  placeholder="Enter 10-digit Client Mobile Number"
+                  value={searchMobile}
+                  onChangeText={setSearchMobile}
+                />
+              </View>
+              <Pressable
+                testID="lookup-btn"
+                onPress={handleMobileLookup}
+                disabled={lookupLoading}
+                style={[styles.searchBtn, { backgroundColor: colors.brandPrimary }]}
+              >
+                {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>Search</Text>}
+              </Pressable>
+            </View>
+            {lookupStatus && (
+              <View
+                style={[
+                  styles.statusBanner,
+                  {
+                    backgroundColor:
+                      lookupStatus.type === "success" ? "#dcfce7" : lookupStatus.type === "warning" ? "#fef3c7" : "#fee2e2",
+                  },
+                ]}
+              >
+                <Text
+                  style={{
+                    color: lookupStatus.type === "success" ? "#166534" : lookupStatus.type === "warning" ? "#92400e" : "#991b1b",
+                    fontSize: 13,
+                    fontWeight: "600",
+                  }}
+                >
+                  {lookupStatus.message}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={{ height: Spacing.lg }} />
+
           {/* Language toggle */}
           <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Document Language</Text>
           <View style={styles.langRow}>
             {[
-              { id: "en", label: "English", sub: "Please enter the application information in English." },
-              { id: "gu", label: "ગુજરાતી", sub: "કૃપા કરીને અરજીની માહિતી ગુજરાતી ભાષામાં ભરો." },
+              { id: "en", label: "English", sub: "Please enter application details in English." },
+              { id: "gu", label: "ગુજરાતી", sub: "કૃપા કરીને વિગતો ગુજરાતીમાં ભરો." },
             ].map((l) => {
               const active = language === l.id;
               return (
@@ -161,6 +274,23 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           {form.case_type_id === "other" && (
             <Field testID="case-type-custom" label="Other Case Type" placeholder="Enter case type" value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
+          )}
+
+          {/* Dynamic Admin Fields */}
+          {dynamicFields.length > 0 && (
+            <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
+              {dynamicFields.map((df) => (
+                <Field
+                  key={df.key}
+                  testID={`dynamic-${df.key}`}
+                  label={language === "gu" ? df.label_gu || df.label_en : df.label_en}
+                  placeholder={df.placeholder || `Enter ${df.label_en}`}
+                  value={customValues[df.key] || ""}
+                  onChangeText={(v) => updateCustom(df.key, v)}
+                />
+              ))}
+            </View>
           )}
 
           {showComplaint && (
@@ -263,7 +393,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         </ScrollView>
 
         <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-          <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={() => onSubmit(form)} />
+          <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={handleFormSubmit} />
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -279,5 +409,10 @@ const styles = StyleSheet.create({
   sectionLbl: { fontSize: 14, fontWeight: "800", marginBottom: Spacing.md, letterSpacing: 0.5 },
   langRow: { flexDirection: "row", gap: Spacing.md },
   langCard: { flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1.5, minHeight: 78 },
+  lookupCard: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
+  searchBtn: { paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, borderRadius: Radius.md, justifyContent: "center", alignItems: "center" },
+  searchBtnText: { color: "#ffffff", fontWeight: "700", fontSize: 14 },
+  statusBanner: { marginTop: Spacing.sm, padding: Spacing.sm, borderRadius: Radius.sm },
+  dynamicSection: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, marginVertical: Spacing.md },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });
