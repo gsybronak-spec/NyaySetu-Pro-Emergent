@@ -12,15 +12,38 @@ export async function getToken(): Promise<string | null> {
   return storage.secureGet(TOKEN_KEY, null as any);
 }
 
+const REQUEST_TIMEOUT_MS = 30000;
+
+export function describeNetworkError(e: unknown): string {
+  // User-friendly copy for fetch-level failures; technical detail goes to console.
+  if (e instanceof Error && e.name === "AbortError") {
+    return "The server took too long to respond. Please check your connection and try again.";
+  }
+  return "Network error — could not reach the server. Please check your connection and try again.";
+}
+
 async function request(path: string, method = "GET", body?: any) {
   const token = await getToken();
   const headers: any = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${BASE}/api${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+
+  let res: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    res = await fetch(`${BASE}/api${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    console.warn("[api] fetch failed", path, e);
+    throw new Error(describeNetworkError(e));
+  } finally {
+    clearTimeout(timer);
+  }
+
   const text = await res.text();
   let json: any = null;
   try {

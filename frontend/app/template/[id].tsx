@@ -44,6 +44,7 @@ export default function TemplateApplication() {
   const [busy, setBusy] = useState(false);
   const [filename, setFilename] = useState("");
   const [extraOptions, setExtraOptions] = useState<Record<string, any[]>>({});
+  const [pageSize, setPageSize] = useState<"A4" | "Legal">("A4");
   const draftTimer = useRef<any>(null);
 
   useEffect(() => {
@@ -146,7 +147,7 @@ export default function TemplateApplication() {
     }
     setBusy(true);
     try {
-      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
+      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values), page_size: pageSize });
       setPreview(res.content);
       setBlocks(res.blocks || []);
       setStep("preview");
@@ -167,6 +168,7 @@ export default function TemplateApplication() {
         values: toDocValues(values),
         format,
         filename: `${filename}.${format}`,
+        page_size: pageSize,
       });
       const path = `${FileSystem.cacheDirectory}${res.filename}`;
       await FileSystem.writeAsStringAsync(path, res.base64, { encoding: "base64" });
@@ -479,6 +481,33 @@ export default function TemplateApplication() {
             <Text style={[styles.lbl, { color: colors.onSurface }]}>Rename File</Text>
             <View style={{ height: Spacing.sm }} />
             <Field testID="filename-input" value={filename} onChangeText={setFilename} placeholder="File name" />
+
+            <Text style={[styles.lbl, { color: colors.onSurface }]}>Page Size</Text>
+            <View style={{ flexDirection: "row", gap: Spacing.md, marginTop: Spacing.sm }}>
+              {(["A4", "Legal"] as const).map((size) => {
+                const active = pageSize === size;
+                return (
+                  <Pressable
+                    key={size}
+                    testID={`page-size-${size.toLowerCase()}`}
+                    onPress={() => setPageSize(size)}
+                    style={[
+                      styles.formatCard,
+                      {
+                        flex: 1,
+                        backgroundColor: active ? `${colors.brandPrimary}14` : colors.surfaceSecondary,
+                        borderColor: active ? colors.brandPrimary : colors.border,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: "700", textAlign: "center" }}>{size}</Text>
+                    <Text style={{ color: colors.muted, fontSize: 11, textAlign: "center", marginTop: 2 }}>
+                      {size === "A4" ? "210 × 297 mm" : "216 × 356 mm"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
 
             <Text style={[styles.lbl, { color: colors.onSurface, marginTop: Spacing.md }]}>Select Format</Text>
             <View style={{ gap: Spacing.md, marginTop: Spacing.sm }}>

@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_ref")
+os.environ.setdefault("OTP_RESEND_COOLDOWN_SECONDS", "0")
 
 import mongomock_motor
 mock_client = mongomock_motor.AsyncMongoMockClient()
@@ -96,6 +97,7 @@ class TestReferral:
         assert _wallet(s, b["token"]) == 5
 
         # Re-verify B (existing user) with same referral: no double reward
+        s.post(f"{API}/auth/send-otp", json={"mobile": b["mobile"]})
         r = s.post(f"{API}/auth/verify-otp",
                    json={"mobile": b["mobile"], "otp": "123456", "referral_code": code})
         assert r.status_code == 200
@@ -105,6 +107,7 @@ class TestReferral:
     def test_self_referral_no_op(self, s):
         a = _new_user(s, seed=4)
         # Re-login with own referral code
+        s.post(f"{API}/auth/send-otp", json={"mobile": a["mobile"]})
         r = s.post(f"{API}/auth/verify-otp",
                    json={"mobile": a["mobile"], "otp": "123456",
                          "referral_code": a["user"]["referral_code"]})

@@ -53,12 +53,12 @@ async def client():
 async def clean_db():
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms"]:
+                 "template_versions", "case_forms", "otps"]:
         await db[coll].drop()
     yield
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms"]:
+                 "template_versions", "case_forms", "otps"]:
         await db[coll].drop()
 
 

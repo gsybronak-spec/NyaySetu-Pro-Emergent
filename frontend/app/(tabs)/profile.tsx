@@ -8,6 +8,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { formatAdvocateName } from "@/src/utils/advocate";
 
 export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
@@ -28,7 +29,7 @@ export default function Profile() {
   const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/(auth)/onboarding") },
     { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates`, onPress: () => router.push("/(tabs)/subscription") },
-    { icon: "receipt-outline", label: "Transaction History", onPress: () => Alert.alert("Coming soon", "Transaction history view will be available shortly.") },
+    { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions") },
     { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral") },
     {
       icon: "moon-outline",
@@ -45,9 +46,9 @@ export default function Profile() {
     },
     { icon: "mail-outline", label: "Contact Support", onPress: () => Alert.alert("Support", "Email us at support@nyaysetupro.in") },
     { icon: "information-circle-outline", label: "About Us", onPress: () => Alert.alert("About NyaySetu Pro", "The New Era of Advocacy — helping Indian Advocates draft routine court documents faster and more affordably.") },
-    { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => Alert.alert("Privacy Policy", "Your data is stored securely. We never share personal information without consent.") },
-    { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => Alert.alert("Terms", "By using NyaySetu Pro, you agree to review each generated document before filing. The Advocate remains solely responsible for document accuracy.") },
-    { icon: "refresh-outline", label: "Refund Policy", onPress: () => Alert.alert("Refund Policy", "Consumed template credits are non-refundable. Unused credits from failed transactions are automatically credited.") },
+    { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy") },
+    { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms") },
+    { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund") },
   ];
 
   return (
@@ -64,7 +65,7 @@ export default function Profile() {
             </Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{user?.name || "Advocate"}</Text>
+            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatAdvocateName(user?.name)}</Text>
             <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>+91 {user?.mobile}</Text>
             {user?.bar_council_no ? (
               <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>

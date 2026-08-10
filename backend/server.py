@@ -3,8 +3,10 @@
 import os
 import re
 import uuid
+import time
 import logging
 import secrets
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional
@@ -26,7 +28,35 @@ load_dotenv(ROOT_DIR / ".env")
 
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
-JWT_SECRET = os.environ.get("JWT_SECRET", "nyaysetu-dev-secret-please-change")
+
+# Production detection — set ENVIRONMENT=production explicitly when the deployment
+# is declared production. RENDER=true alone does NOT trigger strict mode: the
+# operator must opt in (and configure JWT_SECRET / SMS) in the same dashboard
+# session, so pushing code can never silently crash a working deployment.
+_PRODUCTION = os.environ.get("ENVIRONMENT", "").strip().lower() == "production"
+
+# JWT secret — NO unsafe fallback in declared production. The dev default exists
+# only for local development; ENVIRONMENT=production refuses to start without a
+# strong JWT_SECRET. On Render without the declaration we warn loudly instead of
+# crashing, so the current (legacy) deployment keeps working until the operator
+# sets JWT_SECRET + ENVIRONMENT=production.
+_DEV_JWT_FALLBACK = "nyaysetu-dev-secret-please-change"
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if _PRODUCTION:
+    if not JWT_SECRET or JWT_SECRET == _DEV_JWT_FALLBACK or len(JWT_SECRET) < 32:
+        raise RuntimeError(
+            "JWT_SECRET is not set to a strong random value. Refusing to start in "
+            "production with an unsafe default. Set JWT_SECRET (>=32 chars) and "
+            "ENVIRONMENT=production in the environment."
+        )
+if not JWT_SECRET:
+    JWT_SECRET = _DEV_JWT_FALLBACK  # local development only
+elif os.environ.get("RENDER", "").strip().lower() == "true" and not _PRODUCTION:
+    logging.warning(
+        "[SECURITY] Running on Render without ENVIRONMENT=production. If this is "
+        "production, set ENVIRONMENT=production and a strong JWT_SECRET in the "
+        "Render dashboard; until then the development JWT fallback is in use."
+    )
 
 # Admin seed — loaded from env, NEVER hard-coded
 ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL")
@@ -40,6 +70,37 @@ api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nyaysetu")
+
+
+# ============================================================
+# RATE LIMITING — in-memory sliding window (per instance)
+# ============================================================
+_rate_buckets: dict = {}
+_rate_lock = threading.Lock()
+
+
+def rate_limit(key: str, limit: int, window_sec: int = 60) -> bool:
+    """Return True when the request is allowed, False when rate-limited."""
+    now = time.monotonic()
+    with _rate_lock:
+        bucket = _rate_buckets.setdefault(key, [])
+        bucket[:] = [t for t in bucket if t > now - window_sec]
+        if len(bucket) >= limit:
+            return False
+        bucket.append(now)
+        if len(_rate_buckets) > 10000:
+            _rate_buckets.clear()
+        return True
+
+
+# ============================================================
+# OTP CONFIGURATION
+# ============================================================
+OTP_TTL_SECONDS = int(os.environ.get("OTP_TTL_SECONDS", "300"))
+OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
+OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("OTP_RESEND_COOLDOWN_SECONDS", "60"))
+SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "console").strip().lower()
+_MOCK_OTP_ALLOWED = not _PRODUCTION  # fixed 123456 is development-only, never in production
 
 
 # ============================================================
@@ -105,6 +166,7 @@ class GenerateReq(BaseModel):
     language: str = "en"
     values: dict = {}
     filename: Optional[str] = Field(None, max_length=200)
+    page_size: Optional[str] = Field(None, max_length=10)  # A4 | Legal
 
 class DownloadReq(BaseModel):
     template_id: str = Field(..., max_length=50)
@@ -113,6 +175,7 @@ class DownloadReq(BaseModel):
     values: dict = {}
     format: str = "pdf"  # pdf | docx
     filename: Optional[str] = Field(None, max_length=200)
+    page_size: Optional[str] = Field(None, max_length=10)  # A4 | Legal
     consume_credit: bool = True  # DEPRECATED: ignored server-side — always consumes 1 credit
 
 class PurchaseReq(BaseModel):
@@ -263,24 +326,96 @@ async def apply_referral(referral_code: Optional[str], new_user: dict):
 # AUTH (MOCK OTP + GOOGLE)
 # ============================================================
 
+async def send_sms(mobile: str, otp: str) -> None:
+    """SMS provider abstraction. Real providers plug in here; when a provider is
+    selected but not implemented, the exact required env vars are reported instead
+    of inventing credentials."""
+    provider = SMS_PROVIDER
+    if provider in ("", "console"):
+        logger.info(f"[SMS-CONSOLE] {mobile}: your NyaySetu Pro OTP is {otp}")
+        return
+    raise NotImplementedError(
+        f"SMS provider '{provider}' is not implemented. Configure SMS_PROVIDER and its "
+        "credentials (e.g. SMS_ACCOUNT_SID, SMS_AUTH_TOKEN) in the environment."
+    )
+
+
 @api.post("/auth/send-otp")
 async def send_otp(req: SendOtpReq):
     mobile = req.mobile.strip()
     if len(mobile) < 10:
         raise HTTPException(400, "Invalid mobile number")
-    # Mock: log OTP (always 123456)
-    logger.info(f"[MOCK-OTP] mobile={mobile} otp=123456")
-    return {"success": True, "message": "OTP sent successfully", "hint": "Use 123456 for testing"}
+    if not rate_limit(f"otp_send:{mobile}", 5, 60):
+        raise HTTPException(429, "Too many OTP requests. Please try again later.")
+
+    existing = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    if existing and existing.get("last_sent_at"):
+        elapsed = (now() - datetime.fromisoformat(existing["last_sent_at"])).total_seconds()
+        if elapsed < OTP_RESEND_COOLDOWN_SECONDS:
+            raise HTTPException(
+                429,
+                f"Please wait {int(OTP_RESEND_COOLDOWN_SECONDS - elapsed)}s before requesting another OTP.",
+            )
+
+    # Real random OTP in production via the configured SMS provider.
+    # Fixed 123456 is development-only and never used in production.
+    if SMS_PROVIDER in ("", "console"):
+        if _PRODUCTION:
+            raise HTTPException(
+                501,
+                "SMS provider is not configured. Set SMS_PROVIDER (e.g. twilio) plus "
+                "SMS_ACCOUNT_SID and SMS_AUTH_TOKEN in the environment.",
+            )
+        otp = "123456"
+    else:
+        otp = str(secrets.randbelow(1_000_000)).zfill(6)
+        try:
+            await send_sms(mobile, otp)
+        except NotImplementedError as e:
+            raise HTTPException(501, str(e))
+
+    await db.otps.update_one(
+        {"mobile": mobile},
+        {"$set": {
+            "mobile": mobile,
+            "otp": otp,
+            "expires_at": (now() + timedelta(seconds=OTP_TTL_SECONDS)).isoformat(),
+            # BSON date for the Mongo TTL index (TTL indexes ignore ISO strings)
+            "ttl_at": now() + timedelta(seconds=OTP_TTL_SECONDS + 60),
+            "attempts": 0,
+            "last_sent_at": now().isoformat(),
+        }},
+        upsert=True,
+    )
+    logger.info(f"[OTP] sent to {mobile} via provider '{SMS_PROVIDER}'")
+    return {
+        "success": True,
+        "message": "OTP sent successfully",
+        "hint": "Use 123456 for testing" if _MOCK_OTP_ALLOWED else None,
+    }
 
 
 @api.post("/auth/verify-otp")
 async def verify_otp(req: VerifyOtpReq):
     mobile = req.mobile.strip()
     otp = req.otp.strip()
-    # DEVELOPMENT/MOCK: Only accept fixed OTP 123456.
-    # Replace with real SMS provider verification for production.
-    if otp != "123456":
+    if not rate_limit(f"otp_verify:{mobile}", 10, 60):
+        raise HTTPException(429, "Too many OTP attempts. Please try again later.")
+
+    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    if not doc:
+        raise HTTPException(400, "No OTP requested for this number or OTP expired. Please request a new OTP.")
+    if datetime.fromisoformat(doc["expires_at"]) < now():
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(400, "OTP expired. Please request a new OTP.")
+    if doc.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
+    if doc.get("otp") != otp:
+        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
         raise HTTPException(400, "Invalid OTP")
+
+    await db.otps.delete_one({"mobile": mobile})
 
     user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
     is_new = False
@@ -1023,9 +1158,15 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     return ctx
 
 
+def _validate_page_size(page_size: Optional[str]) -> None:
+    if page_size and str(page_size).upper() not in ("A4", "LEGAL"):
+        raise HTTPException(422, "page_size must be 'A4' or 'Legal'")
+
+
 @api.post("/applications/preview")
 async def preview_application(req: GenerateReq, user=Depends(get_user)):
     validate_values_size(req.values)
+    _validate_page_size(req.page_size)
     t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
@@ -1042,6 +1183,9 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 @api.post("/applications/download")
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
+    _validate_page_size(req.page_size)
+    if not rate_limit(f"download:{user['id']}", 30, 60):
+        raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
@@ -1070,11 +1214,12 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         rendered = render_template(tpl, ctx)
         blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
 
+        doc_settings = {"page_size": req.page_size} if req.page_size else None
         if req.format == "docx":
-            b64 = generate_docx(blocks, req.language)
+            b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         else:
-            b64 = generate_pdf(blocks, req.language)
+            b64 = generate_pdf(blocks, req.language, doc_settings)
             mime = "application/pdf"
     except Exception as e:
         # Refund credit on generation failure — user must not be unfairly charged
@@ -1426,6 +1571,8 @@ async def admin_login(req: AdminLoginReq):
     email = req.email.strip().lower()
     if not email:
         raise HTTPException(400, "Email is required")
+    if not rate_limit(f"admin_login:{email}", 5, 60):
+        raise HTTPException(429, "Too many login attempts. Please try again later.")
     admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
     if not admin:
         raise HTTPException(401, "Invalid email or password")
@@ -2064,10 +2211,21 @@ async def seed_super_admin():
 
 app.include_router(api)
 app.include_router(admin_api)
+# CORS — explicit allowlist, never '*' in production. Env CORS_ORIGINS (comma-
+# separated) overrides the defaults; localhost origins stay available for dev via
+# a regex so local preview servers on any port keep working.
+_DEFAULT_CORS_ORIGINS = [
+    "https://nyaysetu-frontend.vercel.app",
+    "https://nyay-setu-pro-emergent-ebhh.vercel.app",
+    "https://nyaysetu-pro-emergent.vercel.app",
+]
+_CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or _DEFAULT_CORS_ORIGINS
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -2099,6 +2257,9 @@ async def create_indexes():
     # Referrals
     await db.referrals.create_index("referrer_id")
     await db.referrals.create_index("referred_user_id", unique=True)
+    # OTPs (auto-cleaned by verify flow / TTL — index on the BSON-date field)
+    await db.otps.create_index("mobile", unique=True)
+    await db.otps.create_index("ttl_at", expireAfterSeconds=OTP_TTL_SECONDS + 60)
     # Admin users
     await db.admin_users.create_index("id", unique=True)
     await db.admin_users.create_index("email", unique=True)

@@ -10,7 +10,7 @@ import re
 import base64
 from pathlib import Path
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, LEGAL
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -19,6 +19,23 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+# ---- Paper sizes (A4 + Legal) ----
+_PAGE_SIZES = {
+    "A4": A4,
+    "Legal": LEGAL,
+}
+
+
+def _norm_page_size(page_size) -> str:
+    """Normalize a configured page size to 'A4' or 'Legal' (case-insensitive)."""
+    key = str(page_size or "A4").strip().upper()
+    return "Legal" if key == "LEGAL" else "A4"
+
+
+def _resolve_pagesize(page_size):
+    """Resolve to a reportlab pagesize tuple (A4 default)."""
+    return _PAGE_SIZES.get(_norm_page_size(page_size), A4)
 
 FONT_DIR = Path(__file__).parent / "fonts"
 
@@ -235,7 +252,7 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
   font-style: normal;
 }}
 @page {{
-  size: {s['page_size']};
+  size: {_norm_page_size(s['page_size'])};
   margin-top: {s['margin_top_cm']}cm;
   margin-bottom: {s['margin_bottom_cm']}cm;
   margin-left: {s['margin_left_cm']}cm;
@@ -276,7 +293,7 @@ body {{
         page = browser.new_page()
         page.set_content(html)
         pdf_bytes = page.pdf(
-            format=s["page_size"],
+            format=_norm_page_size(s["page_size"]),
             print_background=True,
             margin={
                 "top": f"{s['margin_top_cm']}cm",
@@ -305,7 +322,7 @@ def generate_pdf_reportlab(blocks: list, language: str = "en", settings: dict = 
     s = get_doc_settings(settings)
     doc = SimpleDocTemplate(
         buf,
-        pagesize=A4,
+        pagesize=_resolve_pagesize(s.get("page_size")),
         topMargin=s["margin_top_cm"] * 28.35,
         bottomMargin=s["margin_bottom_cm"] * 28.35,
         leftMargin=s["margin_left_cm"] * 28.35,
@@ -354,7 +371,11 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
 def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> str:
     doc = Document()
     s = get_doc_settings(settings)
+    # A4 = 21.0 x 29.7 cm; Legal = 21.59 x 35.56 cm (US Legal)
+    is_legal = _norm_page_size(s.get("page_size")) == "Legal"
     for section in doc.sections:
+        section.page_width = Cm(21.59 if is_legal else 21.0)
+        section.page_height = Cm(35.56 if is_legal else 29.7)
         section.top_margin = Cm(s["margin_top_cm"])
         section.bottom_margin = Cm(s["margin_bottom_cm"])
         section.left_margin = Cm(s["margin_left_cm"])

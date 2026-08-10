@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_api")
+os.environ.setdefault("OTP_RESEND_COOLDOWN_SECONDS", "0")
 
 import mongomock_motor
 mock_client = mongomock_motor.AsyncMongoMockClient()
@@ -83,9 +84,12 @@ class TestAuth:
 
     def test_verify_new_and_existing(self, session):
         mobile = f"9{int(time.time()*1000) % 1000000000:09d}"
+        session.post(f"{API}/auth/send-otp", json={"mobile": mobile})
         r1 = session.post(f"{API}/auth/verify-otp", json={"mobile": mobile, "otp": "123456"})
         assert r1.status_code == 200
         assert r1.json()["is_new"] is True
+        # OTP is single-use: request again before re-login
+        session.post(f"{API}/auth/send-otp", json={"mobile": mobile})
         r2 = session.post(f"{API}/auth/verify-otp", json={"mobile": mobile, "otp": "123456"})
         assert r2.status_code == 200
         assert r2.json()["is_new"] is False

@@ -56,12 +56,12 @@ async def client():
 async def clean_db():
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms"]:
+                 "template_versions", "case_forms", "otps"]:
         await db[coll].drop()
     yield
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms"]:
+                 "template_versions", "case_forms", "otps"]:
         await db[coll].drop()
 
 
@@ -126,8 +126,10 @@ class TestAuthNullIndexSafety:
     @pytest.mark.asyncio
     async def test_two_mobile_signups_succeed(self, client, clean_db):
         for i in range(2):
+            mobile = f"98000000{i}1"
+            await client.post(f"{API}/auth/send-otp", json={"mobile": mobile})
             r = await client.post(f"{API}/auth/verify-otp", json={
-                "mobile": f"98000000{i}1", "otp": "123456"
+                "mobile": mobile, "otp": "123456"
             })
             assert r.status_code == 200, f"signup #{i + 1} failed: {r.text}"
             assert r.json()["token"]
@@ -135,6 +137,7 @@ class TestAuthNullIndexSafety:
     @pytest.mark.asyncio
     async def test_mobile_then_google_signups_succeed(self, client, clean_db):
         # Mobile user stores no email; Google user stores no mobile.
+        await client.post(f"{API}/auth/send-otp", json={"mobile": "9800000012"})
         r = await client.post(f"{API}/auth/verify-otp", json={"mobile": "9800000012", "otp": "123456"})
         assert r.status_code == 200
         # Google session exchange requires the Emergent endpoint — simulate by
