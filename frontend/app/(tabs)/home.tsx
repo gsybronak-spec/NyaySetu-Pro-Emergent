@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -50,9 +50,7 @@ export default function Home() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.brandRow}>
-          <View style={[styles.brandBadge, { backgroundColor: colors.brand }]}>
-            <Ionicons name="scale" size={18} color={colors.brandPrimary} />
-          </View>
+          <Image source={require("../../assets/images/logo.png")} style={styles.brandLogo} resizeMode="contain" />
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md }}>
@@ -197,7 +195,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   brandRow: { flexDirection: "row", alignItems: "center", gap: Spacing.sm },
-  brandBadge: { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  brandLogo: { width: 28, height: 30 },
   brandName: { fontSize: 18, fontWeight: "800", fontFamily: "serif" },
   welcome: {
     margin: Spacing.lg,

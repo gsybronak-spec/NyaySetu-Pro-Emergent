@@ -15,7 +15,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <div className="sidebar-logo">⚖️</div>
+        <img className="sidebar-logo" src="/nyaysetu-logo.png" alt="NyaySetu Pro" />
         <div>
           <div className="sidebar-title">NyaySetu Pro</div>
           <div className="sidebar-subtitle">Admin Portal</div>

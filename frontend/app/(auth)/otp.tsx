@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { Button } from "@/src/components/Button";
@@ -34,7 +33,7 @@ export default function Otp() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.logo}>
-            <Ionicons name="shield-checkmark" size={40} color="#C5A059" />
+            <Image source={require("../../assets/images/logo.png")} style={styles.logoImage} resizeMode="contain" />
           </View>
           <Text style={styles.title}>Verify OTP</Text>
           <Text style={styles.sub}>
@@ -67,15 +66,13 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: Spacing.xl, justifyContent: "center" },
   logo: {
     alignSelf: "center",
-    width: 76,
-    height: 76,
-    borderRadius: 20,
-    backgroundColor: "rgba(197,160,89,0.12)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(197,160,89,0.3)",
     marginBottom: Spacing.lg,
+  },
+  logoImage: {
+    width: 92,
+    height: 99,
   },
   title: { color: "#FDFDFD", fontSize: 26, fontWeight: "700", textAlign: "center", fontFamily: "serif" },
   sub: { color: "#A6B1C2", fontSize: 14, textAlign: "center", marginTop: 6, marginBottom: Spacing.xl },

@@ -24,7 +24,7 @@ export default function Login() {
     <div className="login-page">
       <div className="login-card">
         <div className="login-brand">
-          <div className="login-logo">⚖️</div>
+          <img className="login-logo" src="/nyaysetu-logo.png" alt="NyaySetu Pro" />
           <h1 className="login-title">NyaySetu Pro</h1>
           <p className="login-subtitle">Admin Portal</p>
         </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -42,7 +42,7 @@ export default function Login() {
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
             <View style={styles.logo}>
-              <Ionicons name="scale" size={44} color="#C5A059" />
+              <Image source={require("../../assets/images/logo.png")} style={styles.logoImage} resizeMode="contain" />
             </View>
             <Text style={styles.title}>NyaySetu Pro</Text>
             <Text style={styles.tagline}>The New Era of Advocacy</Text>
@@ -110,14 +110,12 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, padding: Spacing.xl, justifyContent: "center" },
   brandBlock: { alignItems: "center", marginBottom: Spacing.xxl },
   logo: {
-    width: 84,
-    height: 84,
-    borderRadius: 22,
-    backgroundColor: "rgba(197,160,89,0.12)",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "rgba(197,160,89,0.35)",
+  },
+  logoImage: {
+    width: 116,
+    height: 125,
   },
   title: { color: "#FDFDFD", fontSize: 30, fontWeight: "700", marginTop: Spacing.lg, fontFamily: "serif" },
   tagline: { color: "#C5A059", fontSize: 12, marginTop: 6, letterSpacing: 2, textTransform: "uppercase" },

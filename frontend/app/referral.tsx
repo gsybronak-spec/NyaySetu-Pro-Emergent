@@ -22,7 +22,7 @@ export default function Referral() {
   const code = data?.referral_code || "…";
   const reward = data?.reward_per_referral || 10;
 
-  const shareMessage = `I'm using NyaySetu Pro to draft court applications in seconds ⚖️\n\nUse my referral code *${code}* when you sign up.\n\nThe New Era of Advocacy.`;
+  const shareMessage = `I'm using NyaySetu Pro to draft court applications in seconds\n\nUse my referral code *${code}* when you sign up.\n\nThe New Era of Advocacy.`;
 
   const copy = async () => {
     await Clipboard.setStringAsync(code);
