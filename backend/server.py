@@ -2773,8 +2773,12 @@ app.include_router(admin_api)
 # separated) overrides the defaults; localhost origins stay available for dev via
 # a regex so local preview servers on any port keep working.
 _DEFAULT_CORS_ORIGINS = [
-    "https://nyaysetu-frontend.vercel.app",
+    # Production Lawyer Frontend (Expo web export on Vercel)
+    "https://nyay-setu-pro-emergent-bo83.vercel.app",
+    # Production Admin Portal
     "https://nyay-setu-pro-emergent-ebhh.vercel.app",
+    # Legacy/other frontend deployments kept for compatibility
+    "https://nyaysetu-frontend.vercel.app",
     "https://nyaysetu-pro-emergent.vercel.app",
 ]
 _CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or _DEFAULT_CORS_ORIGINS

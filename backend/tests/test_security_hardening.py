@@ -264,6 +264,9 @@ class TestCorsAndJwt:
     def test_cors_never_wildcard(self):
         from server import _CORS_ORIGINS
         assert "*" not in _CORS_ORIGINS
+        # The real production Lawyer Frontend must always be on the allowlist
+        assert "https://nyay-setu-pro-emergent-bo83.vercel.app" in _CORS_ORIGINS
+        assert "https://nyay-setu-pro-emergent-ebhh.vercel.app" in _CORS_ORIGINS
         assert "https://nyaysetu-frontend.vercel.app" in _CORS_ORIGINS
         found = False
         for mw in app.user_middleware:
@@ -273,6 +276,29 @@ class TestCorsAndJwt:
                 assert mw.kwargs.get("allow_origin_regex") is not None
                 found = True
         assert found, "CORSMiddleware not found"
+
+    @pytest.mark.asyncio
+    async def test_cors_production_frontend_origin_allowed(self, client, clean_db):
+        """The real production Lawyer Frontend must get CORS headers on GET and
+        preflight — this is what makes send-otp work from the browser."""
+        origin = "https://nyay-setu-pro-emergent-bo83.vercel.app"
+        r = await client.get("/api/templates", headers={"Origin": origin})
+        assert r.status_code == 200
+        assert r.headers.get("access-control-allow-origin") == origin
+
+        r = await client.options("/api/auth/send-otp", headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        })
+        assert r.status_code == 200
+        assert r.headers.get("access-control-allow-origin") == origin
+
+    @pytest.mark.asyncio
+    async def test_cors_unknown_origin_rejected(self, client, clean_db):
+        r = await client.get("/api/templates", headers={"Origin": "https://evil.example.com"})
+        assert r.status_code == 200
+        assert r.headers.get("access-control-allow-origin") is None
 
     def test_jwt_failsafe_production_missing_secret(self):
         code = (
