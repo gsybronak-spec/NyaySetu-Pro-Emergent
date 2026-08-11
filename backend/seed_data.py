@@ -1503,37 +1503,61 @@ Advocate for the Applicant
             {"key": "opposite_party", "label_en": "Name", "label_gu": "નામ", "type": "text", "required": True},
             {"key": "advocate_name", "label_en": "Advocate For", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "options": []},
             {
-                "key": "case_status", "label_en": "Case Status", "label_gu": "કેસ ચાલુ છે કે ડિસ્પોઝ્ડ થયેલ છે", "type": "select", "required": True,
+                "key": "case_status", "label_en": "Case Status", "label_gu": "કેસ ચાલુ છે કે ડિસ્પોસ્ડ થયેલ છે", "type": "select", "required": True,
                 "options": [
                     {"value": "ચાલુ", "label_en": "Ongoing", "label_gu": "ચાલુ"},
-                    {"value": "ડિસ્પોઝ્ડ", "label_en": "Disposed", "label_gu": "ડિસ્પોઝ્ડ"},
+                    {"value": "ડિસ્પોસ્ડ", "label_en": "Disposed", "label_gu": "ડિસ્પોસ્ડ"},
                 ],
             },
             {"key": "document_name", "label_en": "Document Name / Description", "label_gu": "દસ્તાવેજનું નામ / વિગત", "type": "textarea", "required": True, "placeholder": "દા.ત. આંક ૧૯ મુજબનો મકાનનો દસ્તાવેજ / પાસપોર્ટ જમા થયેલ હોય તો પાસપોર્ટ"},
             {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
             {"key": "place", "label_en": "Place", "label_gu": "સ્થળ", "type": "text", "required": True},
         ],
+        "settings": {
+            # Page geometry reproduces the source document: A4, 2cm top/bottom,
+            # 4cm left/right margins, 13pt Gujarati at 150% line height.
+            "page_size": "A4",
+            "margin_top_cm": 2,
+            "margin_bottom_cm": 2,
+            "margin_left_cm": 4,
+            "margin_right_cm": 4,
+            "body_size": 13,
+            "heading_size": 13,
+            "line_spacing": 19.5,
+            # Per-line layout from the source: centered header block (court line,
+            # place line, case line, parties, title), justified body, right-aligned
+            # signature. First matching rule wins.
+            "block_align": [
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center"},
+                {"position": 2, "align": "center"},
+                {"contains": " નં. ", "align": "center"},
+                {"contains": "વિરુદ્ધ", "align": "center"},
+                {"contains": "દસ્તાવેજ પરત મેળવવાની અરજી", "align": "center", "bold": False},
+                {"contains": "સદર કામમા અમો", "align": "justify"},
+                {"contains": "સદર કેસ આપ નામદાર", "align": "justify"},
+                {"contains": "સદર દસ્તાવેજની હવે", "align": "justify"},
+                {"contains": "તારીખ :", "align": "left"},
+                {"contains": "સ્થળ :", "align": "left"},
+                {"contains": "ના એડવોકેટ", "align": "right"},
+            ],
+        },
         "content_en": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 
 {{taluka_place}}
 
 {{case_type}} નં. {{case_number}}
 
-{{applicant_role}}
+{{applicant_role}} {{party_name}}
 વિરુદ્ધ
-{{opposite_party_role}}
+{{opposite_party_role}} {{opposite_party}}
 
 દસ્તાવેજ પરત મેળવવાની અરજી
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ {{case_status_clause}}.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ {{case_status_clause}}. સદર કેસમાં {{document_name}} કામમા રજૂ કરવામાં આવેલ {{tense}}. સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
-સદર કેસમાં {{document_name}} કામમાં રજૂ કરવામાં આવેલ {{tense}}.
-
-સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
-
-તારીખ : {{date}}
+તારીખ : {{date_display}}
 સ્થળ : {{place}}
 
 {{selected_party_role}}ના એડવોકેટ
@@ -1544,21 +1568,17 @@ Advocate for the Applicant
 
 {{case_type}} નં. {{case_number}}
 
-{{applicant_role}}
+{{applicant_role}} {{party_name}}
 વિરુદ્ધ
-{{opposite_party_role}}
+{{opposite_party_role}} {{opposite_party}}
 
 દસ્તાવેજ પરત મેળવવાની અરજી
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ {{case_status_clause}}.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ {{case_status_clause}}. સદર કેસમાં {{document_name}} કામમા રજૂ કરવામાં આવેલ {{tense}}. સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
-સદર કેસમાં {{document_name}} કામમાં રજૂ કરવામાં આવેલ {{tense}}.
-
-સદર દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરિયાત ન હોવાથી તથા દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત અપાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
-
-તારીખ : {{date}}
+તારીખ : {{date_display}}
 સ્થળ : {{place}}
 
 {{selected_party_role}}ના એડવોકેટ

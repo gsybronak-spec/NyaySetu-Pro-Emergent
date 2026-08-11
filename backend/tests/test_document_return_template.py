@@ -1,11 +1,18 @@
 """Regression tests for the 'દસ્તાવેજ પરત મેળવવાની અરજી' (Application for Return of Document) template.
 
-Covers the locked spec:
+Covers the locked spec (source document "Document parat levani arji.odt" is the only
+source of truth):
 - Template id `document_return_application` is in the public library with the exact 14-field spec
   (court/district/taluka/case_type selects, role radios, case-status select, date, textarea...).
-- Conditional wording derived from case_status: "ચાલુ" -> ચાલવા પર છે / છે ;
-  "ડિસ્પોઝ્ડ" -> ડિસ્પોઝ્ડ થયેલ છે / હતો.
+- ODT-literal wording: કામમા, ડિસ્પોસ્ડ, કરશોજી.
+- Conditional wording derived from case_status: "ચાલુ" -> આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે / છે ;
+  "ડિસ્પોસ્ડ" -> આપ નામદાર કોર્ટ સમક્ષ આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે / હતો (legacy ડિસ્પોઝ્ડ also
+  accepted so old drafts keep working).
+- Party names are printed with the selected roles.
 - Taluka/district line renders "તાલુકો, જિલ્લો" when a taluka is selected, district alone otherwise.
+- Date displays DD/MM/YYYY (from stored YYYY-MM-DD).
+- Page geometry from template settings: A4, 2cm top/bottom, 4cm left/right margins, 150% spacing.
+- Per-line layout from the source: centered header block, justified body, right-aligned signature.
 - No leftover {{placeholders}} in preview; PDF and DOCX generate with the conditional text and
   consume exactly one credit each.
 """
@@ -117,7 +124,7 @@ def full_values(**overrides):
         "advocate_name": "Adv. Test Lawyer",
         "case_status": "ચાલુ",
         "document_name": "આંક ૧૯ મુજબનો મકાનનો દસ્તાવેજ",
-        "date": "15-02-2026",
+        "date": "2026-02-15",
         "place": "ગાંધીનગર",
     }
     vals.update(overrides)
@@ -168,7 +175,9 @@ class TestTemplateSpec:
         opp = next(f for f in fields if f["key"] == "opposite_party_role")
         assert [o["value"] for o in opp["options"]] == ["આરોપી", "સામાવાળા", "પ્રતિવાદી"]
         status = next(f for f in fields if f["key"] == "case_status")
-        assert [o["value"] for o in status["options"]] == ["ચાલુ", "ડિસ્પોઝ્ડ"]
+        # Source-document spelling (ડિસ્પોસ્ડ); the legacy ડિસ્પોઝ્ડ value is
+        # still accepted by the renderer so saved drafts keep working.
+        assert [o["value"] for o in status["options"]] == ["ચાલુ", "ડિસ્પોસ્ડ"]
         # Select fields carry existing catalog values (ids) with bilingual labels
         district = next(f for f in fields if f["key"] == "district")
         assert any(o["value"] == "gandhinagar" and o["label_gu"] == "ગાંધીનગર" for o in district["options"])
@@ -207,23 +216,57 @@ class TestCaseStatusConditionals:
             "template_id": TEMPLATE_ID, "language": "gu", "values": full_values(),
         }, headers=H(token))
         assert r.status_code == 200, r.text
-        content = r.json()["content"]
+        data = r.json()
+        content = data["content"]
         assert "મહેરબાન જે.એમ.એફ.સી. ન્યાયાલય સાહેબશ્રીની કોર્ટમાં," in content
         assert "કલોલ, ગાંધીનગર" in content                      # taluka, district order
         assert "સિવિલ સૂટ નં. Civil Suit No. 125/2024" in content
-        assert "ફરીયાદી\nવિરુદ્ધ\nપ્રતિવાદી" in content
-        assert "સદર કામમાં અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....." in content
+        # Party names are printed with the selected roles (source page 1 name fields)
+        assert "ફરીયાદી રમેશભાઈ પટેલ\nવિરુદ્ધ\nપ્રતિવાદી મહેશભાઈ શાહ" in content
+        assert "સદર કામમા અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....." in content
         assert "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે." in content
-        assert "કામમાં રજૂ કરવામાં આવેલ છે." in content
-        assert "તારીખ : 15-02-2026" in content
+        assert "કામમા રજૂ કરવામાં આવેલ છે." in content
+        assert "કરશોજી." in content                            # source wording (one word)
+        assert "તારીખ : 15/02/2026" in content                  # DD/MM/YYYY from YYYY-MM-DD
         assert "સ્થળ : ગાંધીનગર" in content
         assert "ફરીયાદીના એડવોકેટ" in content                  # derived signature role
         assert "{{" not in content                                # no leftover placeholders
-        assert "ડિસ્પોઝ્ડ થયેલ છે" not in content
+        assert "ડિસ્પોસ્ડ થયેલ છે" not in content
         assert "હતો" not in content
+        # Per-line layout matches the source: centered header block, justified
+        # body, right-aligned signature; title is centered and NOT bold (the
+        # source document has no bold anywhere).
+        by_text = {b["text"]: b for b in data["blocks"] if b["text"]}
+        assert by_text["મહેરબાન જે.એમ.એફ.સી. ન્યાયાલય સાહેબશ્રીની કોર્ટમાં,"]["align"] == "center"
+        assert by_text["કલોલ, ગાંધીનગર"]["align"] == "center"
+        assert by_text["સિવિલ સૂટ નં. Civil Suit No. 125/2024"]["align"] == "center"
+        assert by_text["વિરુદ્ધ"]["align"] == "center"
+        assert by_text["દસ્તાવેજ પરત મેળવવાની અરજી"]["align"] == "center"
+        assert by_text["દસ્તાવેજ પરત મેળવવાની અરજી"]["bold"] is False
+        pleading = next(b for b in data["blocks"] if b["text"].startswith("સદર કામમા"))
+        assert pleading["align"] == "justify"
+        body = next(b for b in data["blocks"] if b["text"].startswith("સદર કેસ આપ"))
+        assert body["align"] == "justify"
+        sig = next(b for b in data["blocks"] if b["text"] == "ફરીયાદીના એડવોકેટ")
+        assert sig["align"] == "right"
 
     @pytest.mark.asyncio
     async def test_disposed_case_wording(self, client, clean_db):
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/applications/preview", json={
+            "template_id": TEMPLATE_ID, "language": "gu",
+            "values": full_values(case_status="ડિસ્પોસ્ડ"),
+        }, headers=H(token))
+        assert r.status_code == 200, r.text
+        content = r.json()["content"]
+        assert "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે." in content
+        assert "કામમા રજૂ કરવામાં આવેલ હતો." in content
+        assert "ચાલવા પર છે" not in content
+        assert "{{" not in content
+
+    @pytest.mark.asyncio
+    async def test_legacy_disposed_spelling_still_accepted(self, client, clean_db):
+        """Drafts saved with the old ડિસ્પોઝ્ડ value must keep rendering correctly."""
         _, token = await create_test_lawyer()
         r = await client.post(f"{API}/applications/preview", json={
             "template_id": TEMPLATE_ID, "language": "gu",
@@ -231,10 +274,8 @@ class TestCaseStatusConditionals:
         }, headers=H(token))
         assert r.status_code == 200, r.text
         content = r.json()["content"]
-        assert "સદર કેસ આપની કોર્ટમાં ડિસ્પોઝ્ડ થયેલ છે." in content
-        assert "કામમાં રજૂ કરવામાં આવેલ હતો." in content
-        assert "ચાલવા પર છે" not in content
-        assert "{{" not in content
+        assert "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે." in content
+        assert "કામમા રજૂ કરવામાં આવેલ હતો." in content
 
     @pytest.mark.asyncio
     async def test_no_taluka_shows_district_only(self, client, clean_db):
@@ -309,6 +350,47 @@ class TestDocumentGeneration:
         from io import BytesIO
         z = zipfile.ZipFile(BytesIO(base64.b64decode(r.json()["base64"])))
         xml = z.read("word/document.xml").decode("utf-8", "ignore")
-        assert "ડિસ્પોઝ્ડ થયેલ છે" in xml
+        assert "ડિસ્પોસ્ડ થયેલ છે" in xml
         assert "હતો" in xml
         assert "ચાલવા પર છે" not in xml
+
+    @pytest.mark.asyncio
+    async def test_pdf_is_a4(self, client, clean_db):
+        """The generated PDF must be A4 (595 x 842 pt) — the source page size."""
+        import re
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/applications/download", json={
+            "template_id": TEMPLATE_ID, "language": "gu",
+            "values": full_values(), "format": "pdf", "filename": "doc_return_a4.pdf",
+        }, headers=H(token))
+        assert r.status_code == 200, r.text
+        import base64
+        pdf = base64.b64decode(r.json()["base64"])
+        m = re.search(rb"/MediaBox\s*\[\s*([^\]]+)\]", pdf)
+        assert m, "MediaBox not found"
+        # MediaBox is [0 0 width height] — the page size is the last two numbers.
+        w, h = (float(x) for x in m.group(1).split()[-2:])
+        assert abs(w - 595) < 3 and abs(h - 842) < 3, f"expected A4, got {w}x{h}"
+
+    @pytest.mark.asyncio
+    async def test_download_passes_template_geometry_settings(self, client, clean_db, monkeypatch):
+        """Template settings (page size + source margins + spacing) reach the doc engine."""
+        import base64 as _b64
+        captured = {}
+
+        def fake_pdf(blocks, language, settings):
+            captured["settings"] = settings
+            return _b64.b64encode(b"%PDF-1.4 fake").decode()
+
+        monkeypatch.setattr(server, "generate_pdf", fake_pdf)
+        _, token = await create_test_lawyer()
+        r = await client.post(f"{API}/applications/download", json={
+            "template_id": TEMPLATE_ID, "language": "gu",
+            "values": full_values(), "format": "pdf", "filename": "doc_return.pdf",
+        }, headers=H(token))
+        assert r.status_code == 200, r.text
+        s = captured["settings"]
+        assert s["page_size"] == "A4"
+        assert s["margin_top_cm"] == 2 and s["margin_bottom_cm"] == 2
+        assert s["margin_left_cm"] == 4 and s["margin_right_cm"] == 4
+        assert s["line_spacing"] == 19.5

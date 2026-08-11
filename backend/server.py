@@ -1241,6 +1241,7 @@ _AUTO_FILL_FIELDS = {
     "client_name", "client_mobile", "client_email", "client_address", "client_district",
     # Derived values for the document-return application (never user-entered)
     "case_status_clause", "tense", "selected_party_role", "taluka_place",
+    "date_display",
 }
 
 def public_template(t: dict) -> dict:
@@ -1429,13 +1430,17 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["client_name"] = ""
 
     # ---- Derived values for the document-return application (never user-entered) ----
-    # case_status -> conditional Gujarati clause + verb tense (required by the source spec)
+    # case_status -> conditional Gujarati clause + verb tense, literal per the
+    # source document: "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ [ચાલવા પર છે./ આપની કોર્ટમા
+    # ડિસ્પોસ્ડ થયેલ છે]" and "કામમા રજૂ કરવામાં આવેલ [છે/હતો]". Both the current
+    # (ડિસ્પોઝ્ડ) and source-document (ડિસ્પોસ્ડ) spellings are accepted so
+    # previously saved drafts keep working.
     status = ctx.get("case_status")
     if status == "ચાલુ":
-        ctx["case_status_clause"] = "આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે"
+        ctx["case_status_clause"] = "ચાલવા પર છે"
         ctx["tense"] = "છે"
-    elif status == "ડિસ્પોઝ્ડ":
-        ctx["case_status_clause"] = "આપની કોર્ટમાં ડિસ્પોઝ્ડ થયેલ છે"
+    elif status in ("ડિસ્પોઝ્ડ", "ડિસ્પોસ્ડ"):
+        ctx["case_status_clause"] = "આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે"
         ctx["tense"] = "હતો"
     else:
         ctx["case_status_clause"] = ""
@@ -1445,6 +1450,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર")
     _tal = (ctx.get("taluka") or "").strip()
     ctx["taluka_place"] = f"{_tal}, {ctx.get('district') or ''}" if _tal else (ctx.get("district") or "")
+    # Date display — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
+    # canonical stored value is YYYY-MM-DD. Derived key keeps {{date}} untouched
+    # for every other template. Legacy DD-MM-YYYY values pass through unchanged.
+    _d = ctx.get("date")
+    if isinstance(_d, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _d):
+        ctx["date_display"] = f"{_d[8:10]}/{_d[5:7]}/{_d[0:4]}"
+    else:
+        ctx["date_display"] = (_d or "") if isinstance(_d, str) else ""
     return ctx
 
 
@@ -1476,7 +1489,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     ctx = await build_render_context(user, case, req.values, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
-    blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
+    blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
+                          (t.get("settings") or {}).get("block_align"))
     return {"content": rendered, "blocks": blocks, "language": req.language, "template_id": t["id"]}
 
 
@@ -1517,9 +1531,17 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         ctx = await build_render_context(user, case, req.values, req.language)
         tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
         rendered = render_template(tpl, ctx)
-        blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
+        blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
+                              (t.get("settings") or {}).get("block_align"))
 
         doc_settings = {"page_size": page_size}
+        tpl_settings = t.get("settings") or {}
+        for _k in ("margin_top_cm", "margin_bottom_cm", "margin_left_cm",
+                   "margin_right_cm", "body_size", "heading_size", "line_spacing",
+                   "paragraph_spacing", "alignment", "gujarati_font", "english_font",
+                   "gujarati_font_docx", "english_font_docx"):
+            if tpl_settings.get(_k) is not None:
+                doc_settings[_k] = tpl_settings[_k]
         if req.format == "docx":
             b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -3157,10 +3179,12 @@ async def admin_preview_template(template_id: str, req: Optional[AdminPreviewReq
                 sample_values[key] = f.get("default_value") or f.get("label_en", key)
 
     rendered_en = render_template(content_en, sample_values)
-    blocks_en = build_blocks(rendered_en, name_en, name_gu)
+    blocks_en = build_blocks(rendered_en, name_en, name_gu,
+                             (t.get("settings") or {}).get("block_align"))
 
     rendered_gu = render_template(content_gu, sample_values)
-    blocks_gu = build_blocks(rendered_gu, name_en, name_gu)
+    blocks_gu = build_blocks(rendered_gu, name_en, name_gu,
+                             (t.get("settings") or {}).get("block_align"))
 
     validation = _validate_placeholders(content_en, content_gu, fields)
     return {

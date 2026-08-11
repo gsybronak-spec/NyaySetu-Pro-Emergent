@@ -149,7 +149,8 @@ def register_fonts():
 _EN_HEADING_WORDS = ("APPLICATION", "AFFIDAVIT", "VERIFICATION", "VAKALATNAMA", "BAIL")
 
 
-def build_blocks(content: str, title_en: str = "", title_gu: str = "") -> list:
+def build_blocks(content: str, title_en: str = "", title_gu: str = "",
+                  align_rules: list = None) -> list:
     """Deterministically classify each line. Returns [{text, align, bold}].
 
     Rules (explicit, NOT fuzzy — this is what fixes numbered points turning bold):
@@ -157,15 +158,25 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "") -> list:
       * Exact template title line (GU or EN) -> center + bold
       * Fully UPPERCASE Latin heading containing a heading keyword -> center + bold
       * Everything else (incl. all numbered legal points) -> left + normal
+
+    Optional `align_rules` (per-template, opt-in) lets a template reproduce the
+    source document's per-line layout — e.g. centered header lines, justified
+    body, right-aligned signature. Each rule is
+    {"contains": <substring>, "align": left|center|right|justify, "bold": bool};
+    the FIRST matching rule wins and overrides the classification above, so a
+    template can also opt out of the engine's bold title. Empty by default —
+    every other template is unaffected.
     """
     blocks = []
     t_en = (title_en or "").strip()
     t_gu = (title_gu or "").strip()
+    nonempty = 0  # 1-based index of non-empty lines, for position-based rules
     for raw in content.split("\n"):
         line = raw.strip()
         if not line:
             blocks.append({"text": "", "align": "left", "bold": False})
             continue
+        nonempty += 1
         is_court = line.startswith("IN THE COURT OF") or line.startswith("માનનીય ન્યાયાલય")
         is_title = (t_en and line == t_en) or (t_gu and line == t_gu)
         # English uppercase heading (e.g. "APPLICATION FOR ADJOURNMENT", "AFFIDAVIT")
@@ -177,10 +188,26 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "") -> list:
             and any(w in line for w in _EN_HEADING_WORDS)
             and len(line) < 70
         )
+        align = "left"
+        bold = False
         if is_court or is_title or is_upper_en:
-            blocks.append({"text": line, "align": "center", "bold": True})
-        else:
-            blocks.append({"text": line, "align": "left", "bold": False})
+            align, bold = "center", True
+        if align_rules:
+            for rule in align_rules:
+                if not isinstance(rule, dict):
+                    continue
+                a = rule.get("align")
+                if a not in ("left", "center", "right", "justify"):
+                    continue
+                needle = rule.get("contains")
+                pos = rule.get("position")
+                matched = (needle and needle in line) or (pos is not None and int(pos) == nonempty)
+                if matched:
+                    align = a
+                    if "bold" in rule:
+                        bold = bool(rule["bold"])
+                    break
+        blocks.append({"text": line, "align": align, "bold": bold})
     return blocks
 
 
