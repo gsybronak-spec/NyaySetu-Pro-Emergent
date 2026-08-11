@@ -49,6 +49,7 @@ export const adminApi = {
   adminUpdateTemplate: (id: string, data: any) => request(`/templates/${id}`, 'PUT', data),
   adminPublishTemplate: (id: string) => request(`/templates/${id}/publish`, 'POST'),
   adminArchiveTemplate: (id: string) => request(`/templates/${id}/archive`, 'POST'),
+  adminRemoveShadowDraft: (id: string, confirm = true) => request(`/templates/${id}/draft?confirm=${confirm}`, 'DELETE'),
   adminCloneTemplate: (id: string, data?: any) => request(`/templates/${id}/clone`, 'POST', data),
   adminTemplateVersions: (id: string) => request(`/templates/${id}/versions`),
   adminPreviewTemplate: (id: string, data?: any) => request(`/templates/${id}/preview`, 'POST', data),

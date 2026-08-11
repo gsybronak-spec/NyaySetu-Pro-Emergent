@@ -1,10 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
+import { useAdminAuth } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
 
 export default function Templates() {
   const navigate = useNavigate();
+  const { admin } = useAdminAuth();
+  const isSuperAdmin = admin?.role === 'super_admin';
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -140,6 +143,22 @@ export default function Templates() {
     }
   };
 
+  const isShadowRow = (t: any) =>
+    t.is_seed_template && (t.status === 'draft' || t.status === 'archived');
+
+  const handleRemoveShadowDraft = async (t: any) => {
+    const ok = window.confirm(
+      `Remove Shadow Draft (${t.id})?\n\nThis will remove the ${t.status} record that is currently hiding the seeded template from the lawyer app. The published/seed template will remain unchanged.`
+    );
+    if (!ok) return;
+    try {
+      await adminApi.adminRemoveShadowDraft(t.id, true);
+      loadTemplates();
+    } catch (err: any) {
+      alert(`Failed to remove shadow draft: ${err.message}`);
+    }
+  };
+
   return (
     <div className="dashboard">
       <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -252,6 +271,15 @@ export default function Templates() {
                         {t.status !== 'archived' && (
                           <button className="action-btn text-danger" title="Archive Template" onClick={() => handleArchive(t.id)}>
                             📦 Archive
+                          </button>
+                        )}
+                        {isSuperAdmin && isShadowRow(t) && (
+                          <button
+                            className="action-btn text-danger"
+                            title="Remove the draft/archived record hiding the seed template from the lawyer app"
+                            onClick={() => handleRemoveShadowDraft(t)}
+                          >
+                            🗑️ Remove Shadow Draft
                           </button>
                         )}
                       </div>

@@ -2771,7 +2771,7 @@ async def admin_list_templates(
     merged = []
     for seed_t in TEMPLATES:
         if seed_t["id"] in db_by_id:
-            merged.append(db_by_id[seed_t["id"]])
+            merged.append({**db_by_id[seed_t["id"]], "is_seed_template": True})
         else:
             merged.append({
                 **seed_t,
@@ -2779,10 +2779,11 @@ async def admin_list_templates(
                 "version": 0,
                 "source": "seed",
                 "locked": False,
+                "is_seed_template": True,
             })
     for db_t in db_templates:
         if db_t["id"] not in seed_ids:
-            merged.append(db_t)
+            merged.append({**db_t, "is_seed_template": False})
 
     if status:
         merged = [t for t in merged if t.get("status") == status]
@@ -3016,6 +3017,48 @@ async def admin_archive_template(template_id: str, admin=Depends(get_admin)):
     )
     await audit_log(admin=admin, action="template_archive", target=template_id)
     return {"success": True, "status": "archived"}
+
+
+@admin_api.delete("/templates/{template_id}/draft")
+async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = None,
+                                    admin=Depends(require_super_admin)):
+    """Remove an obsolete draft/archived DB record that is shadowing a seed template.
+
+    A seed template becomes shadowed when an admin branches it for editing: the
+    version-branch clone materialises a draft/archived record under the SAME id,
+    which hides the seed from the lawyer-facing template list. This endpoint
+    removes ONLY that shadow record so the (correct) seed template becomes
+    visible again.
+
+    Safety rules (super_admin only):
+      - 404 if no DB record exists (idempotent — already-removed = clean 404)
+      - 409 for published templates (published versions are never deleted)
+      - 409 for ids with no seed counterpart (real admin-created templates are
+        never touched)
+      - archived shadows require explicit confirm=true before removal
+      - every removal is audit-logged as template_shadow_draft_delete
+    """
+    rec = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Shadow record not found")
+    seed = next((s for s in TEMPLATES if s["id"] == template_id), None)
+    status = rec.get("status")
+    if status == "published":
+        raise HTTPException(409, "Published templates cannot be removed — only draft/archived shadow records of seed templates")
+    if seed is None:
+        raise HTTPException(409, "This template has no seed counterpart — it is a real template, not a shadow record")
+    if status not in ("draft", "archived"):
+        raise HTTPException(409, f"Cannot remove template in status '{status}' — only draft/archived shadows")
+    if status == "archived" and not confirm:
+        raise HTTPException(400, "Archived shadow removal requires explicit confirmation (confirm=true)")
+    result = await db.templates.delete_one({"id": template_id, "status": status})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "Shadow record not found")
+    await audit_log(admin=admin, action="template_shadow_draft_delete", target=template_id,
+                    metadata={"removed_status": status, "seed_id": template_id,
+                              "seed_name_gu": seed.get("name_gu")})
+    return {"success": True, "removed_status": status,
+            "message": f"Removed the {status} shadow record for seed template '{template_id}'. The seed template is visible to lawyers again."}
 
 
 @admin_api.post("/templates/{template_id}/clone")
