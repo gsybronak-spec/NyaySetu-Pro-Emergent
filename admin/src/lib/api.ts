@@ -95,4 +95,6 @@ export const adminApi = {
   createCatalogItem: (kind: string, data: any) => request(`/catalog/${kind}`, 'POST', data),
   updateCatalogItem: (kind: string, id: string, data: any) => request(`/catalog/${kind}/${id}`, 'PUT', data),
   setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
+  listSettings: () => request('/settings'),
+  updateSetting: (key: string, value: number | string) => request(`/settings/${key}`, 'PUT', { value }),
 };

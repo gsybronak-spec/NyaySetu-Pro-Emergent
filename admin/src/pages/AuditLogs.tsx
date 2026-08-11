@@ -30,6 +30,7 @@ const ACTION_LABELS: Record<string, string> = {
   catalog_create: 'Catalog entry created',
   catalog_update: 'Catalog entry updated',
   catalog_status_update: 'Catalog status changed',
+  settings_update: 'Setting updated',
 };
 
 export default function AuditLogs() {

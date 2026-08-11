@@ -9,7 +9,7 @@ const navItems = [
   { label: 'Catalog', path: '/catalog', icon: '📚', enabled: true },
   { label: 'Plans', path: '/plans', icon: '💳', enabled: true },
   { label: 'Audit Logs', path: '/audit-logs', icon: '🛡️', enabled: true },
-  { label: 'Settings', path: '/settings', icon: '⚙️', enabled: false },
+  { label: 'Settings', path: '/settings', icon: '⚙️', enabled: true },
 ]
 
 export default function Sidebar() {

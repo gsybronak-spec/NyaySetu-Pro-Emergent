@@ -4,6 +4,7 @@ import AuditLogs from './pages/AuditLogs'
 import Cases from './pages/Cases'
 import Plans from './pages/Plans'
 import Catalog from './pages/Catalog'
+import Settings from './pages/Settings'
 import { AuthProvider, useAdminAuth } from './lib/auth'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -42,6 +43,7 @@ export default function App() {
           <Route path="cases" element={<Cases />} />
           <Route path="plans" element={<Plans />} />
           <Route path="catalog" element={<Catalog />} />
+          <Route path="settings" element={<Settings />} />
           <Route path="audit-logs" element={<AuditLogs />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -9,7 +9,7 @@ import secrets
 import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends
@@ -101,6 +101,38 @@ OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
 OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("OTP_RESEND_COOLDOWN_SECONDS", "60"))
 SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "console").strip().lower()
 _MOCK_OTP_ALLOWED = not _PRODUCTION  # fixed 123456 is development-only, never in production
+
+
+# ============================================================
+# ADMIN-CONFIGURABLE OPERATIONAL SETTINGS (Phase 40)
+# DB values override these defaults (which honor env vars where applicable).
+# ============================================================
+_SETTING_DEFAULTS = {
+    "signup_credits": 5,
+    "default_page_size": "A4",
+    "otp_ttl_seconds": OTP_TTL_SECONDS,
+    "otp_resend_cooldown_seconds": OTP_RESEND_COOLDOWN_SECONDS,
+    "otp_max_attempts": OTP_MAX_ATTEMPTS,
+}
+_SETTING_DESCRIPTIONS = {
+    "signup_credits": "Free credits granted to each new account",
+    "default_page_size": "Default paper size for generated documents (A4 or Legal)",
+    "otp_ttl_seconds": "OTP validity in seconds",
+    "otp_resend_cooldown_seconds": "Minimum seconds between OTP resends",
+    "otp_max_attempts": "Max incorrect OTP attempts before a new OTP is required",
+}
+
+
+def _setting_type(key: str):
+    return int if isinstance(_SETTING_DEFAULTS[key], int) else str
+
+
+async def _get_setting(key: str):
+    """Resolve an operational setting: DB value if present, else the default."""
+    doc = await db.settings.find_one({"key": key}, {"_id": 0, "value": 1})
+    if doc is not None and "value" in doc:
+        return doc["value"]
+    return _SETTING_DEFAULTS[key]
 
 
 # ============================================================
@@ -278,10 +310,11 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
     if picture is not None:
         user["picture"] = picture
     await db.users.insert_one(user.copy())
+    signup_credits = await _get_setting("signup_credits")
     await db.wallets.insert_one({
         "user_id": user_id,
-        "balance": 5,
-        "free_credits_granted": 5,
+        "balance": signup_credits,
+        "free_credits_granted": signup_credits,
         "total_used": 0,
         "updated_at": now().isoformat(),
     })
@@ -352,11 +385,12 @@ async def send_otp(req: SendOtpReq):
 
     existing = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
     if existing and existing.get("last_sent_at"):
+        cooldown = await _get_setting("otp_resend_cooldown_seconds")
         elapsed = (now() - datetime.fromisoformat(existing["last_sent_at"])).total_seconds()
-        if elapsed < OTP_RESEND_COOLDOWN_SECONDS:
+        if elapsed < cooldown:
             raise HTTPException(
                 429,
-                f"Please wait {int(OTP_RESEND_COOLDOWN_SECONDS - elapsed)}s before requesting another OTP.",
+                f"Please wait {int(cooldown - elapsed)}s before requesting another OTP.",
             )
 
     # Real random OTP in production via the configured SMS provider.
@@ -376,14 +410,15 @@ async def send_otp(req: SendOtpReq):
         except NotImplementedError as e:
             raise HTTPException(501, str(e))
 
+    ttl_seconds = await _get_setting("otp_ttl_seconds")
     await db.otps.update_one(
         {"mobile": mobile},
         {"$set": {
             "mobile": mobile,
             "otp": otp,
-            "expires_at": (now() + timedelta(seconds=OTP_TTL_SECONDS)).isoformat(),
+            "expires_at": (now() + timedelta(seconds=ttl_seconds)).isoformat(),
             # BSON date for the Mongo TTL index (TTL indexes ignore ISO strings)
-            "ttl_at": now() + timedelta(seconds=OTP_TTL_SECONDS + 60),
+            "ttl_at": now() + timedelta(seconds=ttl_seconds + 60),
             "attempts": 0,
             "last_sent_at": now().isoformat(),
         }},
@@ -410,7 +445,8 @@ async def verify_otp(req: VerifyOtpReq):
     if datetime.fromisoformat(doc["expires_at"]) < now():
         await db.otps.delete_one({"mobile": mobile})
         raise HTTPException(400, "OTP expired. Please request a new OTP.")
-    if doc.get("attempts", 0) >= OTP_MAX_ATTEMPTS:
+    max_attempts = await _get_setting("otp_max_attempts")
+    if doc.get("attempts", 0) >= max_attempts:
         await db.otps.delete_one({"mobile": mobile})
         raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
     if doc.get("otp") != otp:
@@ -1267,7 +1303,8 @@ def _validate_page_size(page_size: Optional[str]) -> None:
 @api.post("/applications/preview")
 async def preview_application(req: GenerateReq, user=Depends(get_user)):
     validate_values_size(req.values)
-    _validate_page_size(req.page_size)
+    page_size = req.page_size or await _get_setting("default_page_size")
+    _validate_page_size(page_size)
     t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
@@ -1284,7 +1321,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 @api.post("/applications/download")
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
-    _validate_page_size(req.page_size)
+    page_size = req.page_size or await _get_setting("default_page_size")
+    _validate_page_size(page_size)
     if not rate_limit(f"download:{user['id']}", 30, 60):
         raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)
@@ -1315,7 +1353,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         rendered = render_template(tpl, ctx)
         blocks = build_blocks(rendered, t["name_en"], t["name_gu"])
 
-        doc_settings = {"page_size": req.page_size} if req.page_size else None
+        doc_settings = {"page_size": page_size}
         if req.format == "docx":
             b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -1628,6 +1666,9 @@ class CatalogItemReq(BaseModel):
 
 class CatalogStatusReq(BaseModel):
     active: bool = Field(..., description="True to activate, False to deactivate.")
+
+class SettingsUpdateReq(BaseModel):
+    value: Union[int, str] = Field(..., description="New value for the setting")
 
 
 # ============================================================
@@ -2165,6 +2206,63 @@ async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusRe
                     metadata={"kind": kind, "active": req.active, "en": existing.get("en")})
     updated = await db[coll].find_one({"id": item_id}, {"_id": 0})
     return {"success": True, "item": {**updated, "active": updated.get("active") is not False}}
+
+def _validate_setting_value(key: str, value) -> None:
+    """Validate a setting value against its schema. Raises HTTPException(422) on invalid."""
+    expected = _setting_type(key)
+    if expected is int:
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise HTTPException(422, f"Setting '{key}' requires an integer value")
+        ranges = {
+            "signup_credits": (0, 1000),
+            "otp_ttl_seconds": (60, 86400),
+            "otp_resend_cooldown_seconds": (10, 3600),
+            "otp_max_attempts": (1, 10),
+        }
+        lo, hi = ranges.get(key, (0, 10 ** 9))
+        if not (lo <= value <= hi):
+            raise HTTPException(422, f"Setting '{key}' must be between {lo} and {hi}")
+    else:
+        if not isinstance(value, str):
+            raise HTTPException(422, f"Setting '{key}' requires a string value")
+        if key == "default_page_size" and value.upper() not in ("A4", "LEGAL"):
+            raise HTTPException(422, "default_page_size must be 'A4' or 'Legal'")
+
+
+@admin_api.get("/settings")
+async def admin_list_settings(admin=Depends(get_admin)):
+    """List all operational settings with current values, defaults and types."""
+    items = []
+    for key in _SETTING_DEFAULTS:
+        items.append({
+            "key": key,
+            "value": await _get_setting(key),
+            "default": _SETTING_DEFAULTS[key],
+            "description": _SETTING_DESCRIPTIONS[key],
+            "type": "int" if _setting_type(key) is int else "str",
+        })
+    return items
+
+
+@admin_api.put("/settings/{key}")
+async def admin_update_setting(key: str, req: SettingsUpdateReq,
+                               admin=Depends(require_super_admin)):
+    """Update an operational setting (super admin only). Applied immediately."""
+    if key not in _SETTING_DEFAULTS:
+        raise HTTPException(404, "Unknown setting")
+    value = req.value
+    if key == "default_page_size":
+        value = str(value).upper()
+    _validate_setting_value(key, value)
+    await db.settings.update_one(
+        {"key": key},
+        {"$set": {"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()}},
+        upsert=True,
+    )
+    await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
+    return {"success": True, "key": key, "value": value,
+            "default": _SETTING_DEFAULTS[key], "description": _SETTING_DESCRIPTIONS[key],
+            "type": "int" if _setting_type(key) is int else "str"}
 
 
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
@@ -2821,7 +2919,7 @@ async def create_indexes():
     await db.referrals.create_index("referred_user_id", unique=True)
     # OTPs (auto-cleaned by verify flow / TTL — index on the BSON-date field)
     await db.otps.create_index("mobile", unique=True)
-    await db.otps.create_index("ttl_at", expireAfterSeconds=OTP_TTL_SECONDS + 60)
+    await db.otps.create_index("ttl_at", expireAfterSeconds=(await _get_setting("otp_ttl_seconds")) + 60)
     # Admin users
     await db.admin_users.create_index("id", unique=True)
     await db.admin_users.create_index("email", unique=True)
