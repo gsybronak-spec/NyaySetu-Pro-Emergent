@@ -18,7 +18,7 @@ interface AuthCtx {
   loading: boolean;
   signInOtp: (mobile: string) => Promise<void>;
   verifyOtp: (mobile: string, otp: string, referralCode?: string) => Promise<{ is_new: boolean }>;
-  completeGoogleSession: (sessionId: string, referralCode?: string) => Promise<{ is_new: boolean }>;
+  completeGoogleCode: (code: string, redirectUri: string, referralCode?: string) => Promise<{ is_new: boolean }>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: User | null) => void;
@@ -78,10 +78,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const completeGoogleSession = async (sessionId: string, referralCode?: string) => {
+  const completeGoogleCode = async (code: string, redirectUri: string, referralCode?: string) => {
     setLoading(true);
     try {
-      const res = await api.googleSession(sessionId, referralCode);
+      const res = await api.googleExchange(code, redirectUri, referralCode);
       await setToken(res.token);
       setUser(res.user);
       return { is_new: res.is_new };
@@ -96,7 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, completeGoogleSession, refresh, signOut, setUser }}>
+    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, completeGoogleCode, refresh, signOut, setUser }}>
       {children}
     </Ctx.Provider>
   );

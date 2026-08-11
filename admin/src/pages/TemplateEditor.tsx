@@ -71,6 +71,7 @@ export default function TemplateEditor() {
       heading_size: 13,
       line_spacing: 18,
       paragraph_spacing: 6,
+      page_size: 'A4',
     }
   });
   
@@ -105,6 +106,7 @@ export default function TemplateEditor() {
               heading_size: 13,
               line_spacing: 18,
               paragraph_spacing: 6,
+              page_size: 'A4',
             }
           });
         })
@@ -761,9 +763,20 @@ export default function TemplateEditor() {
         <div className="editor-section">
           <h3>Page & Typography Settings</h3>
           <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '20px' }}>
-            Configure default page margins, typography, and line spacing for this template's generated PDF and DOCX documents.
+            Configure the paper size, page margins, typography, and line spacing for this template's generated PDF and DOCX documents. Paper size is applied automatically — the lawyer is not asked to choose it.
           </p>
           <div className="grid-2">
+            <div className="form-group">
+              <label>Paper Size</label>
+              <select
+                value={template.settings?.page_size || 'A4'}
+                onChange={e => handleSettingsChange('page_size', e.target.value)}
+                disabled={isLocked}
+              >
+                <option value="A4">A4 (210 × 297 mm) — standard applications</option>
+                <option value="Legal">Legal (216 × 356 mm) — affidavits / સોગંદનામું</option>
+              </select>
+            </div>
             <div className="form-group">
               <label>Top Margin (cm)</label>
               <input 

@@ -158,6 +158,7 @@ export default function Templates() {
           <label>Status:</label>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="">All Statuses</option>
+            <option value="seed">Seed (Not in DB)</option>
             <option value="published">Published</option>
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>

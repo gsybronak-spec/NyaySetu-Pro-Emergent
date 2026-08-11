@@ -16,7 +16,7 @@ export default function Login() {
   const [showReferral, setShowReferral] = useState(false);
   const [err, setErr] = useState<string>();
   const { signInOtp, loading } = useAuth();
-  const { startGoogleLogin, googleBusy } = useGoogleAuth();
+  const { startGoogleLogin, googleBusy, googleError, setGoogleError } = useGoogleAuth();
 
   const submit = async () => {
     setErr(undefined);
@@ -90,13 +90,22 @@ export default function Login() {
 
             <Pressable
               testID="login-google-button"
-              onPress={() => startGoogleLogin(referral.trim() || undefined)}
+              onPress={async () => {
+                setGoogleError("");
+                await startGoogleLogin(referral.trim() || undefined);
+              }}
               disabled={googleBusy}
               style={[styles.googleBtn, googleBusy && { opacity: 0.6 }]}
             >
               <Ionicons name="logo-google" size={20} color="#0B1B3D" />
               <Text style={styles.googleTxt}>{googleBusy ? "Connecting..." : "Continue with Google"}</Text>
             </Pressable>
+
+            {!!googleError && (
+              <Text testID="login-google-error" style={styles.googleError}>
+                {googleError}
+              </Text>
+            )}
 
             <Text style={styles.hint}>By continuing, you agree to our Terms and Privacy Policy.</Text>
           </View>
@@ -136,5 +145,12 @@ const styles = StyleSheet.create({
     minHeight: 52, borderRadius: 12, backgroundColor: "#FFFFFF",
   },
   googleTxt: { color: "#0B1B3D", fontSize: 16, fontWeight: "700" },
+  googleError: {
+    color: "#ff6b6b",
+    fontSize: 12.5,
+    textAlign: "center",
+    marginTop: Spacing.sm,
+    lineHeight: 18,
+  },
   hint: { color: "#A6B1C2", fontSize: 11, textAlign: "center", marginTop: Spacing.lg },
 });

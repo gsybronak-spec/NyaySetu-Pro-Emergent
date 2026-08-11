@@ -1566,6 +1566,20 @@ Advocate for the Applicant
     },
 ]
 
+# Template-level page-size defaults (admin-controlled via template settings).
+# Affidavit / સોગંદનામું-type documents are drafted on Legal-size paper; all
+# other templates default to A4. Admins can change any template's page size in
+# the Template Editor (Page & Typography Settings).
+_TEMPLATE_PAGE_SIZES = {
+    "affidavit": "Legal",
+}
+for _seed_t in TEMPLATES:
+    _seed_t.setdefault("settings", {})
+    _seed_t["settings"].setdefault(
+        "page_size",
+        _TEMPLATE_PAGE_SIZES.get(_seed_t.get("id"), "A4"),
+    )
+
 PLANS = [
     {"id": "single", "name": "Pay Per Template", "price": 9, "credits": 1, "popular": False, "per_template": 9.0},
     {"id": "plan_299", "name": "Starter Pack", "price": 299, "credits": 51, "popular": False, "per_template": 5.86},

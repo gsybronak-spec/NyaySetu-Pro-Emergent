@@ -207,17 +207,37 @@ async def test_default_page_size_setting_flows_into_pdf(client, clean_db):
     r = await client.put("/api/admin/settings/default_page_size", json={"value": "Legal"}, headers=H(token))
     assert r.status_code == 200
 
+    # Template WITHOUT a template-level page_size -> global default applies
+    await db.templates.insert_one({
+        "id": "no_ps_tpl", "name_en": "No PS", "name_gu": "નો પીએસ",
+        "category": "General", "fields": [], "content_en": "x {{today}}", "content_gu": "x {{today}}",
+        "settings": {"body_size": 12},
+        "status": "published", "version": 1, "locked": True,
+        "created_at": now().isoformat(), "updated_at": now().isoformat(),
+    })
+
     lawyer = await create_lawyer("9876500001")
     lt = make_token(lawyer["id"])
     # Download WITHOUT page_size -> should use the Legal default
     r = await client.post("/api/applications/download", headers=H(lt), json={
-        "template_id": "adjournment", "language": "gu",
-        "values": {"reason": "test", "next_date": "01-01-2027"},
+        "template_id": "no_ps_tpl", "language": "gu",
+        "values": {},
         "format": "pdf", "filename": "default_legal.pdf",
     })
     assert r.status_code == 200, r.text
     w, h = pdf_mediabox(base64.b64decode(r.json()["base64"]))
     assert abs(w - 612) < 2 and abs(h - 1008) < 2, f"expected Legal, got {w}x{h}"
+
+    # Template WITH an explicit template-level page_size (adjournment seed -> A4)
+    # overrides the global default — template configuration controls the document.
+    r = await client.post("/api/applications/download", headers=H(lt), json={
+        "template_id": "adjournment", "language": "gu",
+        "values": {"reason": "test", "next_date": "01-01-2027"},
+        "format": "pdf", "filename": "tpl_a4.pdf",
+    })
+    assert r.status_code == 200, r.text
+    w, h = pdf_mediabox(base64.b64decode(r.json()["base64"]))
+    assert abs(w - 595) < 3 and abs(h - 842) < 3, f"expected template A4, got {w}x{h}"
 
     # Back to A4 default
     r = await client.put("/api/admin/settings/default_page_size", json={"value": "A4"}, headers=H(token))

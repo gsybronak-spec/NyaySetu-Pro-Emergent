@@ -112,13 +112,27 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
 RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()
 RAZORPAY_API_BASE = os.environ.get("RAZORPAY_API_BASE", "https://api.razorpay.com").strip()
 
-# Google OAuth session exchange — the upstream session-data endpoint is
-# configurable so production can point at a real configured OAuth provider
-# instead of silently depending on a hardcoded third-party demo endpoint.
-GOOGLE_SESSION_URL = os.environ.get(
-    "GOOGLE_SESSION_URL",
-    "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+# Google OAuth — native Authorization Code flow (replaces the legacy Emergent
+# session exchange). The frontend opens Google's consent URL directly and sends
+# the returned `code` to POST /api/auth/google, which exchanges it server-side.
+# Without client credentials the endpoint fails safely (503); no default or
+# invented credentials are ever used.
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+GOOGLE_OAUTH_CLIENT_SECRET = os.environ.get("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+GOOGLE_OAUTH_TOKEN_URL = os.environ.get(
+    "GOOGLE_OAUTH_TOKEN_URL", "https://oauth2.googleapis.com/token"
 ).strip()
+GOOGLE_OAUTH_USERINFO_URL = os.environ.get(
+    "GOOGLE_OAUTH_USERINFO_URL", "https://www.googleapis.com/oauth2/v3/userinfo"
+).strip()
+
+# Legacy Emergent session exchange — kept only for backward compatibility with
+# older clients. Production fails safe: it must be explicitly enabled via
+# GOOGLE_SESSION_URL and is never silently pointed at a third-party demo endpoint.
+_GOOGLE_SESSION_URL_ENV = os.environ.get("GOOGLE_SESSION_URL", "").strip()
+GOOGLE_SESSION_URL = _GOOGLE_SESSION_URL_ENV or (
+    "" if _PRODUCTION else "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+)
 
 
 # ============================================================
@@ -167,6 +181,11 @@ class VerifyOtpReq(BaseModel):
 
 class GoogleSessionReq(BaseModel):
     session_id: str = Field(..., max_length=500)
+    referral_code: Optional[str] = Field(None, max_length=20)
+
+class GoogleCodeReq(BaseModel):
+    code: str = Field(..., max_length=4000)
+    redirect_uri: str = Field(..., max_length=2000)
     referral_code: Optional[str] = Field(None, max_length=20)
 
 class ProfileUpdate(BaseModel):
@@ -498,12 +517,13 @@ async def verify_otp(req: VerifyOtpReq):
 
 @api.post("/auth/google-session")
 async def google_session(req: GoogleSessionReq):
-    """Exchange an OAuth session_id for our JWT. Upsert user by email.
+    """LEGACY: exchange an OAuth session_id for our JWT (Emergent-era clients).
 
-    The upstream session-data endpoint is configurable via GOOGLE_SESSION_URL
-    (defaults to the legacy Emergent demo endpoint for backward compatibility).
-    Production should set GOOGLE_SESSION_URL to the real configured OAuth
-    provider endpoint."""
+    Kept for backward compatibility. Production fails safe — GOOGLE_SESSION_URL
+    must be explicitly configured; it is never silently pointed at a third-party
+    demo endpoint. New clients use the native POST /api/auth/google flow."""
+    if not GOOGLE_SESSION_URL:
+        raise HTTPException(503, "Google OAuth is not configured.")
     async with httpx.AsyncClient(timeout=15) as http:
         try:
             r = await http.get(GOOGLE_SESSION_URL, headers={"X-Session-ID": req.session_id})
@@ -517,6 +537,108 @@ async def google_session(req: GoogleSessionReq):
     picture = data.get("picture")
     if not email:
         raise HTTPException(401, "Email not provided by Google")
+
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    is_new = False
+    if not user:
+        is_new = True
+        user = await create_new_user(email=email, name=name, picture=picture, provider="google")
+        await apply_referral(req.referral_code, user)
+    elif user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
+    else:
+        # Keep profile fresh
+        updates = {}
+        if name and not user.get("name"):
+            updates["name"] = name
+        if picture:
+            updates["picture"] = picture
+        if updates:
+            await db.users.update_one({"id": user["id"]}, {"$set": updates})
+            user.update(updates)
+
+    user_clean = {k: v for k, v in user.items() if k != "_id"}
+    token = make_token(user["id"])
+    return {"token": token, "user": user_clean, "is_new": is_new}
+
+
+async def _google_token_exchange(code: str, redirect_uri: str) -> tuple:
+    """POST the authorization code to Google's token endpoint (network stub point)."""
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.post(
+            GOOGLE_OAUTH_TOKEN_URL,
+            data={
+                "code": code,
+                "client_id": GOOGLE_OAUTH_CLIENT_ID,
+                "client_secret": GOOGLE_OAUTH_CLIENT_SECRET,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+        )
+    try:
+        body = r.json()
+    except Exception:
+        body = {}
+    return r.status_code, body
+
+
+async def _google_userinfo(access_token: str) -> tuple:
+    """Fetch verified identity from Google's userinfo endpoint (network stub point)."""
+    async with httpx.AsyncClient(timeout=15) as http:
+        u = await http.get(
+            GOOGLE_OAUTH_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    try:
+        body = u.json()
+    except Exception:
+        body = {}
+    return u.status_code, body
+
+
+@api.post("/auth/google")
+async def google_code_exchange(req: GoogleCodeReq):
+    """Native Google OAuth Authorization Code exchange (replaces Emergent flow).
+
+    The frontend opens Google's consent URL directly and sends the returned
+    authorization `code`. We exchange it for tokens server-side (the client
+    secret never leaves this backend), fetch verified identity from Google's
+    userinfo endpoint, then upsert the user by verified email — same JWT/session
+    contract as the rest of auth. Fails safe (503) when the OAuth client is not
+    configured; no default or invented credentials are ever used.
+    """
+    if not GOOGLE_OAUTH_CLIENT_ID or not GOOGLE_OAUTH_CLIENT_SECRET:
+        raise HTTPException(
+            503,
+            "Google OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID and "
+            "GOOGLE_OAUTH_CLIENT_SECRET in the backend environment to enable it.",
+        )
+    try:
+        status, tok = await _google_token_exchange(req.code, req.redirect_uri)
+    except Exception:
+        raise HTTPException(503, "Google OAuth service unavailable")
+    if status != 200:
+        raise HTTPException(401, "Invalid or expired Google authorization code")
+    access_token = tok.get("access_token")
+    if not access_token:
+        raise HTTPException(401, "Google did not return an access token")
+
+    try:
+        u_status, info = await _google_userinfo(access_token)
+    except Exception:
+        raise HTTPException(503, "Google OAuth service unavailable")
+    if u_status != 200:
+        raise HTTPException(401, "Unable to verify Google identity")
+    email = (info.get("email") or "").strip().lower()
+    if not email or not info.get("email_verified"):
+        raise HTTPException(401, "Email not verified by Google")
+    name = info.get("name")
+    picture = info.get("picture")
+    email = (info.get("email") or "").strip().lower()
+    if not email or not info.get("email_verified"):
+        raise HTTPException(401, "Email not verified by Google")
+    name = info.get("name")
+    picture = info.get("picture")
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     is_new = False
@@ -1147,7 +1269,9 @@ def public_template(t: dict) -> dict:
         "category": t["category"],
         "fields": clean_fields,
     }
-    for opt_key in ["sub_category", "description", "tags", "case_types", "courts", "jurisdiction", "settings"]:
+    # settings (margins/fonts/page_size) stay internal to document generation —
+    # never exposed to the lawyer client; the public shape must remain unchanged.
+    for opt_key in ["sub_category", "description", "tags", "case_types", "courts", "jurisdiction"]:
         if opt_key in t and t[opt_key]:
             res[opt_key] = t[opt_key]
     return res
@@ -1329,14 +1453,23 @@ def _validate_page_size(page_size: Optional[str]) -> None:
         raise HTTPException(422, "page_size must be 'A4' or 'Legal'")
 
 
+def _validate_template_settings(settings: Optional[dict]) -> None:
+    """Validate admin-supplied template settings (page_size must be A4/Legal)."""
+    if not settings:
+        return
+    _validate_page_size(settings.get("page_size"))
+
 @api.post("/applications/preview")
 async def preview_application(req: GenerateReq, user=Depends(get_user)):
     validate_values_size(req.values)
-    page_size = req.page_size or await _get_setting("default_page_size")
-    _validate_page_size(page_size)
+    _validate_page_size(req.page_size)
     t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
+    tpl_ps = (t.get("settings") or {}).get("page_size")
+    _validate_page_size(tpl_ps)
+    page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
+    _validate_page_size(page_size)
     case = None
     if req.case_id:
         case = await db.cases.find_one({"id": req.case_id, "user_id": user["id"]}, {"_id": 0})
@@ -1350,13 +1483,16 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 @api.post("/applications/download")
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
-    page_size = req.page_size or await _get_setting("default_page_size")
-    _validate_page_size(page_size)
+    _validate_page_size(req.page_size)
     if not rate_limit(f"download:{user['id']}", 30, 60):
         raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)
     if not t:
         raise HTTPException(404, "Template not found")
+    tpl_ps = (t.get("settings") or {}).get("page_size")
+    _validate_page_size(tpl_ps)
+    page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
+    _validate_page_size(page_size)
 
     # SERVER-CONTROLLED: Always consume exactly 1 credit for final downloads.
     # The consume_credit client flag is IGNORED for security.
@@ -2600,27 +2736,45 @@ async def admin_list_templates(
     q: Optional[str] = None,
     admin=Depends(get_admin),
 ):
-    """List all templates (all statuses) for admin management."""
-    query = {}
+    """List all templates (all statuses) for admin management.
+
+    Merges DB templates with seed templates so EVERY template visible in the
+    Lawyer App is manageable here: DB templates override seeds by ID (admin
+    edits are never overwritten); seeds not yet in the DB appear as
+    status="seed". The merge is idempotent — no writes, no duplicates."""
+    db_templates = await db.templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    db_by_id = {t["id"]: t for t in db_templates}
+    seed_ids = {t["id"] for t in TEMPLATES}
+
+    merged = []
+    for seed_t in TEMPLATES:
+        if seed_t["id"] in db_by_id:
+            merged.append(db_by_id[seed_t["id"]])
+        else:
+            merged.append({
+                **seed_t,
+                "status": "seed",
+                "version": 0,
+                "source": "seed",
+                "locked": False,
+            })
+    for db_t in db_templates:
+        if db_t["id"] not in seed_ids:
+            merged.append(db_t)
+
     if status:
-        query["status"] = status
+        merged = [t for t in merged if t.get("status") == status]
     if category:
-        query["category"] = category
-    templates = await db.templates.find(query, {"_id": 0}).sort("updated_at", -1).to_list(500)
-    if not templates and not status:
-        templates = [
-            {**t, "status": "seed", "version": 0, "source": "seed", "locked": False}
-            for t in TEMPLATES
-        ]
+        merged = [t for t in merged if t.get("category", "").lower() == category.lower()]
     if q:
         ql = q.lower().strip()
-        templates = [
-            t for t in templates
+        merged = [
+            t for t in merged
             if ql in t.get("name_en", "").lower()
             or ql in t.get("name_gu", "").lower()
             or ql in t.get("id", "").lower()
         ]
-    return templates
+    return merged
 
 
 @admin_api.get("/templates/{template_id}")
@@ -2630,6 +2784,8 @@ async def admin_get_template(template_id: str, admin=Depends(get_admin)):
     if not t:
         t = next((x for x in TEMPLATES if x["id"] == template_id), None)
         if t:
+            # Merge (never replace) the seed's own settings so admin-configured
+            # values like settings.page_size survive the fallback view.
             t = {
                 **t,
                 "status": "seed",
@@ -2647,6 +2803,8 @@ async def admin_get_template(template_id: str, admin=Depends(get_admin)):
                     "heading_size": 13,
                     "line_spacing": 18,
                     "paragraph_spacing": 6,
+                    "page_size": "A4",
+                    **((t.get("settings") or {})),
                 },
             }
     if not t:
@@ -2657,6 +2815,7 @@ async def admin_get_template(template_id: str, admin=Depends(get_admin)):
 @admin_api.post("/templates")
 async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admin)):
     """Create a new template as draft."""
+    _validate_template_settings(req.settings)
     template_id = req.id or re.sub(r"[^a-z0-9_]", "_", req.name_en.lower().strip().replace(" ", "_"))[:50]
     existing = await db.templates.find_one({"id": template_id})
     if existing:
@@ -2689,6 +2848,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
             "heading_size": 13,
             "line_spacing": 18,
             "paragraph_spacing": 6,
+            "page_size": "A4",
         },
         "status": "draft",
         "version": 1,
@@ -2710,6 +2870,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
 @admin_api.put("/templates/{template_id}")
 async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admin=Depends(get_admin)):
     """Update a draft template. Published/locked templates cannot be directly modified."""
+    _validate_template_settings(req.settings)
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
         seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
@@ -2893,6 +3054,13 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
     if t.get("status") == "draft" and not t.get("locked"):
         raise HTTPException(400, "Template is already a draft. Edit it directly.")
 
+    # Seed template being branched for the first time -> materialize the FULL
+    # seed document (name/content/fields/settings) in the DB first, otherwise
+    # the upsert below creates a partial draft missing all template data.
+    in_db = await db.templates.find_one({"id": template_id}, {"_id": 1})
+    if not in_db:
+        await db.templates.insert_one({**t, "created_at": ts, "updated_at": ts})
+
     new_version = (t.get("version") or 0) + 1
     # Save previous version to template_versions if not already archived
     if t.get("version", 0) > 0:
@@ -3038,6 +3206,19 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
                 ],
                 "content_en": t.get("content_en", ""),
                 "content_gu": t.get("content_gu", ""),
+                "settings": {
+                    "margin_top_cm": 2.5,
+                    "margin_bottom_cm": 2.5,
+                    "margin_left_cm": 2.5,
+                    "margin_right_cm": 2.5,
+                    "gujarati_font": "LohitGujarati",
+                    "english_font": "Times-Roman",
+                    "body_size": 12,
+                    "heading_size": 13,
+                    "line_spacing": 18,
+                    "paragraph_spacing": 6,
+                    **((t.get("settings") or {})),
+                },
                 "status": "published",
                 "version": 1,
                 "locked": True,

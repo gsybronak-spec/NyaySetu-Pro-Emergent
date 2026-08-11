@@ -75,6 +75,9 @@ export const api = {
     request("/auth/verify-otp", "POST", { mobile, otp, referral_code }),
   googleSession: (session_id: string, referral_code?: string) =>
     request("/auth/google-session", "POST", { session_id, referral_code }),
+  // Native Google OAuth: exchange the authorization code server-side.
+  googleExchange: (code: string, redirect_uri: string, referral_code?: string) =>
+    request("/auth/google", "POST", { code, redirect_uri, referral_code }),
   me: () => request("/profile/me"),
   updateProfile: (data: any) => request("/profile/update", "PUT", data),
   lookupClient: (mobile: string) => request(`/clients/lookup?mobile=${encodeURIComponent(mobile)}`),
