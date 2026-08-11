@@ -4,6 +4,9 @@ import os
 import re
 import uuid
 import time
+import json
+import hmac
+import hashlib
 import logging
 import secrets
 import threading
@@ -12,7 +15,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import httpx
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -101,6 +104,21 @@ OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
 OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("OTP_RESEND_COOLDOWN_SECONDS", "60"))
 SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "console").strip().lower()
 _MOCK_OTP_ALLOWED = not _PRODUCTION  # fixed 123456 is development-only, never in production
+
+# Razorpay — production payment. When keys are absent the payment API fails safely
+# (503 with an exact message); no default/invented credentials are ever used.
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "").strip()
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
+RAZORPAY_WEBHOOK_SECRET = os.environ.get("RAZORPAY_WEBHOOK_SECRET", "").strip()
+RAZORPAY_API_BASE = os.environ.get("RAZORPAY_API_BASE", "https://api.razorpay.com").strip()
+
+# Google OAuth session exchange — the upstream session-data endpoint is
+# configurable so production can point at a real configured OAuth provider
+# instead of silently depending on a hardcoded third-party demo endpoint.
+GOOGLE_SESSION_URL = os.environ.get(
+    "GOOGLE_SESSION_URL",
+    "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+).strip()
 
 
 # ============================================================
@@ -212,6 +230,15 @@ class DownloadReq(BaseModel):
 
 class PurchaseReq(BaseModel):
     plan_id: str = Field(..., max_length=50)
+
+class RazorpayCreateOrderReq(BaseModel):
+    plan_id: str = Field(..., max_length=50)
+
+class RazorpayVerifyReq(BaseModel):
+    plan_id: str = Field(..., max_length=50)
+    order_id: str = Field(..., max_length=100)
+    payment_id: str = Field(..., max_length=100)
+    signature: str = Field(..., max_length=256)
 
 class DraftSave(BaseModel):
     template_id: str = Field(..., max_length=50)
@@ -469,15 +496,17 @@ async def verify_otp(req: VerifyOtpReq):
     return {"token": token, "user": user_clean, "is_new": is_new}
 
 
-EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
-
-
 @api.post("/auth/google-session")
 async def google_session(req: GoogleSessionReq):
-    """Exchange an Emergent OAuth session_id for our JWT. Upsert user by email."""
+    """Exchange an OAuth session_id for our JWT. Upsert user by email.
+
+    The upstream session-data endpoint is configurable via GOOGLE_SESSION_URL
+    (defaults to the legacy Emergent demo endpoint for backward compatibility).
+    Production should set GOOGLE_SESSION_URL to the real configured OAuth
+    provider endpoint."""
     async with httpx.AsyncClient(timeout=15) as http:
         try:
-            r = await http.get(EMERGENT_SESSION_URL, headers={"X-Session-ID": req.session_id})
+            r = await http.get(GOOGLE_SESSION_URL, headers={"X-Session-ID": req.session_id})
         except Exception:
             raise HTTPException(401, "Auth service unavailable")
     if r.status_code != 200:
@@ -1444,6 +1473,234 @@ async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
     })
     w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
     return {"success": True, "transaction_id": txn_id, "balance": w.get("balance", 0)}
+
+
+# ============================================================
+# RAZORPAY PAYMENTS (production path)
+# ============================================================
+
+
+def _razorpay_enabled() -> bool:
+    """True only when both Razorpay keys are configured — never a default pair."""
+    return bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+
+
+async def _razorpay_create_order(amount_paise: int, receipt: str) -> dict:
+    """Create a Razorpay order. Network call isolated here so tests can stub it."""
+    auth = (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
+    async with httpx.AsyncClient(timeout=15) as http:
+        r = await http.post(
+            f"{RAZORPAY_API_BASE}/v1/orders",
+            auth=auth,
+            json={"amount": amount_paise, "currency": "INR", "receipt": receipt},
+        )
+    if r.status_code != 200:
+        raise HTTPException(502, "Payment provider error. Please try again.")
+    data = r.json()
+    if not data.get("id"):
+        raise HTTPException(502, "Payment provider returned an invalid order.")
+    return data
+
+
+def _razorpay_verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
+    """HMAC-SHA256 over '{order_id}|{payment_id}' using the Razorpay key secret."""
+    payload = f"{order_id}|{payment_id}".encode()
+    expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+
+@api.post("/payments/razorpay/create-order")
+async def razorpay_create_order(req: RazorpayCreateOrderReq, user=Depends(get_user)):
+    """Create a Razorpay order for a plan. Fails safely (503) when keys are missing."""
+    if not _razorpay_enabled():
+        raise HTTPException(
+            503,
+            "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
+            "in the environment.",
+        )
+    plan = await _get_plan(req.plan_id)
+    if not plan or plan.get("active") is False:
+        raise HTTPException(404, "Plan not found or inactive")
+    amount_paise = int(round(plan["price"] * 100))
+    receipt = f"nsp_{uuid.uuid4().hex[:16]}"
+    rz = await _razorpay_create_order(amount_paise, receipt)
+    await db.payment_orders.insert_one({
+        "id": rz["id"],
+        "receipt": receipt,
+        "user_id": user["id"],
+        "plan_id": plan["id"],
+        "plan_name": plan["name"],
+        "amount_paise": amount_paise,
+        "currency": "INR",
+        "status": "created",
+        "created_at": now().isoformat(),
+    })
+    return {
+        "order_id": rz["id"],
+        "key_id": RAZORPAY_KEY_ID,
+        "amount_paise": amount_paise,
+        "currency": "INR",
+        "plan": {"id": plan["id"], "name": plan["name"], "credits": plan["credits"]},
+    }
+
+
+@api.post("/payments/razorpay/verify")
+async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
+    """Server-side verification of the client-side Razorpay checkout.
+
+    Credits are granted ONLY after the payment signature verifies. Idempotent:
+    a payment_id that already granted credits returns the existing transaction
+    without granting again (duplicate / replay protection).
+    """
+    if not _razorpay_enabled():
+        raise HTTPException(
+            503,
+            "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
+            "in the environment.",
+        )
+    order = await db.payment_orders.find_one({"id": req.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.get("user_id") != user["id"]:
+        raise HTTPException(403, "Order belongs to another user")
+    if not _razorpay_verify_signature(req.order_id, req.payment_id, req.signature):
+        raise HTTPException(400, "Payment signature verification failed")
+
+    # Idempotency: a transaction already recorded for this payment_id means
+    # credits were already granted — never grant twice.
+    existing = await db.transactions.find_one(
+        {"razorpay_payment_id": req.payment_id}, {"_id": 0}
+    )
+    if existing:
+        w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+        return {
+            "success": True,
+            "already_processed": True,
+            "transaction_id": existing["id"],
+            "balance": (w or {}).get("balance", 0),
+        }
+
+    plan = await _get_plan(req.plan_id)
+    if not plan or plan.get("active") is False:
+        raise HTTPException(404, "Plan not found or inactive")
+
+    txn_id = str(uuid.uuid4())
+    # Atomic credit grant. The unique sparse index on razorpay_payment_id makes
+    # concurrent replays fail the insert instead of double-granting.
+    await db.wallets.update_one(
+        {"user_id": user["id"]},
+        {"$inc": {"balance": plan["credits"]}, "$set": {"updated_at": now().isoformat()}},
+        upsert=True,
+    )
+    try:
+        await db.transactions.insert_one({
+            "id": txn_id,
+            "user_id": user["id"],
+            "plan_id": plan["id"],
+            "plan_name": plan["name"],
+            "amount": plan["price"],
+            "credits": plan["credits"],
+            "status": "success",
+            "provider": "razorpay",
+            "razorpay_order_id": req.order_id,
+            "razorpay_payment_id": req.payment_id,
+            "created_at": now().isoformat(),
+        })
+    except Exception:
+        # Insert failed (e.g. duplicate razorpay_payment_id race) — roll back
+        # the credit grant so the user is never credited twice for one payment.
+        await db.wallets.update_one(
+            {"user_id": user["id"]},
+            {"$inc": {"balance": -plan["credits"]}},
+        )
+        raise HTTPException(409, "Payment already processed")
+    await db.payment_orders.update_one({"id": req.order_id}, {"$set": {"status": "paid"}})
+    w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+    return {"success": True, "already_processed": False, "transaction_id": txn_id,
+            "balance": w.get("balance", 0)}
+
+
+@api.post("/payments/razorpay/webhook")
+async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(None)):
+    """Razorpay webhook — verifies X-Razorpay-Signature over the RAW request body.
+
+    Handles payment.captured with an idempotent credit grant. All events return
+    200 so Razorpay does not retry forever; unknown events are no-ops.
+    """
+    if not RAZORPAY_WEBHOOK_SECRET:
+        raise HTTPException(
+            503, "Webhook secret is not configured. Set RAZORPAY_WEBHOOK_SECRET."
+        )
+    if not x_razorpay_signature:
+        raise HTTPException(400, "Missing signature header")
+    raw = await request.body()
+    expected = hmac.new(
+        RAZORPAY_WEBHOOK_SECRET.encode(), raw, hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(expected, x_razorpay_signature):
+        raise HTTPException(400, "Invalid webhook signature")
+    try:
+        data = json.loads(raw)
+    except Exception:
+        raise HTTPException(400, "Invalid webhook payload")
+
+    event = data.get("event", "")
+    if event != "payment.captured":
+        return {"success": True, "handled": False}
+
+    entity = (data.get("payload") or {}).get("payment") or {}
+    payment_id = entity.get("id")
+    order_id = entity.get("order_id")
+    if not payment_id or not order_id:
+        return {"success": True, "handled": False}
+
+    # Idempotent grant — never credit the same payment twice.
+    existing = await db.transactions.find_one(
+        {"razorpay_payment_id": payment_id}, {"_id": 0}
+    )
+    if existing:
+        return {"success": True, "handled": True, "already_processed": True}
+
+    order = await db.payment_orders.find_one({"id": order_id}, {"_id": 0})
+    if not order:
+        # Unknown order (e.g. created before this feature). Accept the event
+        # silently and log — the client verify call is the authoritative path.
+        logger.warning(f"[RAZORPAY] captured payment {payment_id} for unknown order {order_id}")
+        return {"success": True, "handled": False}
+
+    plan = await _get_plan(order.get("plan_id") or "")
+    if not plan:
+        logger.warning(f"[RAZORPAY] captured payment {payment_id} for missing plan")
+        return {"success": True, "handled": False}
+
+    txn_id = str(uuid.uuid4())
+    await db.wallets.update_one(
+        {"user_id": order["user_id"]},
+        {"$inc": {"balance": plan["credits"]}, "$set": {"updated_at": now().isoformat()}},
+        upsert=True,
+    )
+    try:
+        await db.transactions.insert_one({
+            "id": txn_id,
+            "user_id": order["user_id"],
+            "plan_id": plan["id"],
+            "plan_name": plan["name"],
+            "amount": plan["price"],
+            "credits": plan["credits"],
+            "status": "success",
+            "provider": "razorpay",
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "created_at": now().isoformat(),
+        })
+    except Exception:
+        await db.wallets.update_one(
+            {"user_id": order["user_id"]},
+            {"$inc": {"balance": -plan["credits"]}},
+        )
+        raise HTTPException(409, "Payment already processed")
+    await db.payment_orders.update_one({"id": order_id}, {"$set": {"status": "paid"}})
+    return {"success": True, "handled": True}
 
 
 @api.get("/transactions")
@@ -2914,6 +3171,10 @@ async def create_indexes():
     # Transactions
     await db.transactions.create_index("user_id")
     await db.transactions.create_index([("user_id", 1), ("created_at", -1)])
+    # Razorpay idempotency: one payment_id may grant credits at most once.
+    await db.transactions.create_index("razorpay_payment_id", unique=True, sparse=True)
+    await db.payment_orders.create_index("id", unique=True)
+    await db.payment_orders.create_index("user_id")
     # Referrals
     await db.referrals.create_index("referrer_id")
     await db.referrals.create_index("referred_user_id", unique=True)

@@ -111,6 +111,11 @@ export const api = {
   history: () => request("/applications/history"),
   wallet: () => request("/wallet"),
   purchase: (plan_id: string) => request("/purchase/mock", "POST", { plan_id }),
+  // Razorpay production payment path (enabled via EXPO_PUBLIC_RAZORPAY_ENABLED=1)
+  razorpayCreateOrder: (plan_id: string) =>
+    request("/payments/razorpay/create-order", "POST", { plan_id }),
+  razorpayVerify: (data: { plan_id: string; order_id: string; payment_id: string; signature: string }) =>
+    request("/payments/razorpay/verify", "POST", data),
   transactions: () => request("/transactions"),
   referral: () => request("/referral/me"),
   saveDraft: (data: any) => request("/drafts", "POST", data),
