@@ -1373,6 +1373,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         raise HTTPException(402, "Insufficient credits")
 
     # Generate document — if this fails, refund the credit
+    app_id = str(uuid.uuid4())
     try:
         case = None
         if req.case_id:
@@ -1395,13 +1396,25 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             {"user_id": user["id"]},
             {"$inc": {"balance": 1, "total_used": -1}, "$set": {"updated_at": now().isoformat()}},
         )
+        await db.transactions.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": user["id"],
+            "type": "refund",
+            "plan_name": t["name_en"],
+            "credits": 1,
+            "amount": 0,
+            "status": "refunded",
+            "reference": app_id,
+            "created_at": now().isoformat(),
+        })
         logger.error(f"Document generation failed, credit refunded: {e}")
         raise HTTPException(500, "Document generation failed. Your credit has been refunded.")
 
-    # Log usage
+    # Log usage + record the credit consumption as a transaction (Phase 24/25:
+    # transaction history must show actual activity with a type).
     filename = req.filename or f"{t['id']}_{now().strftime('%Y%m%d_%H%M%S')}.{req.format}"
     await db.applications.insert_one({
-        "id": str(uuid.uuid4()),
+        "id": app_id,
         "user_id": user["id"],
         "template_id": t["id"],
         "template_name": t["name_en"],
@@ -1409,6 +1422,17 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "language": req.language,
         "format": req.format,
         "filename": filename,
+        "created_at": now().isoformat(),
+    })
+    await db.transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "type": "document",
+        "plan_name": t["name_en"],
+        "credits": -1,
+        "amount": 0,
+        "status": "success",
+        "reference": app_id,
         "created_at": now().isoformat(),
     })
     if req.case_id:
