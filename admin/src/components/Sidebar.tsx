@@ -6,7 +6,7 @@ const navItems = [
   { label: 'Cases', path: '/cases', icon: '📋', enabled: true },
   { label: 'Templates', path: '/templates', icon: '📄', enabled: true },
   { label: 'Case Forms', path: '/case-forms', icon: '📝', enabled: true },
-  { label: 'Catalog', path: '/catalog', icon: '📚', enabled: false },
+  { label: 'Catalog', path: '/catalog', icon: '📚', enabled: true },
   { label: 'Plans', path: '/plans', icon: '💳', enabled: true },
   { label: 'Audit Logs', path: '/audit-logs', icon: '🛡️', enabled: true },
   { label: 'Settings', path: '/settings', icon: '⚙️', enabled: false },

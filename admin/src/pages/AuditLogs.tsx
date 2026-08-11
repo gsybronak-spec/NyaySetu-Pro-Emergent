@@ -27,6 +27,9 @@ const ACTION_LABELS: Record<string, string> = {
   plan_create: 'Plan created',
   plan_update: 'Plan updated',
   plan_status_update: 'Plan status changed',
+  catalog_create: 'Catalog entry created',
+  catalog_update: 'Catalog entry updated',
+  catalog_status_update: 'Catalog status changed',
 };
 
 export default function AuditLogs() {

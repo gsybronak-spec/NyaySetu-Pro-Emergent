@@ -268,3 +268,7 @@ body { font-family: 'Inter', sans-serif; background: #F4F6F9; color: #0B1B3D; }
 .form-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #0B1B3D; margin: 12px 0; }
 .modal-close { background: none; border: none; font-size: 16px; color: #64748b; cursor: pointer; }
 
+/* Catalog page */
+.catalog-tabs { margin-bottom: 16px; }
+.catalog-id { font-family: monospace; font-size: 11px; color: #64748b; }
+

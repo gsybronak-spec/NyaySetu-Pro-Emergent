@@ -608,36 +608,47 @@ async def get_case_form_config(case_type_id: str):
 
 @api.get("/catalog/case-types")
 async def case_types():
-    return CASE_TYPES
+    items = await _load_catalog("case-types")
+    return [_catalog_public(p) for p in items if p.get("active") is not False]
 
 @api.get("/catalog/laws")
 async def laws():
-    return LAWS
+    items = await _load_catalog("laws")
+    return [_catalog_public(p) for p in items if p.get("active") is not False]
 
 @api.get("/catalog/laws/{law_id}/sections")
 async def law_sections(law_id: str):
-    law = next((l for l in LAWS if l["id"] == law_id), None)
+    law = await db.laws.find_one({"id": law_id}, {"_id": 0})
+    if not law:
+        law = next((l for l in LAWS if l["id"] == law_id), None)
     if not law:
         return []
-    return law["sections"]
+    return law.get("sections", [])
 
 @api.get("/catalog/districts")
 async def districts():
-    return DISTRICTS
+    items = await _load_catalog("districts")
+    return [_catalog_public(p) for p in items if p.get("active") is not False]
 
 @api.get("/catalog/courts")
 async def courts(district_id: Optional[str] = None):
-    generic = [c for c in COURTS if c["district_id"] == "generic"]
+    items = await _load_catalog("courts")
+    items = [p for p in items if p.get("active") is not False]
+    items = [_catalog_public(p) for p in items]
+    generic = [c for c in items if c["district_id"] == "generic"]
     if district_id:
-        specific = [c for c in COURTS if c["district_id"] == district_id]
+        specific = [c for c in items if c["district_id"] == district_id]
         return specific + generic
-    return COURTS
+    return items
 
 @api.get("/catalog/police-stations")
 async def police_stations(district_id: Optional[str] = None):
+    items = await _load_catalog("police-stations")
+    items = [p for p in items if p.get("active") is not False]
+    items = [_catalog_public(p) for p in items]
     if district_id:
-        return [p for p in POLICE_STATIONS if p["district_id"] == district_id]
-    return POLICE_STATIONS
+        return [p for p in items if p["district_id"] == district_id]
+    return items
 
 async def _load_plans() -> list:
     """DB plans if any exist, else the seed PLANS (backward compat when the
@@ -690,12 +701,59 @@ async def daily_quote():
 # CASES
 # ============================================================
 
+# Catalog maps are refreshed from MongoDB (via _refresh_catalog_maps) so that
+# admin-managed catalog entries flow into case labels, validation and document
+# rendering without code changes. Initial seed build keeps module import safe.
 _CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
 _LAW_MAP = {l["id"]: l for l in LAWS}
 _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
 _COURT_MAP = {c["id"]: c for c in COURTS}
 _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
 _COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
+
+# entity kind -> (collection name, seed list)
+_CATALOG_KINDS = {
+    "case-types": ("case_types", CASE_TYPES),
+    "laws": ("laws", LAWS),
+    "districts": ("districts", DISTRICTS),
+    "courts": ("courts", COURTS),
+    "police-stations": ("police_stations", POLICE_STATIONS),
+}
+
+_CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
+
+
+async def _load_catalog(kind: str) -> list:
+    """DB catalog entries if the collection has any, else the seed list
+    (backward compat for uninitialized databases)."""
+    coll, seed_list = _CATALOG_KINDS[kind]
+    items = await db[coll].find({}, {"_id": 0}).to_list(1000)
+    if items:
+        return items
+    return [dict(x, active=True) for x in seed_list]
+
+
+async def _refresh_catalog_maps() -> None:
+    """Rebuild in-memory catalog maps + valid-id sets from MongoDB. Called at
+    startup and after every admin catalog mutation so labels, validation and
+    document rendering see admin-managed entries immediately."""
+    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _COURT_MAP, _PS_MAP
+    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+    _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}
+    _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
+    _DISTRICT_MAP = {d["id"]: d for d in await _load_catalog("districts")}
+    _COURT_MAP = {c["id"]: c for c in await _load_catalog("courts")}
+    _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
+    _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
+    _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
+    _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+    _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
+    _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
+
+
+def _catalog_public(item: dict) -> dict:
+    """Public catalog shape — identical to the legacy seed shape (no internals)."""
+    return {k: v for k, v in item.items() if k not in _CATALOG_INTERNAL_FIELDS}
 
 
 def enrich_case(c: dict) -> dict:
@@ -735,11 +793,11 @@ def enrich_case(c: dict) -> dict:
 # REFERENCE VALIDATION
 # ============================================================
 
-_VALID_CASE_TYPE_IDS = {c["id"] for c in CASE_TYPES}
-_VALID_LAW_IDS = {l["id"] for l in LAWS}
-_VALID_DISTRICT_IDS = {d["id"] for d in DISTRICTS}
-_VALID_COURT_IDS = {c["id"] for c in COURTS}
-_VALID_PS_IDS = {p["id"] for p in POLICE_STATIONS}
+_VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
+_VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
+_VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+_VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
+_VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
 
 MAX_TEMPLATE_VALUES_TOTAL = 100_000  # max total chars in template values dict
 
@@ -1557,6 +1615,20 @@ class AdminPlanReq(BaseModel):
 class AdminPlanStatusReq(BaseModel):
     active: bool = Field(..., description="True to activate the plan, False to deactivate.")
 
+class CatalogSectionDef(BaseModel):
+    id: str = Field(..., max_length=50)
+    label: str = Field(..., max_length=300)
+
+class CatalogItemReq(BaseModel):
+    en: str = Field(..., max_length=300)
+    gu: str = Field("", max_length=300)
+    cat: Optional[str] = Field(None, max_length=50)  # case types only
+    district_id: Optional[str] = Field(None, max_length=50)  # courts / police stations
+    sections: Optional[list[CatalogSectionDef]] = None  # laws only
+
+class CatalogStatusReq(BaseModel):
+    active: bool = Field(..., description="True to activate, False to deactivate.")
+
 
 # ============================================================
 # ADMIN PORTAL — JWT & AUTH HELPERS
@@ -1990,6 +2062,109 @@ async def admin_set_plan_status(plan_id: str, req: AdminPlanStatusReq,
                     metadata={"active": req.active, "name": existing.get("name")})
     updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
     return {"success": True, "plan": _plan_public(updated)}
+
+def _catalog_item_id(en: str) -> str:
+    base = re.sub(r"[^a-z0-9_]", "_", en.lower().strip().replace(" ", "_"))[:40]
+    return f"{base}_{uuid.uuid4().hex[:6]}"
+
+
+def _build_catalog_doc(kind: str, req: CatalogItemReq, admin: dict, item_id: str) -> dict:
+    ts = now().isoformat()
+    doc = {
+        "id": item_id,
+        "en": req.en.strip(),
+        "gu": req.gu.strip() or req.en.strip(),
+        "active": True,
+        "created_by": admin["id"],
+        "updated_by": admin["id"],
+        "created_at": ts,
+        "updated_at": ts,
+    }
+    if kind == "case-types":
+        doc["cat"] = req.cat or "Other"
+    elif kind in ("courts", "police-stations"):
+        doc["district_id"] = req.district_id or "generic"
+    elif kind == "laws":
+        doc["sections"] = [s.model_dump() for s in (req.sections or [])]
+    return doc
+
+
+@admin_api.get("/catalog/{kind}")
+async def admin_list_catalog(kind: str, admin=Depends(get_admin)):
+    """List all catalog entries (including inactive) for a catalog kind."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    items = await _load_catalog(kind)
+    return [{**i, "active": i.get("active") is not False} for i in items]
+
+
+@admin_api.post("/catalog/{kind}")
+async def admin_create_catalog_item(kind: str, req: CatalogItemReq,
+                                     admin=Depends(require_super_admin)):
+    """Create a catalog entry (super admin only). Immediately usable by lawyers."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    coll = _CATALOG_KINDS[kind][0]
+    item_id = _catalog_item_id(req.en)
+    doc = _build_catalog_doc(kind, req, admin, item_id)
+    await db[coll].insert_one(doc.copy())
+    await _refresh_catalog_maps()
+    await audit_log(admin=admin, action="catalog_create", target=f"{kind}:{item_id}",
+                    metadata={"kind": kind, "en": req.en, "id": item_id})
+    return {"success": True, "item": {**doc, "active": True}}
+
+
+@admin_api.put("/catalog/{kind}/{item_id}")
+async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq,
+                                    admin=Depends(require_super_admin)):
+    """Update labels/attributes of a catalog entry (super admin only)."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    coll = _CATALOG_KINDS[kind][0]
+    existing = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Catalog entry not found")
+    updates = {
+        "en": req.en.strip(),
+        "gu": req.gu.strip() or req.en.strip(),
+        "updated_by": admin["id"],
+        "updated_at": now().isoformat(),
+    }
+    if kind == "case-types":
+        updates["cat"] = req.cat or "Other"
+    elif kind in ("courts", "police-stations"):
+        updates["district_id"] = req.district_id or "generic"
+    elif kind == "laws" and req.sections is not None:
+        updates["sections"] = [s.model_dump() for s in req.sections]
+    await db[coll].update_one({"id": item_id}, {"$set": updates})
+    await _refresh_catalog_maps()
+    await audit_log(admin=admin, action="catalog_update", target=f"{kind}:{item_id}",
+                    metadata={"kind": kind, "en": req.en})
+    updated = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    return {"success": True, "item": {**updated, "active": updated.get("active") is not False}}
+
+
+@admin_api.post("/catalog/{kind}/{item_id}/status")
+async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusReq,
+                                   admin=Depends(require_super_admin)):
+    """Activate/deactivate a catalog entry (super admin only). Deactivated entries
+    stay valid for existing cases (labels + validation preserved) but are hidden
+    from new lawyer selections."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    coll = _CATALOG_KINDS[kind][0]
+    existing = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Catalog entry not found")
+    await db[coll].update_one(
+        {"id": item_id},
+        {"$set": {"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}},
+    )
+    await _refresh_catalog_maps()
+    await audit_log(admin=admin, action="catalog_status_update", target=f"{kind}:{item_id}",
+                    metadata={"kind": kind, "active": req.active, "en": existing.get("en")})
+    updated = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    return {"success": True, "item": {**updated, "active": updated.get("active") is not False}}
 
 
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
@@ -2527,6 +2702,19 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
 # ADMIN SEED HELPER
 # ============================================================
 
+async def seed_catalogs():
+    """Idempotently seed catalog collections from the static catalogs.
+    Only inserts when a collection is empty — never overwrites admin edits."""
+    ts = now().isoformat()
+    for kind, (coll, seed_list) in _CATALOG_KINDS.items():
+        if await db[coll].count_documents({}) > 0:
+            continue
+        for item in seed_list:
+            await db[coll].insert_one({**item, "active": True, "created_at": ts, "updated_at": ts})
+        logger.info(f"Seeded catalog '{kind}' ({len(seed_list)} entries).")
+    await _refresh_catalog_maps()
+
+
 async def seed_plans():
     """Idempotently seed the plans collection from the static catalog.
     Only inserts when the collection is empty — never overwrites admin edits."""
@@ -2641,6 +2829,7 @@ async def create_indexes():
     logger.info("MongoDB indexes ensured.")
     # Seed super admin from env vars
     await seed_plans()
+    await seed_catalogs()
     await seed_super_admin()
 
 

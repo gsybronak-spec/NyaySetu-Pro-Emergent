@@ -91,4 +91,8 @@ export const adminApi = {
   createPlan: (data: any) => request('/plans', 'POST', data),
   updatePlan: (id: string, data: any) => request(`/plans/${id}`, 'PUT', data),
   setPlanStatus: (id: string, active: boolean) => request(`/plans/${id}/status`, 'POST', { active }),
+  listCatalog: (kind: string) => request(`/catalog/${kind}`),
+  createCatalogItem: (kind: string, data: any) => request(`/catalog/${kind}`, 'POST', data),
+  updateCatalogItem: (kind: string, id: string, data: any) => request(`/catalog/${kind}/${id}`, 'PUT', data),
+  setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
 };
