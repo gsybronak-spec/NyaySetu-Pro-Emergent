@@ -87,4 +87,8 @@ export const adminApi = {
   getCase: (id: string) => request(`/cases/${id}`),
   archiveCase: (id: string) => request(`/cases/${id}/archive`, 'POST'),
   restoreCase: (id: string) => request(`/cases/${id}/restore`, 'POST'),
+  listPlans: () => request('/plans'),
+  createPlan: (data: any) => request('/plans', 'POST', data),
+  updatePlan: (id: string, data: any) => request(`/plans/${id}`, 'PUT', data),
+  setPlanStatus: (id: string, active: boolean) => request(`/plans/${id}/status`, 'POST', { active }),
 };

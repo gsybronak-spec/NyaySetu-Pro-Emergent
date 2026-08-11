@@ -639,9 +639,46 @@ async def police_stations(district_id: Optional[str] = None):
         return [p for p in POLICE_STATIONS if p["district_id"] == district_id]
     return POLICE_STATIONS
 
+async def _load_plans() -> list:
+    """DB plans if any exist, else the seed PLANS (backward compat when the
+    plans collection has not been initialized)."""
+    items = await db.plans.find({}, {"_id": 0}).to_list(200)
+    if items:
+        return items
+    return [dict(p, active=True) for p in PLANS]
+
+
+async def _get_plan(plan_id: str) -> Optional[dict]:
+    """Resolve a plan from the DB, falling back to the seed catalog."""
+    p = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    if p:
+        return p
+    seed = next((x for x in PLANS if x["id"] == plan_id), None)
+    if seed:
+        return dict(seed, active=True)
+    return None
+
+
+def _plan_public(p: dict) -> dict:
+    """Public plan shape: computed per-template price, never raw DB internals."""
+    price = p.get("price") or 0
+    credits = p.get("credits") or 0
+    return {
+        "id": p["id"],
+        "name": p["name"],
+        "price": price,
+        "credits": credits,
+        "popular": bool(p.get("popular")),
+        "description": p.get("description"),
+        "per_template": round(price / credits, 2) if credits else 0,
+        "active": p.get("active") is not False,
+    }
+
+
 @api.get("/catalog/plans")
 async def plans():
-    return PLANS
+    items = await _load_plans()
+    return [_plan_public(p) for p in items if p.get("active") is not False]
 
 @api.get("/catalog/quote")
 async def daily_quote():
@@ -1286,9 +1323,12 @@ async def get_wallet(user=Depends(get_user)):
 
 @api.post("/purchase/mock")
 async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
-    plan = next((p for p in PLANS if p["id"] == req.plan_id), None)
-    if not plan:
-        raise HTTPException(404, "Plan not found")
+    """DEV-ONLY mock purchase — never used as the production payment path.
+    Resolves plans from the admin-managed plans catalog so admin edits flow
+    through; inactive plans cannot be purchased."""
+    plan = await _get_plan(req.plan_id)
+    if not plan or plan.get("active") is False:
+        raise HTTPException(404, "Plan not found or inactive")
     txn_id = str(uuid.uuid4())
     await db.wallets.update_one(
         {"user_id": user["id"]},
@@ -1506,6 +1546,16 @@ class AdminPreviewReq(BaseModel):
 
 class AdminUserStatusReq(BaseModel):
     active: bool = Field(..., description="True to enable the user, False to disable.")
+
+class AdminPlanReq(BaseModel):
+    name: str = Field(..., max_length=100)
+    price: int = Field(..., ge=0, description="Price in INR")
+    credits: int = Field(..., ge=1, description="Credits granted on purchase")
+    popular: bool = False
+    description: Optional[str] = Field(None, max_length=500)
+
+class AdminPlanStatusReq(BaseModel):
+    active: bool = Field(..., description="True to activate the plan, False to deactivate.")
 
 
 # ============================================================
@@ -1865,6 +1915,81 @@ async def admin_restore_case(case_id: str, admin=Depends(get_admin)):
         raise HTTPException(404, "Case not found")
     await audit_log(admin=admin, action="case_restore", target=case_id)
     return {"success": True, "status": "active"}
+
+@admin_api.get("/plans")
+async def admin_list_plans(admin=Depends(get_admin)):
+    """List all plans (including inactive) for admin management."""
+    items = await _load_plans()
+    items = sorted(items, key=lambda p: p.get("price") or 0)
+    return [{**p, "per_template": round((p.get("price") or 0) / (p.get("credits") or 1), 2),
+             "active": p.get("active") is not False} for p in items]
+
+
+@admin_api.post("/plans")
+async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin)):
+    """Create a new plan (super admin only)."""
+    plan_id = "plan_" + str(int(now().timestamp()))
+    existing = await db.plans.find_one({"id": plan_id})
+    if existing:
+        raise HTTPException(409, "Plan id collision — retry")
+    ts = now().isoformat()
+    doc = {
+        "id": plan_id,
+        "name": req.name,
+        "price": req.price,
+        "credits": req.credits,
+        "popular": req.popular,
+        "description": req.description,
+        "active": True,
+        "created_by": admin["id"],
+        "updated_by": admin["id"],
+        "created_at": ts,
+        "updated_at": ts,
+    }
+    await db.plans.insert_one(doc.copy())
+    await audit_log(admin=admin, action="plan_create", target=plan_id,
+                    metadata={"name": req.name, "price": req.price, "credits": req.credits})
+    return {"success": True, "plan": _plan_public(doc)}
+
+
+@admin_api.put("/plans/{plan_id}")
+async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(require_super_admin)):
+    """Update plan name/price/credits (super admin only)."""
+    existing = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Plan not found")
+    updates = {
+        "name": req.name,
+        "price": req.price,
+        "credits": req.credits,
+        "popular": req.popular,
+        "description": req.description,
+        "updated_by": admin["id"],
+        "updated_at": now().isoformat(),
+    }
+    await db.plans.update_one({"id": plan_id}, {"$set": updates})
+    await audit_log(admin=admin, action="plan_update", target=plan_id,
+                    metadata={"name": req.name, "price": req.price, "credits": req.credits})
+    updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    return {"success": True, "plan": _plan_public(updated)}
+
+
+@admin_api.post("/plans/{plan_id}/status")
+async def admin_set_plan_status(plan_id: str, req: AdminPlanStatusReq,
+                                admin=Depends(require_super_admin)):
+    """Activate/deactivate a plan (super admin only). Inactive plans are hidden
+    from the lawyer catalog and cannot be purchased."""
+    existing = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Plan not found")
+    await db.plans.update_one(
+        {"id": plan_id},
+        {"$set": {"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}},
+    )
+    await audit_log(admin=admin, action="plan_status_update", target=plan_id,
+                    metadata={"active": req.active, "name": existing.get("name")})
+    updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    return {"success": True, "plan": _plan_public(updated)}
 
 
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
@@ -2402,6 +2527,27 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
 # ADMIN SEED HELPER
 # ============================================================
 
+async def seed_plans():
+    """Idempotently seed the plans collection from the static catalog.
+    Only inserts when the collection is empty — never overwrites admin edits."""
+    count = await db.plans.count_documents({})
+    if count > 0:
+        return
+    ts = now().isoformat()
+    for p in PLANS:
+        await db.plans.insert_one({
+            "id": p["id"],
+            "name": p["name"],
+            "price": p["price"],
+            "credits": p["credits"],
+            "popular": p.get("popular", False),
+            "active": True,
+            "created_at": ts,
+            "updated_at": ts,
+        })
+    logger.info(f"Seeded {len(PLANS)} plans.")
+
+
 async def seed_super_admin():
     """Idempotently create the first super_admin from environment variables.
     Does NOT overwrite an existing admin with the same email."""
@@ -2494,6 +2640,7 @@ async def create_indexes():
     await db.case_forms.create_index("case_type_id", unique=True)
     logger.info("MongoDB indexes ensured.")
     # Seed super admin from env vars
+    await seed_plans()
     await seed_super_admin()
 
 

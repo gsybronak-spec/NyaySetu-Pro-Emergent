@@ -257,3 +257,14 @@ body { font-family: 'Inter', sans-serif; background: #F4F6F9; color: #0B1B3D; }
 .case-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
 .case-docs-title { font-size: 14px; font-weight: 600; color: #0B1B3D; margin: 16px 0 10px; }
 
+/* Plans page */
+.plans-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.plans-hint { font-size: 12px; color: #64748b; }
+.plans-actions { display: flex; gap: 6px; }
+.btn-plain { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: #3B4A6B; margin: 10px 0 4px; }
+.form-input { width: 100%; padding: 9px 12px; border: 1px solid #E1E5ED; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #0B1B3D; margin: 12px 0; }
+.modal-close { background: none; border: none; font-size: 16px; color: #64748b; cursor: pointer; }
+
