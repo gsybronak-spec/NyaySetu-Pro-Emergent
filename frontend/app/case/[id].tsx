@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -14,8 +14,10 @@ export default function CaseDetail() {
   const [c, setC] = useState<any>(null);
   const [templates, setTemplates] = useState<any[]>([]);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const [cs, tpls] = await Promise.all([api.getCase(String(id)), api.templates()]);
       setC(cs);
@@ -34,7 +36,9 @@ export default function CaseDetail() {
           })
           .catch(() => {});
       }
-    } catch {}
+    } catch (e: any) {
+      setError(e?.message || "Could not load this case.");
+    }
   }, [id]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -77,8 +81,23 @@ export default function CaseDetail() {
 
   if (!c) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-        <Text style={{ color: colors.muted }}>Loading...</Text>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", padding: Spacing.xl }}>
+        {error ? (
+          <>
+            <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
+            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load this case</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center" }}>{error}</Text>
+            <Pressable
+              testID="case-error-retry"
+              onPress={load}
+              style={{ marginTop: Spacing.lg, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, borderRadius: Radius.md, backgroundColor: colors.brandPrimary }}
+            >
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+            </Pressable>
+          </>
+        ) : (
+          <ActivityIndicator color={colors.brandPrimary} size="large" />
+        )}
       </SafeAreaView>
     );
   }

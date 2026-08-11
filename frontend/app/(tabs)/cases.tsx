@@ -34,9 +34,11 @@ export default function Cases() {
   const [sort, setSort] = useState("updated");
   const [sortOpen, setSortOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (query: string, cat: string, archived: boolean, sortBy: string) => {
     setLoading(true);
+    setError(null);
     try {
       const c = await api.listCases({
         q: query || undefined,
@@ -45,8 +47,9 @@ export default function Cases() {
         sort: sortBy,
       });
       setCases(Array.isArray(c) ? c : []);
-    } catch {
+    } catch (e: any) {
       setCases([]);
+      setError(e?.message || "Could not load your cases.");
     } finally {
       setLoading(false);
     }
@@ -145,6 +148,22 @@ export default function Cases() {
         </Pressable>
       </Modal>
 
+      {error ? (
+        <View style={styles.empty}>
+          <Ionicons name="cloud-offline-outline" size={44} color={colors.muted} />
+          <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load cases</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: Spacing.xl }}>
+            {error}
+          </Text>
+          <Pressable
+            testID="cases-error-retry"
+            onPress={() => load(q, filter, showArchived, sort)}
+            style={[styles.emptyBtn, { backgroundColor: colors.brandPrimary }]}
+          >
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
       <FlatList
         data={cases}
         keyExtractor={(c) => c.id}
@@ -218,6 +237,7 @@ export default function Cases() {
           </Pressable>
         )}
       />
+      )}
     </SafeAreaView>
   );
 }

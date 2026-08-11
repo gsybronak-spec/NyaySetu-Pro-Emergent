@@ -1,15 +1,15 @@
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
-  { label: 'Dashboard', path: '/dashboard', icon: '📊', enabled: true },
-  { label: 'Users', path: '/users', icon: '👥', enabled: true },
-  { label: 'Cases', path: '/cases', icon: '📋', enabled: true },
-  { label: 'Templates', path: '/templates', icon: '📄', enabled: true },
-  { label: 'Case Forms', path: '/case-forms', icon: '📝', enabled: true },
-  { label: 'Catalog', path: '/catalog', icon: '📚', enabled: true },
-  { label: 'Plans', path: '/plans', icon: '💳', enabled: true },
-  { label: 'Audit Logs', path: '/audit-logs', icon: '🛡️', enabled: true },
-  { label: 'Settings', path: '/settings', icon: '⚙️', enabled: true },
+  { label: 'Dashboard', path: '/dashboard', icon: '📊' },
+  { label: 'Users', path: '/users', icon: '👥' },
+  { label: 'Cases', path: '/cases', icon: '📋' },
+  { label: 'Templates', path: '/templates', icon: '📄' },
+  { label: 'Case Forms', path: '/case-forms', icon: '📝' },
+  { label: 'Catalog', path: '/catalog', icon: '📚' },
+  { label: 'Plans', path: '/plans', icon: '💳' },
+  { label: 'Audit Logs', path: '/audit-logs', icon: '🛡️' },
+  { label: 'Settings', path: '/settings', icon: '⚙️' },
 ]
 
 export default function Sidebar() {
@@ -24,22 +24,14 @@ export default function Sidebar() {
       </div>
       <nav className="sidebar-nav">
         {navItems.map((item) => (
-          item.enabled ? (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-            >
-              <span className="sidebar-icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </NavLink>
-          ) : (
-            <div key={item.path} className="sidebar-link disabled" title="Coming Soon">
-              <span className="sidebar-icon">{item.icon}</span>
-              <span>{item.label}</span>
-              <span className="coming-soon-badge">Soon</span>
-            </div>
-          )
+          <NavLink
+            key={item.path}
+            to={item.path}
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          >
+            <span className="sidebar-icon">{item.icon}</span>
+            <span>{item.label}</span>
+          </NavLink>
         ))}
       </nav>
       <div className="sidebar-footer">

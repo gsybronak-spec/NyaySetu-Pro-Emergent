@@ -18,20 +18,21 @@ export default function Home() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [drafts, setDrafts] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const [q, w, tpls, drs] = await Promise.all([
-        api.quote().catch(() => ({ quote })),
-        api.wallet().catch(() => wallet),
-        api.templates().catch(() => []),
-        api.drafts().catch(() => []),
-      ]);
-      if (q?.quote) setQuote(q.quote);
-      if (w && typeof w === "object") setWallet(w);
-      setTemplates(Array.isArray(tpls) ? tpls.slice(0, 10) : []);
-      setDrafts(Array.isArray(drs) ? drs : []);
-    } catch {}
+    let failed = false;
+    const [q, w, tpls, drs] = await Promise.all([
+      api.quote().catch(() => { failed = true; return null; }),
+      api.wallet().catch(() => { failed = true; return null; }),
+      api.templates().catch(() => { failed = true; return []; }),
+      api.drafts().catch(() => { failed = true; return []; }),
+    ]);
+    if (q?.quote) setQuote(q.quote);
+    if (w && typeof w === "object") setWallet(w);
+    setTemplates(Array.isArray(tpls) ? tpls.slice(0, 10) : []);
+    setDrafts(Array.isArray(drs) ? drs : []);
+    setLoadError(failed);
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -57,9 +58,6 @@ export default function Home() {
           <Pressable testID="home-search-btn" onPress={() => router.push("/search")}>
             <Ionicons name="search" size={22} color={colors.onSurface} />
           </Pressable>
-          <Pressable testID="home-notif-btn">
-            <Ionicons name="notifications-outline" size={22} color={colors.onSurface} />
-          </Pressable>
         </View>
       </View>
 
@@ -67,6 +65,17 @@ export default function Home() {
         contentContainerStyle={{ paddingBottom: Spacing.xxxl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
+        {loadError && (
+          <View style={[styles.errorBanner, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "50" }]}>
+            <Ionicons name="cloud-offline-outline" size={16} color={colors.error} />
+            <Text style={{ color: colors.error, fontSize: 12, flex: 1, marginLeft: 6 }}>
+              Couldn't refresh your data. Check your connection.
+            </Text>
+            <Pressable testID="home-error-retry" onPress={load} hitSlop={8}>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
         {/* Welcome Card */}
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#112240"] : ["#0B1B3D", "#1D2D50"]}
@@ -217,6 +226,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(197,160,89,0.35)",
   },
   walletTxt: { color: "#C5A059", fontSize: 12, fontWeight: "700" },
+  errorBanner: {
+    flexDirection: "row", alignItems: "center", marginHorizontal: Spacing.lg, marginTop: Spacing.md,
+    padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
+  },
   actionRow: { flexDirection: "row", paddingHorizontal: Spacing.lg, gap: Spacing.md },
   actionCard: { flex: 1, padding: Spacing.lg, borderRadius: Radius.lg, gap: 6 },
   actionTitle: { fontSize: 16, fontWeight: "800", marginTop: Spacing.sm },

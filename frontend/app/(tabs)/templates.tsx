@@ -14,13 +14,16 @@ export default function Templates() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [items, setItems] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    setError(null);
     try {
       const res = await api.templates(q || undefined, cat || undefined);
       setItems(Array.isArray(res) ? res : []);
-    } catch {
+    } catch (e: any) {
       setItems([]);
+      setError(e?.message || "Could not load templates.");
     }
   }, [q, cat]);
 
@@ -77,6 +80,22 @@ export default function Templates() {
         })}
       </ScrollView>
 
+      {error ? (
+        <View style={styles.errorBox}>
+          <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
+          <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load templates</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: Spacing.xl }}>
+            {error}
+          </Text>
+          <Pressable
+            testID="tpl-error-retry"
+            onPress={load}
+            style={[styles.retryBtn, { backgroundColor: colors.brandPrimary }]}
+          >
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : (
       <FlatList
         data={items}
         keyExtractor={(t) => t.id}
@@ -104,6 +123,7 @@ export default function Templates() {
           </Pressable>
         )}
       />
+      )}
     </SafeAreaView>
   );
 }
@@ -131,4 +151,6 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3,
     borderRadius: 6, borderWidth: 1, marginTop: Spacing.sm,
   },
+  errorBox: { alignItems: "center", marginTop: Spacing.xxxl, paddingHorizontal: Spacing.xl, gap: 4 },
+  retryBtn: { marginTop: Spacing.xl, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: 999 },
 });
