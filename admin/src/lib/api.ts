@@ -74,4 +74,17 @@ export const adminApi = {
     p.append('offset', String(params?.offset ?? 0));
     return request(`/audit-logs?${p.toString()}`);
   },
+  listCases: (params?: { q?: string; status?: string; category?: string; user_id?: string; limit?: number; offset?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.q) p.append('q', params.q);
+    if (params?.status) p.append('status', params.status);
+    if (params?.category) p.append('category', params.category);
+    if (params?.user_id) p.append('user_id', params.user_id);
+    p.append('limit', String(params?.limit ?? 50));
+    p.append('offset', String(params?.offset ?? 0));
+    return request(`/cases?${p.toString()}`);
+  },
+  getCase: (id: string) => request(`/cases/${id}`),
+  archiveCase: (id: string) => request(`/cases/${id}/archive`, 'POST'),
+  restoreCase: (id: string) => request(`/cases/${id}/restore`, 'POST'),
 };

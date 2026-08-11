@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: '📊', enabled: true },
   { label: 'Users', path: '/users', icon: '👥', enabled: true },
-  { label: 'Cases', path: '/cases', icon: '📋', enabled: false },
+  { label: 'Cases', path: '/cases', icon: '📋', enabled: true },
   { label: 'Templates', path: '/templates', icon: '📄', enabled: true },
   { label: 'Case Forms', path: '/case-forms', icon: '📝', enabled: true },
   { label: 'Catalog', path: '/catalog', icon: '📚', enabled: false },

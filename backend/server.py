@@ -1768,6 +1768,105 @@ async def admin_audit_logs(limit: int = 50, offset: int = 0,
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+async def _admin_owner_map(user_ids: set) -> dict:
+    """Batch-fetch public user info for a set of case owner ids."""
+    if not user_ids:
+        return {}
+    cursor = db.users.find(
+        {"id": {"$in": list(user_ids)}},
+        {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "provider": 1, "active": 1},
+    )
+    return {u["id"]: u for u in await cursor.to_list(2000)}
+
+
+@admin_api.get("/cases")
+async def admin_list_cases(q: Optional[str] = None, status: str = "all",
+                          category: Optional[str] = None, user_id: Optional[str] = None,
+                          limit: int = 50, offset: int = 0,
+                          admin=Depends(get_admin)):
+    """List all cases with search, filters and owner info (admin visibility)."""
+    query: dict = {}
+    if status != "all":
+        if status == "active":
+            query["status"] = {"$ne": "archived"}
+        else:
+            query["status"] = status
+    if user_id:
+        query["user_id"] = user_id
+    if q:
+        q_re = re.compile(re.escape(q), re.IGNORECASE)
+        query["$or"] = [
+            {"nickname": q_re},
+            {"case_number": q_re},
+            {"party_name": q_re},
+            {"opposite_party": q_re},
+            {"client_name": q_re},
+            {"client_mobile": q_re},
+            {"case_type_custom": q_re},
+            {"court_custom": q_re},
+        ]
+    cursor = db.cases.find(query, {"_id": 0}).sort("updated_at", -1).limit(2000)
+    items = await cursor.to_list(2000)
+    items = [enrich_case(c) for c in items]
+    if category and category != "All":
+        items = [c for c in items if c.get("category") == category]
+    total = len(items)
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    page = items[offset:offset + limit]
+    owner_ids = {c.get("user_id") for c in page if c.get("user_id")}
+    owners = await _admin_owner_map(owner_ids)
+    for c in page:
+        c["owner"] = owners.get(c.get("user_id"))
+    return {"items": page, "total": total, "limit": limit, "offset": offset}
+
+
+@admin_api.get("/cases/{case_id}")
+async def admin_get_case(case_id: str, admin=Depends(get_admin)):
+    """Full admin case detail: enriched case, owner profile, and generated documents."""
+    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Case not found")
+    c = enrich_case(c)
+    owner = None
+    if c.get("user_id"):
+        owner = await db.users.find_one(
+            {"id": c["user_id"]},
+            {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "provider": 1, "active": 1,
+             "bar_council_no": 1, "state": 1, "district": 1, "court": 1, "created_at": 1},
+        )
+    applications = await db.applications.find(
+        {"case_id": case_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    return {"case": c, "owner": owner, "applications": applications}
+
+
+@admin_api.post("/cases/{case_id}/archive")
+async def admin_archive_case(case_id: str, admin=Depends(get_admin)):
+    """Admin archive of a case (preserves data, hides from active lawyer list)."""
+    r = await db.cases.update_one(
+        {"id": case_id},
+        {"$set": {"status": "archived", "updated_at": now().isoformat()}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Case not found")
+    await audit_log(admin=admin, action="case_archive", target=case_id)
+    return {"success": True, "status": "archived"}
+
+
+@admin_api.post("/cases/{case_id}/restore")
+async def admin_restore_case(case_id: str, admin=Depends(get_admin)):
+    """Admin restore of an archived case back to active."""
+    r = await db.cases.update_one(
+        {"id": case_id},
+        {"$set": {"status": "active", "updated_at": now().isoformat()}},
+    )
+    if r.matched_count == 0:
+        raise HTTPException(404, "Case not found")
+    await audit_log(admin=admin, action="case_restore", target=case_id)
+    return {"success": True, "status": "active"}
+
+
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
     """Validate that all placeholders in content match known fields.
     Returns {valid: bool, unknown: [...], unused: [...], duplicate_keys: [...]}. """

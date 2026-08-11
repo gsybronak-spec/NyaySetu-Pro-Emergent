@@ -22,6 +22,8 @@ const ACTION_LABELS: Record<string, string> = {
   template_clone: 'Template cloned',
   case_form_save: 'Case form saved',
   user_status_update: 'User status changed',
+  case_archive: 'Case archived',
+  case_restore: 'Case restored',
 };
 
 export default function AuditLogs() {

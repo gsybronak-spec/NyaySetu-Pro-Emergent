@@ -251,3 +251,9 @@ body { font-family: 'Inter', sans-serif; background: #F4F6F9; color: #0B1B3D; }
 .audit-filters select { padding: 9px 12px; border: 1px solid #E1E5ED; border-radius: 6px; font-size: 13px; background: #fff; }
 .audit-meta { font-size: 12px; color: #3B4A6B; max-width: 320px; }
 
+/* Cases page */
+.cases-filters { display: flex; gap: 8px; }
+.cases-filters select { padding: 9px 12px; border: 1px solid #E1E5ED; border-radius: 6px; font-size: 13px; background: #fff; }
+.case-sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+.case-docs-title { font-size: 14px; font-weight: 600; color: #0B1B3D; margin: 16px 0 10px; }
+
