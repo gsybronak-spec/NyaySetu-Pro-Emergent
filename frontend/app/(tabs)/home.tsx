@@ -54,7 +54,7 @@ export default function Home() {
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md }}>
-          <Pressable testID="home-search-btn" onPress={() => router.push("/(tabs)/templates")}>
+          <Pressable testID="home-search-btn" onPress={() => router.push("/search")}>
             <Ionicons name="search" size={22} color={colors.onSurface} />
           </Pressable>
           <Pressable testID="home-notif-btn">

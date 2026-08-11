@@ -12,6 +12,13 @@ export async function getToken(): Promise<string | null> {
   return storage.secureGet(TOKEN_KEY, null as any);
 }
 
+// C4: called when any API returns 401, so the auth context can clear the
+// session and route guards can redirect to login (not just drop the token).
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(cb: (() => void) | null) {
+  onUnauthorized = cb;
+}
+
 const REQUEST_TIMEOUT_MS = 30000;
 
 export function describeNetworkError(e: unknown): string {
@@ -54,6 +61,7 @@ async function request(path: string, method = "GET", body?: any) {
   if (!res.ok) {
     if (res.status === 401) {
       setToken(null);
+      onUnauthorized?.();
     }
     const msg = json?.detail || json?.message || `HTTP ${res.status}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));

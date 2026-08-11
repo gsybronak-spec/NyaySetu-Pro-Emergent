@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, getToken, setToken } from "@/src/api/client";
+import { api, getToken, setOnUnauthorized, setToken } from "@/src/api/client";
 
 interface User {
   id: string;
@@ -49,6 +49,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh().finally(() => setReady(true));
   }, [refresh]);
+
+  // C4: any 401 from the API clears the in-memory session so the tabs route
+  // guard redirects to login instead of leaving the user on a broken screen.
+  useEffect(() => {
+    setOnUnauthorized(() => setUser(null));
+    return () => setOnUnauthorized(null);
+  }, []);
 
   const signInOtp = async (mobile: string) => {
     setLoading(true);
