@@ -2,12 +2,13 @@ import { NavLink } from 'react-router-dom'
 
 const navItems = [
   { label: 'Dashboard', path: '/dashboard', icon: '📊', enabled: true },
-  { label: 'Users', path: '/users', icon: '👥', enabled: false },
+  { label: 'Users', path: '/users', icon: '👥', enabled: true },
   { label: 'Cases', path: '/cases', icon: '📋', enabled: false },
   { label: 'Templates', path: '/templates', icon: '📄', enabled: true },
   { label: 'Case Forms', path: '/case-forms', icon: '📝', enabled: true },
   { label: 'Catalog', path: '/catalog', icon: '📚', enabled: false },
   { label: 'Plans', path: '/plans', icon: '💳', enabled: false },
+  { label: 'Audit Logs', path: '/audit-logs', icon: '🛡️', enabled: true },
   { label: 'Settings', path: '/settings', icon: '⚙️', enabled: false },
 ]
 

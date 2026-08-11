@@ -57,4 +57,21 @@ export const adminApi = {
   getCaseFormConfig: (id: string) => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json()),
   getCaseTypes: () => fetch(`${BASE}/api/catalog/case-types`).then(r => r.json()),
   adminSaveCaseForm: (id: string, data: any) => request(`/case-forms/${id}`, 'POST', data),
+  listUsers: (q?: string, limit = 50, offset = 0) => {
+    const params = new URLSearchParams();
+    if (q) params.append('q', q);
+    params.append('limit', String(limit));
+    params.append('offset', String(offset));
+    return request(`/users?${params.toString()}`);
+  },
+  getUser: (id: string) => request(`/users/${id}`),
+  setUserStatus: (id: string, active: boolean) => request(`/users/${id}/status`, 'PATCH', { active }),
+  listAuditLogs: (params?: { action?: string; admin_id?: string; limit?: number; offset?: number }) => {
+    const p = new URLSearchParams();
+    if (params?.action) p.append('action', params.action);
+    if (params?.admin_id) p.append('admin_id', params.admin_id);
+    p.append('limit', String(params?.limit ?? 50));
+    p.append('offset', String(params?.offset ?? 0));
+    return request(`/audit-logs?${p.toString()}`);
+  },
 };

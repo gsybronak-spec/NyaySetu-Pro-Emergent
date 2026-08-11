@@ -229,6 +229,8 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not user:
         raise HTTPException(401, "User not found")
+    if user.get("active") is False:
+        raise HTTPException(401, "Account disabled. Contact support.")
     return user
 
 
@@ -423,6 +425,8 @@ async def verify_otp(req: VerifyOtpReq):
         is_new = True
         user = await create_new_user(mobile=mobile, provider="mobile")
         await apply_referral(req.referral_code, user)
+    elif user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
 
     user_clean = {k: v for k, v in user.items() if k != "_id"}
     token = make_token(user["id"])
@@ -455,6 +459,8 @@ async def google_session(req: GoogleSessionReq):
         is_new = True
         user = await create_new_user(email=email, name=name, picture=picture, provider="google")
         await apply_referral(req.referral_code, user)
+    elif user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
     else:
         # Keep profile fresh
         updates = {}
@@ -1498,6 +1504,9 @@ class AdminPreviewReq(BaseModel):
     fields: Optional[list[TemplateFieldDef]] = None
     settings: Optional[dict] = None
 
+class AdminUserStatusReq(BaseModel):
+    active: bool = Field(..., description="True to enable the user, False to disable.")
+
 
 # ============================================================
 # ADMIN PORTAL — JWT & AUTH HELPERS
@@ -1558,6 +1567,26 @@ def admin_public(admin: dict) -> dict:
     return {k: v for k, v in admin.items() if k not in ("_id", "password_hash")}
 
 
+async def audit_log(*, admin: Optional[dict], action: str, target: Optional[str] = None,
+                    metadata: Optional[dict] = None) -> None:
+    """Record an admin action in the audit log. Never raises — auditing must not
+    break the primary action it records."""
+    entry = {
+        "id": str(uuid.uuid4()),
+        "admin_id": admin.get("id") if admin else None,
+        "admin_email": admin.get("email") if admin else None,
+        "admin_role": admin.get("role") if admin else None,
+        "action": action,
+        "target": target,
+        "metadata": metadata or {},
+        "timestamp": now().isoformat(),
+    }
+    try:
+        await db.audit_logs.insert_one(entry)
+    except Exception:
+        logger.warning(f"audit_log insert failed for action={action}", exc_info=True)
+
+
 # ============================================================
 # ADMIN PORTAL — API ROUTER
 # ============================================================
@@ -1575,18 +1604,22 @@ async def admin_login(req: AdminLoginReq):
         raise HTTPException(429, "Too many login attempts. Please try again later.")
     admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
     if not admin:
+        await audit_log(admin=None, action="admin_login_failed", target=email, metadata={"reason": "not_found"})
         raise HTTPException(401, "Invalid email or password")
     if not admin.get("active", False):
+        await audit_log(admin=None, action="admin_login_failed", target=email, metadata={"reason": "disabled"})
         raise HTTPException(401, "Admin account is disabled")
     # Verify password
     stored_hash = admin.get("password_hash", "")
     if not stored_hash or not bcrypt.checkpw(req.password.encode("utf-8"), stored_hash.encode("utf-8")):
+        await audit_log(admin=None, action="admin_login_failed", target=email, metadata={"reason": "bad_password"})
         raise HTTPException(401, "Invalid email or password")
     # Update last_login
     await db.admin_users.update_one(
         {"id": admin["id"]},
         {"$set": {"last_login": now().isoformat()}},
     )
+    await audit_log(admin=admin, action="admin_login", target=admin["id"], metadata={"email": email})
     token = make_admin_token(admin["id"], admin["email"], admin["role"])
     return {"token": token, "admin": admin_public(admin)}
 
@@ -1655,6 +1688,85 @@ async def admin_dashboard_stats(admin=Depends(get_admin)):
         "recent_applications": recent_applications,
     }
 
+@admin_api.get("/users")
+async def admin_list_users(q: Optional[str] = None, limit: int = 50, offset: int = 0,
+                          admin=Depends(get_admin)):
+    """List platform users with optional search (name/mobile/email/id) and pagination."""
+    query = {}
+    if q:
+        q_re = re.compile(re.escape(q), re.IGNORECASE)
+        query["$or"] = [
+            {"name": q_re},
+            {"mobile": q_re},
+            {"email": q_re},
+            {"id": q_re},
+        ]
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    cursor = db.users.find(query, {"_id": 0, "password_hash": 0})\
+        .sort("created_at", -1).skip(offset).limit(limit)
+    items = await cursor.to_list(limit)
+    total = await db.users.count_documents(query)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+@admin_api.get("/users/{user_id}")
+async def admin_get_user(user_id: str, admin=Depends(get_admin)):
+    """Full user detail: profile, wallet, and activity counts."""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not user:
+        raise HTTPException(404, "User not found")
+    wallet = await db.wallets.find_one({"user_id": user_id}, {"_id": 0})
+    cases_count = await db.cases.count_documents({"user_id": user_id})
+    applications_count = await db.applications.count_documents({"user_id": user_id})
+    transactions_count = await db.transactions.count_documents({"user_id": user_id})
+    return {
+        "user": user,
+        "wallet": wallet,
+        "cases_count": cases_count,
+        "applications_count": applications_count,
+        "transactions_count": transactions_count,
+    }
+
+
+@admin_api.patch("/users/{user_id}/status")
+async def admin_set_user_status(user_id: str, req: AdminUserStatusReq,
+                                admin=Depends(require_super_admin)):
+    """Enable/disable a user account (super admin only). Disabled users are
+    rejected at login and at every authenticated endpoint."""
+    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not user:
+        raise HTTPException(404, "User not found")
+    ts = now().isoformat()
+    updates = {"active": req.active, "updated_at": ts}
+    updates["enabled_at" if req.active else "disabled_at"] = ts
+    await db.users.update_one({"id": user_id}, {"$set": updates})
+    await audit_log(admin=admin, action="user_status_update", target=user_id,
+                    metadata={"active": req.active,
+                              "name": user.get("name"),
+                              "mobile": user.get("mobile"),
+                              "email": user.get("email")})
+    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    return {"success": True, "user": updated}
+
+
+@admin_api.get("/audit-logs")
+async def admin_audit_logs(limit: int = 50, offset: int = 0,
+                           action: Optional[str] = None, admin_id: Optional[str] = None,
+                           admin=Depends(get_admin)):
+    """List recorded admin actions, newest first, with optional filters."""
+    query = {}
+    if action:
+        query["action"] = action
+    if admin_id:
+        query["admin_id"] = admin_id
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
+    cursor = db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(offset).limit(limit)
+    items = await cursor.to_list(limit)
+    total = await db.audit_logs.count_documents(query)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
 
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:
     """Validate that all placeholders in content match known fields.
@@ -1697,6 +1809,8 @@ async def admin_save_case_form(case_type_id: str, req: CaseFormConfigReq, admin=
         "updated_by": admin["id"],
     }
     await db.case_forms.update_one({"case_type_id": case_type_id}, {"$set": doc}, upsert=True)
+    await audit_log(admin=admin, action="case_form_save", target=case_type_id,
+                    metadata={"name_en": req.name_en, "name_gu": req.name_gu, "field_count": len(req.fields)})
     res = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
     return res
 
@@ -1809,6 +1923,8 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
         "published_at": None,
     }
     await db.templates.insert_one(template_doc.copy())
+    await audit_log(admin=admin, action="template_create", target=template_id,
+                    metadata={"name_en": req.name_en, "category": req.category})
     template_doc.pop("_id", None)
     return template_doc
 
@@ -1847,6 +1963,8 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         updates["updated_at"] = now().isoformat()
         updates["source"] = "admin_edited" if t.get("source") != "admin_created" else t["source"]
         await db.templates.update_one({"id": template_id}, {"$set": updates})
+        await audit_log(admin=admin, action="template_update", target=template_id,
+                        metadata={"field_count": len(updates.get("fields", t.get("fields", [])))})
     updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
     return updated
 
@@ -1919,6 +2037,8 @@ async def admin_publish_template(template_id: str, admin=Depends(get_admin)):
             "updated_by": admin["id"],
         }},
     )
+    await audit_log(admin=admin, action="template_publish", target=template_id,
+                    metadata={"version": current_version})
     updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
     return {"success": True, "template": updated, "validation": validation}
 
@@ -1933,6 +2053,7 @@ async def admin_archive_template(template_id: str, admin=Depends(get_admin)):
         {"id": template_id},
         {"$set": {"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}},
     )
+    await audit_log(admin=admin, action="template_archive", target=template_id)
     return {"success": True, "status": "archived"}
 
 
@@ -1985,6 +2106,8 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
             "published_at": None,
         }
         await db.templates.insert_one(new_doc.copy())
+        await audit_log(admin=admin, action="template_clone", target=template_id,
+                        metadata={"as_new_template": True, "new_id": new_id})
         new_doc.pop("_id", None)
         return {"success": True, "template": new_doc, "new_version": 1}
 
@@ -2027,6 +2150,8 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
         }},
         upsert=True,
     )
+    await audit_log(admin=admin, action="template_clone", target=template_id,
+                    metadata={"as_new_template": False, "new_version": new_version})
     updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
     return {"success": True, "template": updated, "new_version": new_version}
 

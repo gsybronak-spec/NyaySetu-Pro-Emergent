@@ -1,4 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import Users from './pages/Users'
+import AuditLogs from './pages/AuditLogs'
 import { AuthProvider, useAdminAuth } from './lib/auth'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -33,6 +35,8 @@ export default function App() {
           <Route path="templates/new" element={<TemplateEditor />} />
           <Route path="templates/:id/edit" element={<TemplateEditor />} />
           <Route path="case-forms" element={<CaseFormBuilder />} />
+          <Route path="users" element={<Users />} />
+          <Route path="audit-logs" element={<AuditLogs />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
