@@ -31,6 +31,8 @@ const ACTION_LABELS: Record<string, string> = {
   catalog_update: 'Catalog entry updated',
   catalog_status_update: 'Catalog status changed',
   settings_update: 'Setting updated',
+  template_import: 'Word template imported (draft created)',
+  template_import_analyze: 'Word template analyzed',
 };
 
 export default function AuditLogs() {

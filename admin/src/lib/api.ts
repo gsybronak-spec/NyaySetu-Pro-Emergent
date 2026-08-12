@@ -5,11 +5,18 @@ async function request(path: string, method = 'GET', body?: unknown) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}/api/admin${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/admin${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err: any) {
+    // Network-level failure (backend unreachable / connection reset / CORS).
+    // Surface a readable message instead of the raw browser 'Failed to fetch'.
+    throw new Error('Server connection failed. Check that the backend is reachable and try again.');
+  }
 
   const text = await res.text();
   let json: any = null;
@@ -54,6 +61,9 @@ export const adminApi = {
   adminTemplateVersions: (id: string) => request(`/templates/${id}/versions`),
   adminPreviewTemplate: (id: string, data?: any) => request(`/templates/${id}/preview`, 'POST', data),
   adminMigrateSeed: () => request('/templates/migrate-seed', 'POST'),
+  adminImportAnalyze: (file_name: string, content_base64: string) =>
+    request('/templates/import-word/analyze', 'POST', { file_name, content_base64 }),
+  adminImportCreate: (data: any) => request('/templates/import-word', 'POST', data),
   getCaseForms: () => fetch(`${BASE}/api/catalog/case-forms`).then(r => r.json()),
   getCaseFormConfig: (id: string) => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json()),
   getCaseTypes: () => fetch(`${BASE}/api/catalog/case-types`).then(r => r.json()),

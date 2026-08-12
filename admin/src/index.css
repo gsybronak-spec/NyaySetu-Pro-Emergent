@@ -89,6 +89,14 @@ body { font-family: 'Inter', sans-serif; background: #F4F6F9; color: #0B1B3D; }
 
 /* Data table */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table-scroll { overflow-x: auto; }
+.table-scroll .data-table td input, .table-scroll .data-table td select, .table-scroll .data-table td textarea {
+  border: 1px solid #E1E5ED;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  background: #fff;
+}
 .data-table th { text-align: left; padding: 10px 12px; color: #3B4A6B; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #E1E5ED; }
 .data-table td { padding: 10px 12px; border-bottom: 1px solid #F4F6F9; color: #0B1B3D; }
 .data-table tr:last-child td { border-bottom: none; }

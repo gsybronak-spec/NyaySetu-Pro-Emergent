@@ -25,6 +25,7 @@ import bcrypt
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
+from docx_import import analyze_docx, decode_upload, DocxImportError
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -2079,6 +2080,29 @@ class AdminPreviewReq(BaseModel):
     fields: Optional[list[TemplateFieldDef]] = None
     settings: Optional[dict] = None
 
+
+class WordImportAnalyzeReq(BaseModel):
+    file_name: str = Field(..., max_length=200)
+    content_base64: str = Field(..., max_length=5_000_000)
+
+
+class WordImportCreateReq(BaseModel):
+    id: Optional[str] = Field(None, max_length=50)
+    name_en: str = Field(..., max_length=200)
+    name_gu: str = Field(..., max_length=200)
+    category: str = Field(default="General", max_length=50)
+    sub_category: Optional[str] = Field(None, max_length=100)
+    description: Optional[str] = Field(None, max_length=1000)
+    tags: list[str] = []
+    aliases: list[str] = []
+    case_types: list[str] = []
+    courts: list[str] = []
+    jurisdiction: Optional[str] = Field(None, max_length=200)
+    fields: list[TemplateFieldDef] = []
+    content_en: str = ""
+    content_gu: str = ""
+    settings: Optional[dict] = None
+
 class AdminUserStatusReq(BaseModel):
     active: bool = Field(..., description="True to enable the user, False to disable.")
 
@@ -2890,6 +2914,100 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
     return template_doc
 
 
+@admin_api.post("/templates/import-word/analyze")
+async def admin_import_word_analyze(req: WordImportAnalyzeReq, admin=Depends(require_super_admin)):
+    """Analyze an uploaded .docx and propose a template definition (fields, draft, settings).
+
+    The uploaded Word document is the source of truth: page size, margins, fonts,
+    formatting and wording are extracted deterministically. Nothing is published
+    here — the admin reviews the extracted fields and explicitly creates the draft.
+    """
+    try:
+        data = decode_upload(req.file_name, req.content_base64)
+        analysis = analyze_docx(data, req.file_name)
+    except DocxImportError as e:
+        raise HTTPException(400, str(e))
+    await audit_log(admin=admin, action="template_import_analyze", target=req.file_name,
+                    metadata={"page_size": analysis["page_size"], "fields": len(analysis["fields"]),
+                              "unmapped": len(analysis["unmapped"])})
+    return analysis
+
+
+@admin_api.post("/templates/import-word")
+async def admin_import_word_create(req: WordImportCreateReq, admin=Depends(require_super_admin)):
+    """Create a draft template from an admin-reviewed Word import.
+
+    The client sends back the reviewed field configuration plus the analyzed
+    content/settings. Creates a DRAFT only — publishing is always an explicit
+    admin action. source="imported" so the record is clearly identifiable.
+    """
+    _validate_template_settings(req.settings)
+    template_id = req.id or re.sub(r"[^a-z0-9_]", "_", req.name_en.lower().strip().replace(" ", "_"))[:50]
+    existing = await db.templates.find_one({"id": template_id})
+    if existing:
+        raise HTTPException(409, f"Template with id '{template_id}' already exists. Rename it or delete the existing draft first.")
+
+    validation = _validate_placeholders(req.content_en, req.content_gu, [f.model_dump() for f in req.fields])
+    if not validation["valid"]:
+        errors = []
+        if validation.get("unknown"):
+            errors.append(f"unknown placeholders: {', '.join(validation['unknown'])}")
+        if validation.get("duplicate_keys"):
+            errors.append(f"duplicate field keys: {', '.join(validation['duplicate_keys'])}")
+        raise HTTPException(
+            400,
+            "Cannot create template: " + "; ".join(errors)
+            + ". Add matching fields for each placeholder before saving the draft."
+        )
+
+    ts = now().isoformat()
+    template_doc = {
+        "id": template_id,
+        "slug": template_id,
+        "name_en": req.name_en,
+        "name_gu": req.name_gu,
+        "category": req.category,
+        "sub_category": req.sub_category,
+        "description": req.description,
+        "tags": req.tags,
+        "aliases": req.aliases,
+        "case_types": req.case_types,
+        "courts": req.courts,
+        "jurisdiction": req.jurisdiction,
+        "fields": [f.model_dump() for f in req.fields],
+        "content_en": req.content_en or "",
+        "content_gu": req.content_gu or "",
+        "settings": req.settings or {
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 2.5,
+            "margin_right_cm": 2.5,
+            "gujarati_font": "LohitGujarati",
+            "english_font": "Times-Roman",
+            "body_size": 13,
+            "heading_size": 14,
+            "line_spacing": 19.5,
+            "paragraph_spacing": 6,
+            "page_size": "A4",
+        },
+        "status": "draft",
+        "version": 1,
+        "locked": False,
+        "source": "imported",
+        "created_by": admin["id"],
+        "updated_by": admin["id"],
+        "created_at": ts,
+        "updated_at": ts,
+        "published_at": None,
+    }
+    await db.templates.insert_one(template_doc.copy())
+    await audit_log(admin=admin, action="template_import", target=template_id,
+                    metadata={"name_en": req.name_en, "category": req.category,
+                              "fields": len(req.fields), "source": "word_docx"})
+    template_doc.pop("_id", None)
+    return template_doc
+
+
 @admin_api.put("/templates/{template_id}")
 async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admin=Depends(get_admin)):
     """Update a draft template. Published/locked templates cannot be directly modified."""
@@ -2945,6 +3063,31 @@ async def admin_publish_template(template_id: str, admin=Depends(get_admin)):
             
     if t.get("status") == "published" and t.get("locked"):
         raise HTTPException(400, "Template is already published and locked")
+
+    # Guard: malformed/incomplete DB records (e.g. the partial documents created
+    # by the pre-24d0936 seed-clone bug) must fail with a readable error, never
+    # an unhandled 500 (which surfaces as 'Failed to fetch' in the admin UI).
+    # Names are mandatory in both languages; at least one language's content
+    # must be present (Gujarati-only templates legitimately have empty content_en).
+    missing = [k for k in ("name_en", "name_gu") if not str(t.get(k) or "").strip()]
+    has_content = bool(str(t.get("content_en") or "").strip() or str(t.get("content_gu") or "").strip())
+    if not has_content:
+        missing.append("content (content_en/content_gu)")
+    if missing:
+        raise HTTPException(
+            400,
+            "Cannot publish: this template record is incomplete (missing: "
+            + ", ".join(missing)
+            + "). It is a malformed/partial record and cannot be published. "
+            + "If it shadows a seed template, remove it with the 'Remove Shadow Draft' action "
+            + "and re-edit the seed template instead.",
+        )
+    if not isinstance(t.get("fields"), list):
+        raise HTTPException(
+            400,
+            "Cannot publish: the template's field list is missing or invalid. "
+            + "This record is malformed; remove it and recreate the template draft.",
+        )
         
     validation = _validate_placeholders(
         t.get("content_en", ""), t.get("content_gu", ""), t.get("fields", [])
