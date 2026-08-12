@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, getToken, setOnUnauthorized, setToken } from "@/src/api/client";
+import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
 
 interface User {
   id: string;
@@ -22,6 +23,7 @@ interface AuthCtx {
   signInPassword: (identifier: string, password: string, referralCode?: string) => Promise<{ is_new: boolean }>;
   registerAccount: (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => Promise<{ is_new: boolean }>;
   completeGoogleCode: (code: string, redirectUri: string, referralCode?: string) => Promise<{ is_new: boolean }>;
+  firebaseExchange: (idToken: string, referralCode?: string) => Promise<{ is_new: boolean }>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: User | null) => void;
@@ -124,13 +126,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const firebaseExchange = async (idToken: string, referralCode?: string) => {
+    setLoading(true);
+    try {
+      const res = await api.firebaseAuth(idToken, referralCode);
+      await setToken(res.token);
+      setUser(res.user);
+      return { is_new: res.is_new };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const signOut = async () => {
     await setToken(null);
     setUser(null);
+    // Clear the Firebase client session too (no-op when Firebase is not
+    // configured). The NyaySetu JWT removal is authoritative either way.
+    await firebaseSignOutClient();
   };
 
   return (
-    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, refresh, signOut, setUser }}>
+    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, firebaseExchange, refresh, signOut, setUser }}>
       {children}
     </Ctx.Provider>
   );

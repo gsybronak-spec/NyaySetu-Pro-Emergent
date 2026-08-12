@@ -7,10 +7,12 @@ import { router } from "expo-router";
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { api } from "@/src/api/client";
+import { firebaseConfigured, firebaseSendPasswordReset } from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function ForgotPassword() {
   const [mobile, setMobile] = useState("");
+  const [resetVia, setResetVia] = useState<"otp" | "firebase">("otp");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
@@ -24,6 +26,21 @@ export default function ForgotPassword() {
   const sendOtp = async () => {
     setErr(undefined);
     const m = mobile.trim();
+    // Firebase email reset for email input when Firebase is configured; the
+    // existing mobile-OTP reset stays for legacy accounts and mobile numbers.
+    if (m.includes("@") && firebaseConfigured) {
+      setBusy(true);
+      try {
+        await firebaseSendPasswordReset(m);
+        setResetVia("firebase");
+        setDone(true);
+      } catch (e: any) {
+        setErr(e?.message || "Could not send the reset email. Please try again.");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (!/^\d{10}$/.test(m)) {
       setErr("Enter a valid 10-digit mobile number");
       return;
@@ -31,6 +48,7 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       await api.forgotPassword(m);
+      setResetVia("otp");
       setOtpSent(true);
     } catch (e: any) {
       setErr(e?.message || "Could not send OTP. Please try again.");
@@ -84,7 +102,11 @@ export default function ForgotPassword() {
               <>
                 <Ionicons name="checkmark-circle" size={56} color="#4CAF50" style={{ alignSelf: "center", marginBottom: Spacing.md }} />
                 <Text style={styles.cardTitle}>Password Reset</Text>
-                <Text style={styles.cardSub}>Password reset successfully. Please login with your new password.</Text>
+                <Text style={styles.cardSub}>
+                  {resetVia === "firebase"
+                    ? "If a matching account exists, a password reset email has been sent to your inbox."
+                    : "Password reset successfully. Please login with your new password."}
+                </Text>
                 <Button
                   testID="forgot-go-login"
                   title="Go to Login"
@@ -95,20 +117,20 @@ export default function ForgotPassword() {
               <>
                 <Text style={styles.cardTitle}>Forgot Password</Text>
                 <Text style={styles.cardSub}>
-                  Enter your registered mobile number. We'll send an OTP to reset your password.
+                  Enter your registered mobile number (we'll send an OTP) or email (we'll send a reset link).
                 </Text>
                 <Field
                   testID="forgot-mobile-input"
-                  label="Mobile Number"
+                  label="Mobile Number or Email"
                   labelColor="#D1D8E5"
-                  placeholder="10-digit mobile"
-                  keyboardType="number-pad"
-                  maxLength={10}
+                  placeholder="10-digit mobile or email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
                   value={mobile}
                   onChangeText={setMobile}
                   error={err}
                 />
-                <Button testID="forgot-send-otp-button" title="Send OTP" loading={busy} onPress={sendOtp} />
+                <Button testID="forgot-send-otp-button" title="Send Reset" loading={busy} onPress={sendOtp} />
               </>
             ) : (
               <>

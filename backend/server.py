@@ -135,6 +135,20 @@ GOOGLE_SESSION_URL = _GOOGLE_SESSION_URL_ENV or (
     "" if _PRODUCTION else "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 )
 
+# Firebase Authentication — server-side verification of Firebase ID tokens.
+# Verification uses Firebase's public signing keys (the documented verification
+# path for servers without a service account); the public project id is the only
+# configuration needed. Fails safe (503) when FIREBASE_PROJECT_ID is unset — no
+# default or invented value is ever used. Real SMS from Firebase Phone Auth also
+# requires the Firebase project (and Blaze billing for production SMS volumes).
+FIREBASE_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "").strip()
+FIREBASE_CERT_URL = os.environ.get(
+    "FIREBASE_CERT_URL",
+    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com",
+).strip()
+_firebase_certs: Optional[dict] = None
+_firebase_certs_fetched_at: Optional[float] = None
+
 
 # ============================================================
 # ADMIN-CONFIGURABLE OPERATIONAL SETTINGS (Phase 40)
@@ -171,6 +185,10 @@ async def _get_setting(key: str):
 # ============================================================
 # MODELS
 # ============================================================
+
+class FirebaseAuthReq(BaseModel):
+    id_token: str = Field(..., max_length=8192)
+    referral_code: Optional[str] = Field(None, max_length=20)
 
 class SendOtpReq(BaseModel):
     mobile: str = Field(..., max_length=15)
@@ -885,6 +903,160 @@ async def google_code_exchange(req: GoogleCodeReq):
         if updates:
             await db.users.update_one({"id": user["id"]}, {"$set": updates})
             user.update(updates)
+
+    token = make_token(user["id"], user.get("token_version", 0))
+    return {"token": token, "user": _public_user(user), "is_new": is_new}
+
+
+# ============================================================
+# FIREBASE AUTH — verified ID-token exchange
+# ============================================================
+
+async def _get_firebase_certs() -> dict:
+    """Fetch Firebase public signing keys (x509 certs), cached for 5 minutes.
+    These are the keys Firebase uses to sign ID tokens; verification against
+    them is the officially documented path for servers without a service
+    account. Google rotates these keys, so a missing `kid` triggers a refresh.
+    Never logs the keys or any token."""
+    global _firebase_certs, _firebase_certs_fetched_at
+    now_ts = time.time()
+    if _firebase_certs and _firebase_certs_fetched_at and now_ts - _firebase_certs_fetched_at < 300:
+        return _firebase_certs
+    async with httpx.AsyncClient(timeout=10) as http:
+        r = await http.get(FIREBASE_CERT_URL)
+    if r.status_code != 200:
+        raise HTTPException(503, "Firebase authentication service unavailable")
+    _firebase_certs = r.json()
+    _firebase_certs_fetched_at = now_ts
+    return _firebase_certs
+
+
+def _verify_firebase_token_sync(id_token: str, cert_pem: str) -> dict:
+    """RS256-verify a Firebase ID token with Firebase's public cert."""
+    claims = jwt.decode(
+        id_token,
+        cert_pem,
+        algorithms=["RS256"],
+        audience=FIREBASE_PROJECT_ID,
+        issuer=f"https://securetoken.google.com/{FIREBASE_PROJECT_ID}",
+    )
+    return claims
+
+
+async def verify_firebase_id_token(id_token: str) -> dict:
+    """Verify a Firebase ID token server-side and return the verified identity.
+
+    Enforces: RS256 signature against Firebase's public key, `aud` == project
+    id, `iss` == securetoken.google.com/<project>, expiry, and presence of a
+    `uid`. The returned email/phone come from the VERIFIED token claims — never
+    from anything the client sends separately.
+    """
+    if not FIREBASE_PROJECT_ID:
+        raise HTTPException(503, "Firebase authentication is not configured on the server.")
+    try:
+        header = jwt.get_unverified_header(id_token)
+        kid = header.get("kid")
+    except Exception:
+        raise HTTPException(401, "Invalid Firebase token")
+    if not kid:
+        raise HTTPException(401, "Invalid Firebase token")
+    certs = await _get_firebase_certs()
+    cert_pem = certs.get(kid)
+    # Key rotation: refresh once in case a fresh kid appeared since our cache.
+    if not cert_pem:
+        _firebase_certs_fetched_at = 0.0
+        certs = await _get_firebase_certs()
+        cert_pem = certs.get(kid)
+    if not cert_pem:
+        raise HTTPException(401, "Invalid Firebase token")
+    try:
+        claims = _verify_firebase_token_sync(id_token, cert_pem)
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(401, "Firebase token expired. Please sign in again.")
+    except Exception:
+        raise HTTPException(401, "Invalid Firebase token")
+    uid = claims.get("uid")
+    if not uid:
+        raise HTTPException(401, "Invalid Firebase token")
+    return {
+        "uid": uid,
+        "email": ((claims.get("email") or "").strip().lower() or None),
+        "email_verified": bool(claims.get("email_verified")),
+        "phone": claims.get("phone_number"),
+        "name": claims.get("name"),
+        "picture": claims.get("picture"),
+        "provider": (claims.get("firebase") or {}).get("sign_in_provider"),
+    }
+
+
+@api.post("/auth/firebase")
+async def firebase_auth(req: FirebaseAuthReq):
+    """Exchange a verified Firebase ID token for the existing NyaySetu session.
+
+    Flow: Firebase client SDK authenticates (email/password, phone OTP, or
+    Google) -> the client sends ONLY the Firebase ID token -> we verify it
+    server-side -> find or link the NyaySetu user by verified identity
+    (firebase_uid -> email -> phone) -> issue the existing NyaySetu JWT.
+    The frontend-supplied identity is never trusted; everything comes from the
+    verified token claims. Fails safe (503) when FIREBASE_PROJECT_ID is unset.
+    """
+    if not FIREBASE_PROJECT_ID:
+        raise HTTPException(
+            503,
+            "Firebase authentication is not configured on the server. Set "
+            "FIREBASE_PROJECT_ID in the backend environment to enable it.",
+        )
+    # Hash the token for the rate-limit key (never store/log the raw token; the
+    # first characters of JWTs are a shared header so a prefix key would lump
+    # unrelated attempts into one bucket).
+    _rl_key = hashlib.sha256(req.id_token.encode("utf-8")).hexdigest()[:32]
+    if not rate_limit(f"firebase_auth:{_rl_key}", 5, 60):
+        raise HTTPException(429, "Too many login attempts. Please wait before trying again.")
+    info = await verify_firebase_id_token(req.id_token)
+
+    # 1) Already linked to this Firebase UID
+    user = await db.users.find_one({"firebase_uid": info["uid"]}, {"_id": 0})
+    # 2) Existing user with the verified email (only when Google verified it)
+    if not user and info["email"] and info["email_verified"]:
+        user = await db.users.find_one({"email": info["email"]}, {"_id": 0})
+    # 3) Existing user with the verified phone
+    if not user and info["phone"]:
+        clean_phone = info["phone"].replace(" ", "")
+        if clean_phone.startswith("+91"):
+            clean_phone = clean_phone[3:]
+        user = await db.users.find_one({"mobile": clean_phone}, {"_id": 0})
+
+    is_new = False
+    if not user:
+        is_new = True
+        mobile = None
+        if info["phone"]:
+            clean_phone = info["phone"].replace(" ", "")
+            if clean_phone.startswith("+91"):
+                clean_phone = clean_phone[3:]
+            mobile = clean_phone if len(clean_phone) == 10 else None
+        email = info["email"] if info["email_verified"] else None
+        user = await create_new_user(
+            mobile=mobile,
+            email=email,
+            name=info["name"],
+            picture=info["picture"],
+            provider="firebase",
+        )
+        await db.users.update_one({"id": user["id"]}, {"$set": {"firebase_uid": info["uid"]}})
+        user["firebase_uid"] = info["uid"]
+        await apply_referral(req.referral_code, user)
+    elif user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
+    else:
+        # Existing user signing in via Firebase — link the UID and keep profile fresh.
+        updates = {"firebase_uid": info["uid"]}
+        if info["name"] and not user.get("name"):
+            updates["name"] = info["name"]
+        if info["picture"]:
+            updates["picture"] = info["picture"]
+        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        user.update(updates)
 
     token = make_token(user["id"], user.get("token_version", 0))
     return {"token": token, "user": _public_user(user), "is_new": is_new}
@@ -3811,6 +3983,9 @@ async def create_indexes():
     await db.users.create_index("id", unique=True)
     await db.users.create_index("mobile", unique=True, sparse=True)
     await db.users.create_index("email", unique=True, sparse=True)
+    # Firebase identity — sparse so legacy users (no firebase_uid) are unaffected,
+    # unique so one Firebase UID can never map to two NyaySetu accounts.
+    await db.users.create_index("firebase_uid", unique=True, sparse=True)
     await db.users.create_index("referral_code", unique=True, sparse=True)
     # Cases
     await db.cases.create_index("user_id")

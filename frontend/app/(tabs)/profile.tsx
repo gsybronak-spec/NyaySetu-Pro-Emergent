@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -20,6 +20,14 @@ export default function Profile() {
   }, []));
 
   const logout = () => {
+    if (Platform.OS === "web") {
+      // Alert.alert is a no-op on web (react-native-web), so sign-out would
+      // silently never run. Use the browser's confirm dialog instead.
+      if (typeof window !== "undefined" && window.confirm("Sign out? You will need to login again to continue.")) {
+        signOut().then(() => router.replace("/(auth)/login")).catch(() => router.replace("/(auth)/login"));
+      }
+      return;
+    }
     Alert.alert("Sign out?", "You will need to verify OTP again to sign in.", [
       { text: "Cancel", style: "cancel" },
       { text: "Sign out", style: "destructive", onPress: async () => { await signOut(); router.replace("/(auth)/login"); } },

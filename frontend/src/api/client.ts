@@ -96,6 +96,10 @@ export const api = {
   setPassword: (new_password: string) => request("/auth/set-password", "POST", { new_password }),
   googleSession: (session_id: string, referral_code?: string) =>
     request("/auth/google-session", "POST", { session_id, referral_code }),
+  // Firebase Auth: exchange a VERIFIED Firebase ID token for the NyaySetu JWT.
+  // The backend verifies the token server-side (never trusts client identity).
+  firebaseAuth: (id_token: string, referral_code?: string) =>
+    request("/auth/firebase", "POST", { id_token, referral_code }),
   // Native Google OAuth: exchange the authorization code server-side.
   googleExchange: (code: string, redirect_uri: string, referral_code?: string) =>
     request("/auth/google", "POST", { code, redirect_uri, referral_code }),

@@ -6,11 +6,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
+import {
+  firebaseConfirmPhoneOtp,
+  getPendingPhoneConfirmation,
+} from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function Otp() {
-  const { mobile, referral } = useLocalSearchParams<{ mobile: string; referral?: string }>();
-  const { verifyOtp, loading } = useAuth();
+  const { mobile, referral, firebase } = useLocalSearchParams<{ mobile: string; referral?: string; firebase?: string }>();
+  const { verifyOtp, firebaseExchange, loading } = useAuth();
   const [otp, setOtp] = useState("");
   const [err, setErr] = useState<string>();
 
@@ -21,6 +25,18 @@ export default function Otp() {
       return;
     }
     try {
+      // Firebase phone-auth OTP: confirm with Firebase, exchange the ID token.
+      if (firebase === "1") {
+        const confirmation = getPendingPhoneConfirmation();
+        if (!confirmation) {
+          setErr("OTP session expired. Please go back and request a new OTP.");
+          return;
+        }
+        const idToken = await firebaseConfirmPhoneOtp(confirmation, otp);
+        const { is_new } = await firebaseExchange(idToken, referral ? String(referral) : undefined);
+        router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+        return;
+      }
       const { is_new } = await verifyOtp(String(mobile), otp, referral ? String(referral) : undefined);
       router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
     } catch (e: any) {

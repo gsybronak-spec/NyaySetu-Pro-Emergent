@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,12 +8,17 @@ import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
 import { useGoogleAuth } from "@/src/hooks/useGoogleAuth";
+import {
+  firebaseConfigured as fbConfigured,
+  firebaseEmailPasswordLogin,
+  firebaseSendPhoneOtp,
+} from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 type Mode = "password" | "otp";
 
 export default function Login() {
-  const { signInPassword, signInOtp, loading } = useAuth();
+  const { signInPassword, signInOtp, firebaseExchange, loading } = useAuth();
   const { startGoogleLogin, googleBusy, googleError, setGoogleError } = useGoogleAuth();
 
   const [mode, setMode] = useState<Mode>("password");
@@ -24,6 +29,8 @@ export default function Login() {
   const [referral, setReferral] = useState("");
   const [showReferral, setShowReferral] = useState(false);
   const [err, setErr] = useState<string>();
+  // Hidden container for Firebase Phone Auth's invisible reCAPTCHA (web only).
+  const recaptchaRef = useRef<View | null>(null);
 
   const submitPassword = async () => {
     setErr(undefined);
@@ -36,9 +43,34 @@ export default function Login() {
       setErr("Enter your password");
       return;
     }
+    // Firebase email/password is authoritative when the account exists in
+    // Firebase. Legacy NyaySetu accounts (never created in Firebase) fall back
+    // to the backend password check transparently.
+    const isEmail = id.includes("@");
+    if (isEmail && fbConfigured) {
+      try {
+        const fb = await firebaseEmailPasswordLogin(id, password);
+        if (fb) {
+          const { is_new } = await firebaseExchange(fb.idToken, referral.trim() || undefined);
+          router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+          return;
+        }
+      } catch (e: any) {
+        const code = e?.code || "";
+        if (code === "auth/user-not-found") {
+          // Not a Firebase account — try the legacy NyaySetu password below.
+        } else if (code === "auth/invalid-email") {
+          setErr("Enter a valid email address.");
+          return;
+        } else {
+          setErr(e?.message || "Invalid mobile/email or password.");
+          return;
+        }
+      }
+    }
     try {
-      await signInPassword(id, password, referral.trim() || undefined);
-      router.replace("/(tabs)/home");
+      const { is_new } = await signInPassword(id, password, referral.trim() || undefined);
+      router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
     } catch (e: any) {
       setErr(e?.message || "Invalid mobile/email or password.");
     }
@@ -50,6 +82,18 @@ export default function Login() {
     if (!/^\d{10}$/.test(m)) {
       setErr("Enter a valid 10-digit mobile number");
       return;
+    }
+    // Firebase Phone Auth sends the SMS and verifies the OTP (reCAPTCHA behind
+    // the scenes). On ANY Firebase failure we fall back to the existing
+    // NyaySetu OTP flow so login keeps working.
+    if (fbConfigured && Platform.OS === "web" && recaptchaRef.current) {
+      try {
+        await firebaseSendPhoneOtp(m, recaptchaRef.current as any);
+        router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim(), firebase: "1" } });
+        return;
+      } catch {
+        // fall through to the existing OTP flow below
+      }
     }
     try {
       await signInOtp(m);
@@ -235,6 +279,12 @@ export default function Login() {
             <Text style={styles.hint}>By continuing, you agree to our Terms and Privacy Policy.</Text>
           </View>
         </ScrollView>
+
+        {/* Hidden container for Firebase Phone Auth's invisible reCAPTCHA (web
+            only). Must exist in the DOM when firebaseSendPhoneOtp runs. */}
+        {fbConfigured && Platform.OS === "web" && (
+          <View ref={recaptchaRef as any} testID="firebase-recaptcha-container" style={styles.recaptchaWrap} />
+        )}
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -275,6 +325,8 @@ const styles = StyleSheet.create({
   modeTabTxtActive: { color: "#0B1B3D", fontWeight: "700" },
   otpNote: { color: "#A6B1C2", fontSize: 12.5, marginBottom: Spacing.md, lineHeight: 18 },
   eyeBtn: { position: "absolute", right: 12, top: 42 },
+  // Off-screen (not 0-sized) so reCAPTCHA's invisible iframe can still render.
+  recaptchaWrap: { position: "absolute", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" },
   dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: Spacing.lg },
   divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255,255,255,0.2)" },
   divTxt: { color: "#A6B1C2", fontSize: 12, marginHorizontal: Spacing.md, fontWeight: "600" },
