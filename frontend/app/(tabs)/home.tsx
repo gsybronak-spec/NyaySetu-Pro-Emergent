@@ -9,6 +9,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { formatAdvocateName } from "@/src/utils/advocate";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -45,7 +46,7 @@ export default function Home() {
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
-  const advocateName = user?.name || "Advocate";
+  const advocateName = formatAdvocateName(user?.name);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>

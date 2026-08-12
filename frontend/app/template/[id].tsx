@@ -21,6 +21,7 @@ import { Field } from "@/src/components/Field";
 import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { formatDateDisplay, isISODate } from "@/src/utils/date";
+import { formatAdvocateName } from "@/src/utils/advocate";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -87,8 +88,11 @@ export default function TemplateApplication() {
         // (the app has no advocate catalog — the logged-in advocate drafts the document).
         const me = await api.me().catch(() => null);
         if (me?.name) {
-          setExtraOptions((p) => ({ ...p, advocate_name: [{ value: me.name, label_en: me.name, label_gu: me.name }] }));
-          if (!initialValues.advocate_name) initialValues["advocate_name"] = me.name;
+          // Display and autofill the professional advocate name ("Adv. <Name>",
+          // no double prefix) so generated documents carry the same format.
+          const advName = formatAdvocateName(me.name);
+          setExtraOptions((p) => ({ ...p, advocate_name: [{ value: advName, label_en: advName, label_gu: advName }] }));
+          if (!initialValues.advocate_name) initialValues["advocate_name"] = advName;
         }
         // Date fields default to today when unset (still editable).
         for (const f of t.fields || []) {

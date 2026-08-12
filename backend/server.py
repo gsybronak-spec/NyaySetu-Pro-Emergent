@@ -1351,10 +1351,22 @@ async def get_template(template_id: str):
 # APPLICATION GENERATION
 # ============================================================
 
+def format_advocate_name(name: Optional[str] = None) -> str:
+    """Display an advocate name as \"Adv. <Name>\" without double-prefixing.
+
+    Mirrors the frontend helper (src/utils/advocate.ts) so documents render the
+    same professional format regardless of generation path. Client-provided
+    values are untouched; only the server-side default is formatted."""
+    n = (name or "").strip()
+    if not n:
+        return "Advocate"
+    return n if re.match(r"^adv\.?\s", n, re.IGNORECASE) else f"Adv. {n}"
+
+
 async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
     ctx = dict(values or {})
-    # Advocate
-    ctx.setdefault("advocate_name", user.get("name") or "Advocate")
+    # Advocate (server-side default only; a client-provided advocate_name wins)
+    ctx.setdefault("advocate_name", format_advocate_name(user.get("name")))
     # Today (formatted)
     ctx["today"] = now().strftime("%d-%m-%Y")
     # Guard: if a client sent a raw district id (e.g. "ahmedabad") instead of a
