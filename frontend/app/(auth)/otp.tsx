@@ -70,7 +70,9 @@ export default function Otp() {
               error={err}
             />
             <Button testID="otp-verify-button" title="Verify & Continue" loading={loading} onPress={submit} />
-            <Text style={styles.hint}>For testing use OTP: 123456</Text>
+            {/* Dev-only hint for the legacy NyaySetu OTP path — never shown when
+                the OTP comes from Firebase SMS. */}
+            {firebase !== "1" && <Text style={styles.hint}>For testing use OTP: 123456</Text>}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

@@ -22,6 +22,8 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
 import bcrypt
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
+from cryptography.x509 import load_pem_x509_certificate
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
@@ -931,11 +933,25 @@ async def _get_firebase_certs() -> dict:
     return _firebase_certs
 
 
+def _firebase_cert_to_key(cert_pem: str):
+    """Turn a Firebase public signing key into a key PyJWT can verify against.
+
+    The Google cert endpoint returns x509 CERTIFICATES (PEM) — PyJWT's RS256
+    path parses `BEGIN PUBLIC KEY`, not certificates — so parse the x509 and
+    take its public key. Some callers (tests) provide a plain public-key PEM,
+    which we accept as a fallback.
+    """
+    try:
+        return load_pem_x509_certificate(cert_pem.encode()).public_key()
+    except Exception:
+        return load_pem_public_key(cert_pem.encode())
+
+
 def _verify_firebase_token_sync(id_token: str, cert_pem: str) -> dict:
     """RS256-verify a Firebase ID token with Firebase's public cert."""
     claims = jwt.decode(
         id_token,
-        cert_pem,
+        _firebase_cert_to_key(cert_pem),
         algorithms=["RS256"],
         audience=FIREBASE_PROJECT_ID,
         issuer=f"https://securetoken.google.com/{FIREBASE_PROJECT_ID}",
@@ -975,7 +991,9 @@ async def verify_firebase_id_token(id_token: str) -> dict:
         raise HTTPException(401, "Firebase token expired. Please sign in again.")
     except Exception:
         raise HTTPException(401, "Invalid Firebase token")
-    uid = claims.get("uid")
+    # Firebase ID tokens carry the uid in `sub` (and legacy `user_id`) — there
+    # is no `uid` claim. Accept all three for robustness.
+    uid = claims.get("uid") or claims.get("user_id") or claims.get("sub")
     if not uid:
         raise HTTPException(401, "Invalid Firebase token")
     return {

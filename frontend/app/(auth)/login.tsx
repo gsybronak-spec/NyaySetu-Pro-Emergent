@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
 import { useGoogleAuth } from "@/src/hooks/useGoogleAuth";
 import {
+  destroyFirebaseRecaptcha,
   firebaseConfigured as fbConfigured,
   firebaseEmailPasswordLogin,
   firebaseSendPhoneOtp,
@@ -29,8 +30,15 @@ export default function Login() {
   const [referral, setReferral] = useState("");
   const [showReferral, setShowReferral] = useState(false);
   const [err, setErr] = useState<string>();
-  // Hidden container for Firebase Phone Auth's invisible reCAPTCHA (web only).
-  const recaptchaRef = useRef<View | null>(null);
+  // Empty anchor element inside the Send OTP button wrapper where Firebase's
+  // INVISIBLE reCAPTCHA widget renders (web only). reCAPTCHA requires the
+  // container to be empty, and this anchor is invisible — no checkbox, no
+  // badge, no visible container is ever rendered on the login page.
+  const recaptchaAnchorRef = useRef<View | null>(null);
+
+  // Destroy the invisible reCAPTCHA widget when leaving the login screen so no
+  // stale widget/iframe is ever left behind.
+  useEffect(() => () => destroyFirebaseRecaptcha(), []);
 
   const submitPassword = async () => {
     setErr(undefined);
@@ -62,6 +70,9 @@ export default function Login() {
         } else if (code === "auth/invalid-email") {
           setErr("Enter a valid email address.");
           return;
+        } else if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
+          setErr("Invalid mobile/email or password.");
+          return;
         } else {
           setErr(e?.message || "Invalid mobile/email or password.");
           return;
@@ -83,12 +94,13 @@ export default function Login() {
       setErr("Enter a valid 10-digit mobile number");
       return;
     }
-    // Firebase Phone Auth sends the SMS and verifies the OTP (reCAPTCHA behind
-    // the scenes). On ANY Firebase failure we fall back to the existing
+    // Firebase Phone Auth sends the SMS and verifies the OTP (invisible
+    // reCAPTCHA behind the scenes, attached to the Send OTP button). On ANY
+    // Firebase failure the widget is reset and we fall back to the existing
     // NyaySetu OTP flow so login keeps working.
-    if (fbConfigured && Platform.OS === "web" && recaptchaRef.current) {
+    if (fbConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
       try {
-        await firebaseSendPhoneOtp(m, recaptchaRef.current as any);
+        await firebaseSendPhoneOtp(m, recaptchaAnchorRef.current as any);
         router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim(), firebase: "1" } });
         return;
       } catch {
@@ -236,7 +248,15 @@ export default function Login() {
                   </Pressable>
                 )}
 
-                <Button testID="login-send-otp-button" title="Send OTP" loading={loading} onPress={submitOtp} />
+                {/* The invisible Firebase reCAPTCHA widget renders inside the
+                    empty anchor below (inside the Send OTP button wrapper) — no
+                    CAPTCHA UI is ever shown to the user. */}
+                <View style={styles.otpBtnWrap}>
+                  <Button testID="login-send-otp-button" title="Send OTP" loading={loading} onPress={submitOtp} />
+                  {fbConfigured && Platform.OS === "web" && (
+                    <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
+                  )}
+                </View>
               </>
             )}
 
@@ -280,11 +300,6 @@ export default function Login() {
           </View>
         </ScrollView>
 
-        {/* Hidden container for Firebase Phone Auth's invisible reCAPTCHA (web
-            only). Must exist in the DOM when firebaseSendPhoneOtp runs. */}
-        {fbConfigured && Platform.OS === "web" && (
-          <View ref={recaptchaRef as any} testID="firebase-recaptcha-container" style={styles.recaptchaWrap} />
-        )}
       </KeyboardAvoidingView>
     </LinearGradient>
   );
@@ -325,8 +340,11 @@ const styles = StyleSheet.create({
   modeTabTxtActive: { color: "#0B1B3D", fontWeight: "700" },
   otpNote: { color: "#A6B1C2", fontSize: 12.5, marginBottom: Spacing.md, lineHeight: 18 },
   eyeBtn: { position: "absolute", right: 12, top: 42 },
-  // Off-screen (not 0-sized) so reCAPTCHA's invisible iframe can still render.
-  recaptchaWrap: { position: "absolute", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" },
+  otpBtnWrap: { position: "relative" },
+  // Empty, off-screen anchor for the INVISIBLE reCAPTCHA widget. Must remain
+  // empty (reCAPTCHA render() requires an empty container) and is never
+  // visible — no checkbox, badge, or CAPTCHA card appears on the page.
+  recaptchaAnchor: { position: "absolute", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" },
   dividerRow: { flexDirection: "row", alignItems: "center", marginVertical: Spacing.lg },
   divLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: "rgba(255,255,255,0.2)" },
   divTxt: { color: "#A6B1C2", fontSize: 12, marginHorizontal: Spacing.md, fontWeight: "600" },
