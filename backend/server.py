@@ -1736,6 +1736,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
     _validate_page_size(req.page_size)
+    if req.format not in ("pdf", "docx"):
+        raise HTTPException(422, "format must be 'pdf' or 'docx'")
     if not rate_limit(f"download:{user['id']}", 30, 60):
         raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)

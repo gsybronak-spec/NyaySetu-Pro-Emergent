@@ -38,14 +38,14 @@ export function describeStatusError(status: number): string | null {
   return null;
 }
 
-async function request(path: string, method = "GET", body?: any) {
+async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS) {
   const token = await getToken();
   const headers: any = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     res = await fetch(`${BASE}/api${path}`, {
       method,
@@ -139,7 +139,10 @@ export const api = {
   },
   template: (id: string) => request(`/templates/${id}`),
   previewApp: (data: any) => request("/applications/preview", "POST", data),
-  downloadApp: (data: any) => request("/applications/download", "POST", data),
+  // Downloads may need longer: document generation + a cold Render instance can
+  // exceed the 30s default timeout for large legal PDFs. 90s keeps the request
+  // from being aborted mid-generation while still failing fast on hangs.
+  downloadApp: (data: any) => request("/applications/download", "POST", data, 90000),
   history: () => request("/applications/history"),
   wallet: () => request("/wallet"),
   purchase: (plan_id: string) => request("/purchase/mock", "POST", { plan_id }),

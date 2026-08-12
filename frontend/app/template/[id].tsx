@@ -13,8 +13,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import * as FileSystem from "expo-file-system/legacy";
-import * as Sharing from "expo-sharing";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
@@ -22,6 +20,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { formatDateDisplay, isISODate } from "@/src/utils/date";
 import { formatAdvocateName } from "@/src/utils/advocate";
+import { saveDocument } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -43,7 +42,14 @@ export default function TemplateApplication() {
   const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Which format is being generated right now (drives the per-button loading
+  // copy "Generating PDF…" / "Generating Word…").
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
   const [filename, setFilename] = useState("");
+  // Inline success/error feedback: Alert.alert is a NO-OP on web
+  // (react-native-web), so the download result must also be visible in the UI
+  // or users would get zero feedback — exactly the reported symptom.
+  const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
   const [extraOptions, setExtraOptions] = useState<Record<string, any[]>>({});
   // Page size is template-controlled (admin-configured per template, e.g.
   // affidavit -> Legal). The lawyer does NOT choose it; the backend resolves
@@ -166,6 +172,8 @@ export default function TemplateApplication() {
 
   const download = async (format: "pdf" | "docx") => {
     setBusy(true);
+    setDownloading(format);
+    setNotice(null);
     try {
       const res = await api.downloadApp({
         template_id: templateId,
@@ -175,28 +183,44 @@ export default function TemplateApplication() {
         format,
         filename: `${filename}.${format}`,
       });
-      const path = `${FileSystem.cacheDirectory}${res.filename}`;
-      await FileSystem.writeAsStringAsync(path, res.base64, { encoding: "base64" });
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(path, { mimeType: res.mime_type, dialogTitle: "Save or Share Document" });
+      if (!res?.base64) {
+        throw new Error("The server returned an empty document. Please try again.");
       }
+      // Delivers the file (real browser download on web, share sheet on
+      // native) and VALIDATES the bytes are actually the requested format
+      // before we claim success. Throws with a readable message otherwise.
+      await saveDocument({ filename: res.filename, mime_type: res.mime_type, base64: res.base64 }, format);
+      // Only reachable after the download was actually initiated/saved.
+      const okText = `${res.filename} generated successfully. 1 template credit consumed.`;
+      setNotice({ tone: "ok", text: `Download started — ${res.filename}. 1 template credit consumed.` });
       Alert.alert(
         "Document Ready",
-        `${res.filename} generated successfully. 1 template credit consumed.`,
+        okText,
         [{ text: "Done", onPress: () => (caseId ? router.replace({ pathname: "/case/[id]", params: { id: caseId } }) : router.replace("/(tabs)/home")) }]
       );
     } catch (e: any) {
-      if (e.message?.toLowerCase().includes("insufficient") || e.message?.includes("402")) {
+      const msg = e?.message || "Unknown error";
+      if (msg.toLowerCase().includes("insufficient") || msg.includes("402")) {
+        setNotice({ tone: "err", text: "You have no templates remaining. Please purchase a plan." });
         Alert.alert("No Credits", "You have no templates remaining. Please purchase a plan.", [
           { text: "Cancel", style: "cancel" },
           { text: "View Plans", onPress: () => router.push("/(tabs)/subscription") },
         ]);
+      } else if (msg.includes("429") || msg.toLowerCase().includes("too many")) {
+        setNotice({ tone: "err", text: "Too many requests. Please wait a moment before trying again." });
+        Alert.alert("Too Many Requests", "Please wait a moment before trying again.");
+      } else if (msg.toLowerCase().includes("unable to download") || msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("empty")) {
+        // Delivery/validation failure — the file was not handed to the browser.
+        setNotice({ tone: "err", text: msg });
+        Alert.alert("Unable to download the document", `${msg}`);
       } else {
-        Alert.alert("Generation Failed", `${e.message}. Your credit has not been deducted.`);
+        setNotice({ tone: "err", text: "Unable to download the document. Please try again. Failed generations are refunded automatically." });
+        Alert.alert("Unable to download the document", "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
+        console.warn("[download] generation failed", msg);
       }
     } finally {
       setBusy(false);
+      setDownloading(null);
     }
   };
 
@@ -483,6 +507,27 @@ export default function TemplateApplication() {
 
         {step === "output" && (
           <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+            {notice && (
+              <View
+                testID="download-notice"
+                style={[
+                  styles.notice,
+                  {
+                    backgroundColor: notice.tone === "ok" ? colors.brandTertiary : "#FDE8E8",
+                    borderColor: notice.tone === "ok" ? colors.brandPrimary + "55" : "#B3261E",
+                  },
+                ]}
+              >
+                <Ionicons
+                  name={notice.tone === "ok" ? "checkmark-circle" : "alert-circle"}
+                  size={18}
+                  color={notice.tone === "ok" ? colors.brandPrimary : "#B3261E"}
+                />
+                <Text style={{ color: notice.tone === "ok" ? colors.onBrandTertiary : "#7A1C1C", fontSize: 13, flex: 1, marginLeft: 8 }}>
+                  {notice.text}
+                </Text>
+              </View>
+            )}
             <Text style={[styles.lbl, { color: colors.onSurface }]}>Rename File</Text>
             <View style={{ height: Spacing.sm }} />
             <Field testID="filename-input" value={filename} onChangeText={setFilename} placeholder="File name" />
@@ -499,10 +544,16 @@ export default function TemplateApplication() {
                   <Ionicons name="document" size={22} color="#7A1C1C" />
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>PDF Document</Text>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
+                    {downloading === "pdf" ? "Generating PDF…" : "PDF Document"}
+                  </Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>Ready to print & file</Text>
                 </View>
-                <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                {downloading === "pdf" ? (
+                  <ActivityIndicator size="small" color={colors.brandPrimary} />
+                ) : (
+                  <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                )}
               </Pressable>
               <Pressable
                 testID="download-docx"
@@ -514,10 +565,16 @@ export default function TemplateApplication() {
                   <Ionicons name="document-text" size={22} color="#1D2D50" />
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>Word Document</Text>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
+                    {downloading === "docx" ? "Generating Word…" : "Word Document"}
+                  </Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>Editable .docx format</Text>
                 </View>
-                <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                {downloading === "docx" ? (
+                  <ActivityIndicator size="small" color={colors.brandPrimary} />
+                ) : (
+                  <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                )}
               </Pressable>
             </View>
 
@@ -568,6 +625,7 @@ const styles = StyleSheet.create({
   },
   formatCard: { flexDirection: "row", alignItems: "center", padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   formatIcon: { width: 42, height: 42, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  notice: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginBottom: Spacing.lg, borderWidth: 1 },
   note: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginTop: Spacing.lg },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
 });
