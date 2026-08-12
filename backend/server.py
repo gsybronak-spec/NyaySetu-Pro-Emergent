@@ -3439,7 +3439,12 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         else:
             raise HTTPException(404, "Template not found")
     
-    if t.get("locked") or t.get("status") == "published":
+    # Status is the authoritative lock: only PUBLISHED versions are immutable
+    # (edits go through clone -> new draft). The `locked` flag is set at publish
+    # as a marker; it must never lock a draft — a stale `locked: True` on a
+    # draft (e.g. a malformed legacy record) would otherwise make it permanently
+    # uneditable. Matches the admin editor's isLocked (status-based).
+    if t.get("status") == "published":
         raise HTTPException(403, "Published templates cannot be directly modified. Clone or edit to create a new draft version.")
 
     updates = {}
@@ -3453,6 +3458,9 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         updates["updated_by"] = admin["id"]
         updates["updated_at"] = now().isoformat()
         updates["source"] = "admin_edited" if t.get("source") != "admin_created" else t["source"]
+        # A draft is never locked — self-heal a stale lock marker so the admin
+        # lock icon (published-only) stays truthful.
+        updates["locked"] = False
         await db.templates.update_one({"id": template_id}, {"$set": updates})
         await audit_log(admin=admin, action="template_update", target=template_id,
                         metadata={"field_count": len(updates.get("fields", t.get("fields", [])))})

@@ -622,3 +622,72 @@ class TestBackwardCompatibility:
             r = await client.get(f"/api/templates/{tid}")
             assert r.status_code == 200, f"Template {tid} not found"
             assert r.json()["id"] == tid
+
+
+class TestTemplateLockLifecycle:
+    """The `locked` flag is a publish-time marker. Only published templates are
+    truly locked; the lawyer API never sees lock/status/version state."""
+
+    @pytest.mark.asyncio
+    async def test_lawyer_api_never_exposes_lock_state(self, client, clean_db):
+        _, token = await create_super_admin()
+        # Publish a template so it carries the real lock marker
+        await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
+        await client.post("/api/admin/templates/adjournment/publish", headers=auth(token))
+        # list endpoint
+        r = await client.get("/api/templates")
+        assert r.status_code == 200
+        for t in r.json():
+            for forbidden in ("locked", "status", "version", "source", "settings", "is_seed_template"):
+                assert forbidden not in t, f"lawyer API leaked '{forbidden}'"
+        # single-template endpoint
+        r2 = await client.get("/api/templates/adjournment")
+        assert r2.status_code == 200
+        for forbidden in ("locked", "status", "version", "source", "settings", "is_seed_template"):
+            assert forbidden not in r2.json(), f"lawyer API leaked '{forbidden}'"
+
+    @pytest.mark.asyncio
+    async def test_publish_sets_lock_but_lawyer_serves_normally(self, client, clean_db):
+        _, token = await create_super_admin()
+        # migrate-seed creates published+locked records; a manual publish of a
+        # draft exercises the same code path and lock marker.
+        await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
+        c = await client.post("/api/admin/templates", headers=auth(token), json={
+            "name_en": "Publish Lock", "name_gu": "પબ્લિશ લોક", "category": "General",
+            "content_en": "Test {{client_name}}", "content_gu": "",
+            "fields": [{"key": "client_name", "label_en": "Client", "label_gu": "ક્લાયંટ",
+                        "type": "text", "required": True}],
+        })
+        assert c.status_code == 200, c.text
+        tid = c.json()["id"]
+        r = await client.post(f"/api/admin/templates/{tid}/publish", headers=auth(token))
+        assert r.status_code == 200, r.text
+        # Admin state: published + locked marker
+        admin_list = await client.get("/api/admin/templates", headers=auth(token))
+        row = next(t for t in admin_list.json() if t["id"] == tid)
+        assert row["status"] == "published"
+        assert row["locked"] is True
+        # Lawyer still gets the template normally (no lock visible)
+        r2 = await client.get(f"/api/templates/{tid}")
+        assert r2.status_code == 200
+        assert r2.json()["id"] == tid
+        assert "locked" not in r2.json()
+
+    @pytest.mark.asyncio
+    async def test_draft_with_stale_locked_flag_is_editable(self, client, clean_db):
+        _, token = await create_super_admin()
+        # Create a draft, then simulate a stale/malformed record with locked=True
+        c = await client.post("/api/admin/templates", headers=auth(token), json={
+            "name_en": "Lock Test", "name_gu": "લોક ટેસ્ટ", "category": "General",
+            "content_en": "Test {{client_name}}", "content_gu": "",
+            "fields": [{"key": "client_name", "label_en": "Client", "label_gu": "ક્લાયંટ",
+                        "type": "text", "required": True}],
+        })
+        assert c.status_code == 200, c.text
+        tid = c.json()["id"]
+        await db.templates.update_one({"id": tid}, {"$set": {"locked": True}})
+        # Editing must succeed (status is draft -> not locked)
+        r = await client.put(f"/api/admin/templates/{tid}", headers=auth(token), json={"name_en": "Lock Test v2"})
+        assert r.status_code == 200, r.text
+        assert r.json()["locked"] is False, "stale lock not self-healed on edit"
+        assert r.json()["name_en"] == "Lock Test v2"

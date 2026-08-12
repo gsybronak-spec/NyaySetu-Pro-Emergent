@@ -352,7 +352,11 @@ export default function Templates() {
                     <td><StatusBadge status={t.status} /></td>
                     <td>
                       <span className="version-badge">v{t.version || 1}</span>
-                      {t.locked && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: '#888' }}>🔒</span>}
+                      {/* The lock is the published-version lock: only published
+                          templates are immutable (edits go through Clone). A
+                          stray `locked` flag on a draft/seed/archived record is
+                          not a real lock and must not show a lock icon. */}
+                      {t.locked && t.status === 'published' && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: '#888' }}>🔒</span>}
                     </td>
                     <td>{t.fields?.length || 0} fields</td>
                     <td>
