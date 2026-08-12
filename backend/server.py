@@ -189,6 +189,30 @@ class GoogleCodeReq(BaseModel):
     redirect_uri: str = Field(..., max_length=2000)
     referral_code: Optional[str] = Field(None, max_length=20)
 
+class RegisterReq(BaseModel):
+    mobile: str = Field(..., max_length=15)
+    otp: str = Field(..., max_length=10)
+    password: str = Field(..., min_length=8, max_length=128)
+    name: Optional[str] = Field(None, max_length=200)
+    email: Optional[str] = Field(None, max_length=200)
+    referral_code: Optional[str] = Field(None, max_length=20)
+
+class LoginReq(BaseModel):
+    identifier: str = Field(..., max_length=200)
+    password: str = Field(..., max_length=128)
+    referral_code: Optional[str] = Field(None, max_length=20)
+
+class ForgotPasswordReq(BaseModel):
+    mobile: str = Field(..., max_length=15)
+
+class ResetPasswordReq(BaseModel):
+    mobile: str = Field(..., max_length=15)
+    otp: str = Field(..., max_length=10)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+class SetPasswordReq(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128)
+
 class ProfileUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=200)
@@ -292,8 +316,13 @@ class CaseFormConfigReq(BaseModel):
 def now():
     return datetime.now(timezone.utc)
 
-def make_token(user_id: str) -> str:
-    payload = {"sub": user_id, "iat": int(now().timestamp()), "exp": int((now() + timedelta(days=90)).timestamp())}
+def make_token(user_id: str, token_version: int = 0) -> str:
+    payload = {
+        "sub": user_id,
+        "ver": token_version,
+        "iat": int(now().timestamp()),
+        "exp": int((now() + timedelta(days=90)).timestamp()),
+    }
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
 
 async def get_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -310,7 +339,32 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
         raise HTTPException(401, "User not found")
     if user.get("active") is False:
         raise HTTPException(401, "Account disabled. Contact support.")
+    # Password reset bumps token_version, revoking previously issued JWTs.
+    # Tokens issued before this feature (no `ver` claim) remain valid unless the
+    # user has since bumped their version.
+    if user.get("token_version") and payload.get("ver") != user["token_version"]:
+        raise HTTPException(401, "Session expired. Please login again.")
     return user
+
+
+def hash_password(password: str) -> str:
+    """bcrypt-hash a plaintext password. Never stored or logged in plaintext."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def _public_user(user: dict) -> dict:
+    """User object safe for clients: strips the password hash and flags whether a
+    password is set (so the UI can offer Set Password for legacy OTP-only users)."""
+    u = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
+    u["has_password"] = bool(user.get("password_hash"))
+    return u
 
 
 async def gen_referral_code() -> str:
@@ -345,6 +399,7 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         "court": None,
         "language_pref": "en",
         "theme_pref": "light",
+        "token_version": 0,
         "referral_code": code,
         "referred_by": None,
         "favourite_courts": [],
@@ -408,13 +463,31 @@ async def apply_referral(referral_code: Optional[str], new_user: dict):
 # AUTH (MOCK OTP + GOOGLE)
 # ============================================================
 
+SMS_REQUEST_TIMEOUT_SECONDS = 5  # explicit cap — production must never hang
+
 async def send_sms(mobile: str, otp: str) -> None:
     """SMS provider abstraction. Real providers plug in here; when a provider is
     selected but not implemented, the exact required env vars are reported instead
-    of inventing credentials."""
+    of inventing credentials. Every provider request uses an explicit timeout so
+    an unreachable provider can never hang the HTTP request."""
     provider = SMS_PROVIDER
     if provider in ("", "console"):
         logger.info(f"[SMS-CONSOLE] {mobile}: your NyaySetu Pro OTP is {otp}")
+        return
+    if provider == "twilio":
+        # Example contract — activate only with real credentials from the operator.
+        account_sid = os.environ.get("SMS_ACCOUNT_SID", "").strip()
+        auth_token = os.environ.get("SMS_AUTH_TOKEN", "").strip()
+        if not account_sid or not auth_token:
+            raise NotImplementedError(
+                "Twilio is selected but SMS_ACCOUNT_SID / SMS_AUTH_TOKEN are not set."
+            )
+        async with httpx.AsyncClient(timeout=SMS_REQUEST_TIMEOUT_SECONDS) as http:
+            await http.post(
+                f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json",
+                data={"To": f"+91{mobile}", "From": os.environ.get("SMS_FROM", "").strip(), "Body": f"Your NyaySetu Pro OTP is {otp}"},
+                auth=(account_sid, auth_token),
+            )
         return
     raise NotImplementedError(
         f"SMS provider '{provider}' is not implemented. Configure SMS_PROVIDER and its "
@@ -422,9 +495,9 @@ async def send_sms(mobile: str, otp: str) -> None:
     )
 
 
-@api.post("/auth/send-otp")
-async def send_otp(req: SendOtpReq):
-    mobile = req.mobile.strip()
+async def _issue_otp(mobile: str, kind: str) -> dict:
+    """Shared OTP issuance (login, signup, password reset). Rate-limited, with an
+    explicit resend cooldown. Returns the stored OTP doc keys for callers."""
     if len(mobile) < 10:
         raise HTTPException(400, "Invalid mobile number")
     if not rate_limit(f"otp_send:{mobile}", 5, 60):
@@ -445,9 +518,8 @@ async def send_otp(req: SendOtpReq):
     if SMS_PROVIDER in ("", "console"):
         if _PRODUCTION:
             raise HTTPException(
-                501,
-                "SMS provider is not configured. Set SMS_PROVIDER (e.g. twilio) plus "
-                "SMS_ACCOUNT_SID and SMS_AUTH_TOKEN in the environment.",
+                503,
+                "OTP service is not configured. Please contact support.",
             )
         otp = "123456"
     else:
@@ -456,6 +528,12 @@ async def send_otp(req: SendOtpReq):
             await send_sms(mobile, otp)
         except NotImplementedError as e:
             raise HTTPException(501, str(e))
+        except (httpx.TimeoutException, TimeoutError) as e:
+            logger.error(f"[OTP] SMS provider timeout for {mobile}: {type(e).__name__}")
+            raise HTTPException(503, "OTP service is temporarily unavailable. Please try again shortly.")
+        except Exception as e:
+            logger.error(f"[OTP] SMS provider failure for {mobile}: {type(e).__name__}")
+            raise HTTPException(503, "OTP service is temporarily unavailable. Please try again shortly.")
 
     ttl_seconds = await _get_setting("otp_ttl_seconds")
     await db.otps.update_one(
@@ -463,6 +541,7 @@ async def send_otp(req: SendOtpReq):
         {"$set": {
             "mobile": mobile,
             "otp": otp,
+            "kind": kind,
             "expires_at": (now() + timedelta(seconds=ttl_seconds)).isoformat(),
             # BSON date for the Mongo TTL index (TTL indexes ignore ISO strings)
             "ttl_at": now() + timedelta(seconds=ttl_seconds + 60),
@@ -471,7 +550,14 @@ async def send_otp(req: SendOtpReq):
         }},
         upsert=True,
     )
-    logger.info(f"[OTP] sent to {mobile} via provider '{SMS_PROVIDER}'")
+    logger.info(f"[OTP] {kind} OTP issued to {mobile} via provider '{SMS_PROVIDER}'")
+    return {"ttl_seconds": ttl_seconds}
+
+
+@api.post("/auth/send-otp")
+async def send_otp(req: SendOtpReq):
+    mobile = req.mobile.strip()
+    await _issue_otp(mobile, "login")
     return {
         "success": True,
         "message": "OTP sent successfully",
@@ -487,7 +573,7 @@ async def verify_otp(req: VerifyOtpReq):
         raise HTTPException(429, "Too many OTP attempts. Please try again later.")
 
     doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
-    if not doc:
+    if not doc or doc.get("kind", "login") != "login":
         raise HTTPException(400, "No OTP requested for this number or OTP expired. Please request a new OTP.")
     if datetime.fromisoformat(doc["expires_at"]) < now():
         await db.otps.delete_one({"mobile": mobile})
@@ -511,9 +597,155 @@ async def verify_otp(req: VerifyOtpReq):
     elif user.get("active") is False:
         raise HTTPException(403, "Account disabled. Contact support.")
 
-    user_clean = {k: v for k, v in user.items() if k != "_id"}
-    token = make_token(user["id"])
-    return {"token": token, "user": user_clean, "is_new": is_new}
+    token = make_token(user["id"], user.get("token_version", 0))
+    return {"token": token, "user": _public_user(user), "is_new": is_new}
+
+
+# ============================================================
+# PASSWORD AUTH — register / login / forgot / reset / set
+# ============================================================
+
+@api.post("/auth/register")
+async def register(req: RegisterReq):
+    """Create an account with a password. OTP-verified (single-use) so the mobile
+    number is confirmed before the account exists; no duplicate users are created.
+    Returns the same JWT/session contract as OTP/Google auth (auto-login)."""
+    mobile = req.mobile.strip()
+    if len(mobile) < 10 or not mobile.isdigit():
+        raise HTTPException(400, "Invalid mobile number")
+    if len(req.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+    if not rate_limit(f"otp_verify:{mobile}", 10, 60):
+        raise HTTPException(429, "Too many attempts. Please try again later.")
+
+    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    if not doc or doc.get("kind", "login") != "login":
+        raise HTTPException(400, "No OTP requested for this number or OTP expired. Please request a new OTP.")
+    if datetime.fromisoformat(doc["expires_at"]) < now():
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(400, "OTP expired. Please request a new OTP.")
+    max_attempts = await _get_setting("otp_max_attempts")
+    if doc.get("attempts", 0) >= max_attempts:
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
+    if doc.get("otp") != req.otp.strip():
+        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Invalid OTP")
+    await db.otps.delete_one({"mobile": mobile})
+
+    if await db.users.find_one({"mobile": mobile}, {"_id": 1}):
+        raise HTTPException(409, "An account with this mobile number already exists. Please login.")
+    email = (req.email or "").strip().lower() or None
+    if email and await db.users.find_one({"email": email}, {"_id": 1}):
+        raise HTTPException(409, "An account with this email already exists. Please login.")
+
+    user = await create_new_user(
+        mobile=mobile,
+        email=email,
+        name=(req.name or "").strip() or None,
+        provider="mobile",
+    )
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(req.password)}},
+    )
+    await apply_referral(req.referral_code, user)
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    token = make_token(user["id"], fresh.get("token_version", 0))
+    return {"token": token, "user": _public_user(fresh), "is_new": True}
+
+
+@api.post("/auth/login")
+async def login(req: LoginReq):
+    """Password login by mobile or email. Generic error on any mismatch so the
+    response never reveals whether a user or which field was wrong. Rate-limited."""
+    identifier = req.identifier.strip()
+    if not identifier or not req.password:
+        raise HTTPException(401, "Invalid mobile/email or password.")
+    if not rate_limit(f"login:{identifier.lower()}", 5, 60):
+        raise HTTPException(429, "Too many login attempts. Please wait before trying again.")
+
+    user = None
+    digits = re.sub(r"\D", "", identifier)
+    if 10 <= len(digits) <= 12:
+        m = digits[2:] if len(digits) == 12 and digits.startswith("91") else digits
+        if len(m) == 10:
+            user = await db.users.find_one({"mobile": m}, {"_id": 0})
+    if not user and "@" in identifier:
+        user = await db.users.find_one({"email": identifier.strip().lower()}, {"_id": 0})
+
+    if not user or not user.get("password_hash") or not verify_password(req.password, user["password_hash"]):
+        raise HTTPException(401, "Invalid mobile/email or password.")
+    if user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
+    token = make_token(user["id"], user.get("token_version", 0))
+    return {"token": token, "user": _public_user(user), "is_new": False}
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(req: ForgotPasswordReq):
+    """Send a password-reset OTP to the registered mobile. Returns the same message
+    whether or not the account exists (no user enumeration); no OTP is sent for
+    unknown numbers and nothing else happens."""
+    mobile = req.mobile.strip()
+    existing = await db.users.find_one({"mobile": mobile}, {"_id": 1})
+    if not existing:
+        logger.info(f"[forgot-password] no account for {mobile} — no OTP sent")
+        return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
+    await _issue_otp(mobile, "reset")
+    return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
+
+
+@api.post("/auth/reset-password")
+async def reset_password(req: ResetPasswordReq):
+    """Verify a password-reset OTP and set a new password. Bumps token_version so
+    previously issued JWTs are revoked. The OTP is single-use."""
+    mobile = req.mobile.strip()
+    if len(req.new_password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+    if not rate_limit(f"otp_verify:{mobile}", 10, 60):
+        raise HTTPException(429, "Too many attempts. Please try again later.")
+
+    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    if not doc or doc.get("kind", "login") != "reset":
+        raise HTTPException(400, "No password reset OTP requested or OTP expired. Please request a new OTP.")
+    if datetime.fromisoformat(doc["expires_at"]) < now():
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(400, "OTP expired. Please request a new OTP.")
+    max_attempts = await _get_setting("otp_max_attempts")
+    if doc.get("attempts", 0) >= max_attempts:
+        await db.otps.delete_one({"mobile": mobile})
+        raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
+    if doc.get("otp") != req.otp.strip():
+        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Invalid OTP")
+    await db.otps.delete_one({"mobile": mobile})
+
+    user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
+    if not user:
+        raise HTTPException(400, "No account found for this mobile number.")
+    if user.get("active") is False:
+        raise HTTPException(403, "Account disabled. Contact support.")
+
+    new_hash = hash_password(req.new_password)
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": new_hash, "token_version": int(user.get("token_version", 0)) + 1}},
+    )
+    return {"success": True, "message": "Password reset successfully. Please login with your new password."}
+
+
+@api.post("/auth/set-password")
+async def set_password(req: SetPasswordReq, user=Depends(get_user)):
+    """Authenticated: set a password on an existing (OTP-only) account so the user
+    can also login with mobile/email + password."""
+    if len(req.new_password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(req.new_password)}},
+    )
+    return {"success": True, "message": "Password set successfully. You can now login with your mobile/email and password."}
 
 
 @api.post("/auth/google-session")
@@ -558,9 +790,8 @@ async def google_session(req: GoogleSessionReq):
             await db.users.update_one({"id": user["id"]}, {"$set": updates})
             user.update(updates)
 
-    user_clean = {k: v for k, v in user.items() if k != "_id"}
-    token = make_token(user["id"])
-    return {"token": token, "user": user_clean, "is_new": is_new}
+    token = make_token(user["id"], user.get("token_version", 0))
+    return {"token": token, "user": _public_user(user), "is_new": is_new}
 
 
 async def _google_token_exchange(code: str, redirect_uri: str) -> tuple:
@@ -635,11 +866,6 @@ async def google_code_exchange(req: GoogleCodeReq):
         raise HTTPException(401, "Email not verified by Google")
     name = info.get("name")
     picture = info.get("picture")
-    email = (info.get("email") or "").strip().lower()
-    if not email or not info.get("email_verified"):
-        raise HTTPException(401, "Email not verified by Google")
-    name = info.get("name")
-    picture = info.get("picture")
 
     user = await db.users.find_one({"email": email}, {"_id": 0})
     is_new = False
@@ -660,9 +886,8 @@ async def google_code_exchange(req: GoogleCodeReq):
             await db.users.update_one({"id": user["id"]}, {"$set": updates})
             user.update(updates)
 
-    user_clean = {k: v for k, v in user.items() if k != "_id"}
-    token = make_token(user["id"])
-    return {"token": token, "user": user_clean, "is_new": is_new}
+    token = make_token(user["id"], user.get("token_version", 0))
+    return {"token": token, "user": _public_user(user), "is_new": is_new}
 
 
 # ============================================================
@@ -671,7 +896,7 @@ async def google_code_exchange(req: GoogleCodeReq):
 
 @api.get("/profile/me")
 async def me(user=Depends(get_user)):
-    return user
+    return _public_user(user)
 
 @api.put("/profile/update")
 async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
@@ -679,7 +904,7 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
     if updates:
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    return u
+    return _public_user(u)
 
 
 @api.get("/clients/lookup")
@@ -3555,7 +3780,9 @@ app.include_router(admin_api)
 # separated) overrides the defaults; localhost origins stay available for dev via
 # a regex so local preview servers on any port keep working.
 _DEFAULT_CORS_ORIGINS = [
-    # Production Lawyer Frontend (Expo web export on Vercel)
+    # Production Lawyer Frontend — custom domain + Vercel deployment
+    "https://nyaysetupro.in",
+    "https://www.nyaysetupro.in",
     "https://nyay-setu-pro-emergent-bo83.vercel.app",
     # Production Admin Portal
     "https://nyay-setu-pro-emergent-ebhh.vercel.app",

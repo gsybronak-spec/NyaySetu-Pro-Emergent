@@ -28,6 +28,11 @@ export default function Profile() {
 
   const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/(auth)/onboarding") },
+    {
+      icon: "key-outline",
+      label: user?.has_password ? "Change Password" : "Set Password",
+      onPress: () => router.push("/(auth)/set-password"),
+    },
     { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates`, onPress: () => router.push("/(tabs)/subscription") },
     { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions") },
     { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral") },

@@ -24,9 +24,18 @@ const REQUEST_TIMEOUT_MS = 30000;
 export function describeNetworkError(e: unknown): string {
   // User-friendly copy for fetch-level failures; technical detail goes to console.
   if (e instanceof Error && e.name === "AbortError") {
-    return "The server took too long to respond. Please check your connection and try again.";
+    return "Server is taking longer than expected. Please try again.";
   }
   return "Network error — could not reach the server. Please check your connection and try again.";
+}
+
+// Maps backend status codes to safe, readable user copy (used when the backend
+// did not return a JSON body). Backend-provided `detail` messages are preferred.
+export function describeStatusError(status: number): string | null {
+  if (status === 429) return "Too many attempts. Please wait before trying again.";
+  if (status === 503) return "Service is temporarily unavailable. Please try again shortly.";
+  if (status === 401) return "Invalid mobile/email or password.";
+  return null;
 }
 
 async function request(path: string, method = "GET", body?: any) {
@@ -59,11 +68,15 @@ async function request(path: string, method = "GET", body?: any) {
     json = { raw: text };
   }
   if (!res.ok) {
-    if (res.status === 401) {
+    // 401 from an authenticated screen means the session died; clear it and let
+    // the route guards redirect. Password-login 401 must NOT clear an existing
+    // session (there isn't one) — clearing is harmless but the caller relies on
+    // the message, so only notify when a token was actually present.
+    if (res.status === 401 && token) {
       setToken(null);
       onUnauthorized?.();
     }
-    const msg = json?.detail || json?.message || `HTTP ${res.status}`;
+    const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return json;
@@ -73,6 +86,14 @@ export const api = {
   sendOtp: (mobile: string) => request("/auth/send-otp", "POST", { mobile }),
   verifyOtp: (mobile: string, otp: string, referral_code?: string) =>
     request("/auth/verify-otp", "POST", { mobile, otp, referral_code }),
+  register: (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referral_code?: string }) =>
+    request("/auth/register", "POST", data),
+  login: (identifier: string, password: string, referral_code?: string) =>
+    request("/auth/login", "POST", { identifier, password, referral_code }),
+  forgotPassword: (mobile: string) => request("/auth/forgot-password", "POST", { mobile }),
+  resetPassword: (mobile: string, otp: string, new_password: string) =>
+    request("/auth/reset-password", "POST", { mobile, otp, new_password }),
+  setPassword: (new_password: string) => request("/auth/set-password", "POST", { new_password }),
   googleSession: (session_id: string, referral_code?: string) =>
     request("/auth/google-session", "POST", { session_id, referral_code }),
   // Native Google OAuth: exchange the authorization code server-side.

@@ -10,6 +10,7 @@ interface User {
   state?: string | null;
   district?: string | null;
   court?: string | null;
+  has_password?: boolean;
 }
 
 interface AuthCtx {
@@ -18,6 +19,8 @@ interface AuthCtx {
   loading: boolean;
   signInOtp: (mobile: string) => Promise<void>;
   verifyOtp: (mobile: string, otp: string, referralCode?: string) => Promise<{ is_new: boolean }>;
+  signInPassword: (identifier: string, password: string, referralCode?: string) => Promise<{ is_new: boolean }>;
+  registerAccount: (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => Promise<{ is_new: boolean }>;
   completeGoogleCode: (code: string, redirectUri: string, referralCode?: string) => Promise<{ is_new: boolean }>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -78,6 +81,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInPassword = async (identifier: string, password: string, referralCode?: string) => {
+    setLoading(true);
+    try {
+      const res = await api.login(identifier, password, referralCode);
+      await setToken(res.token);
+      setUser(res.user);
+      return { is_new: res.is_new };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const registerAccount = async (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => {
+    setLoading(true);
+    try {
+      const res = await api.register({
+        mobile: data.mobile,
+        otp: data.otp,
+        password: data.password,
+        name: data.name,
+        email: data.email,
+        referral_code: data.referralCode,
+      });
+      await setToken(res.token);
+      setUser(res.user);
+      return { is_new: res.is_new };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const completeGoogleCode = async (code: string, redirectUri: string, referralCode?: string) => {
     setLoading(true);
     try {
@@ -96,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, completeGoogleCode, refresh, signOut, setUser }}>
+    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, refresh, signOut, setUser }}>
       {children}
     </Ctx.Provider>
   );
