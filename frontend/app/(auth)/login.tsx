@@ -51,9 +51,17 @@ export default function Login() {
       setErr("Enter your password");
       return;
     }
-    // Firebase email/password is authoritative when the account exists in
-    // Firebase. Legacy NyaySetu accounts (never created in Firebase) fall back
-    // to the backend password check transparently.
+    // Firebase email/password is an opportunistic fast path ONLY for accounts
+    // that exist in Firebase with a matching password. The existing NyaySetu
+    // backend password (bcrypt) is the authoritative check for legacy accounts
+    // (created via /auth/register — the app never provisions Firebase users).
+    //
+    // So any Firebase sign-in failure here — auth/user-not-found,
+    // auth/invalid-credential, auth/wrong-password, rate limits, provider
+    // config, network — must fall through to the backend login below instead of
+    // rejecting. Only a backend rejection surfaces the final invalid-credential
+    // error. The single exception is auth/invalid-email (malformed input),
+    // which gets a clearer message and never reaches the backend.
     const isEmail = id.includes("@");
     if (isEmail && fbConfigured) {
       try {
@@ -64,19 +72,11 @@ export default function Login() {
           return;
         }
       } catch (e: any) {
-        const code = e?.code || "";
-        if (code === "auth/user-not-found") {
-          // Not a Firebase account — try the legacy NyaySetu password below.
-        } else if (code === "auth/invalid-email") {
+        if (e?.code === "auth/invalid-email") {
           setErr("Enter a valid email address.");
           return;
-        } else if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
-          setErr("Invalid mobile/email or password.");
-          return;
-        } else {
-          setErr(e?.message || "Invalid mobile/email or password.");
-          return;
         }
+        // Everything else falls through to the NyaySetu backend login below.
       }
     }
     try {
