@@ -356,3 +356,44 @@ class TestCorsAndJwt:
         r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout
+
+
+class TestDevOtpRenderGuard:
+    """The fixed 123456 development OTP must never work on any Render
+    deployment, even one that lacks ENVIRONMENT=production."""
+
+    def test_dev_otp_blocked_on_render(self):
+        code = (
+            "import os\n"
+            "os.environ['RENDER']='true'\n"
+            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
+            "os.environ['DB_NAME']='nyaysetu_render_otp'\n"
+            "import mongomock_motor\n"
+            "import server\n"
+            "server.db = mongomock_motor.AsyncMongoMockClient()['nyaysetu_render_otp']\n"
+            "from starlette.testclient import TestClient\n"
+            "c = TestClient(server.app)\n"
+            "r = c.post('/api/auth/send-otp', json={'mobile':'9999999999'})\n"
+            "assert r.status_code == 503, r.text\n"
+            "assert 'Use 123456' not in r.text\n"
+            "assert server._DEV_OTP_ALLOWED is False\n"
+            "print('OK')\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0, r.stderr
+        assert "OK" in r.stdout
+
+    def test_dev_otp_allowed_locally(self):
+        # No RENDER, no ENVIRONMENT=production -> local dev keeps the fixed OTP.
+        code = (
+            "import os\n"
+            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
+            "os.environ['DB_NAME']='nyaysetu_local_otp'\n"
+            "import mongomock_motor\n"
+            "import server\n"
+            "assert server._DEV_OTP_ALLOWED is True\n"
+            "print('OK')\n"
+        )
+        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0, r.stderr
+        assert "OK" in r.stdout

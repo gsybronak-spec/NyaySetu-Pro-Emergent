@@ -106,7 +106,11 @@ OTP_TTL_SECONDS = int(os.environ.get("OTP_TTL_SECONDS", "300"))
 OTP_MAX_ATTEMPTS = int(os.environ.get("OTP_MAX_ATTEMPTS", "5"))
 OTP_RESEND_COOLDOWN_SECONDS = int(os.environ.get("OTP_RESEND_COOLDOWN_SECONDS", "60"))
 SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "console").strip().lower()
-_MOCK_OTP_ALLOWED = not _PRODUCTION  # fixed 123456 is development-only, never in production
+# The fixed 123456 OTP is a development-only convenience. It is never allowed in
+# declared production AND never on Render (RENDER=true is set by every Render
+# deployment, preview or production) — a belt-and-braces guard so a deployment
+# that forgets ENVIRONMENT=production cannot run the dev-OTP auth bypass.
+_DEV_OTP_ALLOWED = (not _PRODUCTION) and os.environ.get("RENDER", "").strip().lower() != "true"
 
 # Razorpay — production payment. When keys are absent the payment API fails safely
 # (503 with an exact message); no default/invented credentials are ever used.
@@ -534,9 +538,10 @@ async def _issue_otp(mobile: str, kind: str) -> dict:
             )
 
     # Real random OTP in production via the configured SMS provider.
-    # Fixed 123456 is development-only and never used in production.
+    # Fixed 123456 is development-only: never in declared production and never
+    # on any Render deployment (even one missing ENVIRONMENT=production).
     if SMS_PROVIDER in ("", "console"):
-        if _PRODUCTION:
+        if not _DEV_OTP_ALLOWED:
             raise HTTPException(
                 503,
                 "OTP service is not configured. Please contact support.",
@@ -581,7 +586,7 @@ async def send_otp(req: SendOtpReq):
     return {
         "success": True,
         "message": "OTP sent successfully",
-        "hint": "Use 123456 for testing" if _MOCK_OTP_ALLOWED else None,
+        "hint": "Use 123456 for testing" if _DEV_OTP_ALLOWED else None,
     }
 
 

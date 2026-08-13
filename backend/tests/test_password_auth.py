@@ -462,6 +462,7 @@ class TestOtpReliability:
         """In declared production with console provider, send-otp returns a
         controlled 503 — never a hang, never a fake OTP."""
         monkeypatch.setattr(server, "_PRODUCTION", True)
+        monkeypatch.setattr(server, "_DEV_OTP_ALLOWED", False)
         monkeypatch.setattr(server, "SMS_PROVIDER", "console")
         r = await client.post(f"{API}/auth/send-otp", json={"mobile": "9876540007"})
         assert r.status_code == 503
