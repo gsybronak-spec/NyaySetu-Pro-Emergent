@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -8,10 +8,28 @@ import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
+import {
+  destroyFirebaseRecaptcha,
+  firebaseConfigured,
+  firebaseConfirmPhoneOtp,
+  firebaseSendPhoneOtp,
+  getPendingPhoneConfirmation,
+} from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function Signup() {
-  const { registerAccount, loading } = useAuth();
+  const { registerAccount, firebaseExchange, signOut, loading } = useAuth();
+  // Empty anchor inside the Send OTP button wrapper where Firebase renders its
+  // INVISIBLE reCAPTCHA (reCAPTCHA's render() requires an empty container). It
+  // is off-screen — no checkbox, no badge, no CAPTCHA UI on the signup page.
+  const recaptchaAnchorRef = useRef<View | null>(null);
+  // True when this signup's OTP was sent via Firebase Phone Auth (SMS + OTP
+  // verification happen entirely in Firebase); the account is then created via
+  // the verified-token exchange instead of the legacy OTP record.
+  const [usedFirebase, setUsedFirebase] = useState(false);
+  // Destroy the invisible reCAPTCHA widget when leaving the screen so no stale
+  // widget/iframe is ever left behind (one verifier at a time).
+  useEffect(() => () => destroyFirebaseRecaptcha(), []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
@@ -44,11 +62,33 @@ export default function Signup() {
     }
     setOtpBusy(true);
     try {
-      await api.sendOtp(mobile.trim());
+      // Firebase Phone Auth sends the SMS and verifies the OTP (invisible
+      // reCAPTCHA attached to the Send OTP button). When Firebase is not
+      // configured (local dev / tests) we fall back to the legacy NyaySetu OTP
+      // flow so signup keeps working everywhere.
+      if (firebaseConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
+        await firebaseSendPhoneOtp(mobile.trim(), recaptchaAnchorRef.current as any);
+        setUsedFirebase(true);
+      } else {
+        setUsedFirebase(false);
+        await api.sendOtp(mobile.trim());
+      }
       setOtpSent(true);
       setOtpErr(undefined);
     } catch (e: any) {
-      setErr(e?.message || "Could not send OTP. Please try again.");
+      // Map known Firebase phone-auth failures to safe, accurate messages —
+      // never leak raw SDK text. SMS delivery itself depends on the Firebase
+      // project's SMS region/billing config (an external setting).
+      const code = e?.code as string | undefined;
+      if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
+        setErr("SMS OTP is temporarily unavailable for this region. Please try again later or use password login.");
+      } else if (code === "auth/too-many-requests") {
+        setErr("Too many OTP requests. Please wait a minute and try again.");
+      } else if (code === "auth/invalid-phone-number") {
+        setErr("Enter a valid 10-digit mobile number.");
+      } else {
+        setErr(e?.message || "Could not send OTP. Please try again.");
+      }
     } finally {
       setOtpBusy(false);
     }
@@ -61,6 +101,32 @@ export default function Signup() {
       return;
     }
     try {
+      if (usedFirebase) {
+        const confirmation = getPendingPhoneConfirmation();
+        if (!confirmation) {
+          setOtpErr("OTP session expired. Please go back and request a new OTP.");
+          return;
+        }
+        const idToken = await firebaseConfirmPhoneOtp(confirmation, otp.trim());
+        const { is_new } = await firebaseExchange(idToken, referral.trim() || undefined);
+        if (!is_new) {
+          // The verified mobile maps to an existing NyaySetu account — link it
+          // (no duplicate) and mirror the legacy "already exists" UX instead of
+          // silently signing in or overwriting the existing password.
+          await signOut();
+          setOtpErr("An account with this mobile number already exists. Please login.");
+          return;
+        }
+        // New account: attach the chosen password + profile fields to the
+        // Firebase-created user so mobile/email + password login also works.
+        await api.setPassword(password);
+        const profile: Record<string, string> = {};
+        if (name.trim()) profile.name = name.trim();
+        if (email.trim()) profile.email = email.trim().toLowerCase();
+        if (Object.keys(profile).length) await api.updateProfile(profile);
+        router.replace("/(auth)/onboarding");
+        return;
+      }
       await registerAccount({
         mobile: mobile.trim(),
         otp: otp.trim(),
@@ -172,7 +238,12 @@ export default function Signup() {
             )}
 
             {!otpSent ? (
-              <Button testID="signup-send-otp-button" title="Send OTP" loading={otpBusy} onPress={sendOtp} />
+              <View>
+                <Button testID="signup-send-otp-button" title="Send OTP" loading={otpBusy} onPress={sendOtp} />
+                {/* Empty off-screen anchor for Firebase's INVISIBLE reCAPTCHA — no
+                    visible CAPTCHA of any kind on the signup page. */}
+                <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
+              </View>
             ) : (
               <>
                 <Text style={styles.otpNote}>
@@ -182,7 +253,7 @@ export default function Signup() {
                   testID="signup-otp-input"
                   label="Enter OTP"
                   labelColor="#D1D8E5"
-                  placeholder="123456"
+                  placeholder="6-digit code"
                   keyboardType="number-pad"
                   maxLength={6}
                   value={otp}
@@ -223,4 +294,8 @@ const styles = StyleSheet.create({
   cardSub: { color: "#A6B1C2", fontSize: 13, marginBottom: Spacing.lg },
   eyeBtn: { position: "absolute", right: 12, top: 42 },
   otpNote: { color: "#A6B1C2", fontSize: 13, marginBottom: Spacing.md, lineHeight: 18 },
+  // Empty, off-screen anchor for the INVISIBLE reCAPTCHA widget. Must remain
+  // empty (Firebase render() requires it) and truly invisible — no checkbox,
+  // no badge, no iframe visible on the signup page.
+  recaptchaAnchor: { position: "absolute", left: -9999, top: -9999, width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" },
 });
