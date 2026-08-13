@@ -356,3 +356,32 @@ class TestSearch:
         r = session.get(f"{API}/search?q=mudat", headers=H(user_ctx))
         assert r.status_code == 200
         assert any(t["id"] == "adjournment" for t in r.json()["templates"])
+
+
+# ---------- Mock purchase production guard ----------
+class TestMockPurchaseGuard:
+    """Free-credit mock purchases must be impossible when real payment exists
+    (Razorpay keys configured) or when the deployment is declared production."""
+
+    def test_mock_blocked_when_razorpay_configured(self, session, user_ctx, monkeypatch):
+        monkeypatch.setattr(server, "_razorpay_enabled", lambda: True)
+        monkeypatch.setattr(server, "_PRODUCTION", False)
+        before = session.get(f"{API}/wallet", headers=H(user_ctx)).json()["balance"]
+        r = session.post(f"{API}/purchase/mock", headers=H(user_ctx), json={"plan_id": "plan_299"})
+        assert r.status_code == 403
+        assert "Mock purchases are disabled" in r.json()["detail"]
+        # No credit was granted
+        after = session.get(f"{API}/wallet", headers=H(user_ctx)).json()["balance"]
+        assert after == before
+
+    def test_mock_blocked_in_production_mode(self, session, user_ctx, monkeypatch):
+        monkeypatch.setattr(server, "_razorpay_enabled", lambda: False)
+        monkeypatch.setattr(server, "_PRODUCTION", True)
+        r = session.post(f"{API}/purchase/mock", headers=H(user_ctx), json={"plan_id": "plan_299"})
+        assert r.status_code == 403
+
+    def test_mock_allowed_when_no_payment_configured(self, session, user_ctx, monkeypatch):
+        monkeypatch.setattr(server, "_razorpay_enabled", lambda: False)
+        monkeypatch.setattr(server, "_PRODUCTION", False)
+        r = session.post(f"{API}/purchase/mock", headers=H(user_ctx), json={"plan_id": "plan_299"})
+        assert r.status_code == 200

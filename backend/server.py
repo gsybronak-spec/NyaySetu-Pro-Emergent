@@ -2062,7 +2062,17 @@ async def get_wallet(user=Depends(get_user)):
 async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
     """DEV-ONLY mock purchase — never used as the production payment path.
     Resolves plans from the admin-managed plans catalog so admin edits flow
-    through; inactive plans cannot be purchased."""
+    through; inactive plans cannot be purchased.
+
+    Hard-disabled the moment real payment is available: refused when Razorpay
+    keys are configured (the production payment path exists) or when the
+    deployment is declared production (ENVIRONMENT=production), so free-credit
+    mock purchases can never run in a real paying environment."""
+    if _razorpay_enabled() or _PRODUCTION:
+        raise HTTPException(
+            403,
+            "Mock purchases are disabled in this environment. Use the configured payment method.",
+        )
     plan = await _get_plan(req.plan_id)
     if not plan or plan.get("active") is False:
         raise HTTPException(404, "Plan not found or inactive")
