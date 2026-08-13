@@ -35,7 +35,15 @@ export default function ForgotPassword() {
         setResetVia("firebase");
         setDone(true);
       } catch (e: any) {
-        setErr(e?.message || "Could not send the reset email. Please try again.");
+        const code = e?.code || "";
+        if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
+          // No Firebase account for this email — switch to the mobile-OTP
+          // path, which works for every existing NyaySetu account.
+          setResetVia("otp");
+          setErr("No password-reset email is available for this address. Enter your registered mobile number to reset via OTP.");
+        } else {
+          setErr(e?.message || "Could not send the reset email. Please try again.");
+        }
       } finally {
         setBusy(false);
       }
