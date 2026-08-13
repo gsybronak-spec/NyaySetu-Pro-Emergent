@@ -24,6 +24,7 @@ const KINDS: KindConfig[] = [
   { kind: 'case-types', label: 'Case Types', hasCat: true, hasDistrict: false, hasSections: false },
   { kind: 'laws', label: 'Laws / Sections', hasCat: false, hasDistrict: false, hasSections: true },
   { kind: 'districts', label: 'Districts', hasCat: false, hasDistrict: false, hasSections: false },
+  { kind: 'talukas', label: 'Talukas', hasCat: false, hasDistrict: true, hasSections: false },
   { kind: 'courts', label: 'Courts', hasCat: false, hasDistrict: true, hasSections: false },
   { kind: 'police-stations', label: 'Police Stations', hasCat: false, hasDistrict: true, hasSections: false },
 ];

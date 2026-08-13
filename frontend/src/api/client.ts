@@ -112,6 +112,7 @@ export const api = {
   laws: () => request("/catalog/laws"),
   lawSections: (id: string) => request(`/catalog/laws/${id}/sections`),
   districts: () => request("/catalog/districts"),
+  talukas: (district_id?: string) => request(`/catalog/talukas${district_id ? `?district_id=${district_id}` : ""}`),
   courts: (district_id?: string) => request(`/catalog/courts${district_id ? `?district_id=${district_id}` : ""}`),
   policeStations: (district_id?: string) => request(`/catalog/police-stations${district_id ? `?district_id=${district_id}` : ""}`),
   favCourts: () => request("/favourites/courts"),

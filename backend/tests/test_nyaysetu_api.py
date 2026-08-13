@@ -385,3 +385,34 @@ class TestMockPurchaseGuard:
         monkeypatch.setattr(server, "_PRODUCTION", False)
         r = session.post(f"{API}/purchase/mock", headers=H(user_ctx), json={"plan_id": "plan_299"})
         assert r.status_code == 200
+
+
+# ---------- Gujarat master catalog (districts + talukas) ----------
+class TestMasterCatalog:
+    def test_all_34_districts_available(self, session):
+        r = session.get(f"{API}/catalog/districts")
+        assert r.status_code == 200
+        ids = {d["id"] for d in r.json()}
+        assert "ahmedabad" in ids and "vav_tharad" in ids and "gir_somnath" in ids
+        assert len(ids) >= 33
+        # every district has Gujarati + English labels
+        for d in r.json():
+            assert d["en"] and d["gu"], d
+
+    def test_talukas_catalog_and_district_filter(self, session):
+        r = session.get(f"{API}/catalog/talukas")
+        assert r.status_code == 200
+        all_t = r.json()
+        assert len(all_t) > 200
+        # Ahmedabad talukas
+        r = session.get(f"{API}/catalog/talukas", params={"district_id": "ahmedabad"})
+        ah = r.json()
+        assert any(t["en"] == "Sanand" for t in ah)
+        assert all(t["district_id"] == "ahmedabad" for t in ah)
+        # Gir Somnath (newer district)
+        r = session.get(f"{API}/catalog/talukas", params={"district_id": "gir_somnath"})
+        gs = r.json()
+        assert any(t["en"] == "Una" for t in gs)
+        # Every taluka belongs to a valid district
+        dist_ids = {d["id"] for d in session.get(f"{API}/catalog/districts").json()}
+        assert all(t["district_id"] in dist_ids for t in all_t)

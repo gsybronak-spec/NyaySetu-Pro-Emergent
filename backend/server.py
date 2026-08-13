@@ -25,7 +25,7 @@ import bcrypt
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
-from seed_data import CASE_TYPES, LAWS, DISTRICTS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
+from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
 from docx_import import analyze_docx, decode_upload, DocxImportError
 
@@ -1244,6 +1244,17 @@ async def courts(district_id: Optional[str] = None):
         return specific + generic
     return items
 
+@api.get("/catalog/talukas")
+async def talukas(district_id: Optional[str] = None):
+    """Talukas under a district (or all). Used for district -> taluka
+    dependencies in forms, autofill and template field options."""
+    items = await _load_catalog("talukas")
+    items = [_catalog_public(p) for p in items if p.get("active") is not False]
+    if district_id:
+        return [t for t in items if t["district_id"] == district_id]
+    return items
+
+
 @api.get("/catalog/police-stations")
 async def police_stations(district_id: Optional[str] = None):
     items = await _load_catalog("police-stations")
@@ -1310,6 +1321,7 @@ async def daily_quote():
 _CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
 _LAW_MAP = {l["id"]: l for l in LAWS}
 _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
+_TALUKA_MAP = {t["id"]: t for t in TALUKAS}
 _COURT_MAP = {c["id"]: c for c in COURTS}
 _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
 _COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
@@ -1319,6 +1331,7 @@ _CATALOG_KINDS = {
     "case-types": ("case_types", CASE_TYPES),
     "laws": ("laws", LAWS),
     "districts": ("districts", DISTRICTS),
+    "talukas": ("talukas", TALUKAS),
     "courts": ("courts", COURTS),
     "police-stations": ("police_stations", POLICE_STATIONS),
 }
@@ -1340,16 +1353,18 @@ async def _refresh_catalog_maps() -> None:
     """Rebuild in-memory catalog maps + valid-id sets from MongoDB. Called at
     startup and after every admin catalog mutation so labels, validation and
     document rendering see admin-managed entries immediately."""
-    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _COURT_MAP, _PS_MAP
-    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP
+    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
     _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}
     _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
     _DISTRICT_MAP = {d["id"]: d for d in await _load_catalog("districts")}
+    _TALUKA_MAP = {t["id"]: t for t in await _load_catalog("talukas")}
     _COURT_MAP = {c["id"]: c for c in await _load_catalog("courts")}
     _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
     _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
     _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
     _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+    _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
     _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
     _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
 
@@ -1399,6 +1414,7 @@ def enrich_case(c: dict) -> dict:
 _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
 _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
 _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+_VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
 _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
 _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
 
@@ -3025,7 +3041,7 @@ def _build_catalog_doc(kind: str, req: CatalogItemReq, admin: dict, item_id: str
     }
     if kind == "case-types":
         doc["cat"] = req.cat or "Other"
-    elif kind in ("courts", "police-stations"):
+    elif kind in ("courts", "police-stations", "talukas"):
         doc["district_id"] = req.district_id or "generic"
     elif kind == "laws":
         doc["sections"] = [s.model_dump() for s in (req.sections or [])]
