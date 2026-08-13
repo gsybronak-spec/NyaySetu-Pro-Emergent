@@ -329,3 +329,41 @@ async def test_court_and_ps_creation(client, clean_db):
 
     r = await client.get("/api/catalog/police-stations?district_id=gandhinagar")
     assert any(p["id"] == ps_id for p in r.json())
+
+
+async def test_seed_catalogs_merges_missing_seed_ids_without_overwriting(client, clean_db):
+    """Startup catalog seeding must ADD new seed ids to a partially-seeded
+    collection and never touch existing (possibly admin-edited) records."""
+    # server.db is module-global, so the collections this test seeds can leak
+    # into other test files. Use a fictional id that cannot collide with seed
+    # ids or label assertions, and drop the collections afterwards to restore
+    # the pre-test (empty) state.
+    await db.districts.drop()
+    await db.talukas.drop()
+    # Simulate a DB seeded by an older version: 1 pre-existing record, with an
+    # admin-edited English name + extra field.
+    await db.districts.insert_one({
+        "id": "test_old_district", "en": "Old District (Edited)", "gu": "જૂનો જિલ્લો",
+        "active": True, "custom_note": "admin kept this", "created_at": now().isoformat(),
+    })
+    await server.seed_catalogs()
+
+    docs = await db.districts.find({}, {"_id": 0}).to_list(None)
+    ids = {d["id"] for d in docs}
+    assert "test_old_district" in ids
+    assert "vav_tharad" in ids and "gir_somnath" in ids
+    assert len(ids) >= 34
+
+    # The pre-existing record was NOT overwritten
+    edited = await db.districts.find_one({"id": "test_old_district"}, {"_id": 0})
+    assert edited["en"] == "Old District (Edited)"
+    assert edited.get("custom_note") == "admin kept this"
+
+    # No duplicates after re-running (idempotent)
+    await server.seed_catalogs()
+    assert await db.districts.count_documents({}) == len(ids)
+
+    # Restore the pre-test state so the global server.db is not polluted for
+    # other test modules that run later in the same process.
+    await db.districts.drop()
+    await db.talukas.drop()

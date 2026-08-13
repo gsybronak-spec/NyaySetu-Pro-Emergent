@@ -3936,15 +3936,28 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
 # ============================================================
 
 async def seed_catalogs():
-    """Idempotently seed catalog collections from the static catalogs.
-    Only inserts when a collection is empty — never overwrites admin edits."""
+    """Idempotently merge catalog seeds into their collections on startup.
+
+    Only INSERTS seed ids that are missing — existing records (including
+    admin edits and deactivations) are never overwritten. This keeps the
+    collection in sync with the canonical seed list even when the DB was
+    seeded by an older version with fewer entries (e.g. new districts).
+    """
     ts = now().isoformat()
     for kind, (coll, seed_list) in _CATALOG_KINDS.items():
-        if await db[coll].count_documents({}) > 0:
-            continue
+        existing_ids = {
+            d["id"] for d in await db[coll].find({}, {"_id": 0, "id": 1}).to_list(10000)
+        }
+        added = 0
         for item in seed_list:
-            await db[coll].insert_one({**item, "active": True, "created_at": ts, "updated_at": ts})
-        logger.info(f"Seeded catalog '{kind}' ({len(seed_list)} entries).")
+            if item["id"] in existing_ids:
+                continue
+            await db[coll].insert_one(
+                {**item, "active": True, "created_at": ts, "updated_at": ts}
+            )
+            added += 1
+        if added:
+            logger.info(f"Seeded catalog '{kind}' (+{added} new entries).")
     await _refresh_catalog_maps()
 
 
