@@ -69,26 +69,47 @@ def _assert_correct_gujarati(text):
     return False
 
 
+def _subset_identities(raw):
+    """All embedded subset-font identities (TAG+BaseName) in the PDF."""
+    return [n.decode("latin1") for n in re.findall(rb"/BaseFont\s*/([A-Z]{6}\+[^\s/>]+)", raw)]
+
+
 def test_sequential_generations_stay_correct():
-    """A, B, A, C, B sequentially in one process — all must be correct."""
+    """A, B, A, C, B sequentially in one process — all must be correct.
+
+    Same content must render IDENTICALLY (identical semantic text, identical
+    layout) but must carry a DIFFERENT embedded font identity per document —
+    the exact property Android's font cache needs to never collide between
+    downloads. Byte equality is intentionally NOT asserted here because the
+    per-document unique font tag is the fix.
+    """
     seq = [("A", BLOCK_A), ("B", BLOCK_B), ("A", BLOCK_A), ("C", BLOCK_C), ("B", BLOCK_B)]
     out = {}
+    ids = {}
     for i, (label, blocks) in enumerate(seq, 1):
         raw = _gen_pdf(blocks)
         out[label + str(i)] = raw
+        ids[label + str(i)] = _subset_identities(raw)
         text = _mupdf_text(raw)
         assert _assert_correct_gujarati(text), f"gen #{i} ({label}) corrupted: {text[:80]!r}"
         assert "\\ue0" not in repr(text), f"gen #{i} ({label}) leaked PUA glyph codes"
-    # Same content -> byte-identical output (modulo /ID + timestamps)
-    assert _normalize(out["A1"]) == _normalize(out["A3"])
-    assert _normalize(out["B2"]) == _normalize(out["B5"])
+    # Same content -> identical semantic text, but DISTINCT font identities
+    assert _mupdf_text(out["A1"]) == _mupdf_text(out["A3"])
+    assert _mupdf_text(out["B2"]) == _mupdf_text(out["B5"])
+    assert ids["A1"] and ids["A1"] != ids["A3"], "same doc must not reuse font identity"
+    assert ids["B2"] != ids["B5"], "same doc must not reuse font identity"
+    all_ids = [i for k, i in ids.items()]
+    assert len({tuple(i) for i in all_ids}) == 5, "all five generations must have distinct identities"
 
 
 def test_repeated_generation_is_deterministic():
-    """Generating the same document 3x yields identical normalized bytes."""
+    """Generating the same document 3x: identical rendering and semantic text,
+    but a distinct embedded font identity every time."""
     raws = [_gen_pdf(BLOCK_A) for _ in range(3)]
-    n = [_normalize(r) for r in raws]
-    assert n[0] == n[1] == n[2]
+    texts = [_mupdf_text(r) for r in raws]
+    assert texts[0] == texts[1] == texts[2]
+    idents = [_subset_identities(r) for r in raws]
+    assert len({tuple(i) for i in idents}) == 3, "each generation needs a unique font identity"
     for r in raws:
         assert _assert_correct_gujarati(_mupdf_text(r))
 

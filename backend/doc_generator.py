@@ -18,6 +18,62 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 
+# ---- Unique per-PDF embedded-font identity (Android cache-collision fix) ----
+#
+# ReportLab's SUBSETN(n) is a FIXED function: subset index 0 always becomes the
+# tag 'AAAAAA', so every generated PDF embeds its subsetted fonts under the SAME
+# /BaseFont identity (e.g. /AAAAAA+Lohit-Gujarati) even though each document
+# carries a different glyph->code mapping. Android PDF viewers cache embedded
+# fonts keyed by that name, so opening PDF #2 reuses PDF #1's cached glyph
+# mapping and renders corrupted/malformed Gujarati — exactly the reported
+# "first download perfect, second+ broken" behaviour. The PDF-standard fix is a
+# unique 6-letter subset tag per generated document (the tag is the identity
+# Android's font cache is keyed on).
+
+import secrets as _secrets
+import string as _string
+import threading as _threading
+from contextlib import contextmanager
+from reportlab.pdfbase import ttfonts as _ttfonts
+
+_pdf_font_lock = _threading.Lock()
+
+
+def _patch_subset_tag():
+    """Give this generation a unique 6-letter PDF font subset tag.
+
+    Returns a zero-arg callable that restores the original SUBSETN. The tag is
+    cryptographically random per generation; the subset index n is folded in by
+    letter-shift so multiple subsets inside one document stay distinct (PDF
+    spec requires a tag of exactly six uppercase letters).
+    """
+    base = "".join(_secrets.choice(_string.ascii_uppercase) for _ in range(6))
+
+    def _subsetn(n, _base=base):
+        shift = n % 26
+        return bytes((ord(c) - 65 + shift) % 26 + 65 for c in _base)
+
+    orig = _ttfonts.SUBSETN
+    _ttfonts.SUBSETN = _subsetn
+    return lambda: setattr(_ttfonts, "SUBSETN", orig)
+
+
+@contextmanager
+def _unique_subset_tag():
+    """Serialize + isolate the SUBSETN patch for one PDF generation.
+
+    SUBSETN is module-global in reportlab, so concurrent generations in
+    different threads would race on it. The lock serializes ReportLab-based
+    PDF generation (fast, runs on the async event loop anyway) and the
+    try/finally guarantees the original function is restored even on error.
+    """
+    with _pdf_font_lock:
+        restore = _patch_subset_tag()
+        try:
+            yield
+        finally:
+            restore()
+
 from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -359,6 +415,11 @@ def _pdf_align(a: str) -> int:
 
 
 def generate_pdf_reportlab(blocks: list, language: str = "en", settings: dict = None) -> str:
+    with _unique_subset_tag():
+        return _generate_pdf_reportlab_inner(blocks, language, settings)
+
+
+def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: dict = None) -> str:
     register_fonts()
     buf = io.BytesIO()
     s = get_doc_settings(settings)
@@ -592,6 +653,11 @@ def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
 
 def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -> str:
     """Generate a Gujarati PDF with correct HarfBuzz shaping (no Chromium)."""
+    with _unique_subset_tag():
+        return _generate_pdf_hb_inner(blocks, language, settings)
+
+
+def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = None) -> str:
     import tempfile
     from reportlab.pdfgen import canvas as pdfcanvas
 
