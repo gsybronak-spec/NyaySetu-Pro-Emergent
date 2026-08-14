@@ -157,6 +157,12 @@ EXPECTED_IDS = [
     "condonation_delay", "interim_injunction", "vakalatnama", "return_documents",
     "inspection", "compromise", "withdrawal", "amendment", "surety", "early_hearing",
     "document_return_application",
+    # v2 application catalog (the lawyer's final drafts)
+    "aanke_padvani_arji", "certified_report", "dd_karavani_arji", "document_return",
+    "document_on_record", "closing_purshish", "hazari_mafi_arji", "fs_haq_bandh",
+    "fs_haq_khol", "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
+    "samadhan_purshish", "ulat_tapas_bandh", "ulat_tapas_khol", "undertaking",
+    "vakilatnama_civil", "vakilatnama_criminal", "warrant_hathbido", "warrant_rad",
 ]
 
 
@@ -167,13 +173,13 @@ EXPECTED_IDS = [
 class TestSeedMigration:
     @pytest.mark.asyncio
     async def test_migrate_creates_24_templates(self, client, clean_db):
-        """Seed migration must create exactly 24 templates."""
+        """Seed migration must create every seed template (legacy + v2)."""
         _, token = await create_super_admin()
         r = await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         assert r.status_code == 200
         data = r.json()
-        assert data["total_seed_templates"] == 24
-        assert data["created"] == 24
+        assert data["total_seed_templates"] == len(EXPECTED_IDS)
+        assert data["created"] == len(EXPECTED_IDS)
         assert data["skipped"] == 0
         assert data["errors"] == 0
         # Verify all IDs
@@ -189,7 +195,7 @@ class TestSeedMigration:
         assert r.status_code == 200
         data = r.json()
         assert data["created"] == 0
-        assert data["skipped"] == 24
+        assert data["skipped"] == len(EXPECTED_IDS)
 
     @pytest.mark.asyncio
     async def test_migrate_does_not_overwrite_admin_edit(self, client, clean_db):
@@ -239,7 +245,7 @@ class TestLawyerTemplateAPI:
         r = await client.get("/api/templates")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 24
+        assert len(data) == len(EXPECTED_IDS)
         ids = [t["id"] for t in data]
         for tid in EXPECTED_IDS:
             assert tid in ids
@@ -252,7 +258,7 @@ class TestLawyerTemplateAPI:
         r = await client.get("/api/templates")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == 24
+        assert len(data) == len(EXPECTED_IDS)
 
     @pytest.mark.asyncio
     async def test_get_template_by_id(self, client, clean_db):
@@ -335,7 +341,7 @@ class TestAdminTemplateCRUD:
         await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.get("/api/admin/templates", headers=auth(token))
         assert r.status_code == 200
-        assert len(r.json()) == 24
+        assert len(r.json()) == len(EXPECTED_IDS)
 
     @pytest.mark.asyncio
     async def test_admin_list_with_status_filter(self, client, clean_db):

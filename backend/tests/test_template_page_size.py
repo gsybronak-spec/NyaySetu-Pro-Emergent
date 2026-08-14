@@ -41,6 +41,7 @@ app = server.app
 
 from server import make_token, make_admin_token, now
 from seed_data import TEMPLATES
+from seed_data_templates_v2 import TEMPLATES_V2
 from httpx import AsyncClient, ASGITransport
 
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
@@ -48,8 +49,8 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "templates", "template_versions", "otps", "audit_logs",
                "plans", "settings"]
 
-SEED_IDS = {t["id"] for t in TEMPLATES}
-assert "affidavit" in SEED_IDS and len(SEED_IDS) == 24
+SEED_IDS = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
+assert "affidavit" in SEED_IDS and len(SEED_IDS) == 45
 
 
 @pytest_asyncio.fixture(scope="function")

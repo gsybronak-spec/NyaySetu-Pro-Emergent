@@ -3,10 +3,33 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import StatusBadge from '../components/StatusBadge';
 
-const BUILT_IN_PLACEHOLDERS = [
-  'advocate_name', 'today', 'district', 'court', 
-  'case_number', 'case_type', 'party_name', 'opposite_party'
+// Default system auto-fill placeholders. Unlike the old hardcoded palette,
+// these are per-template registry entries (template.placeholders): the admin
+// can edit their key/labels/type, delete them, or add new ones. The underlying
+// case->value auto-fill still resolves whenever a key is referenced in content.
+const SYSTEM_PLACEHOLDER_DEFAULTS = [
+  { key: 'advocate_name', label_en: 'Advocate Name', label_gu: 'વકીલનું નામ' },
+  { key: 'today', label_en: 'Today Date', label_gu: 'આજની તારીખ' },
+  { key: 'district', label_en: 'District', label_gu: 'જિલ્લો' },
+  { key: 'court', label_en: 'Court', label_gu: 'કોર્ટ' },
+  { key: 'case_number', label_en: 'Case Number', label_gu: 'કેસ નંબર' },
+  { key: 'case_type', label_en: 'Case Type', label_gu: 'કેસનો પ્રકાર' },
+  { key: 'party_name', label_en: 'Party Name', label_gu: 'પક્ષકારનું નામ' },
+  { key: 'opposite_party', label_en: 'Opposite Party', label_gu: 'સામાવાળા પક્ષ' },
 ];
+
+function buildSystemPlaceholders() {
+  return SYSTEM_PLACEHOLDER_DEFAULTS.map((p) => ({
+    key: p.key,
+    label_en: p.label_en,
+    label_gu: p.label_gu,
+    type: 'text',
+    required: false,
+    default_value: '',
+    options: [],
+    source: 'system',
+  }));
+}
 
 interface FieldOption {
   label_en: string;
@@ -55,6 +78,7 @@ export default function TemplateEditor() {
     case_types: [],
     courts: [],
     jurisdiction: '',
+    placeholders: buildSystemPlaceholders(),
     status: 'draft',
     version: 1,
     content_en: '',
@@ -95,6 +119,11 @@ export default function TemplateEditor() {
               default_value: f.default_value || '',
               options: f.options || [],
             })),
+            // Placeholder registry: stored per template; defaults to the system
+            // auto-fill list so every placeholder is editable/deletable.
+            placeholders: Array.isArray(data.placeholders) && data.placeholders.length
+              ? data.placeholders.map((p: any) => ({ ...p, source: p.source || 'system' }))
+              : buildSystemPlaceholders(),
             settings: data.settings || {
               margin_top_cm: 2.5,
               margin_bottom_cm: 2.5,
@@ -154,13 +183,24 @@ export default function TemplateEditor() {
 
   const updateFieldKey = (index: number, newKey: string) => {
     const oldKey = template.fields[index].key;
-    if (oldKey && oldKey !== newKey && (template.content_en?.includes(`{{${oldKey}}}`) || template.content_gu?.includes(`{{${oldKey}}}`))) {
-      const confirmChange = window.confirm(
-        `Warning: Changing field key from '{{${oldKey}}}' to '{{${newKey}}}' may break existing references in the document content.\n\nDo you want to proceed?`
-      );
-      if (!confirmChange) return;
+    const cleanKey = newKey.replace(/[^A-Za-z0-9_]/g, '');
+    if (!cleanKey) return;
+    if (oldKey && oldKey !== cleanKey) {
+      // Duplicate guard within the fields list.
+      const dup = template.fields.some((f: any, i: number) => i !== index && f.key === cleanKey);
+      if (dup) {
+        alert(`Field key '${cleanKey}' already exists. Keys must be unique within this template.`);
+        return;
+      }
+      if (template.content_en?.includes(`{{${oldKey}}}`) || template.content_gu?.includes(`{{${oldKey}}}`)) {
+        const doUpdate = window.confirm(
+          `Rename '{{${oldKey}}}' to '{{${cleanKey}}}'?\n\nReferences in the document content will be updated to the new key.`
+        );
+        if (!doUpdate) return;
+        handleChange('content_en', (template.content_en || '').split(`{{${oldKey}}}`).join(`{{${cleanKey}}}`));
+        handleChange('content_gu', (template.content_gu || '').split(`{{${oldKey}}}`).join(`{{${cleanKey}}}`));
+      }
     }
-    const cleanKey = newKey.toLowerCase().replace(/[^a-z0-9_]/g, '_');
     updateField(index, 'key', cleanKey);
   };
 
@@ -188,10 +228,16 @@ export default function TemplateEditor() {
 
   const removeField = (index: number) => {
     const field = template.fields[index];
-    if (template.content_en?.includes(`{{${field.key}}}`) || template.content_gu?.includes(`{{${field.key}}}`)) {
-      if (!window.confirm(`Field '{{${field.key}}}' is used in the template content. Are you sure you want to delete it?`)) {
-        return;
-      }
+    const used = template.content_en?.includes(`{{${field.key}}}`) || template.content_gu?.includes(`{{${field.key}}}`);
+    if (used) {
+      const choice = window.confirm(
+        `Field '{{${field.key}}}' is used in the template content.\n\nOK = delete it and REMOVE the {{${field.key}}} references from the content.\nCancel = keep the field.`
+      );
+      if (!choice) return;
+      handleChange('content_en', (template.content_en || '').split(`{{${field.key}}}`).join(''));
+      handleChange('content_gu', (template.content_gu || '').split(`{{${field.key}}}`).join(''));
+    } else if (!window.confirm(`Delete field '{{${field.key}}}'?`)) {
+      return;
     }
     const newFields = template.fields.filter((_: any, i: number) => i !== index);
     handleChange('fields', newFields);
@@ -208,6 +254,83 @@ export default function TemplateEditor() {
     newFields[targetIdx] = temp;
     newFields.forEach((f, idx) => { f.order = idx; });
     handleChange('fields', newFields);
+  };
+
+  // ---- Placeholder registry operations (system + custom, all editable) ----
+  const updatePlaceholder = (index: number, key: string, value: any) => {
+    const arr = [...template.placeholders];
+    arr[index] = { ...arr[index], [key]: value };
+    handleChange('placeholders', arr);
+  };
+
+  // Sanitize a placeholder key: allow letters/digits/underscore (custom IDs
+  // like {{001}} are valid), strip whitespace and the {{ }} braces.
+  const sanitizeKey = (raw: string) => raw.replace(/[^A-Za-z0-9_]/g, '');
+
+  const updatePlaceholderKey = (index: number, rawKey: string) => {
+    const oldKey = template.placeholders[index].key;
+    const cleanKey = sanitizeKey(rawKey);
+    if (!cleanKey) return;
+    if (cleanKey === oldKey) return;
+    // Duplicate key guard within the registry.
+    const dup = template.placeholders.some((p: any, i: number) => i !== index && p.key === cleanKey);
+    if (dup) {
+      alert(`Placeholder key '${cleanKey}' already exists. Keys must be unique within this template.`);
+      return;
+    }
+    const usedEn = template.content_en?.includes(`{{${oldKey}}}`);
+    const usedGu = template.content_gu?.includes(`{{${oldKey}}}`);
+    if (usedEn || usedGu) {
+      const doUpdate = window.confirm(
+        `Rename '{{${oldKey}}}' to '{{${cleanKey}}}'?\n\nReferences in the document content will be updated to the new key.`
+      );
+      if (!doUpdate) return;
+      handleChange('content_en', (template.content_en || '').split(`{{${oldKey}}}`).join(`{{${cleanKey}}}`));
+      handleChange('content_gu', (template.content_gu || '').split(`{{${oldKey}}}`).join(`{{${cleanKey}}}`));
+    }
+    updatePlaceholder(index, 'key', cleanKey);
+  };
+
+  const addPlaceholder = () => {
+    const arr = [...(template.placeholders || []), {
+      key: `ph_${(template.placeholders?.length || 0) + 1}`,
+      label_en: `Placeholder ${(template.placeholders?.length || 0) + 1}`,
+      label_gu: `પ્લેસહોલ્ડર ${(template.placeholders?.length || 0) + 1}`,
+      type: 'text',
+      required: false,
+      default_value: '',
+      options: [],
+      source: 'custom',
+    }];
+    handleChange('placeholders', arr);
+  };
+
+  const removePlaceholder = (index: number) => {
+    const p = template.placeholders[index];
+    const usedEn = template.content_en?.includes(`{{${p.key}}}`);
+    const usedGu = template.content_gu?.includes(`{{${p.key}}}`);
+    if (usedEn || usedGu) {
+      const choice = window.confirm(
+        `'{{${p.key}}}' is used in the document content.\n\nOK = delete it and REMOVE the {{${p.key}}} references from the content.\nCancel = keep the placeholder.`
+      );
+      if (!choice) return;
+      handleChange('content_en', (template.content_en || '').split(`{{${p.key}}}`).join(''));
+      handleChange('content_gu', (template.content_gu || '').split(`{{${p.key}}}`).join(''));
+    } else if (!window.confirm(`Delete placeholder '{{${p.key}}}'?`)) {
+      return;
+    }
+    const arr = template.placeholders.filter((_: any, i: number) => i !== index);
+    handleChange('placeholders', arr);
+  };
+
+  const movePlaceholder = (index: number, direction: 'up' | 'down') => {
+    const arr = [...template.placeholders];
+    const target = direction === 'up' ? index - 1 : index + 1;
+    if (target < 0 || target >= arr.length) return;
+    const temp = arr[index];
+    arr[index] = arr[target];
+    arr[target] = temp;
+    handleChange('placeholders', arr);
   };
 
   // Option Operations for Select/Radio/Checkbox
@@ -367,6 +490,7 @@ export default function TemplateEditor() {
 
   const isLocked = template.status === 'published' || template.status === 'archived';
   const customPlaceholders = template.fields.map((f: any) => f.key).filter(Boolean);
+  const registryKeys = new Set((template.placeholders || []).map((p: any) => p.key).filter(Boolean));
 
   return (
     <div className="editor-page">
@@ -694,30 +818,127 @@ export default function TemplateEditor() {
             )}
           </div>
 
+          {/* Placeholder Registry — system auto-fill entries are fully editable/deletable */}
+          <div className="editor-section">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3>Auto-Fill Placeholder Registry</h3>
+              {!isLocked && <button className="btn-secondary btn-sm" onClick={addPlaceholder}>+ Add Placeholder</button>}
+            </div>
+            <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '-10px', marginBottom: '14px' }}>
+              Every placeholder is fully manageable: add, edit (key / English label / Gujarati label / type) or delete any entry — including the system auto-fill values below. Keys can be custom IDs such as <code>001</code>, <code>court</code> or <code>case_no</code>. Deleting a placeholder that is still used in the content removes its references safely.
+            </p>
+            {(template.placeholders || []).length === 0 ? (
+              <p className="no-data">No placeholders defined. Click "+ Add Placeholder" to create one.</p>
+            ) : (
+              <div className="fields-table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: '40px' }}>#</th>
+                      <th>Placeholder Key</th>
+                      <th>Label (EN)</th>
+                      <th>Label (GU)</th>
+                      <th>Type</th>
+                      <th>Req</th>
+                      <th>Source</th>
+                      {!isLocked && <th>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {template.placeholders.map((p: any, idx: number) => (
+                      <tr key={`ph-${idx}`}>
+                        <td><strong>{idx + 1}</strong></td>
+                        <td>
+                          <input
+                            type="text"
+                            className="table-input"
+                            value={p.key}
+                            onChange={e => updatePlaceholderKey(idx, e.target.value)}
+                            disabled={isLocked}
+                            placeholder="key or 001"
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            className="table-input"
+                            value={p.label_en || ''}
+                            onChange={e => updatePlaceholder(idx, 'label_en', e.target.value)}
+                            disabled={isLocked}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            className="table-input text-gu"
+                            value={p.label_gu || ''}
+                            onChange={e => updatePlaceholder(idx, 'label_gu', e.target.value)}
+                            disabled={isLocked}
+                          />
+                        </td>
+                        <td>
+                          <select
+                            className="table-input"
+                            value={p.type || 'text'}
+                            onChange={e => updatePlaceholder(idx, 'type', e.target.value)}
+                            disabled={isLocked}
+                          >
+                            <option value="text">Text</option>
+                            <option value="textarea">Textarea</option>
+                            <option value="date">Date</option>
+                            <option value="select">Dropdown Select</option>
+                            <option value="radio">Radio Buttons</option>
+                          </select>
+                        </td>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={p.required === true}
+                            onChange={e => updatePlaceholder(idx, 'required', e.target.checked)}
+                            disabled={isLocked}
+                          />
+                        </td>
+                        <td>
+                          <span className={p.source === 'system' ? 'badge badge-info' : 'badge'} style={{ fontSize: '0.75rem' }}>
+                            {p.source === 'system' ? 'Auto-fill' : 'Custom'}
+                          </span>
+                        </td>
+                        {!isLocked && (
+                          <td>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button className="btn-icon" title="Move Up" onClick={() => movePlaceholder(idx, 'up')} disabled={idx === 0}>↑</button>
+                              <button className="btn-icon" title="Move Down" onClick={() => movePlaceholder(idx, 'down')} disabled={idx === template.placeholders.length - 1}>↓</button>
+                              <button className="btn-icon text-danger" title="Delete Placeholder" onClick={() => removePlaceholder(idx)}>✕</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
           {/* Content Editor Section */}
           <div className="editor-section">
             <h3>3. Document Content & Placeholders</h3>
             
-            {/* Clickable Placeholder Palette */}
+            {/* Clickable Placeholder Palette — fully data-driven from the registry */}
             <div className="palette-container">
               <div className="palette-section">
-                <span className="palette-title">System Auto-Fill:</span>
-                {BUILT_IN_PLACEHOLDERS.map(p => (
-                  <button key={p} className="palette-btn" onClick={() => insertPlaceholder(p)} disabled={isLocked} title={`Auto-filled from case/advocate`}>
+                <span className="palette-title">Auto-Fill & Fields ({new Set([...(template.placeholders || []).map((p: any) => p.key).filter(Boolean), ...customPlaceholders]).size}):</span>
+                {(template.placeholders || []).map((p: any) => (
+                  <button key={p.key} className={`palette-btn ${p.source === 'custom' ? 'custom' : ''}`} onClick={() => insertPlaceholder(p.key)} disabled={isLocked} title={p.source === 'system' ? 'Auto-filled from case/advocate — editable in the placeholder registry' : 'Dynamic template field'}>
+                    + {`{{${p.key}}}`}
+                  </button>
+                ))}
+                {customPlaceholders.filter((k: string) => !registryKeys.has(k)).map((p: string) => (
+                  <button key={p} className="palette-btn custom" onClick={() => insertPlaceholder(p)} disabled={isLocked} title={`Dynamic template field`}>
                     + {`{{${p}}}`}
                   </button>
                 ))}
               </div>
-              {customPlaceholders.length > 0 && (
-                <div className="palette-section" style={{ marginTop: '8px' }}>
-                  <span className="palette-title">Template Custom Fields:</span>
-                  {customPlaceholders.map((p: string) => (
-                    <button key={p} className="palette-btn custom" onClick={() => insertPlaceholder(p)} disabled={isLocked} title={`Dynamic template field`}>
-                      + {`{{${p}}}`}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
 
             {/* Split Content Panes */}

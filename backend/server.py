@@ -27,6 +27,7 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
+from seed_data_templates_v2 import TEMPLATES_V2
 from doc_generator import (
     generate_pdf,
     generate_pdf_detailed,
@@ -279,6 +280,10 @@ class CaseCreate(BaseModel):
     police_station: Optional[str] = Field(None, max_length=200)
     police_station_id: Optional[str] = Field(None, max_length=50)
     police_station_custom: Optional[str] = Field(None, max_length=200)
+    # Party roles (v2 catalog) — e.g. ફરિયાદી/અરજદાર/વાદી and
+    # આરોપી/સામાવાળા/પ્રતિવાદી. Case-level, reused by every application.
+    party_role: Optional[str] = Field(None, max_length=30)
+    opposite_party_role: Optional[str] = Field(None, max_length=30)
     complaint_custom: Optional[str] = Field(None, max_length=500)
     notes: Optional[str] = Field(None, max_length=2000)
     # Admin-configured case form values (dynamic fields) — persisted on the case.
@@ -1701,6 +1706,9 @@ _AUTO_FILL_FIELDS = {
     # Derived values for the document-return application (never user-entered)
     "case_status_clause", "tense", "selected_party_role", "taluka_place",
     "date_display",
+    # Case-level party roles + derived lines (v2 catalog — never user-entered)
+    "party_role", "opposite_party_role", "party_line", "opposite_party_line",
+    "case_or_crime",
 }
 
 def public_template(t: dict) -> dict:
@@ -1721,6 +1729,11 @@ def public_template(t: dict) -> dict:
             field_dict["default_value"] = f["default_value"]
         if f.get("placeholder"):
             field_dict["placeholder"] = f["placeholder"]
+        # v2 catalog field behavior: conditional fields (depends_on/show_when —
+        # the "અન્ય/Other" pattern) and case-party selects (source).
+        for opt_key in ("depends_on", "show_when", "source"):
+            if f.get(opt_key):
+                field_dict[opt_key] = f[opt_key]
         clean_fields.append(field_dict)
     res = {
         "id": t["id"],
@@ -1745,7 +1758,7 @@ async def _get_published_templates() -> list:
 
     merged = []
     # Add seed templates if not overridden or if published in DB
-    for seed_t in TEMPLATES:
+    for seed_t in [*TEMPLATES, *TEMPLATES_V2]:
         t_id = seed_t["id"]
         if t_id in db_by_id:
             db_t = db_by_id[t_id]
@@ -1757,7 +1770,7 @@ async def _get_published_templates() -> list:
             merged.append(seed_t)
 
     # Add newly created templates from DB that are published and not in seed
-    seed_ids = {t["id"] for t in TEMPLATES}
+    seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
     for db_t in db_templates:
         if db_t["id"] not in seed_ids and db_t.get("status") == "published":
             merged.append(db_t)
@@ -1772,7 +1785,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         if t.get("status") == "published":
             return t
         return None  # Draft or archived in DB -> hidden from public lawyer API
-    return next((x for x in TEMPLATES if x["id"] == template_id), None)
+    return next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
 
 
 @api.get("/templates")
@@ -1874,6 +1887,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
         ctx.setdefault("opposite_party", case.get("opposite_party") or "")
+        # Party roles (v2 catalog): stored on the Case, inherited by every
+        # application. Gujarati legal defaults as a safety net when a case was
+        # created before roles were recorded — never "None"/empty in output.
+        ctx.setdefault("party_role", case.get("party_role") or "ફરીયાદી")
+        ctx.setdefault("opposite_party_role", case.get("opposite_party_role") or "આરોપી")
         # Police station (label or custom)
         ps_obj = _PS_MAP.get(case.get("police_station_id"))
         if ps_obj:
@@ -1908,6 +1926,8 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx.setdefault("party_name", "")
         ctx.setdefault("opposite_party", "")
         ctx.setdefault("police_station", "")
+        ctx.setdefault("party_role", "ફરીયાદી")
+        ctx.setdefault("opposite_party_role", "આરોપી")
         if not ctx.get("client_name"):
             ctx["client_name"] = ""
 
@@ -1927,8 +1947,36 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["case_status_clause"] = ""
         ctx["tense"] = "છે"
-    # Signature/pleading role — applicant-side role, opposite-side as fallback
-    ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ""
+    # Conditional "અન્ય/Other" fields (v2 catalog): when a select/radio is set
+    # to "other", the companion "<key>_other" text field holds the real value
+    # and replaces it in the rendered document (never prints the literal
+    # English word "other"). Generic rule, no per-template wiring needed.
+    for k in list(ctx.keys()):
+        if ctx.get(k) == "other" and ctx.get(f"{k}_other"):
+            ctx[k] = ctx[f"{k}_other"]
+    # Signature/pleading role — the side the advocate represents. The v2
+    # catalog's advocate_side select ("party"/"opposite", options named after
+    # the linked case's parties) maps to the case-level roles; the legacy
+    # applicant_role/opposite_party_role radios remain supported.
+    side = ctx.get("advocate_side")
+    if side == "party":
+        ctx["selected_party_role"] = ctx.get("party_role") or "ફરીયાદી"
+    elif side == "opposite":
+        ctx["selected_party_role"] = ctx.get("opposite_party_role") or "આરોપી"
+    else:
+        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ""
+    # Party lines — "<role> <name>" for the case header block (never prints a
+    # lone role or a leading space when a name/role is missing).
+    ctx["party_line"] = f"{ctx.get('party_role') or ''} {ctx.get('party_name') or ''}".strip()
+    ctx["opposite_party_line"] = f"{ctx.get('opposite_party_role') or ''} {ctx.get('opposite_party') or ''}".strip()
+    # Case-or-crime line (Jamin Bond): case number wins; crime registration
+    # number is used only when the charge-sheet is not yet filed (no case no.).
+    if ctx.get("case_number"):
+        ctx["case_or_crime"] = f"કેસ નં. {ctx.get('case_number')}"
+    elif ctx.get("crime_reg_number"):
+        ctx["case_or_crime"] = f"ગુન્હા રજી. નં. {ctx.get('crime_reg_number')}"
+    else:
+        ctx["case_or_crime"] = ""
     # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર")
     _tal = (ctx.get("taluka") or "").strip()
     ctx["taluka_place"] = f"{_tal}, {ctx.get('district') or ''}" if _tal else (ctx.get("district") or "")
@@ -1938,8 +1986,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     _d = ctx.get("date")
     if isinstance(_d, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _d):
         ctx["date_display"] = f"{_d[8:10]}/{_d[5:7]}/{_d[0:4]}"
+    elif _d:
+        ctx["date_display"] = _d if isinstance(_d, str) else ""
     else:
-        ctx["date_display"] = (_d or "") if isinstance(_d, str) else ""
+        # No date chosen -> today (the system date). Matches the source blank
+        # "[__ / __ / 20__]" rendered as DD/MM/YYYY.
+        ctx["date_display"] = now().strftime("%d/%m/%Y")
     return ctx
 
 
@@ -2471,7 +2523,7 @@ async def remove_fav_court(court_id: str, user=Depends(get_user)):
 
 @api.post("/drafts")
 async def save_draft(req: DraftSave, user=Depends(get_user)):
-    t = next((x for x in TEMPLATES if x["id"] == req.template_id), None)
+    t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == req.template_id), None)
     template_name = t["name_en"] if t else req.template_id
     # Upsert
     key = {"user_id": user["id"], "template_id": req.template_id, "case_id": req.case_id}
@@ -2512,7 +2564,7 @@ async def global_search(q: str, user=Depends(get_user)):
     ql = q.lower().strip()
     # Templates
     tpls = []
-    for t in TEMPLATES:
+    for t in [*TEMPLATES, *TEMPLATES_V2]:
         aliases = [t["name_en"].lower(), t["name_gu"].lower()] + [a.lower() for a in t.get("aliases", [])]
         if any(ql in a for a in aliases):
             tpls.append(public_template(t))
@@ -2571,6 +2623,7 @@ class AdminTemplateCreate(BaseModel):
     courts: list[str] = []
     jurisdiction: Optional[str] = Field(None, max_length=200)
     fields: list[TemplateFieldDef] = []
+    placeholders: Optional[list] = None
     content_en: str = ""
     content_gu: str = ""
     settings: Optional[dict] = None
@@ -2587,6 +2640,7 @@ class AdminTemplateUpdate(BaseModel):
     courts: Optional[list[str]] = None
     jurisdiction: Optional[str] = Field(None, max_length=200)
     fields: Optional[list[TemplateFieldDef]] = None
+    placeholders: Optional[list] = None
     content_en: Optional[str] = None
     content_gu: Optional[str] = None
     settings: Optional[dict] = None
@@ -3316,10 +3370,10 @@ async def admin_list_templates(
     status="seed". The merge is idempotent — no writes, no duplicates."""
     db_templates = await db.templates.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
     db_by_id = {t["id"]: t for t in db_templates}
-    seed_ids = {t["id"] for t in TEMPLATES}
+    seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
 
     merged = []
-    for seed_t in TEMPLATES:
+    for seed_t in [*TEMPLATES, *TEMPLATES_V2]:
         if seed_t["id"] in db_by_id:
             merged.append({**db_by_id[seed_t["id"]], "is_seed_template": True})
         else:
@@ -3355,7 +3409,7 @@ async def admin_get_template(template_id: str, admin=Depends(get_admin)):
     """Get full template details for admin editing."""
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
-        t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
         if t:
             # Merge (never replace) the seed's own settings so admin-configured
             # values like settings.page_size survive the fallback view.
@@ -3408,6 +3462,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
         "courts": req.courts,
         "jurisdiction": req.jurisdiction,
         "fields": [f.model_dump() for f in req.fields],
+        "placeholders": req.placeholders,
         "content_en": req.content_en,
         "content_gu": req.content_gu,
         "settings": req.settings or {
@@ -3543,7 +3598,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
     _validate_template_settings(req.settings)
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
-        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        seed_t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
         if seed_t:
             # Seed template being edited for first time -> auto-initialize as draft in DB
             t = {
@@ -3566,7 +3621,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         raise HTTPException(403, "Published templates cannot be directly modified. Clone or edit to create a new draft version.")
 
     updates = {}
-    for key in ["name_en", "name_gu", "category", "sub_category", "description", "tags", "aliases", "case_types", "courts", "jurisdiction", "content_en", "content_gu", "settings"]:
+    for key in ["name_en", "name_gu", "category", "sub_category", "description", "tags", "aliases", "case_types", "courts", "jurisdiction", "content_en", "content_gu", "settings", "placeholders"]:
         val = getattr(req, key, None)
         if val is not None:
             updates[key] = val
@@ -3591,7 +3646,7 @@ async def admin_publish_template(template_id: str, admin=Depends(get_admin)):
     """Publish a draft template (makes it visible to lawyers)."""
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
-        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        seed_t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
         if seed_t:
             t = {**seed_t, "status": "draft", "version": 1, "locked": False, "source": "admin_edited"}
             await db.templates.insert_one({**t, "created_at": now().isoformat(), "updated_at": now().isoformat()})
@@ -3721,7 +3776,7 @@ async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = 
     rec = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not rec:
         raise HTTPException(404, "Shadow record not found")
-    seed = next((s for s in TEMPLATES if s["id"] == template_id), None)
+    seed = next((s for s in [*TEMPLATES, *TEMPLATES_V2] if s["id"] == template_id), None)
     status = rec.get("status")
     if status == "published":
         raise HTTPException(409, "Published templates cannot be removed — only draft/archived shadow records of seed templates")
@@ -3748,7 +3803,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
     2. Otherwise -> branches published/archived/seed template into an editable new Draft version (version N+1)."""
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
-        seed_t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        seed_t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
         if not seed_t:
             raise HTTPException(404, "Template not found")
         t = {**seed_t, "version": 0, "source": "seed"}
@@ -3861,7 +3916,7 @@ async def admin_preview_template(template_id: str, req: Optional[AdminPreviewReq
     """Preview a template with sample data. Supports live unsaved overrides from editor."""
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
-        t = next((x for x in TEMPLATES if x["id"] == template_id), None)
+        t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
     if not t and not (req and req.content_en):
         raise HTTPException(404, "Template not found")
     if not t:
@@ -3927,7 +3982,7 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
     skipped = []
     errors = []
     ts = now().isoformat()
-    for t in TEMPLATES:
+    for t in [*TEMPLATES, *TEMPLATES_V2]:
         try:
             existing = await db.templates.find_one({"id": t["id"]})
             if existing:
@@ -3995,7 +4050,7 @@ async def admin_migrate_seed(admin=Depends(require_super_admin)):
         except Exception as e:
             errors.append({"id": t["id"], "error": str(e)})
     return {
-        "total_seed_templates": len(TEMPLATES),
+        "total_seed_templates": len([*TEMPLATES, *TEMPLATES_V2]),
         "created": len(created),
         "skipped": len(skipped),
         "errors": len(errors),

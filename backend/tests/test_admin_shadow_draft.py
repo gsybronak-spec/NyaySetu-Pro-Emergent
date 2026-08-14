@@ -43,13 +43,15 @@ app = server.app
 
 from server import make_admin_token, now
 from seed_data import TEMPLATES
+from seed_data_templates_v2 import TEMPLATES_V2
 from httpx import AsyncClient, ASGITransport
 
 API = "/api"
 ADMIN = "/api/admin"
 
-SEED_IDS = {t["id"] for t in TEMPLATES}
+SEED_IDS = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
 assert "document_return_application" in SEED_IDS
+assert "mudat_arji" in SEED_IDS  # v2 catalog seeded alongside the legacy one
 
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
@@ -200,14 +202,14 @@ class TestShadowDraftRemoval:
 class TestShadowDraftRestoresSeed:
     @pytest.mark.asyncio
     async def test_shadow_hides_seed_then_removal_restores_it(self, client, clean_db):
-        # Baseline: all 24 seed templates visible
+        # Baseline: all seed templates visible (legacy 24 + v2 catalog 21)
         n0, present0 = await lawyer_template_count(client)
-        assert n0 == len(SEED_IDS) == 24 and present0 is True
+        assert n0 == len(SEED_IDS) == 45 and present0 is True
 
         # Reproduce the production blocker: a draft record shadows the seed
         await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
         n1, present1 = await lawyer_template_count(client)
-        assert n1 == 23 and present1 is False, f"shadow not effective: {n1}/{present1}"
+        assert n1 == 44 and present1 is False, f"shadow not effective: {n1}/{present1}"
         r = await client.get(f"{API}/templates/document_return_application")
         assert r.status_code == 404, r.text
 
@@ -217,9 +219,9 @@ class TestShadowDraftRestoresSeed:
                                 headers=H(token))
         assert r.status_code == 200, r.text
 
-        # Seed visible again; count back to 24; single GET 200; nothing else touched
+        # Seed visible again; count back to 45; single GET 200; nothing else touched
         n2, present2 = await lawyer_template_count(client)
-        assert n2 == 24 and present2 is True
+        assert n2 == 45 and present2 is True
         r = await client.get(f"{API}/templates/document_return_application")
         assert r.status_code == 200, r.text
         assert r.json()["name_gu"] == "દસ્તાવેજ પરત મેળવવાની અરજી"

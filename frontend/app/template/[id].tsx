@@ -163,6 +163,8 @@ export default function TemplateApplication() {
     ["district", "District", "જિલ્લો"],
     ["taluka", "Taluka", "તાલુકો"],
     ["case_type", "Case Type", "કેસનો પ્રકાર"],
+    ["party_role", "Party Role", "પક્ષકારની ભૂમિકા"],
+    ["opposite_party_role", "Opposite Party Role", "સામાવાળાની ભૂમિકા"],
   ];
 
   const inheritedRows = useMemo(() => {
@@ -175,6 +177,8 @@ export default function TemplateApplication() {
       district: caseData.district_label || caseData.district_id,
       taluka: caseData.taluka_label,
       case_type: caseData.case_type_label,
+      party_role: caseData.party_role,
+      opposite_party_role: caseData.opposite_party_role,
     };
     const rows: { key: string; label: string; value: string }[] = [];
     for (const [key, lEn, lGu] of CASE_OWNED_LABELS) {
@@ -395,6 +399,10 @@ export default function TemplateApplication() {
               // Inherited case values are shown in the AUTO-FILLED card above —
               // never re-render them as editable inputs.
               if (inheritedKeys.has(f.key)) return null;
+              // Conditional fields (v2 catalog — the "અન્ય/Other" pattern):
+              // only show the companion text field when the parent select/radio
+              // actually has the "other" value.
+              if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
               const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
               const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en);
               const fvalue = values[f.key];
@@ -412,7 +420,17 @@ export default function TemplateApplication() {
               }
               if (f.type === "select") {
                 const districtVal = values.district;
-                const opts = (extraOptions[f.key] || f.options || [])
+                // Case-party select (v2 catalog): options are the two parties of
+                // the linked case — "party"/"opposite" values, party names as
+                // labels. Without a case, fall back to the declared options.
+                let rawOpts = f.options || [];
+                if (f.source === "case_parties" && caseData) {
+                  rawOpts = [
+                    { value: "party", label_en: caseData.party_name || "Applicant side", label_gu: caseData.party_name || "ફરિયાદી / અરજદાર / વાદી" },
+                    { value: "opposite", label_en: caseData.opposite_party || "Opposite side", label_gu: caseData.opposite_party || "આરોપી / સામાવાળા / પ્રતિવાદી" },
+                  ];
+                }
+                const opts = (extraOptions[f.key] || rawOpts)
                   .filter((o: any) => !o.district_id || !districtVal || o.district_id === districtVal)
                   .map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
                 return (

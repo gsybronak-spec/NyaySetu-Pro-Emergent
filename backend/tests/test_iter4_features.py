@@ -65,7 +65,8 @@ class TestTemplatesExpanded:
         r = session.get(f"{API}/templates")
         assert r.status_code == 200
         items = r.json()
-        assert len(items) == 24, f"Expected 24 templates, got {len(items)}"
+        # Legacy 24-template catalog + v2 application catalog (21) = 45 seeds.
+        assert len(items) == 45, f"Expected 45 templates, got {len(items)}"
 
     def test_alias_vakalat(self, session):
         r = session.get(f"{API}/templates?q=vakalat")

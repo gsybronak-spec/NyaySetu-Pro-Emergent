@@ -26,6 +26,8 @@ export interface CaseFormValues {
   complaint_custom?: string;
   party_name: string;
   opposite_party: string;
+  party_role: string;
+  opposite_party_role: string;
   court_id: string | null;
   court_custom: string;
   district_id: string | null;
@@ -53,6 +55,8 @@ const DEFAULTS: CaseFormValues = {
   complaint_custom: "",
   party_name: "",
   opposite_party: "",
+  party_role: "",
+  opposite_party_role: "",
   court_id: null,
   court_custom: "",
   district_id: null,
@@ -83,6 +87,51 @@ function buildClientContext(form: CaseFormValues, districts: any[]): Record<stri
     address: form.client_address || undefined,
     district: (form.language === "gu" ? d?.gu : d?.en) || d?.en || undefined,
   };
+}
+
+// Party-role selector (v2 catalog): the case stores which role each party plays
+// (ફરિયાદી/અરજદાર/વાદી and આરોપી/સામાવાળા/પ્રતિવાદી) once, and every
+// application inherited from the case reuses it.
+function RoleChips({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginBottom: 12 }}>
+      <Text style={{ color: colors.onSurfaceSecondary, fontSize: 13, fontWeight: "600", marginBottom: 6 }}>{label}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <Pressable
+              key={o.value}
+              onPress={() => onChange(o.value)}
+              style={[
+                {
+                  paddingHorizontal: 14,
+                  paddingVertical: 8,
+                  borderRadius: 20,
+                  borderWidth: 1.5,
+                  borderColor: active ? colors.brandPrimary : colors.border,
+                  backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
+                },
+              ]}
+            >
+              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700", fontSize: 13 }}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
 interface Props {
@@ -552,7 +601,27 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
                 <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
                 <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
+                <RoleChips
+                  label={form.language === "gu" ? "પક્ષકારની ભૂમિકા (ફરિયાદી / અરજદાર / વાદી)" : "Party Role (ફરિયાદી / અરજદાર / વાદી)"}
+                  options={[
+                    { value: "ફરિયાદી", label: "ફરિયાદી" },
+                    { value: "અરજદાર", label: "અરજદાર" },
+                    { value: "વાદી", label: "વાદી" },
+                  ]}
+                  value={form.party_role}
+                  onChange={(v) => update("party_role", v)}
+                />
                 <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
+                <RoleChips
+                  label={form.language === "gu" ? "સામાવાળાની ભૂમિકા (આરોપી / સામાવાળા / પ્રતિવાદી)" : "Opposite Party Role (આરોપી / સામાવાળા / પ્રતિવાદી)"}
+                  options={[
+                    { value: "આરોપી", label: "આરોપી" },
+                    { value: "સામાવાળા", label: "સામાવાળા" },
+                    { value: "પ્રતિવાદી", label: "પ્રતિવાદી" },
+                  ]}
+                  value={form.opposite_party_role}
+                  onChange={(v) => update("opposite_party_role", v)}
+                />
                 <Dropdown
                   testID="district"
                   label="District"
@@ -819,7 +888,27 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <View style={{ height: Spacing.md }} />
           <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
           <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
+          <RoleChips
+            label={form.language === "gu" ? "પક્ષકારની ભૂમિકા (ફરિયાદી / અરજદાર / વાદી)" : "Party Role (ફરિયાદી / અરજદાર / વાદી)"}
+            options={[
+              { value: "ફરિયાદી", label: "ફરિયાદી" },
+              { value: "અરજદાર", label: "અરજદાર" },
+              { value: "વાદી", label: "વાદી" },
+            ]}
+            value={form.party_role}
+            onChange={(v) => update("party_role", v)}
+          />
           <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
+          <RoleChips
+            label={form.language === "gu" ? "સામાવાળાની ભૂમિકા (આરોપી / સામાવાળા / પ્રતિવાદી)" : "Opposite Party Role (આરોપી / સામાવાળા / પ્રતિવાદી)"}
+            options={[
+              { value: "આરોપી", label: "આરોપી" },
+              { value: "સામાવાળા", label: "સામાવાળા" },
+              { value: "પ્રતિવાદી", label: "પ્રતિવાદી" },
+            ]}
+            value={form.opposite_party_role}
+            onChange={(v) => update("opposite_party_role", v)}
+          />
           <Dropdown
             testID="district"
             label="District"
