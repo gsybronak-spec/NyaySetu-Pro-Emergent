@@ -781,10 +781,17 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
             # Playwright/Chromium shapes Gujarati correctly too (it IS
             # HarfBuzz), so it is an acceptable secondary shaped engine.
             return generate_pdf_playwright(blocks, language, settings)
+    # English: ReportLab is the PRIMARY engine. It applies a cryptographically
+    # unique subset tag per generation (see _unique_subset_tag), which is the
+    # property Android's font cache needs — Chromium/Playwright's PDF writer
+    # always names subsets AAAAAA+/BAAAAA+ regardless of content, recreating
+    # the cache-collision bug for English documents. ReportLab also keeps
+    # local/dev output byte-identical in behavior to production (Render has no
+    # Chromium). Playwright remains a fallback only if ReportLab fails.
     try:
-        return generate_pdf_playwright(blocks, language, settings)
-    except Exception:
         return generate_pdf_reportlab(blocks, language, settings)
+    except Exception:
+        return generate_pdf_playwright(blocks, language, settings)
 
 
 def _odt_cm(value) -> str:

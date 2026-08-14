@@ -7,6 +7,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
@@ -18,6 +19,7 @@ function fmtDate(iso?: string) {
 
 export default function Transactions() {
   const { colors } = useTheme();
+  const { isDesktop } = useResponsive();
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,6 +41,41 @@ export default function Transactions() {
     setRefreshing(true);
     await load();
     setRefreshing(false);
+  };
+
+  const renderTxn = ({ item }: { item: any }) => {
+    const positive = (item.credits || 0) > 0 && item.status === "success";
+    return (
+      <View style={isDesktop ? { maxWidth: 820, width: "100%" } : undefined}>
+        <View style={[styles.card, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+          <View style={[styles.icon, { backgroundColor: (colors.brandPrimary + "1A") }]}>
+            <Ionicons name={item.mock ? "card-outline" : "wallet-outline"} size={18} color={colors.brandPrimary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
+              {item.plan_name || "Template Credits"}
+            </Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{fmtDate(item.created_at)}</Text>
+            {item.reference ? (
+              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                Ref: {item.reference}
+              </Text>
+            ) : null}
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }}>
+              ₹{(item.amount ?? 0).toLocaleString("en-IN")}
+            </Text>
+            <Text style={{ color: positive ? colors.brandPrimary : colors.muted, fontSize: 12, marginTop: 2 }}>
+              {positive ? "+" : ""}{item.credits ?? 0} credits
+            </Text>
+            <Text style={{ color: item.status === "success" ? "#1B7F4D" : colors.error, fontSize: 11, marginTop: 2, fontWeight: "600" }}>
+              {(item.status || "unknown").toUpperCase()}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -80,41 +117,10 @@ export default function Transactions() {
         <FlatList
           data={items}
           keyExtractor={(t) => t.id || t.created_at}
-          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }}
+          contentContainerStyle={isDesktop ? { alignItems: "center", paddingBottom: 120 } : { padding: Spacing.lg, paddingBottom: 120 }}
           refreshing={refreshing}
           onRefresh={onRefresh}
-          renderItem={({ item }) => {
-            const positive = (item.credits || 0) > 0 && item.status === "success";
-            return (
-              <View style={[styles.card, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-                <View style={[styles.icon, { backgroundColor: (colors.brandPrimary + "1A") }]}>
-                  <Ionicons name={item.mock ? "card-outline" : "wallet-outline"} size={18} color={colors.brandPrimary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
-                    {item.plan_name || "Template Credits"}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{fmtDate(item.created_at)}</Text>
-                  {item.reference ? (
-                    <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                      Ref: {item.reference}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }}>
-                    ₹{(item.amount ?? 0).toLocaleString("en-IN")}
-                  </Text>
-                  <Text style={{ color: positive ? colors.brandPrimary : colors.muted, fontSize: 12, marginTop: 2 }}>
-                    {positive ? "+" : ""}{item.credits ?? 0} credits
-                  </Text>
-                  <Text style={{ color: item.status === "success" ? "#1B7F4D" : colors.error, fontSize: 11, marginTop: 2, fontWeight: "600" }}>
-                    {(item.status || "unknown").toUpperCase()}
-                  </Text>
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderTxn}
         />
       )}
     </SafeAreaView>

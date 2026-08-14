@@ -7,9 +7,12 @@ import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
+import { DesktopPage } from "@/src/components/DesktopPage";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
+  const { isDesktop } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -44,16 +47,18 @@ export default function CaseDetail() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const archive = () => {
-    Alert.alert("Archive Case?", "You can restore it later from the archived view.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Archive",
-        onPress: async () => {
-          await api.archiveCase(String(id));
-          router.replace("/(tabs)/cases");
-        },
-      },
-    ]);
+    const run = async () => {
+      await api.archiveCase(String(id));
+      router.replace("/(tabs)/cases");
+    };
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Archive this case? You can restore it later from the archived view.")) run();
+    } else {
+      Alert.alert("Archive Case?", "You can restore it later from the archived view.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Archive", onPress: run },
+      ]);
+    }
   };
 
   const restore = async () => {
@@ -62,21 +67,22 @@ export default function CaseDetail() {
   };
 
   const remove = () => {
-    Alert.alert(
-      "Delete Case?",
-      "This permanently deletes the case. This cannot be undone. Consider archiving instead.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            await api.deleteCase(String(id));
-            router.replace("/(tabs)/cases");
-          },
-        },
-      ]
-    );
+    const run = async () => {
+      await api.deleteCase(String(id));
+      router.replace("/(tabs)/cases");
+    };
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Delete this case permanently? This cannot be undone. Consider archiving instead.")) run();
+    } else {
+      Alert.alert(
+        "Delete Case?",
+        "This permanently deletes the case. This cannot be undone. Consider archiving instead.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Delete", style: "destructive", onPress: run },
+        ]
+      );
+    }
   };
 
   if (!c) {
@@ -118,11 +124,127 @@ export default function CaseDetail() {
     ["Opposite Party", c.opposite_party],
     ["Court", c.court_label || c.court],
     ["District", c.district_label],
+    ["Taluka", c.taluka_label],
     ["Police Station", c.police_station_label || c.police_station],
     ["Language", c.language === "gu" ? "ગુજરાતી" : "English"],
     ["Applications Generated", c.application_count ? String(c.application_count) : null],
   ].filter(([, v]) => !!v) as any;
 
+  const customFieldRows = Object.entries(c.custom_fields || {}).map(([k, v]) => ({
+    k,
+    lbl: fieldLabels[k] || k,
+    v: String(v),
+  }));
+
+  // ------------------------- DESKTOP -------------------------
+  if (isDesktop) {
+    return (
+      <DesktopPage
+        sidebarOffset={false}
+        title={c.nickname || c.party_name || "Case Details"}
+        subtitle={c.case_number ? `${c.case_number} • ${c.case_type_label || "Case"}` : c.case_type_label || "Case details"}
+        actions={
+          <>
+            <Pressable
+              testID="case-edit-btn"
+              onPress={() => router.push({ pathname: "/case/edit/[id]", params: { id: c.id } })}
+              style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+            >
+              <Ionicons name="create-outline" size={16} color={colors.onSurface} />
+              <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>Edit</Text>
+            </Pressable>
+            {isArchived ? (
+              <Pressable
+                testID="restore-case-btn"
+                onPress={restore}
+                style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <Ionicons name="refresh-outline" size={16} color={colors.brandPrimary} />
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Restore</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                testID="archive-case-btn"
+                onPress={archive}
+                style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <Ionicons name="archive-outline" size={16} color={colors.onSurfaceSecondary} />
+                <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "700", fontSize: 13 }}>Archive</Text>
+              </Pressable>
+            )}
+            <Pressable
+              testID="delete-case-btn"
+              onPress={remove}
+              style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "50" }]}
+            >
+              <Ionicons name="trash-outline" size={16} color={colors.error} />
+              <Text style={{ color: colors.error, fontWeight: "700", fontSize: 13 }}>Delete</Text>
+            </Pressable>
+          </>
+        }
+      >
+        <View style={{ flexDirection: "row", gap: Spacing.xl, alignItems: "flex-start" }}>
+          <View style={{ flex: 1.2, minWidth: 0 }}>
+            <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>CASE INFORMATION</Text>
+              {rows.map(([k, v]) => (
+                <View key={k as string} style={styles.infoRow}>
+                  <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{k}</Text>
+                  <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{v}</Text>
+                </View>
+              ))}
+              {customFieldRows.length > 0 && (
+                <>
+                  <View style={{ height: Spacing.sm }} />
+                  <Text style={[styles.section, { color: colors.brandPrimary }]}>ADMIN CONFIGURED FIELDS</Text>
+                  {customFieldRows.map((r) => (
+                    <View key={r.k} style={styles.infoRow}>
+                      <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{r.lbl}</Text>
+                      <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{r.v}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </View>
+          </View>
+
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>CREATE APPLICATION</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -4 }}>
+                Choose a template — case data auto-fills. No re-entering court, district or parties.
+              </Text>
+              <View style={{ gap: Spacing.sm }}>
+                {templates.map((t) => (
+                  <Pressable
+                    key={t.id}
+                    testID={`case-tpl-${t.id}`}
+                    onPress={() => router.push({ pathname: "/template/[id]", params: { id: t.id, case_id: c.id, lang: c.language } })}
+                    style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                  >
+                    <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
+                      <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                      <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
+                        {c.language === "gu" ? t.name_gu : t.name_en}
+                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                        {c.language === "gu" ? t.name_en : t.name_gu} • {t.category}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
+      </DesktopPage>
+    );
+  }
+
+  // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
@@ -157,19 +279,16 @@ export default function CaseDetail() {
               <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{v}</Text>
             </View>
           ))}
-          {Object.keys(c.custom_fields || {}).length > 0 && (
+          {customFieldRows.length > 0 && (
             <>
               <View style={{ height: Spacing.sm }} />
               <Text style={[styles.section, { color: colors.brandPrimary }]}>ADMIN CONFIGURED FIELDS</Text>
-              {Object.entries(c.custom_fields).map(([k, v]) => {
-                const lbl = fieldLabels[k] || k;
-                return (
-                  <View key={k} style={styles.infoRow}>
-                    <Text style={{ color: colors.muted, fontSize: 12, flex: 1 }}>{lbl}</Text>
-                    <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{String(v)}</Text>
-                  </View>
-                );
-              })}
+              {customFieldRows.map((r) => (
+                <View key={r.k} style={styles.infoRow}>
+                  <Text style={{ color: colors.muted, fontSize: 12, flex: 1 }}>{r.lbl}</Text>
+                  <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", flex: 1.4, textAlign: "right" }}>{r.v}</Text>
+                </View>
+              ))}
             </>
           )}
         </View>
@@ -235,4 +354,11 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     paddingVertical: Spacing.md, borderRadius: Radius.md, borderWidth: 1.5,
   },
+  // Desktop
+  dBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: Spacing.md, paddingVertical: 9, borderRadius: 999, borderWidth: 1,
+  },
+  dAppsCard: { padding: Spacing.lg, borderRadius: 14, borderWidth: 1 },
+  dTplRow: { flexDirection: "row", alignItems: "center", padding: Spacing.md, borderRadius: 12, borderWidth: 1 },
 });

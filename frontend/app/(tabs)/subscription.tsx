@@ -3,11 +3,13 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
+import { DesktopPage } from "@/src/components/DesktopPage";
 
 // Production payment path — enable only when Razorpay keys are configured on
 // the backend (RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET) and this flag is set in
@@ -33,9 +35,7 @@ function loadRazorpayScript(src: string): Promise<void> {
 }
 
 async function buyWithRazorpay(planId: string): Promise<{ balance: number; total_used: number }> {
-  // 1. Server creates the Razorpay order (server resolves plan + price).
   const order = await api.razorpayCreateOrder(planId);
-  // 2. Open Razorpay checkout with the order id; server never trusts client price.
   await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
   const payment = await new Promise<any>((resolve, reject) => {
     const Razorpay = (window as any).Razorpay;
@@ -55,7 +55,6 @@ async function buyWithRazorpay(planId: string): Promise<{ balance: number; total
     });
     rz.open();
   });
-  // 3. Server-side verification + idempotent credit grant.
   const verified = await api.razorpayVerify({
     plan_id: planId,
     order_id: order.order_id,
@@ -67,6 +66,7 @@ async function buyWithRazorpay(planId: string): Promise<{ balance: number; total
 
 export default function Subscription() {
   const { colors, isDark } = useTheme();
+  const { isDesktop } = useResponsive();
   const [plans, setPlans] = useState<any[]>([]);
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
   const [buying, setBuying] = useState<string | null>(null);
@@ -91,14 +91,142 @@ export default function Subscription() {
     try {
       const res = RAZORPAY_ENABLED ? await buyWithRazorpay(id) : await api.purchase(id);
       setWallet({ balance: res.balance, total_used: wallet.total_used });
-      Alert.alert("Payment Successful", `Credits added to your wallet. New balance: ${res.balance} templates.`);
+      if (typeof window !== "undefined") {
+        window.alert(`Payment Successful — Credits added to your wallet. New balance: ${res.balance} templates.`);
+      } else {
+        Alert.alert("Payment Successful", `Credits added to your wallet. New balance: ${res.balance} templates.`);
+      }
     } catch (e: any) {
-      Alert.alert("Payment Failed", e?.message || "Payment could not be completed");
+      if (typeof window !== "undefined") {
+        window.alert(e?.message || "Payment could not be completed");
+      } else {
+        Alert.alert("Payment Failed", e?.message || "Payment could not be completed");
+      }
     } finally {
       setBuying(null);
     }
   };
 
+  const renderPlanCard = (p: any, wide: boolean) => {
+    const isSingle = p.id === "single";
+    const isPopular = p.popular;
+    return (
+      <View
+        key={p.id}
+        style={[
+          wide ? styles.dPlanCard : styles.planCard,
+          {
+            backgroundColor: colors.surfaceSecondary,
+            borderColor: isPopular ? colors.brandPrimary : colors.border,
+            borderWidth: isPopular ? 2 : 1,
+          },
+        ]}
+      >
+        {isPopular ? (
+          <View style={[styles.popularBadge, { backgroundColor: colors.brandPrimary }]}>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "800", fontSize: 10, letterSpacing: 1 }}>
+              MOST POPULAR
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.planTop}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.onSurface, fontSize: 16, fontWeight: "700" }}>{p.name}</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
+              {isSingle ? "One-time payment" : `${p.credits} template credits`}
+            </Text>
+          </View>
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={{ color: colors.brandPrimary, fontSize: 26, fontWeight: "800", fontFamily: "serif" }}>
+              ₹{p.price}
+            </Text>
+            {!isSingle && (
+              <Text style={{ color: colors.muted, fontSize: 11 }}>≈ ₹{p.per_template}/template</Text>
+            )}
+          </View>
+        </View>
+        {!isSingle && (
+          <View style={[styles.savingRow, { backgroundColor: colors.brandTertiary }]}>
+            <Ionicons name="trending-down" size={14} color={colors.onBrandTertiary} />
+            <Text style={{ color: colors.onBrandTertiary, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>
+              Save {Math.round((1 - p.per_template / 9) * 100)}% vs ₹9/template
+            </Text>
+          </View>
+        )}
+        <Pressable
+          testID={`buy-${p.id}`}
+          onPress={() => buy(p.id)}
+          disabled={buying === p.id}
+          style={[styles.buyBtn, { backgroundColor: colors.brand, opacity: buying === p.id ? 0.6 : 1 }]}
+        >
+          <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 14 }}>
+            {buying === p.id ? "Processing..." : isSingle ? "Buy 1 Template" : "Purchase"}
+          </Text>
+        </Pressable>
+      </View>
+    );
+  };
+
+  // ------------------------- DESKTOP -------------------------
+  if (isDesktop) {
+    return (
+      <DesktopPage
+        title="Plans & Wallet"
+        subtitle="Credit packs — valid until consumed"
+      >
+        <LinearGradient
+          colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
+          style={styles.dHero}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heroLabel}>YOUR WALLET</Text>
+            <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 8 }}>
+              <Text style={styles.heroBalance}>{wallet.balance}</Text>
+              <Text style={styles.heroSub}> Templates Remaining</Text>
+            </View>
+            <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 8 }}>
+              Each generated document consumes 1 template credit. Credits never expire.
+            </Text>
+          </View>
+          <View style={styles.dHeroStats}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatVal}>{wallet.total_used}</Text>
+              <Text style={styles.heroStatLbl}>Used</Text>
+            </View>
+            <View style={styles.heroDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatVal}>₹9</Text>
+              <Text style={styles.heroStatLbl}>Per Template</Text>
+            </View>
+            <View style={styles.heroDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatVal}>₹0</Text>
+              <Text style={styles.heroStatLbl}>Expiry</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.lg }}>
+          {plans.map((p) => renderPlanCard(p, true))}
+        </View>
+
+        <View style={[styles.info, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+          <Ionicons name="shield-checkmark" size={20} color={colors.brandPrimary} />
+          <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>Secure Payment</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
+              Payments powered by Razorpay. Credits added after successful verification.
+            </Text>
+          </View>
+          <Pressable testID="txn-link" onPress={() => router.push("/transactions")}>
+            <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Transaction History →</Text>
+          </Pressable>
+        </View>
+      </DesktopPage>
+    );
+  }
+
+  // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: Spacing.xxxl }}>
@@ -128,65 +256,7 @@ export default function Subscription() {
         </Text>
 
         <View style={{ paddingHorizontal: Spacing.lg, gap: Spacing.md }}>
-          {plans.map((p) => {
-            const isSingle = p.id === "single";
-            const isPopular = p.popular;
-            return (
-              <View
-                key={p.id}
-                style={[
-                  styles.planCard,
-                  {
-                    backgroundColor: colors.surfaceSecondary,
-                    borderColor: isPopular ? colors.brandPrimary : colors.border,
-                    borderWidth: isPopular ? 2 : 1,
-                  },
-                ]}
-              >
-                {isPopular ? (
-                  <View style={[styles.popularBadge, { backgroundColor: colors.brandPrimary }]}>
-                    <Text style={{ color: colors.onBrandPrimary, fontWeight: "800", fontSize: 10, letterSpacing: 1 }}>
-                      MOST POPULAR
-                    </Text>
-                  </View>
-                ) : null}
-                <View style={styles.planTop}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.onSurface, fontSize: 16, fontWeight: "700" }}>{p.name}</Text>
-                    <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
-                      {isSingle ? "One-time payment" : `${p.credits} template credits`}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={{ color: colors.brandPrimary, fontSize: 26, fontWeight: "800", fontFamily: "serif" }}>
-                      ₹{p.price}
-                    </Text>
-                    {!isSingle && (
-                      <Text style={{ color: colors.muted, fontSize: 11 }}>≈ ₹{p.per_template}/template</Text>
-                    )}
-                  </View>
-                </View>
-                {!isSingle && (
-                  <View style={[styles.savingRow, { backgroundColor: colors.brandTertiary }]}>
-                    <Ionicons name="trending-down" size={14} color={colors.onBrandTertiary} />
-                    <Text style={{ color: colors.onBrandTertiary, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>
-                      Save {Math.round((1 - p.per_template / 9) * 100)}% vs ₹9/template
-                    </Text>
-                  </View>
-                )}
-                <Pressable
-                  testID={`buy-${p.id}`}
-                  onPress={() => buy(p.id)}
-                  disabled={buying === p.id}
-                  style={[styles.buyBtn, { backgroundColor: colors.brand, opacity: buying === p.id ? 0.6 : 1 }]}
-                >
-                  <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 14 }}>
-                    {buying === p.id ? "Processing..." : isSingle ? "Buy 1 Template" : "Purchase"}
-                  </Text>
-                </Pressable>
-              </View>
-            );
-          })}
+          {plans.map((p) => renderPlanCard(p, false))}
         </View>
 
         <View style={[styles.info, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
@@ -228,4 +298,15 @@ const styles = StyleSheet.create({
   savingRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: 8, marginTop: Spacing.md, alignSelf: "flex-start" },
   buyBtn: { marginTop: Spacing.md, paddingVertical: Spacing.md, borderRadius: Radius.md, alignItems: "center" },
   info: { flexDirection: "row", alignItems: "center", margin: Spacing.lg, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
+  // Desktop
+  dHero: {
+    flexDirection: "row", alignItems: "center",
+    padding: Spacing.xl, borderRadius: 16, borderWidth: 1,
+    borderColor: "rgba(197,160,89,0.2)",
+  },
+  dHeroStats: { flexDirection: "row", alignItems: "center", flexShrink: 0 },
+  dPlanCard: {
+    width: "31%", minWidth: 280, flexGrow: 1,
+    padding: Spacing.xl, borderRadius: 16, position: "relative",
+  },
 });

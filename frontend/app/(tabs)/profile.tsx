@@ -9,9 +9,12 @@ import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName } from "@/src/utils/advocate";
+import { useResponsive } from "@/src/hooks/useResponsive";
+import { DesktopPage } from "@/src/components/DesktopPage";
 
 export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
+  const { isDesktop } = useResponsive();
   const { user, signOut } = useAuth();
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
 
@@ -21,8 +24,6 @@ export default function Profile() {
 
   const logout = () => {
     if (Platform.OS === "web") {
-      // Alert.alert is a no-op on web (react-native-web), so sign-out would
-      // silently never run. Use the browser's confirm dialog instead.
       if (typeof window !== "undefined" && window.confirm("Sign out? You will need to login again to continue.")) {
         signOut().then(() => router.replace("/(auth)/login")).catch(() => router.replace("/(auth)/login"));
       }
@@ -64,6 +65,67 @@ export default function Profile() {
     { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund") },
   ];
 
+  // ------------------------- DESKTOP -------------------------
+  if (isDesktop) {
+    return (
+      <DesktopPage
+        title="Profile"
+        subtitle="Manage your account and preferences"
+      >
+        <View style={styles.dGrid}>
+          <View style={[styles.dUserCard, { backgroundColor: colors.brand }]}>
+            <View style={[styles.avatar, { backgroundColor: colors.brandPrimary }]}>
+              <Text style={{ color: colors.onBrandPrimary, fontSize: 26, fontWeight: "800" }}>
+                {(user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
+              </Text>
+            </View>
+            <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700", marginTop: Spacing.md }}>
+              {formatAdvocateName(user?.name)}
+            </Text>
+            <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 2 }}>+91 {user?.mobile}</Text>
+            {user?.email ? <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }} numberOfLines={1}>{user.email}</Text> : null}
+            {user?.bar_council_no ? (
+              <View style={styles.dBarChip}>
+                <Ionicons name="ribbon" size={13} color="#C5A059" />
+                <Text style={{ color: "#C5A059", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>Bar: {user.bar_council_no}</Text>
+              </View>
+            ) : null}
+            <View style={[styles.dWalletLine, { borderTopColor: "rgba(255,255,255,0.1)" }]}>
+              <Ionicons name="wallet" size={18} color="#C5A059" />
+              <Text style={{ color: "#FDFDFD", fontWeight: "800", fontSize: 16, marginLeft: 8 }}>
+                {wallet.balance} <Text style={{ color: "#A6B1C2", fontSize: 12, fontWeight: "500" }}>templates remaining</Text>
+              </Text>
+            </View>
+            <Pressable
+              testID="logout-btn"
+              onPress={logout}
+              style={styles.dLogout}
+            >
+              <Ionicons name="log-out-outline" size={18} color="#FDFDFD" />
+              <Text style={{ color: "#FDFDFD", fontWeight: "700", marginLeft: 8 }}>Sign Out</Text>
+            </Pressable>
+          </View>
+
+          <View style={{ flex: 1, gap: Spacing.sm }}>
+            {rows.map((r, i) => (
+              <Pressable
+                key={i}
+                testID={`profile-row-${i}`}
+                onPress={r.onPress}
+                style={[styles.dRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <Ionicons name={r.icon} size={20} color={colors.onSurface} />
+                <Text style={{ color: colors.onSurface, flex: 1, marginLeft: Spacing.md, fontSize: 14 }}>{r.label}</Text>
+                {r.right || <Ionicons name="chevron-forward" size={18} color={colors.muted} />}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </DesktopPage>
+    );
+  }
+
+  // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <ScrollView contentContainerStyle={{ paddingBottom: Spacing.xxxl }}>
@@ -123,6 +185,32 @@ const styles = StyleSheet.create({
   },
   avatar: { width: 56, height: 56, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   row: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: Spacing.md, paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md, borderWidth: 1,
+  },
+  // Desktop
+  dGrid: { flexDirection: "row", gap: Spacing.xl, alignItems: "flex-start" },
+  dUserCard: {
+    width: 320, flexShrink: 0,
+    borderRadius: 16, padding: Spacing.xl, alignItems: "center",
+  },
+  dBarChip: {
+    flexDirection: "row", alignItems: "center", marginTop: Spacing.md,
+    backgroundColor: "rgba(197,160,89,0.12)", paddingHorizontal: Spacing.md, paddingVertical: 6,
+    borderRadius: 999,
+  },
+  dWalletLine: {
+    flexDirection: "row", alignItems: "center",
+    borderTopWidth: 1, marginTop: Spacing.xl, paddingTop: Spacing.lg, alignSelf: "stretch",
+  },
+  dLogout: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    marginTop: Spacing.lg, alignSelf: "stretch",
+    borderWidth: 1, borderColor: "rgba(255,255,255,0.25)",
+    borderRadius: 12, paddingVertical: 12,
+  },
+  dRow: {
     flexDirection: "row", alignItems: "center",
     paddingVertical: Spacing.md, paddingHorizontal: Spacing.md,
     borderRadius: Radius.md, borderWidth: 1,

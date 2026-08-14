@@ -11,6 +11,7 @@ import { DateField } from "@/src/components/DateField";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
 
 export interface CaseFormValues {
   language: "en" | "gu";
@@ -94,6 +95,7 @@ interface Props {
 
 export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Props) {
   const { colors } = useTheme();
+  const { isDesktop } = useResponsive();
   const [form, setForm] = useState<CaseFormValues>({ ...DEFAULTS, ...initial });
   const [caseTypes, setCaseTypes] = useState<any[]>([]);
   const [laws, setLaws] = useState<any[]>([]);
@@ -361,6 +363,247 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     }
   };
 
+  // ------------------------- DESKTOP (two-column workspace) -------------------------
+  if (isDesktop) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
+        <KeyboardAvoidingView style={{ flex: 1 }}>
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Pressable testID="case-form-back" onPress={() => router.back()} hitSlop={12}>
+              <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            </Pressable>
+            <Text style={[styles.h1, { color: colors.onSurface }]}>{title}</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView
+            contentContainerStyle={{ alignItems: "center", padding: Spacing.xl, paddingBottom: 140 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={{ maxWidth: 1100, width: "100%", flexDirection: "row", gap: Spacing.xxl, alignItems: "flex-start" }}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                {/* Client lookup */}
+                <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                  <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
+                  <View style={{ flexDirection: "row", gap: Spacing.sm, alignItems: "center" }}>
+                    <View style={{ flex: 1 }}>
+                      <Field
+                        testID="client-mobile-search"
+                        label=""
+                        placeholder="Enter 10-digit Client Mobile Number"
+                        value={searchMobile}
+                        onChangeText={setSearchMobile}
+                      />
+                    </View>
+                    <Pressable
+                      testID="lookup-btn"
+                      onPress={handleMobileLookup}
+                      disabled={lookupLoading}
+                      style={[styles.searchBtn, { backgroundColor: colors.brandPrimary }]}
+                    >
+                      {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>Search</Text>}
+                    </Pressable>
+                  </View>
+                  {lookupStatus && (
+                    <View
+                      style={[
+                        styles.statusBanner,
+                        { backgroundColor: lookupStatus.type === "success" ? "#dcfce7" : lookupStatus.type === "warning" ? "#fef3c7" : "#fee2e2" },
+                      ]}
+                    >
+                      <Text style={{ color: lookupStatus.type === "success" ? "#166534" : lookupStatus.type === "warning" ? "#92400e" : "#991b1b", fontSize: 13, fontWeight: "600" }}>
+                        {lookupStatus.message}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={{ height: Spacing.xl }} />
+
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Details</Text>
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -6 }}>
+                  Auto-filled from client search. Name & district are set under Parties & Court below.
+                </Text>
+                <Field testID="client-mobile" label="Client Mobile" placeholder="10-digit mobile" keyboardType="phone-pad" maxLength={15} value={form.client_mobile} onChangeText={(v) => update("client_mobile", v)} />
+                <Field testID="client-email" label="Client Email (optional)" placeholder="client@example.com" keyboardType="email-address" autoCapitalize="none" value={form.client_email} onChangeText={(v) => update("client_email", v)} />
+                <Field testID="client-address" label="Client Address (optional)" placeholder="Full address" multiline value={form.client_address} onChangeText={(v) => update("client_address", v)} />
+
+                <View style={{ height: Spacing.xl }} />
+
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Document Language</Text>
+                <View style={styles.langRow}>
+                  {[
+                    { id: "en", label: "English", sub: "Please enter application details in English." },
+                    { id: "gu", label: "ગુજરાતી", sub: "કૃપા કરીને વિગતો ગુજરાતીમાં ભરો." },
+                  ].map((l) => {
+                    const active = language === l.id;
+                    return (
+                      <Pressable
+                        key={l.id}
+                        testID={`lang-${l.id}`}
+                        onPress={() => update("language", l.id)}
+                        style={[
+                          styles.langCard,
+                          { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border },
+                        ]}
+                      >
+                        <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "800", fontSize: 15 }}>{l.label}</Text>
+                        <Text style={{ color: active ? colors.onBrandPrimary : colors.muted, fontSize: 11, marginTop: 4 }} numberOfLines={2}>{l.sub}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+
+                <View style={{ height: Spacing.xl }} />
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Case Information</Text>
+
+                <Field testID="case-nickname" label="Case Nickname (optional)" placeholder="e.g. Patel Matter" value={form.nickname} onChangeText={(v) => update("nickname", v)} />
+                <Field testID="case-number" label="Case Number" placeholder="e.g. 12345/2024" value={form.case_number} onChangeText={(v) => update("case_number", v)} />
+
+                <Dropdown
+                  testID="case-type"
+                  label="Case Type"
+                  placeholder="Select case type"
+                  searchable
+                  value={form.case_type_id}
+                  options={caseTypes.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: c.cat }))}
+                  onChange={(v) => update("case_type_id", v)}
+                />
+                {form.case_type_id === "other" && (
+                  <Field testID="case-type-custom" label="Other Case Type" placeholder="Enter case type" value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
+                )}
+
+                {showComplaint && (
+                  <Dropdown
+                    testID="complaint-type"
+                    label="Complaint Type"
+                    placeholder="Select complaint type"
+                    value={form.complaint_type}
+                    options={[
+                      { id: "private", label: "Private Complaint" },
+                      { id: "police", label: "Police Complaint" },
+                      { id: "other", label: "Other" },
+                    ]}
+                    onChange={(v) => update("complaint_type", v)}
+                  />
+                )}
+
+                {showLaw && (
+                  <>
+                    <Dropdown
+                      testID="law"
+                      label="Applicable Law"
+                      placeholder="Select law"
+                      searchable
+                      value={form.law_id}
+                      options={laws.map((l) => ({ id: l.id, label: language === "gu" ? l.gu : l.en }))}
+                      onChange={(v) => update("law_id", v)}
+                    />
+                    {form.law_id === "other_law" && (
+                      <Field testID="law-custom" label="Other Law" placeholder="Specify law" value={form.law_custom} onChangeText={(v) => update("law_custom", v)} />
+                    )}
+                    {sections.length > 0 && (
+                      <Dropdown
+                        testID="section"
+                        label="Section / Provision"
+                        placeholder="Select section"
+                        searchable
+                        value={form.section_id}
+                        options={sections.map((s: any) => ({ id: s.id, label: s.label }))}
+                        onChange={(v) => update("section_id", v)}
+                      />
+                    )}
+                  </>
+                )}
+
+                {form.complaint_type === "police" && (
+                  <>
+                    <Dropdown
+                      testID="police-station"
+                      label="Police Station"
+                      placeholder="Select police station"
+                      searchable
+                      value={form.police_station_id}
+                      options={[
+                        ...policeStations.map((p) => ({ id: p.id, label: language === "gu" ? p.gu : p.en })),
+                        { id: "other", label: "Other (type manually)" },
+                      ]}
+                      onChange={(v) => update("police_station_id", v)}
+                    />
+                    {form.police_station_id === "other" && (
+                      <Field testID="police-station-custom" label="Enter Police Station" value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
+                    )}
+                  </>
+                )}
+
+                {showOther && (
+                  <Field testID="complaint-custom" label="Other Complaint Type" placeholder="Describe complaint type" value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
+                )}
+              </View>
+
+              <View style={{ flex: 1, minWidth: 0 }}>
+                {/* Dynamic admin fields */}
+                {allDynamicFields.length > 0 && (
+                  <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                    <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
+                    {allDynamicFields.map((df) => renderDynamicField(df))}
+                  </View>
+                )}
+
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
+                <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
+                <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
+                <Dropdown
+                  testID="district"
+                  label="District"
+                  placeholder="Select district"
+                  searchable
+                  value={form.district_id}
+                  options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
+                  onChange={(v) => update("district_id", v)}
+                />
+                <Dropdown
+                  testID="taluka"
+                  label="Taluka (Optional)"
+                  placeholder={form.district_id ? "Select Taluka (Optional)" : "Select District first"}
+                  searchable
+                  disabled={!form.district_id}
+                  value={form.taluka_id}
+                  options={talukas.map((t) => ({ id: t.id, label: language === "gu" ? t.gu : t.en, sublabel: language === "gu" ? t.en : t.gu }))}
+                  onChange={(v) => update("taluka_id", v)}
+                />
+                <Dropdown
+                  testID="court"
+                  label="Court"
+                  placeholder="Select court"
+                  searchable
+                  value={form.court_id}
+                  favouriteIds={favCourts}
+                  onToggleFavourite={toggleFavCourt}
+                  options={[
+                    ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en })),
+                    { id: "other", label: "Other (type manually)", pinnable: false },
+                  ]}
+                  onChange={(v) => update("court_id", v)}
+                />
+                {form.court_id === "other" && (
+                  <Field testID="court-custom" label="Enter Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court_custom} onChangeText={(v) => update("court_custom", v)} />
+                )}
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+            <View style={{ maxWidth: 1100, width: "100%", alignSelf: "center" }}>
+              <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={handleFormSubmit} />
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
+  }
+
+  // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>

@@ -1,11 +1,15 @@
 import { Redirect, Tabs } from "expo-router";
+import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { useResponsive } from "@/src/hooks/useResponsive";
+import { DesktopSidebar } from "@/src/components/DesktopSidebar";
 
 export default function TabsLayout() {
   const { colors, isDark } = useTheme();
   const { ready, user } = useAuth();
+  const { isDesktop } = useResponsive();
 
   // Route guard (C4): never render protected tabs for a missing/expired session.
   // The root index also redirects, but this covers sessions that expire mid-use.
@@ -13,6 +17,9 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      tabBar={(props) =>
+        isDesktop ? <DesktopSidebar {...props} /> : <BottomTabBar {...props} />
+      }
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.brandPrimary,

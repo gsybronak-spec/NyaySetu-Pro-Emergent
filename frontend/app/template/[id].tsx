@@ -24,11 +24,13 @@ import { saveDocument } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
 
 type Step = "fields" | "preview" | "output";
 
 export default function TemplateApplication() {
   const { colors } = useTheme();
+  const { isDesktop } = useResponsive();
   const params = useLocalSearchParams<{ id: string; case_id?: string; lang?: string; draft?: string }>();
   const templateId = String(params.id);
   const caseId = params.case_id && params.case_id !== "" ? String(params.case_id) : undefined;
@@ -313,7 +315,12 @@ export default function TemplateApplication() {
         </View>
 
         {step === "fields" && (
-          <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={isDesktop ? { maxWidth: 1100, width: "100%", flexDirection: "row", gap: Spacing.xxl, alignItems: "flex-start" } : undefined}>
+            <View style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>
             {/* Language toggle if no case */}
             {!caseId && (
               <>
@@ -518,13 +525,80 @@ export default function TemplateApplication() {
                 />
               );
             })}
+            </View>
 
+            {/* Desktop summary panel */}
+            {isDesktop ? (
+              <View style={{ width: 340, flexShrink: 0 }}>
+                <View style={[styles.dSummary, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+                  <Text style={[styles.lbl, { color: colors.brandPrimary, letterSpacing: 1, fontSize: 11 }]}>
+                    DOCUMENT SUMMARY
+                  </Text>
+                  <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 16, fontFamily: "serif", marginTop: Spacing.sm }}>
+                    {language === "gu" ? template.name_gu : template.name_en}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
+                    {language === "gu" ? template.name_en : template.name_gu}
+                  </Text>
+
+                  <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
+                    <Ionicons name="wallet-outline" size={16} color={colors.brandPrimary} />
+                    <Text style={styles.dSummaryLabel}>Cost</Text>
+                    <Text style={styles.dSummaryValue}>1 template credit</Text>
+                  </View>
+
+                  {caseData ? (
+                    <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
+                      <Ionicons name="link-outline" size={16} color={colors.brandPrimary} />
+                      <Text style={styles.dSummaryLabel}>Case</Text>
+                      <Text style={styles.dSummaryValue} numberOfLines={1}>
+                        {caseData.case_number || caseData.nickname || "Linked case"}
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  {inheritedRows.length > 0 ? (
+                    <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
+                      <Ionicons name="sparkles-outline" size={16} color={colors.success} />
+                      <Text style={styles.dSummaryLabel}>Auto-filled</Text>
+                      <Text style={[styles.dSummaryValue, { color: colors.success }]}>
+                        {inheritedRows.length} field{inheritedRows.length > 1 ? "s" : ""} from case
+                      </Text>
+                    </View>
+                  ) : null}
+
+                  <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
+                    <Ionicons
+                      name={missingRequired.length > 0 ? "alert-circle-outline" : "checkmark-circle-outline"}
+                      size={16}
+                      color={missingRequired.length > 0 ? colors.warning : colors.success}
+                    />
+                    <Text style={styles.dSummaryLabel}>Required fields</Text>
+                    <Text style={[styles.dSummaryValue, { color: missingRequired.length > 0 ? colors.warning : colors.success }]}>
+                      {missingRequired.length > 0 ? `${missingRequired.length} remaining` : "All complete"}
+                    </Text>
+                  </View>
+
+                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: Spacing.md, lineHeight: 16 }}>
+                    Preview button is at the bottom. Drafts autosave every change — nothing is lost if you leave.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+            </View>
           </ScrollView>
         )}
 
         {step === "preview" && (
-          <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }}>
-            <View style={[styles.doc, { backgroundColor: "#FFFFFF", borderColor: colors.border }]} testID="preview-doc">
+          <ScrollView contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}>
+            <View
+              style={[
+                styles.doc,
+                isDesktop && styles.docDesktop,
+                { backgroundColor: "#FFFFFF", borderColor: colors.border },
+              ]}
+              testID="preview-doc"
+            >
               {blocks.map((b, i) => (
                 <Text
                   key={i}
@@ -543,7 +617,15 @@ export default function TemplateApplication() {
                 </Text>
               ))}
             </View>
-            <Pressable testID="edit-btn" onPress={() => setStep("fields")} style={[styles.editRow, { borderColor: colors.brandPrimary }]}>
+            <Pressable
+              testID="edit-btn"
+              onPress={() => setStep("fields")}
+              style={[
+                styles.editRow,
+                isDesktop && { maxWidth: 780, width: "100%" },
+                { borderColor: colors.brandPrimary },
+              ]}
+            >
               <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
               <Text style={{ color: colors.brandPrimary, fontWeight: "700", marginLeft: 8 }}>Edit Details</Text>
             </Pressable>
@@ -551,7 +633,11 @@ export default function TemplateApplication() {
         )}
 
         {step === "output" && (
-          <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}
+            keyboardShouldPersistTaps="handled"
+          >
+          <View style={isDesktop ? { maxWidth: 780, width: "100%" } : undefined}>
             {notice && (
               <View
                 testID="download-notice"
@@ -578,12 +664,12 @@ export default function TemplateApplication() {
             <Field testID="filename-input" value={filename} onChangeText={setFilename} placeholder="File name" />
 
             <Text style={[styles.lbl, { color: colors.onSurface, marginTop: Spacing.md }]}>Select Format</Text>
-            <View style={{ gap: Spacing.md, marginTop: Spacing.sm }}>
+            <View style={{ gap: Spacing.md, marginTop: Spacing.sm, flexDirection: isDesktop ? "row" : "column" }}>
               <Pressable
                 testID="download-pdf"
                 onPress={() => download("pdf")}
                 disabled={busy}
-                style={[styles.formatCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+                style={[styles.formatCard, isDesktop && { flex: 1 }, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <View style={[styles.formatIcon, { backgroundColor: "#7A1C1C20" }]}>
                   <Ionicons name="document" size={22} color="#7A1C1C" />
@@ -604,7 +690,7 @@ export default function TemplateApplication() {
                 testID="download-docx"
                 onPress={() => download("docx")}
                 disabled={busy}
-                style={[styles.formatCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+                style={[styles.formatCard, isDesktop && { flex: 1 }, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <View style={[styles.formatIcon, { backgroundColor: "#1D2D5020" }]}>
                   <Ionicons name="document-text" size={22} color="#1D2D50" />
@@ -625,7 +711,7 @@ export default function TemplateApplication() {
                 testID="download-odt"
                 onPress={() => download("odt")}
                 disabled={busy}
-                style={[styles.formatCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+                style={[styles.formatCard, isDesktop && { flex: 1 }, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <View style={[styles.formatIcon, { backgroundColor: "#0B6E4F20" }]}>
                   <Ionicons name="document-outline" size={22} color="#0B6E4F" />
@@ -651,18 +737,23 @@ export default function TemplateApplication() {
               </Text>
             </View>
             {busy && <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: Spacing.lg }} />}
+          </View>
           </ScrollView>
         )}
 
         {/* Footer CTA */}
         {step === "fields" && (
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <Button testID="continue-preview-btn" title="Preview Document" loading={busy} onPress={genPreview} />
+            <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
+              <Button testID="continue-preview-btn" title="Preview Document" loading={busy} onPress={genPreview} />
+            </View>
           </View>
         )}
         {step === "preview" && (
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <Button testID="to-output-btn" title="Confirm & Download" onPress={() => setStep("output")} />
+            <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
+              <Button testID="to-output-btn" title="Confirm & Download" onPress={() => setStep("output")} />
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -694,4 +785,24 @@ const styles = StyleSheet.create({
   notice: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginBottom: Spacing.lg, borderWidth: 1 },
   note: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginTop: Spacing.lg },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
+  // Desktop
+  docDesktop: {
+    maxWidth: 780,
+    width: "100%",
+    minHeight: 1000,
+    padding: Spacing.xxxl,
+    borderRadius: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  dSummary: { padding: Spacing.lg, borderRadius: 14, borderWidth: 1 },
+  dSummaryRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingTop: Spacing.md, marginTop: Spacing.md, borderTopWidth: StyleSheet.hairlineWidth, gap: 8,
+  },
+  dSummaryLabel: { color: "#6B7280", fontSize: 12, fontWeight: "600", flex: 1 },
+  dSummaryValue: { color: "#0B1B3D", fontSize: 13, fontWeight: "700", maxWidth: "60%" },
 });
