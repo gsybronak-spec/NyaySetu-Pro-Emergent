@@ -74,6 +74,7 @@ export default function TemplateApplication() {
           if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
           if (c.case_number) initialValues["case_number"] = c.case_number;
           if (c.district_id) initialValues["district"] = c.district_id;
+          if (c.taluka_id) initialValues["taluka"] = c.taluka_id;
           if (c.court_id) initialValues["court"] = c.court_id;
           if (c.case_type_id) initialValues["case_type"] = c.case_type_id;
           if (c.police_station_label) initialValues["police_station"] = c.police_station_label;
@@ -146,6 +147,42 @@ export default function TemplateApplication() {
   };
 
   const fields = template?.fields || [];
+
+  // Case-owned application fields. When an application is opened FROM a case,
+  // these values come from the case (the source of truth) and must not be
+  // re-entered: they are shown read-only in the AUTO-FILLED FROM CASE card and
+  // skipped from the editable field list. A field only counts as inherited when
+  // the case actually HAS the value (taluka stays optional).
+  const CASE_OWNED_LABELS: [string, string, string][] = [
+    ["case_number", "Case No.", "કેસ નં."],
+    ["party_name", "Party / Applicant", "અરજદાર / ફરિયાદી"],
+    ["opposite_party", "Opposite Party", "સામેવાળા / આરોપી"],
+    ["court", "Court", "કોર્ટ"],
+    ["district", "District", "જિલ્લો"],
+    ["taluka", "Taluka", "તાલુકો"],
+    ["case_type", "Case Type", "કેસનો પ્રકાર"],
+  ];
+
+  const inheritedRows = useMemo(() => {
+    if (!caseData) return [];
+    const src: Record<string, string | undefined> = {
+      case_number: caseData.case_number,
+      party_name: caseData.party_name,
+      opposite_party: caseData.opposite_party,
+      court: caseData.court_label || caseData.court,
+      district: caseData.district_label || caseData.district_id,
+      taluka: caseData.taluka_label,
+      case_type: caseData.case_type_label,
+    };
+    const rows: { key: string; label: string; value: string }[] = [];
+    for (const [key, lEn, lGu] of CASE_OWNED_LABELS) {
+      const v = src[key];
+      if (v) rows.push({ key, label: language === "gu" ? lGu : lEn, value: String(v) });
+    }
+    return rows;
+  }, [caseData, language]);
+
+  const inheritedKeys = useMemo(() => new Set(inheritedRows.map((r) => r.key)), [inheritedRows]);
 
   const missingRequired = useMemo(
     () => fields.filter((f: any) => f.required && !values[f.key]).map((f: any) => f.key),
@@ -302,27 +339,32 @@ export default function TemplateApplication() {
               </>
             )}
 
-            {/* Auto-filled info */}
-            {caseData && (
+            {/* Auto-filled from case — read-only, inherited, never re-entered */}
+            {inheritedRows.length > 0 && (
               <View style={[styles.autofill, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40" }]}>
-                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.sm }}>
+                <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.xs }}>
                   <Ionicons name="sparkles" size={16} color={colors.onBrandTertiary} />
                   <Text style={{ color: colors.onBrandTertiary, fontWeight: "800", fontSize: 12, marginLeft: 6, letterSpacing: 0.5 }}>
                     AUTO-FILLED FROM CASE
                   </Text>
                 </View>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-                  {[
-                    caseData.case_number && `Case: ${caseData.case_number}`,
-                    caseData.party_name && `Party: ${caseData.party_name}`,
-                    (caseData.court_label || caseData.court) && `Court: ${caseData.court_label || caseData.court}`,
-                    (caseData.district_label || caseData.district_id) && `Dist: ${caseData.district_label || caseData.district_id}`,
-                  ].filter(Boolean).map((chip: any) => (
-                    <View key={chip} style={[styles.autoChip, { backgroundColor: colors.surface }]}>
-                      <Text style={{ color: colors.onSurface, fontSize: 11 }}>{chip}</Text>
-                    </View>
-                  ))}
-                </View>
+                <Text style={{ color: colors.onBrandTertiary, opacity: 0.8, fontSize: 11, marginBottom: Spacing.sm }}>
+                  Taken from the linked case — locked, no need to enter again.
+                </Text>
+                {inheritedRows.map((r) => (
+                  <View
+                    key={r.key}
+                    style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingVertical: 3 }}
+                  >
+                    <Text style={{ color: colors.onBrandTertiary, opacity: 0.85, fontSize: 12 }}>{r.label}</Text>
+                    <Text
+                      style={{ color: colors.onBrandTertiary, fontWeight: "700", fontSize: 12, flexShrink: 1, marginLeft: Spacing.md, textAlign: "right" }}
+                      numberOfLines={2}
+                    >
+                      {r.value}
+                    </Text>
+                  </View>
+                ))}
               </View>
             )}
 
@@ -334,6 +376,9 @@ export default function TemplateApplication() {
             </Text>
 
             {fields.map((f: any) => {
+              // Inherited case values are shown in the AUTO-FILLED card above —
+              // never re-render them as editable inputs.
+              if (inheritedKeys.has(f.key)) return null;
               const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
               const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en);
               const fvalue = values[f.key];

@@ -1819,6 +1819,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
         d = _DISTRICT_MAP[ctx["district"]]
         ctx["district"] = d["gu"] if language == "gu" else d["en"]
+    # Same guard for taluka raw catalog ids sent as select values (optional —
+    # empty stays empty, never prints "None" / "null" / raw ids).
+    if isinstance(ctx.get("taluka"), str) and ctx["taluka"] in _TALUKA_MAP:
+        tobj = _TALUKA_MAP[ctx["taluka"]]
+        ctx["taluka"] = tobj["gu"] if language == "gu" else tobj["en"]
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
     if isinstance(ctx.get("court"), str) and ctx["court"] in _COURT_MAP:

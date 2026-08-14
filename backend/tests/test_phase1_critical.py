@@ -463,6 +463,118 @@ async def test_invalid_taluka_rejected(client, clean_db):
 
 
 # ============================================================
+# 12c. Case -> Application inheritance (court/district/taluka/type/parties)
+# ============================================================
+
+import zipfile as _zipfile
+import io as _io
+
+
+@pytest.mark.asyncio
+async def test_case_data_inherited_into_application(client, clean_db):
+    """Application opened FROM a case must inherit case-level fields."""
+    creds = await register_user(client, "9888888003")
+    h = auth(creds["token"])
+
+    case_r = await client.post("/api/cases", headers=h, json={
+        "case_number": "1234/2026",
+        "party_name": "Ronak Solanki",
+        "opposite_party": "State of Gujarat",
+        "district_id": "gandhinagar",
+        "taluka_id": "gandhinagar",
+        "court_id": "dst_gandhinagar",
+        "case_type_id": "civil_suit",
+    })
+    assert case_r.status_code == 200, case_r.text
+    case = case_r.json()
+    assert case["taluka_label"] == "Gandhinagar", case.get("taluka_label")
+
+    # Preview must render inherited values from the case (no re-entry needed)
+    r = await client.post("/api/applications/preview", headers=h, json={
+        "template_id": "document_return_application",
+        "case_id": case["id"],
+        "language": "en",
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+    })
+    assert r.status_code == 200, r.text
+    content = r.json()["content"]
+    for expected in ("1234/2026", "Ronak Solanki", "State of Gujarat",
+                     "Gandhinagar", "District & Sessions Court"):
+        assert expected in content, f"inherited value {expected!r} missing from preview"
+
+    # DOCX must carry the inherited values too (plain XML text, reliable check)
+    r = await client.post("/api/applications/download", headers=h, json={
+        "template_id": "document_return_application",
+        "case_id": case["id"],
+        "language": "en",
+        "format": "docx",
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+    })
+    assert r.status_code == 200, r.text
+    doc = _zipfile.ZipFile(_io.BytesIO(__import__("base64").b64decode(r.json()["base64"])))
+    xml_text = doc.read("word/document.xml").decode("utf-8")
+    for expected in ("1234/2026", "Ronak Solanki", "State of Gujarat", "Gandhinagar"):
+        assert expected in xml_text, f"inherited value {expected!r} missing from DOCX"
+
+    # PDF must carry inherited values (MuPDF honours ActualText)
+    fitz = pytest.importorskip("pymupdf")
+    r = await client.post("/api/applications/download", headers=h, json={
+        "template_id": "document_return_application",
+        "case_id": case["id"],
+        "language": "en",
+        "format": "pdf",
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+    })
+    assert r.status_code == 200, r.text
+    raw = __import__("base64").b64decode(r.json()["base64"])
+    doc = fitz.open(stream=raw, filetype="pdf")
+    try:
+        # The HB engine draws one Tj per glyph; MuPDF lays those out with
+        # whitespace between glyphs (ActualText is present in the stream but
+        # MuPDF's per-glyph layout adds spacing). Normalize whitespace so the
+        # comparison checks the real character content, not line-break noise.
+        pdf_text = "".join(p.get_text() for p in doc).replace("\n", "").replace(" ", "")
+    finally:
+        doc.close()
+    for expected in ("1234/2026", "RonakSolanki", "StateofGujarat", "Gandhinagar"):
+        assert expected in pdf_text, f"inherited value {expected!r} missing from PDF"
+
+
+@pytest.mark.asyncio
+async def test_case_without_taluka_application_works(client, clean_db):
+    """A case with NO taluka must generate clean output — no None/null/raw ids."""
+    creds = await register_user(client, "9888888004")
+    h = auth(creds["token"])
+
+    case_r = await client.post("/api/cases", headers=h, json={
+        "case_number": "5678/2026",
+        "party_name": "Applicant Name",
+        "opposite_party": "Respondent Name",
+        "district_id": "gandhinagar",
+        "court_id": "dst_gandhinagar",
+        "case_type_id": "civil_suit",
+    })
+    assert case_r.status_code == 200, case_r.text
+    case = case_r.json()
+    assert case.get("taluka_label") is None
+
+    r = await client.post("/api/applications/preview", headers=h, json={
+        "template_id": "document_return_application",
+        "case_id": case["id"],
+        "language": "en",
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+    })
+    assert r.status_code == 200, r.text
+    content = r.json()["content"]
+    # No None/null/undefined/raw-id artifacts in the taluka slot
+    assert "None" not in content
+    assert "null" not in content
+    assert "undefined" not in content
+    assert "taluka_id" not in content
+    assert "Gandhinagar" in content  # district still inherited
+
+
+# ============================================================
 # 13. Invalid case_type_id is rejected
 # ============================================================
 

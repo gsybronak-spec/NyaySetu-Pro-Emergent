@@ -415,7 +415,24 @@ def generate_pdf_reportlab(blocks: list, language: str = "en", settings: dict = 
 # — no system dependencies — so it works identically on Windows, Linux/Render.
 
 _HB_PUA_START = 0xE000
-_hb_font_counter = [0]
+
+
+def _new_hb_font():
+    """Fresh per-generation HarfBuzz font instance.
+
+    The old design cached one module-level hb.Font and reused it for every
+    generation. HarfBuzz Font objects carry internal GSUB/GPOS caches and are
+    not safe to share across concurrent/threaded generations, and any state
+    carried between calls makes output order-dependent. Loading a fresh face
+    per generation costs one small TTF read and makes every generation fully
+    isolated: no shared mutable shaping state, no cross-request leaks.
+    """
+    import uharfbuzz as hb
+    lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
+    with open(lohit_path, "rb") as f:
+        font_bytes = f.read()
+    face = hb.Face(font_bytes)
+    return hb.Font(face)
 
 
 def _shape_char_glyph_ids(hb_font, ch: str):
@@ -544,6 +561,7 @@ def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
     from fontTools.ttLib import TTFont as FTFont
     from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
 
+    import uuid
     lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
     ft = FTFont(str(lohit_path))
     glyph_order = ft.getGlyphOrder()
@@ -563,10 +581,11 @@ def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
     sub.format = 4
     sub.cmap = synthetic
     cmap.tables = [sub]
-    out_path = str(Path(tmpdir) / f"lohit_hb_{_hb_font_counter[0]}.ttf")
+    # Unique per-generation name — no shared counter, no cross-call collision.
+    tag = uuid.uuid4().hex[:10]
+    out_path = str(Path(tmpdir) / f"lohit_hb_{tag}.ttf")
     ft.save(out_path)
-    _hb_font_counter[0] += 1
-    font_name = f"LohitHB{_hb_font_counter[0]}"
+    font_name = f"LohitHB{tag}"
     pdfmetrics.registerFont(TTFont(font_name, out_path))
     return font_name, gid_to_pua
 
@@ -576,7 +595,8 @@ def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -
     import tempfile
     from reportlab.pdfgen import canvas as pdfcanvas
 
-    hb_font = get_hb_font()
+    # Per-generation font instance: no shared shaping state between calls.
+    hb_font = _new_hb_font()
     if not hb_font:
         raise RuntimeError("HarfBuzz font unavailable")
     upem = hb_font.face.upem
@@ -665,6 +685,14 @@ def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -
                 c.setFont(font_name, size)
                 y = page_h - margin_t
         c.save()
+        # Release the per-generation font from ReportLab's global registry so
+        # repeated generations never accumulate parsed font objects (and so a
+        # reused name can never collide across requests). The canvas has already
+        # embedded the font by save() time, so this is safe.
+        try:
+            pdfmetrics._fonts.pop(font_name, None)
+        except Exception:
+            pass
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
@@ -673,19 +701,20 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
 
     Gujarati content -> HarfBuzz engine (correct conjunct shaping, runs on
     Render without Chromium). English content -> Playwright Chromium with
-    ReportLab fallback. Failures never silently corrupt output: each engine
-    falls through to the next, and the last resort (ReportLab) is the same
-    unshaped path that previously shipped.
+    ReportLab fallback. Gujarati NEVER falls through to the unshaped ReportLab
+    path — that would silently corrupt Indic text (broken conjuncts / garbage
+    glyphs). If both shaped engines fail, the exception propagates so the
+    caller can surface a clear error and refund instead of shipping corrupted
+    output.
     """
     has_gujarati = language == "gu" or any(re.search(r"[\u0A80-\u0AFF]", (b.get("text") or "")) for b in blocks)
     if has_gujarati:
         try:
             return generate_pdf_hb(blocks, language, settings)
         except Exception:
-            try:
-                return generate_pdf_playwright(blocks, language, settings)
-            except Exception:
-                return generate_pdf_reportlab(blocks, language, settings)
+            # Playwright/Chromium shapes Gujarati correctly too (it IS
+            # HarfBuzz), so it is an acceptable secondary shaped engine.
+            return generate_pdf_playwright(blocks, language, settings)
     try:
         return generate_pdf_playwright(blocks, language, settings)
     except Exception:
