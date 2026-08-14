@@ -402,11 +402,293 @@ def generate_pdf_reportlab(blocks: list, language: str = "en", settings: dict = 
     return base64.b64encode(buf.read()).decode("utf-8")
 
 
+# ---- HarfBuzz-shaped PDF engine (production-safe, no Chromium) ----
+#
+# ReportLab draws TTF text character-by-character WITHOUT OpenType GSUB/GPOS,
+# so Gujarati conjuncts (ક્ષ, શ્ર, ત્ર...) render as broken glyph sequences
+# (ક + ્ષ). Chromium's PDF path shapes correctly but is unavailable on
+# Render (playwright is not installed there), so production silently degraded
+# to the unshaped path. This engine shapes with uharfbuzz (HarfBuzz) against
+# the bundled Lohit-Gujarati.ttf, subsets/remaps the font so each shaped
+# glyph becomes a single PUA codepoint, and draws the glyph sequence with
+# HarfBuzz advances/offsets on a ReportLab canvas. Pure Python + bundled TTF
+# — no system dependencies — so it works identically on Windows, Linux/Render.
+
+_HB_PUA_START = 0xE000
+_hb_font_counter = [0]
+
+
+def _shape_char_glyph_ids(hb_font, ch: str):
+    """Raw shape of a single character -> glyph ids (no recursion, no text)."""
+    import uharfbuzz as hb
+    buf = hb.Buffer()
+    buf.add_str(ch)
+    buf.guess_segment_properties()
+    hb.shape(hb_font, buf)
+    return [g.codepoint for g in buf.glyph_infos]
+
+
+def _assign_glyph_texts(word: str, infos, hb_font, upem: int):
+    """Return the original text each shaped glyph represents (parallel to infos).
+
+    GPOS mark attachment (Lohit places matras in the SAME HarfBuzz cluster as
+    their base consonant), so a naive cluster-slice leaves base glyphs with
+    empty text and matras with duplicated text. Scheme:
+      * single-glyph cluster -> the whole cluster text (covers conjunct
+        ligatures like ક્ષ and plain consonants);
+      * multi-glyph cluster (base + matra + anusvara) -> split the cluster
+        text character-by-character by shaping each char alone, so every
+        glyph gets exactly the chars it renders. This reproduces Chromium's
+        extraction quality (marks may appear in visual order).
+    """
+    clusters = [g.cluster for g in infos]
+    texts = [""] * len(infos)
+    groups = {}
+    for i, c in enumerate(clusters):
+        groups.setdefault(c, []).append(i)
+    for c, idxs in sorted(groups.items()):
+        nxt = min((x for x in clusters if x > c), default=len(word))
+        ctext = word[c:nxt]
+        if len(idxs) == 1:
+            texts[idxs[0]] = ctext
+            continue
+        char_glyphs = {}
+        for ch in ctext:
+            for gid in _shape_char_glyph_ids(hb_font, ch):
+                char_glyphs.setdefault(gid, []).append(ch)
+        claimed = set()
+        for i in idxs:
+            gid = infos[i].codepoint
+            if gid in char_glyphs:
+                texts[i] = "".join(char_glyphs[gid])
+                claimed.update(char_glyphs[gid])
+        leftover = [ch for ch in ctext if ch not in claimed]
+        if leftover:
+            # Unmatched glyphs are context variants (e.g. isignguj.alt11 for
+            # the post-base i-matra) that don't appear when shaping chars alone.
+            # Give them the chars no glyph claimed instead of duplicating the
+            # whole cluster text.
+            for i in idxs:
+                if not texts[i]:
+                    texts[i] = "".join(leftover)
+                    break
+    return texts
+
+
+def _shape_hb_word(hb_font, upem, word: str, size_pt: float):
+    """Shape one word -> list of {gid, adv_pt, xoff_pt, yoff_pt, text} using HarfBuzz.
+
+    `text` is the original substring each glyph represents — used to rebuild
+    correct ToUnicode extraction for conjunct ligatures (selectable PDF text).
+    """
+    import uharfbuzz as hb
+    buf = hb.Buffer()
+    buf.add_str(word)
+    buf.guess_segment_properties()
+    hb.shape(hb_font, buf)
+    scale = size_pt / float(upem)
+    infos = buf.glyph_infos
+    positions = buf.glyph_positions
+    texts = _assign_glyph_texts(word, infos, hb_font, upem)
+    out = []
+    for i, (info, pos) in enumerate(zip(infos, positions)):
+        out.append({
+            "gid": info.codepoint,
+            "adv": pos.x_advance * scale,
+            "xoff": pos.x_offset * scale,
+            "yoff": pos.y_offset * scale,  # HarfBuzz y-up == ReportLab canvas y-up
+            "text": texts[i],
+        })
+    return out
+
+
+def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float):
+    """Shape + wrap a paragraph into lines of shaped words.
+
+    Returns [{words: [[glyph...], [glyph...]], width: pt, text: str}] — each
+    word is a list of glyph dicts so justification can add space between words
+    only; `text` is the ORIGINAL line text (used for ActualText spans so the
+    PDF's selectable text is the exact logical text, not PUA/visual order).
+    """
+    space_adv = 0.0
+    try:
+        space_adv = _shape_hb_word(hb_font, upem, " ", size_pt)[0]["adv"]
+    except Exception:
+        space_adv = size_pt * 0.28
+    words = text.split(" ")
+    lines = []
+    cur_words = []
+    cur_raw = []
+    cur_width = 0.0
+    for raw in words:
+        w = _shape_hb_word(hb_font, upem, raw, size_pt) if raw else []
+        ww = sum(g["adv"] for g in w)
+        if cur_words and cur_width + space_adv + ww > max_width_pt:
+            lines.append({"words": cur_words, "width": cur_width, "text": " ".join(cur_raw)})
+            cur_words, cur_raw, cur_width = [], [], 0.0
+        cur_words.append(w)
+        cur_raw.append(raw)
+        cur_width += (space_adv if len(cur_words) > 1 else 0.0) + ww
+    lines.append({"words": cur_words, "width": cur_width, "text": " ".join(cur_raw)})
+    return lines, space_adv
+
+
+def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
+    """Create a TTF whose cmap maps each used glyph to a PUA codepoint.
+
+    Keeps the original Lohit cmap (so Latin digits/letters embedded in Gujarati
+    text keep extracting correctly) and adds PUA entries for every glyph
+    HarfBuzz selected (incl. GSUB-only conjunct ligatures like
+    'kaguj_viramaguj_ssaguj'). Returns (font_name, gid->PUA mapping).
+    """
+    from fontTools.ttLib import TTFont as FTFont
+    from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
+
+    lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
+    ft = FTFont(str(lohit_path))
+    glyph_order = ft.getGlyphOrder()
+    base_cmap = {cp: name for cp, name in (ft.getBestCmap() or {}).items() if cp <= 0xFFFF}
+    synthetic = dict(base_cmap)
+    gid_to_pua = {}
+    for i, gid in enumerate(sorted(set(used_gids))):
+        name = glyph_order[gid] if 0 <= gid < len(glyph_order) else ".notdef"
+        cp = _HB_PUA_START + i
+        synthetic[cp] = name
+        gid_to_pua[gid] = cp
+    cmap = ft["cmap"]
+    sub = CmapSubtable.newSubtable(4)
+    sub.platformID = 3
+    sub.platEncID = 1
+    sub.language = 0
+    sub.format = 4
+    sub.cmap = synthetic
+    cmap.tables = [sub]
+    out_path = str(Path(tmpdir) / f"lohit_hb_{_hb_font_counter[0]}.ttf")
+    ft.save(out_path)
+    _hb_font_counter[0] += 1
+    font_name = f"LohitHB{_hb_font_counter[0]}"
+    pdfmetrics.registerFont(TTFont(font_name, out_path))
+    return font_name, gid_to_pua
+
+
+def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -> str:
+    """Generate a Gujarati PDF with correct HarfBuzz shaping (no Chromium)."""
+    import tempfile
+    from reportlab.pdfgen import canvas as pdfcanvas
+
+    hb_font = get_hb_font()
+    if not hb_font:
+        raise RuntimeError("HarfBuzz font unavailable")
+    upem = hb_font.face.upem
+    s = get_doc_settings(settings)
+    body_size = float(s.get("body_size", 12))
+    heading_size = float(s.get("heading_size", 13))
+    line_spacing = float(s.get("line_spacing", 18))
+    para_space = float(s.get("paragraph_spacing", 6))
+    margin_t = s["margin_top_cm"] * 28.35
+    margin_b = s["margin_bottom_cm"] * 28.35
+    margin_l = s["margin_left_cm"] * 28.35
+    margin_r = s["margin_right_cm"] * 28.35
+    pagesize = _resolve_pagesize(s.get("page_size"))
+    page_w, page_h = pagesize
+    max_width = page_w - margin_l - margin_r
+
+    # Shape every word up front so the font subset covers all used glyphs.
+    shaped = []  # per block: list of lines {words:[{gid,adv,xoff,yoff}], width}
+    used_gids = set()
+    for b in blocks:
+        text = (b.get("text") or "").strip()
+        if not text:
+            shaped.append([])
+            continue
+        size = heading_size if b.get("bold") else body_size
+        lines, space_adv = _wrap_hb_lines(hb_font, upem, text, size, max_width)
+        for ln in lines:
+            for w in ln["words"]:
+                for g in w:
+                    used_gids.add(g["gid"])
+        shaped.append((lines, size, b.get("align", "left"), space_adv))
+
+    buf = io.BytesIO()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir)
+        c = pdfcanvas.Canvas(buf, pagesize=pagesize)
+        y = page_h - margin_t
+        for idx, entry in enumerate(shaped):
+            if not entry:
+                # blank block -> paragraph spacer
+                y -= para_space
+                if y < margin_b:
+                    c.showPage()
+                    y = page_h - margin_t
+                continue
+            lines, size, align, space_adv = entry
+            c.setFont(font_name, size)
+            for ln in lines:
+                width = ln["width"]
+                x = margin_l
+                extra = 0.0
+                if align == "center":
+                    x = margin_l + (max_width - width) / 2.0
+                elif align == "right":
+                    x = margin_l + max_width - width
+                elif align == "justify" and len(ln["words"]) > 1:
+                    extra = (max_width - width) / max(len(ln["words"]) - 1, 1)
+                # ActualText marks the line's semantic text so extraction/copy
+                # returns the exact logical Gujarati (PUA glyph codes and
+                # visual-order matras never leak into the copied text).
+                if ln.get("text"):
+                    # NOTE: a space before the dict close is REQUIRED — otherwise
+                    # the tokenizer sees '<FEFF...>>>' (hex close + dict close
+                    # merged) and MuPDF/pdfminer reject the marked content.
+                    c._code.append(
+                        f"/Span<</ActualText <FEFF{ln['text'].encode('utf-16-be').hex().upper()}> >> BDC"
+                    )
+                x_pos = x
+                for wi, w in enumerate(ln["words"]):
+                    for g in w:
+                        ch = chr(gid_to_pua[g["gid"]])
+                        c.drawString(x_pos + g["xoff"], y + g["yoff"], ch)
+                        x_pos += g["adv"]
+                    if wi < len(ln["words"]) - 1:
+                        x_pos += space_adv + extra
+                if ln.get("text"):
+                    c._code.append("EMC")
+                y -= line_spacing
+                if y < margin_b:
+                    c.showPage()
+                    c.setFont(font_name, size)
+                    y = page_h - margin_t
+            y -= para_space
+            if y < margin_b:
+                c.showPage()
+                c.setFont(font_name, size)
+                y = page_h - margin_t
+        c.save()
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+
 def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> str:
-    """Public PDF generation API. Uses Playwright Chromium with ReportLab fallback."""
+    """Public PDF generation API.
+
+    Gujarati content -> HarfBuzz engine (correct conjunct shaping, runs on
+    Render without Chromium). English content -> Playwright Chromium with
+    ReportLab fallback. Failures never silently corrupt output: each engine
+    falls through to the next, and the last resort (ReportLab) is the same
+    unshaped path that previously shipped.
+    """
+    has_gujarati = language == "gu" or any(re.search(r"[\u0A80-\u0AFF]", (b.get("text") or "")) for b in blocks)
+    if has_gujarati:
+        try:
+            return generate_pdf_hb(blocks, language, settings)
+        except Exception:
+            try:
+                return generate_pdf_playwright(blocks, language, settings)
+            except Exception:
+                return generate_pdf_reportlab(blocks, language, settings)
     try:
         return generate_pdf_playwright(blocks, language, settings)
-    except Exception as e:
+    except Exception:
         return generate_pdf_reportlab(blocks, language, settings)
 
 

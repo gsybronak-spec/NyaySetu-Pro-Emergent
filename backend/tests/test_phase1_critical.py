@@ -392,6 +392,77 @@ async def test_district_label_renders_correctly(client, clean_db):
 
 
 # ============================================================
+# 12b. Taluka selection — optional, validated, district-scoped, rendered
+# ============================================================
+
+@pytest.mark.asyncio
+async def test_taluka_label_renders_and_optional(client, clean_db):
+    """Taluka must be optional, stored, and rendered as a human label."""
+    creds = await register_user(client, "9888888001")
+    h = auth(creds["token"])
+
+    # Without taluka (optional) — must succeed
+    r = await client.post("/api/cases", headers=h, json={
+        "case_number": "CR/101/2025",
+        "district_id": "gandhinagar",
+        "court_id": "gen_sessions",
+        "case_type_id": "civil_suit",
+    })
+    assert r.status_code == 200
+    assert r.json().get("taluka_label") is None
+
+    # With valid taluka of the chosen district
+    r = await client.post("/api/cases", headers=h, json={
+        "case_number": "CR/102/2025",
+        "district_id": "ahmedabad",
+        "taluka_id": "ahmedabad_city_east",
+        "court_id": "gen_sessions",
+        "case_type_id": "civil_suit",
+    })
+    assert r.status_code == 200
+    case = r.json()
+    assert case["taluka_id"] == "ahmedabad_city_east"
+    assert case["taluka_label"] == "Ahmedabad City (East)", case["taluka_label"]
+
+    # Preview must render the taluka label (via taluka_place derived value)
+    r = await client.post("/api/applications/preview", headers=h, json={
+        "template_id": "document_return_application",
+        "case_id": case["id"],
+        "language": "en",
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+    })
+    assert r.status_code == 200
+    content = r.json()["content"]
+    assert "Ahmedabad City (East), Ahmedabad" in content, content[:500]
+
+
+@pytest.mark.asyncio
+async def test_invalid_taluka_rejected(client, clean_db):
+    """Unknown taluka id and taluka of another district must be rejected."""
+    creds = await register_user(client, "9888888002")
+    h = auth(creds["token"])
+
+    # Unknown taluka id
+    r = await client.post("/api/cases", headers=h, json={
+        "district_id": "ahmedabad",
+        "taluka_id": "no_such_taluka",
+        "court_id": "gen_sessions",
+        "case_type_id": "civil_suit",
+    })
+    assert r.status_code == 400
+    assert "taluka" in r.json().get("detail", "").lower()
+
+    # Taluka belongs to a different district than the case's district
+    r = await client.post("/api/cases", headers=h, json={
+        "district_id": "ahmedabad",
+        "taluka_id": "anand",  # anand district's taluka
+        "court_id": "gen_sessions",
+        "case_type_id": "civil_suit",
+    })
+    assert r.status_code == 400
+
+
+# ============================================================
 # 13. Invalid case_type_id is rejected
 # ============================================================
 

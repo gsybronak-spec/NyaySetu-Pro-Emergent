@@ -28,6 +28,7 @@ export interface CaseFormValues {
   court_id: string | null;
   court_custom: string;
   district_id: string | null;
+  taluka_id: string | null;
   police_station_id: string | null;
   police_station_custom: string;
   notes: string;
@@ -54,6 +55,7 @@ const DEFAULTS: CaseFormValues = {
   court_id: null,
   court_custom: "",
   district_id: null,
+  taluka_id: null,
   police_station_id: null,
   police_station_custom: "",
   notes: "",
@@ -97,6 +99,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [laws, setLaws] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [districts, setDistricts] = useState<any[]>([]);
+  const [talukas, setTalukas] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [policeStations, setPoliceStations] = useState<any[]>([]);
   const [favCourts, setFavCourts] = useState<string[]>([]);
@@ -140,6 +143,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   }, [form.law_id]);
 
   useEffect(() => {
+    api.talukas(form.district_id || undefined).then((r) => setTalukas(Array.isArray(r) ? r : [])).catch(() => setTalukas([]));
     api.courts(form.district_id || undefined).then((r) => setCourts(r || [])).catch(() => {});
     api.policeStations(form.district_id || undefined).then((r) => setPoliceStations(r || [])).catch(() => {});
   }, [form.district_id]);
@@ -581,6 +585,16 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             value={form.district_id}
             options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
             onChange={(v) => update("district_id", v)}
+          />
+          <Dropdown
+            testID="taluka"
+            label="Taluka (Optional)"
+            placeholder={form.district_id ? "Select Taluka (Optional)" : "Select District first"}
+            searchable
+            disabled={!form.district_id}
+            value={form.taluka_id}
+            options={talukas.map((t) => ({ id: t.id, label: language === "gu" ? t.gu : t.en, sublabel: language === "gu" ? t.en : t.gu }))}
+            onChange={(v) => update("taluka_id", v)}
           />
           <Dropdown
             testID="court"

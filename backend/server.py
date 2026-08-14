@@ -262,6 +262,7 @@ class CaseCreate(BaseModel):
     court_id: Optional[str] = Field(None, max_length=50)
     court_custom: Optional[str] = Field(None, max_length=200)
     district_id: Optional[str] = Field(None, max_length=50)
+    taluka_id: Optional[str] = Field(None, max_length=50)
     police_station: Optional[str] = Field(None, max_length=200)
     police_station_id: Optional[str] = Field(None, max_length=50)
     police_station_custom: Optional[str] = Field(None, max_length=200)
@@ -1386,6 +1387,7 @@ def enrich_case(c: dict) -> dict:
     ct = _CASE_TYPE_MAP.get(c.get("case_type_id"))
     law = _LAW_MAP.get(c.get("law_id"))
     dist = _DISTRICT_MAP.get(c.get("district_id"))
+    tal = _TALUKA_MAP.get(c.get("taluka_id"))
     court = _COURT_MAP.get(c.get("court_id"))
     ps = _PS_MAP.get(c.get("police_station_id"))
     section = None
@@ -1401,6 +1403,7 @@ def enrich_case(c: dict) -> dict:
     c["law_label"] = (law["gu"] if lang == "gu" else law["en"]) if law else (c.get("law_custom") or None)
     c["section_label"] = section["label"] if section else None
     c["district_label"] = (dist["gu"] if lang == "gu" else dist["en"]) if dist else None
+    c["taluka_label"] = (tal["gu"] if lang == "gu" else tal["en"]) if tal else None
     if court:
         c["court_label"] = court["gu"] if lang == "gu" else court["en"]
     else:
@@ -1438,6 +1441,11 @@ def validate_case_refs(data: dict):
     did = data.get("district_id")
     if did and did not in _VALID_DISTRICT_IDS:
         raise HTTPException(400, f"Invalid district_id: {did}")
+    tid = data.get("taluka_id")
+    if tid and tid != "other" and tid not in _VALID_TALUKA_IDS:
+        raise HTTPException(400, f"Invalid taluka_id: {tid}")
+    if tid and tid != "other" and did and _TALUKA_MAP.get(tid, {}).get("district_id") not in (None, did):
+        raise HTTPException(400, f"Taluka {tid} does not belong to district {did}")
     court = data.get("court_id")
     if court and court != "other" and court not in _VALID_COURT_IDS:
         raise HTTPException(400, f"Invalid court_id: {court}")
@@ -1827,6 +1835,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             district_name = ""
         ctx.setdefault("district", district_name or case.get("district_id") or "")
+        taluka_obj = _TALUKA_MAP.get(case.get("taluka_id"))
+        if taluka_obj:
+            taluka_name = taluka_obj["gu"] if language == "gu" else taluka_obj["en"]
+        else:
+            taluka_name = case.get("taluka") or ""
+        ctx.setdefault("taluka", taluka_name)
         court_obj = _COURT_MAP.get(case.get("court_id"))
         if court_obj:
             court_name = court_obj["gu"] if language == "gu" else court_obj["en"]

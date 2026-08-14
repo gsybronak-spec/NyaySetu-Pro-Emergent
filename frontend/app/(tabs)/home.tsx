@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -169,15 +169,19 @@ export default function Home() {
               <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All</Text>
             </Pressable>
           </View>
-          <FlatList
-            data={templates}
-            keyExtractor={(t) => t.id}
-            numColumns={2}
-            scrollEnabled={false}
-            columnWrapperStyle={{ gap: Spacing.md }}
-            contentContainerStyle={{ gap: Spacing.md, marginTop: Spacing.md }}
-            renderItem={({ item }) => (
+          {/*
+            Template grid: a plain flexWrap View, NOT a nested FlatList.
+            A FlatList (even with scrollEnabled={false}) renders its own
+            scroll container on web, which captures touch/drag gestures and
+            breaks natural scrolling when touched on a card. A flexWrap grid
+            has no scroll container of its own, so every touch on the cards
+            flows straight to the outer ScrollView — cards stay tappable and
+            scrolling works from any content area.
+          */}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.md, marginTop: Spacing.md }}>
+            {templates.map((item) => (
               <Pressable
+                key={item.id}
                 testID={`tpl-card-${item.id}`}
                 onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
                 style={[styles.tplCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
@@ -190,8 +194,8 @@ export default function Home() {
                   {item.name_gu}
                 </Text>
               </Pressable>
-            )}
-          />
+            ))}
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -248,6 +252,6 @@ const styles = StyleSheet.create({
   },
   catIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   tplCard: {
-    flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, minHeight: 110,
+    width: "48%", padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, minHeight: 110,
   },
 });
