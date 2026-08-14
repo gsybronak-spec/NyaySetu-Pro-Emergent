@@ -4053,50 +4053,129 @@ app.add_middleware(
 )
 
 
+async def _existing_index_map(coll) -> dict:
+    """Map normalized key patterns -> existing index docs for a collection.
+
+    Key patterns are normalized to sorted (field, direction) tuples so specs
+    written as strings ("id"), lists of tuples, or dicts all compare equal to
+    what MongoDB reports back from list_indexes()."""
+    indexes = await coll.list_indexes().to_list(200)
+    return {tuple(sorted(ix.get("key", {}).items())): ix for ix in indexes}
+
+
+def _normalize_spec(spec) -> tuple:
+    """Normalize a create_index spec (str | list of tuples | dict) to a sorted
+    tuple of (field, direction) pairs so it can be compared with index keys."""
+    if isinstance(spec, str):
+        items = [(spec, 1)]
+    elif isinstance(spec, dict):
+        items = list(spec.items())
+    else:
+        items = list(spec)
+    return tuple(sorted((str(k), v) for k, v in items))
+
+
+async def _ensure_index(coll, spec, **kwargs):
+    """Create an index only when no index with the same key pattern exists.
+
+    Production-safe and idempotent: an index that already exists (even with
+    slightly different options than requested — e.g. an older version created
+    it with a different TTL/sparse setting) is never re-created, so startup
+    cannot crash with IndexOptionsConflict. The existing index still serves
+    the same functional purpose (uniqueness / lookup on those fields)."""
+    keys = _normalize_spec(spec)
+    existing = await _existing_index_map(coll)
+    if keys in existing:
+        name = existing[keys].get("name", "?")
+        logger.info(f"Index {name} on {getattr(coll, 'name', coll)} already exists — skipping creation.")
+        return None
+    return await coll.create_index(spec, **kwargs)
+
+
+async def _ensure_ttl_index(coll, field: str, required_seconds: int):
+    """Reconcile a TTL index to a required expireAfterSeconds value.
+
+    The application is authoritative for TTL semantics: it stamps ttl_at =
+    now + otp_ttl_seconds + 60 when issuing an OTP, so the index must expire
+    documents no earlier than that (otherwise valid OTPs would be deleted
+    before the app considers them expired). The reconcile is idempotent:
+      - no index on the field  -> create with required_seconds
+      - equal                  -> no-op
+      - greater than required  -> keep (more conservative, never expires valid
+        records early; avoids an unnecessary rebuild)
+      - less than required     -> drop + recreate (the current index would
+        delete valid records too early)
+    This never deletes data and never crashes startup on option conflicts."""
+    keys = tuple(sorted([(field, 1)]))
+    existing = await _existing_index_map(coll)
+    ix = existing.get(keys)
+    if ix is None:
+        await coll.create_index(field, expireAfterSeconds=required_seconds)
+        logger.info(f"Created TTL index {field}_1 (expireAfterSeconds={required_seconds}).")
+        return
+    name = ix.get("name", f"{field}_1")
+    current = ix.get("expireAfterSeconds")
+    if current == required_seconds:
+        logger.info(f"TTL index {name} already correct (expireAfterSeconds={current}).")
+    elif current is not None and current > required_seconds:
+        logger.info(f"TTL index {name} expireAfterSeconds={current} > required {required_seconds} — keeping existing (safe, never expires valid records early).")
+    else:
+        logger.warning(f"TTL index {name} expireAfterSeconds={current} < required {required_seconds} — rebuilding index to prevent early expiry.")
+        await coll.drop_index(name)
+        await coll.create_index(field, expireAfterSeconds=required_seconds)
+        logger.info(f"TTL index {name} rebuilt with expireAfterSeconds={required_seconds}.")
+
+
 @app.on_event("startup")
 async def create_indexes():
-    """Create MongoDB indexes idempotently on startup."""
+    """Create MongoDB indexes idempotently on startup.
+
+    Every index is created only if an index with the same key pattern does not
+    already exist, so deployments and restarts never crash with
+    IndexOptionsConflict (e.g. the otps.ttl_at_1 TTL index whose TTL may have
+    drifted from the admin-configured otp_ttl_seconds setting)."""
     # Users
-    await db.users.create_index("id", unique=True)
-    await db.users.create_index("mobile", unique=True, sparse=True)
-    await db.users.create_index("email", unique=True, sparse=True)
+    await _ensure_index(db.users, "id", unique=True)
+    await _ensure_index(db.users, "mobile", unique=True, sparse=True)
+    await _ensure_index(db.users, "email", unique=True, sparse=True)
     # Firebase identity — sparse so legacy users (no firebase_uid) are unaffected,
     # unique so one Firebase UID can never map to two NyaySetu accounts.
-    await db.users.create_index("firebase_uid", unique=True, sparse=True)
-    await db.users.create_index("referral_code", unique=True, sparse=True)
+    await _ensure_index(db.users, "firebase_uid", unique=True, sparse=True)
+    await _ensure_index(db.users, "referral_code", unique=True, sparse=True)
     # Cases
-    await db.cases.create_index("user_id")
-    await db.cases.create_index([("user_id", 1), ("status", 1)])
-    await db.cases.create_index([("user_id", 1), ("updated_at", -1)])
+    await _ensure_index(db.cases, "user_id")
+    await _ensure_index(db.cases, [("user_id", 1), ("status", 1)])
+    await _ensure_index(db.cases, [("user_id", 1), ("updated_at", -1)])
     # Wallets
-    await db.wallets.create_index("user_id", unique=True)
+    await _ensure_index(db.wallets, "user_id", unique=True)
     # Applications
-    await db.applications.create_index("user_id")
-    await db.applications.create_index([("user_id", 1), ("created_at", -1)])
+    await _ensure_index(db.applications, "user_id")
+    await _ensure_index(db.applications, [("user_id", 1), ("created_at", -1)])
     # Drafts
-    await db.drafts.create_index("user_id")
-    await db.drafts.create_index([("user_id", 1), ("template_id", 1), ("case_id", 1)])
+    await _ensure_index(db.drafts, "user_id")
+    await _ensure_index(db.drafts, [("user_id", 1), ("template_id", 1), ("case_id", 1)])
     # Transactions
-    await db.transactions.create_index("user_id")
-    await db.transactions.create_index([("user_id", 1), ("created_at", -1)])
+    await _ensure_index(db.transactions, "user_id")
+    await _ensure_index(db.transactions, [("user_id", 1), ("created_at", -1)])
     # Razorpay idempotency: one payment_id may grant credits at most once.
-    await db.transactions.create_index("razorpay_payment_id", unique=True, sparse=True)
-    await db.payment_orders.create_index("id", unique=True)
-    await db.payment_orders.create_index("user_id")
+    await _ensure_index(db.transactions, "razorpay_payment_id", unique=True, sparse=True)
+    await _ensure_index(db.payment_orders, "id", unique=True)
+    await _ensure_index(db.payment_orders, "user_id")
     # Referrals
-    await db.referrals.create_index("referrer_id")
-    await db.referrals.create_index("referred_user_id", unique=True)
+    await _ensure_index(db.referrals, "referrer_id")
+    await _ensure_index(db.referrals, "referred_user_id", unique=True)
     # OTPs (auto-cleaned by verify flow / TTL — index on the BSON-date field)
-    await db.otps.create_index("mobile", unique=True)
-    await db.otps.create_index("ttl_at", expireAfterSeconds=(await _get_setting("otp_ttl_seconds")) + 60)
+    await _ensure_index(db.otps, "mobile", unique=True)
+    otp_ttl = await _get_setting("otp_ttl_seconds")
+    await _ensure_ttl_index(db.otps, "ttl_at", otp_ttl + 60)
     # Admin users
-    await db.admin_users.create_index("id", unique=True)
-    await db.admin_users.create_index("email", unique=True)
-    await db.templates.create_index("id", unique=True)
-    await db.templates.create_index("slug", unique=True)
-    await db.templates.create_index([("status", 1), ("category", 1)])
-    await db.template_versions.create_index([("template_id", 1), ("version", 1)], unique=True)
-    await db.case_forms.create_index("case_type_id", unique=True)
+    await _ensure_index(db.admin_users, "id", unique=True)
+    await _ensure_index(db.admin_users, "email", unique=True)
+    await _ensure_index(db.templates, "id", unique=True)
+    await _ensure_index(db.templates, "slug", unique=True)
+    await _ensure_index(db.templates, [("status", 1), ("category", 1)])
+    await _ensure_index(db.template_versions, [("template_id", 1), ("version", 1)], unique=True)
+    await _ensure_index(db.case_forms, "case_type_id", unique=True)
     logger.info("MongoDB indexes ensured.")
     # Seed super admin from env vars
     await seed_plans()
