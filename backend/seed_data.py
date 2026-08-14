@@ -401,6 +401,48 @@ TALUKAS = [
 
 
 # Courts scoped by district_id. "generic" courts appear for every district.
+# Every Gujarat district has a District & Sessions Court at its headquarters
+# (Gujarat High Court / District Judiciary structure) — one entry per district,
+# scoped by district_id so lawyer forms only show courts of the selected district.
+# (district_id, en, gu, legacy_id_or_None). Legacy IDs are preserved so existing
+# cases/templates that reference the old court ids keep resolving.
+_DISTRICT_COURTS = [
+    ("ahmedabad", "District & Sessions Court, Ahmedabad", "જિલ્લા અને સેશન્સ કોર્ટ, અમદાવાદ", None),
+    ("gandhinagar", "District & Sessions Court, Gandhinagar", "જિલ્લા અને સેશન્સ કોર્ટ, ગાંધીનગર", None),
+    ("surat", "District & Sessions Court, Surat", "જિલ્લા અને સેશન્સ કોર્ટ, સુરત", "surat_district"),
+    ("vadodara", "District & Sessions Court, Vadodara", "જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા", "vad_district"),
+    ("rajkot", "District & Sessions Court, Rajkot", "જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ", "rajkot_district"),
+    ("bhavnagar", "District & Sessions Court, Bhavnagar", "જિલ્લા અને સેશન્સ કોર્ટ, ભાવનગર", None),
+    ("jamnagar", "District & Sessions Court, Jamnagar", "જિલ્લા અને સેશન્સ કોર્ટ, જામનગર", None),
+    ("junagadh", "District & Sessions Court, Junagadh", "જિલ્લા અને સેશન્સ કોર્ટ, જૂનાગઢ", None),
+    ("anand", "District & Sessions Court, Anand", "જિલ્લા અને સેશન્સ કોર્ટ, આણંદ", None),
+    ("kutch", "District & Sessions Court, Bhuj", "જિલ્લા અને સેશન્સ કોર્ટ, ભુજ", None),
+    ("mehsana", "District & Sessions Court, Mehsana", "જિલ્લા અને સેશન્સ કોર્ટ, મહેસાણા", None),
+    ("patan", "District & Sessions Court, Patan", "જિલ્લા અને સેશન્સ કોર્ટ, પાટણ", None),
+    ("amreli", "District & Sessions Court, Amreli", "જિલ્લા અને સેશન્સ કોર્ટ, અમરેલી", None),
+    ("aravalli", "District & Sessions Court, Modasa", "જિલ્લા અને સેશન્સ કોર્ટ, મોડાસા", None),
+    ("banaskantha", "District & Sessions Court, Palanpur", "જિલ્લા અને સેશન્સ કોર્ટ, પાલનપુર", None),
+    ("bharuch", "District & Sessions Court, Bharuch", "જિલ્લા અને સેશન્સ કોર્ટ, ભરૂચ", None),
+    ("botad", "District & Sessions Court, Botad", "જિલ્લા અને સેશન્સ કોર્ટ, બોટાદ", None),
+    ("chhota_udaipur", "District & Sessions Court, Chhota Udaipur", "જિલ્લા અને સેશન્સ કોર્ટ, છોટાઉદેપુર", None),
+    ("dahod", "District & Sessions Court, Dahod", "જિલ્લા અને સેશન્સ કોર્ટ, દાહોદ", None),
+    ("dang", "District & Sessions Court, Ahwa", "જિલ્લા અને સેશન્સ કોર્ટ, આહવા", None),
+    ("devbhoomi_dwarka", "District & Sessions Court, Khambhalia", "જિલ્લા અને સેશન્સ કોર્ટ, ખંભાળિયા", None),
+    ("gir_somnath", "District & Sessions Court, Veraval", "જિલ્લા અને સેશન્સ કોર્ટ, વેરાવળ", None),
+    ("kheda", "District & Sessions Court, Nadiad", "જિલ્લા અને સેશન્સ કોર્ટ, નડીઆદ", None),
+    ("mahisagar", "District & Sessions Court, Lunawada", "જિલ્લા અને સેશન્સ કોર્ટ, લુણાવાડા", None),
+    ("morbi", "District & Sessions Court, Morbi", "જિલ્લા અને સેશન્સ કોર્ટ, મોરબી", None),
+    ("narmada", "District & Sessions Court, Rajpipla", "જિલ્લા અને સેશન્સ કોર્ટ, રાજપીપળા", None),
+    ("navsari", "District & Sessions Court, Navsari", "જિલ્લા અને સેશન્સ કોર્ટ, નવસારી", None),
+    ("panchmahal", "District & Sessions Court, Godhra", "જિલ્લા અને સેશન્સ કોર્ટ, ગોધરા", None),
+    ("porbandar", "District & Sessions Court, Porbandar", "જિલ્લા અને સેશન્સ કોર્ટ, પોરબંદર", None),
+    ("sabarkantha", "District & Sessions Court, Himmatnagar", "જિલ્લા અને સેશન્સ કોર્ટ, હિંમતનગર", None),
+    ("surendranagar", "District & Sessions Court, Surendranagar", "જિલ્લા અને સેશન્સ કોર્ટ, સુરેન્દ્રનગર", None),
+    ("tapi", "District & Sessions Court, Vyara", "જિલ્લા અને સેશન્સ કોર્ટ, વ્યારા", None),
+    ("valsad", "District & Sessions Court, Valsad", "જિલ્લા અને સેશન્સ કોર્ટ, વલસાડ", None),
+    ("vav_tharad", "District & Sessions Court, Tharad", "જિલ્લા અને સેશન્સ કોર્ટ, થરાદ", None),
+]
+
 COURTS = [
     {"id": "gen_district", "district_id": "generic", "en": "District Court", "gu": "જિલ્લા ન્યાયાલય"},
     {"id": "gen_sessions", "district_id": "generic", "en": "Sessions Court", "gu": "સેશન્સ ન્યાયાલય"},
@@ -410,9 +452,9 @@ COURTS = [
     {"id": "gen_family", "district_id": "generic", "en": "Family Court", "gu": "ફેમિલી કોર્ટ"},
     {"id": "ahd_metro", "district_id": "ahmedabad", "en": "Metropolitan Magistrate Court, Ahmedabad", "gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ કોર્ટ, અમદાવાદ"},
     {"id": "ahd_city_civil", "district_id": "ahmedabad", "en": "City Civil Court, Ahmedabad", "gu": "સિટી સિવિલ કોર્ટ, અમદાવાદ"},
-    {"id": "surat_district", "district_id": "surat", "en": "District & Sessions Court, Surat", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, સુરત"},
-    {"id": "vad_district", "district_id": "vadodara", "en": "District & Sessions Court, Vadodara", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા"},
-    {"id": "rajkot_district", "district_id": "rajkot", "en": "District & Sessions Court, Rajkot", "gu": "જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ"},
+] + [
+    {"id": legacy_id or f"dst_{d_id}", "district_id": d_id, "en": en, "gu": gu}
+    for d_id, en, gu, legacy_id in _DISTRICT_COURTS
 ]
 
 # Police stations scoped by district_id.

@@ -44,7 +44,7 @@ export default function TemplateApplication() {
   const [busy, setBusy] = useState(false);
   // Which format is being generated right now (drives the per-button loading
   // copy "Generating PDF…" / "Generating Word…").
-  const [downloading, setDownloading] = useState<"pdf" | "docx" | null>(null);
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | null>(null);
   const [filename, setFilename] = useState("");
   // Inline success/error feedback: Alert.alert is a NO-OP on web
   // (react-native-web), so the download result must also be visible in the UI
@@ -170,7 +170,7 @@ export default function TemplateApplication() {
     }
   };
 
-  const download = async (format: "pdf" | "docx") => {
+  const download = async (format: "pdf" | "docx" | "odt") => {
     setBusy(true);
     setDownloading(format);
     setNotice(null);
@@ -571,6 +571,27 @@ export default function TemplateApplication() {
                   <Text style={{ color: colors.muted, fontSize: 12 }}>Editable .docx format</Text>
                 </View>
                 {downloading === "docx" ? (
+                  <ActivityIndicator size="small" color={colors.brandPrimary} />
+                ) : (
+                  <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                )}
+              </Pressable>
+              <Pressable
+                testID="download-odt"
+                onPress={() => download("odt")}
+                disabled={busy}
+                style={[styles.formatCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <View style={[styles.formatIcon, { backgroundColor: "#0B6E4F20" }]}>
+                  <Ionicons name="document-outline" size={22} color="#0B6E4F" />
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
+                    {downloading === "odt" ? "Generating Writer…" : "Writer Document"}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>LibreOffice .odt format</Text>
+                </View>
+                {downloading === "odt" ? (
                   <ActivityIndicator size="small" color={colors.brandPrimary} />
                 ) : (
                   <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />

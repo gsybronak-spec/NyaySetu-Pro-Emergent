@@ -43,7 +43,7 @@ export function decodeBase64(base64: string): Uint8Array {
 }
 
 /** Returns an error string when the bytes do not match the expected format. */
-export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx"): string | null {
+export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx" | "odt"): string | null {
   if (bytes.length < 4) {
     return "The server returned an incomplete document. Please try again.";
   }
@@ -53,10 +53,10 @@ export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx"): st
       return "The server returned an invalid PDF file. Please try again.";
     }
   } else {
-    // DOCX is a ZIP archive — magic bytes PK\x03\x04 (or PK\x05\x06 empty zip).
+    // DOCX/ODT are ZIP archives — magic bytes PK\x03\x04 (or PK\x05\x06 empty zip).
     const head = String.fromCharCode(bytes[0], bytes[1]);
     if (head !== "PK") {
-      return "The server returned an invalid Word document. Please try again.";
+      return `The server returned an invalid ${format === "docx" ? "Word" : "Writer"} document. Please try again.`;
     }
   }
   return null;
@@ -89,7 +89,7 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
  * (native share sheet used). Throws a user-readable Error on any failure —
  * it never silently drops the file.
  */
-export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx"): Promise<"downloaded" | "shared"> {
+export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt"): Promise<"downloaded" | "shared"> {
   const bytes = decodeBase64(res.base64);
   const invalid = validateFileBytes(bytes, format);
   if (invalid) throw new Error(invalid);

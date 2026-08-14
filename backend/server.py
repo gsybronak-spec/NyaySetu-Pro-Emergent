@@ -26,8 +26,9 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
-from doc_generator import generate_pdf, generate_docx, render_template, build_blocks
+from doc_generator import generate_pdf, generate_docx, generate_odt, render_template, build_blocks
 from docx_import import analyze_docx, decode_upload, DocxImportError
+from odt_import import analyze_odt, OdtImportError
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -291,7 +292,7 @@ class DownloadReq(BaseModel):
     case_id: Optional[str] = Field(None, max_length=50)
     language: str = "en"
     values: dict = {}
-    format: str = "pdf"  # pdf | docx
+    format: str = "pdf"  # pdf | docx | odt
     filename: Optional[str] = Field(None, max_length=200)
     page_size: Optional[str] = Field(None, max_length=10)  # A4 | Legal
     consume_credit: bool = True  # DEPRECATED: ignored server-side — always consumes 1 credit
@@ -1947,8 +1948,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
     _validate_page_size(req.page_size)
-    if req.format not in ("pdf", "docx"):
-        raise HTTPException(422, "format must be 'pdf' or 'docx'")
+    if req.format not in ("pdf", "docx", "odt"):
+        raise HTTPException(422, "format must be 'pdf', 'docx' or 'odt'")
     if not rate_limit(f"download:{user['id']}", 30, 60):
         raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)
@@ -1996,6 +1997,9 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         if req.format == "docx":
             b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        elif req.format == "odt":
+            b64 = generate_odt(blocks, req.language, doc_settings)
+            mime = "application/vnd.oasis.opendocument.text"
         else:
             b64 = generate_pdf(blocks, req.language, doc_settings)
             mime = "application/pdf"
@@ -3384,8 +3388,11 @@ async def admin_import_word_analyze(req: WordImportAnalyzeReq, admin=Depends(req
     """
     try:
         data = decode_upload(req.file_name, req.content_base64)
-        analysis = analyze_docx(data, req.file_name)
-    except DocxImportError as e:
+        if req.file_name.lower().endswith(".odt"):
+            analysis = analyze_odt(data, req.file_name)
+        else:
+            analysis = analyze_docx(data, req.file_name)
+    except (DocxImportError, OdtImportError) as e:
         raise HTTPException(400, str(e))
     await audit_log(admin=admin, action="template_import_analyze", target=req.file_name,
                     metadata={"page_size": analysis["page_size"], "fields": len(analysis["fields"]),

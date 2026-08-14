@@ -174,8 +174,10 @@ export default function Templates() {
 
   const handleImportFile = async (file: File | undefined) => {
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.docx')) {
-      setImportModal(prev => prev ? { ...prev, error: 'Unsupported file type. Only .docx Word documents are accepted for import.' } : prev);
+    const isDocx = file.name.toLowerCase().endsWith('.docx');
+    const isOdt = file.name.toLowerCase().endsWith('.odt');
+    if (!isDocx && !isOdt) {
+      setImportModal(prev => prev ? { ...prev, error: 'Unsupported file type. Only .docx Word or .odt LibreOffice documents are accepted for import.' } : prev);
       return;
     }
     const reader = new FileReader();
@@ -194,7 +196,7 @@ export default function Templates() {
           analysis,
           fields,
           id: '',
-          nameEn: analysis.suggested_name_en || file.name.replace(/\.docx$/i, ''),
+          nameEn: analysis.suggested_name_en || file.name.replace(/\.(docx|odt)$/i, ''),
           nameGu: analysis.suggested_name_gu || '',
           category: analysis.suggested_category || 'General',
           error: '',
@@ -551,7 +553,7 @@ export default function Templates() {
               <div>
                 <h3>Import Word Template</h3>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#666' }}>
-                  Upload a .docx — the Word document is the source of truth for the template.
+                  Upload a .docx (Word) or .odt (LibreOffice Writer) — the source document stays unchanged; a new template draft is created from its analysis.
                 </p>
               </div>
               <button className="btn-icon" disabled={importModal.step === 'creating'} onClick={() => setImportModal(null)}>✕</button>
@@ -567,11 +569,11 @@ export default function Templates() {
                 <div>
                   <input
                     type="file"
-                    accept=".docx"
+                    accept=".docx,.odt"
                     onChange={e => handleImportFile(e.target.files?.[0] || undefined)}
                   />
                   <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '8px' }}>
-                    Only .docx files are supported. The document should normally contain two parts:
+                    Only .docx and .odt files are supported. The document should normally contain two parts:
                     Page 1 (required information / field definitions) and Page 2 (the actual legal draft
                     with {"{{placeholder}}"} markers where lawyer data must appear).
                   </p>

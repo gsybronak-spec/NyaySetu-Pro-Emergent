@@ -1,14 +1,16 @@
 """Document generation for NyaySetu Pro.
 
 Single source of truth: `build_blocks()` converts template content into a list of
-structured blocks {text, align, bold}. Preview, PDF and DOCX ALL consume the same
-blocks so the final files match the preview exactly.
+structured blocks {text, align, bold}. Preview, PDF, DOCX and ODT ALL consume the
+same blocks so the final files match the preview exactly.
 """
 
 import io
 import re
+import zipfile
 import base64
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from reportlab.lib.pagesizes import A4, LEGAL
 from reportlab.lib.styles import ParagraphStyle
@@ -19,6 +21,19 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from docx import Document
 from docx.shared import Cm, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+# ---- ODT (OpenDocument) namespace map ----
+ODT_NS = {
+    "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+    "style": "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+    "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+    "fo": "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+    "meta": "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    "dc": "http://purl.org/dc/elements/1.1/",
+    "manifest": "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0",
+}
+ODT_MIME = "application/vnd.oasis.opendocument.text"
+
 
 # ---- Paper sizes (A4 + Legal) ----
 _PAGE_SIZES = {
@@ -393,6 +408,150 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
         return generate_pdf_playwright(blocks, language, settings)
     except Exception as e:
         return generate_pdf_reportlab(blocks, language, settings)
+
+
+def _odt_cm(value) -> str:
+    """Format a centimetre value for ODT fo attributes (e.g. 2.5 -> '2.5cm')."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = 0.0
+    return f"{v:.2f}".rstrip("0").rstrip(".") + "cm"
+
+
+def _odt_page_dimensions(page_size: str):
+    """Return (width, height) cm strings for A4 / Legal page size."""
+    if _norm_page_size(page_size) == "Legal":
+        return "21.59cm", "35.56cm"
+    return "21cm", "29.7cm"
+
+
+def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> str:
+    """Generate a LibreOffice-compatible ODT (OpenDocument Text) from blocks.
+
+    Built with the Python stdlib (zipfile + XML) — no external writer library.
+    The document carries the same page size, margins, fonts, alignment and bold
+    classification as the PDF/DOCX paths, so all three exports stay visually
+    consistent with the preview. Returns base64 of the .odt bytes.
+    """
+    s = get_doc_settings(settings)
+    is_legal = _norm_page_size(s.get("page_size")) == "Legal"
+    page_w, page_h = _odt_page_dimensions(s.get("page_size"))
+    font_name = s["gujarati_font_docx"] if language == "gu" else s["english_font_docx"]
+    body_size = float(s.get("body_size", 12))
+    heading_size = float(s.get("heading_size", 13))
+    para_space = float(s.get("paragraph_spacing", 6))
+    line_spacing = float(s.get("line_spacing", 18))
+    line_height_pct = int(round(100.0 * line_spacing / max(body_size, 1)))
+
+    # Per-block style declarations (deduped).
+    style_ids = {}
+    style_parts = []
+    next_style = 1
+
+    def style_id_for(align: str, bold: bool) -> str:
+        nonlocal next_style
+        key = (align, bold)
+        if key in style_ids:
+            return style_ids[key]
+        sid = f"P{next_style}"
+        next_style += 1
+        style_ids[key] = sid
+        text_props = ""
+        if bold:
+            text_props += f' fo:font-weight="bold" style:font-size="{heading_size:.1f}pt"'
+        else:
+            text_props += f' fo:font-weight="normal" style:font-size="{body_size:.1f}pt"'
+        style_parts.append(
+            f'<style:style style:name="{sid}" style:family="paragraph">'
+            f'<style:paragraph-properties fo:text-align="{align}" '
+            f'fo:margin-top="0cm" fo:margin-bottom="{para_space:.1f}pt" '
+            f'fo:line-height="{line_height_pct}%" '
+            f'fo:keep-together="auto"/>'
+            f'<style:text-properties{text_props} '
+            f'style:font-name="{escape(font_name)}" '
+            f'fo:font-size="{body_size:.1f}pt"/>'
+            f"</style:style>"
+        )
+        return sid
+
+    body_parts = []
+    for b in blocks:
+        text = b.get("text", "") or ""
+        if not text:
+            body_parts.append('<text:p text:style-name="P_empty"/>')
+            continue
+        align = b.get("align", "left")
+        if align == "justify":
+            align = "justify"
+        sid = style_id_for(align, bool(b.get("bold", False)))
+        body_parts.append(f'<text:p text:style-name="{sid}">{escape(text)}</text:p>')
+
+    content_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="{ODT_NS['office']}" xmlns:style="{ODT_NS['style']}" xmlns:text="{ODT_NS['text']}" xmlns:fo="{ODT_NS['fo']}" office:version="1.2">
+<office:automatic-styles>
+{''.join(style_parts)}
+<style:style style:name="P_empty" style:family="paragraph">
+<style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="{para_space:.1f}pt" fo:line-height="100%"/>
+</style:style>
+</office:automatic-styles>
+<office:body>
+<office:text>
+{''.join(body_parts)}
+</office:text>
+</office:body>
+</office:document-content>
+"""
+
+    styles_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-styles xmlns:office="{ODT_NS['office']}" xmlns:style="{ODT_NS['style']}" xmlns:fo="{ODT_NS['fo']}" office:version="1.2">
+<office:master-styles>
+<style:master-page style:name="Standard" style:page-layout-name="P_Default">
+<style:header style:display="false"/>
+<style:footer style:display="false"/>
+</style:master-page>
+</office:master-styles>
+<office:automatic-styles>
+<style:page-layout style:name="P_Default">
+<style:page-layout-properties fo:page-width="{page_w}" fo:page-height="{page_h}" style:print-orientation="portrait" fo:margin-top="{_odt_cm(s.get('margin_top_cm'))}" fo:margin-bottom="{_odt_cm(s.get('margin_bottom_cm'))}" fo:margin-left="{_odt_cm(s.get('margin_left_cm'))}" fo:margin-right="{_odt_cm(s.get('margin_right_cm'))}" fo:background-color="transparent"/>
+</style:page-layout>
+</office:automatic-styles>
+</office:document-styles>
+"""
+
+    manifest_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="{ODT_NS['manifest']}" manifest:version="1.2">
+<manifest:file-entry manifest:full-path="/" manifest:media-type="{ODT_MIME}"/>
+<manifest:file-entry manifest:full-path="content.xml" manifest:media-type="text/xml"/>
+<manifest:file-entry manifest:full-path="styles.xml" manifest:media-type="text/xml"/>
+<manifest:file-entry manifest:full-path="meta.xml" manifest:media-type="text/xml"/>
+<manifest:file-entry manifest:full-path="settings.xml" manifest:media-type="text/xml"/>
+</manifest:manifest>
+"""
+
+    meta_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-meta xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.2">
+<office:meta><meta:generator>NyaySetu Pro</meta:generator></office:meta>
+</office:document-meta>
+"""
+
+    settings_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<office:document-settings xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:config="urn:oasis:names:tc:opendocument:xmlns:config:1.0" office:version="1.2">
+<office:settings/>
+</office:document-settings>
+"""
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # ODF requires `mimetype` to be the first entry and stored uncompressed.
+        zf.writestr(zipfile.ZipInfo("mimetype"), ODT_MIME, compress_type=zipfile.ZIP_STORED)
+        zf.writestr("META-INF/manifest.xml", manifest_xml)
+        zf.writestr("content.xml", content_xml)
+        zf.writestr("styles.xml", styles_xml)
+        zf.writestr("meta.xml", meta_xml)
+        zf.writestr("settings.xml", settings_xml)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
 
 
 def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> str:
