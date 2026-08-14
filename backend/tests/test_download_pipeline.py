@@ -130,7 +130,7 @@ def test_generation_failure_refunds_credit(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("simulated generator failure")
 
-    monkeypatch.setattr(server, "generate_pdf", boom)
+    monkeypatch.setattr(server, "generate_pdf_detailed", boom)
     r = app_client.post(
         f"{BASE}/applications/download",
         headers=_hdr(tok),

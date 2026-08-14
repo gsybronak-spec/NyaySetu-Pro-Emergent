@@ -5,10 +5,13 @@ playwright/Chromium, so the old code silently fell back to ReportLab's
 unshaped TTF drawing (ReportLab does NOT run OpenType GSUB/GPOS).
 
 The engine under test (doc_generator.generate_pdf_hb) shapes with uharfbuzz
-(HarfBuzz) against the bundled Lohit-Gujarati.ttf, subsets/remaps the font so
-each shaped glyph becomes a single PUA codepoint, and marks each line with a
-PDF /ActualText span so copy/paste and search return the exact logical text
-in every conforming reader (MuPDF, Acrobat, Chrome, Preview).
+(HarfBuzz) against the bundled Gujarati font stack — Noto Sans Gujarati
+(default), Noto Serif Gujarati, and Lohit Gujarati as a compatibility
+fallback — subsets/remaps the font so each shaped glyph becomes a single PUA
+codepoint, and marks each line with a PDF /ActualText span so copy/paste and
+search return the exact logical text in every conforming reader (MuPDF,
+Acrobat, Chrome, Preview). All three fonts embed full Latin + digits so mixed
+"કેસ નં. 123/2026" text renders without boxes.
 
 This module is pure-Python (uharfbuzz + fontTools + reportlab) — the exact
 path production uses on Render.
@@ -18,10 +21,11 @@ import base64
 import io
 import re
 import zlib
+import unicodedata
 
 import pytest
 
-from doc_generator import generate_pdf_hb, generate_pdf, get_hb_font
+from doc_generator import generate_pdf_hb, generate_pdf
 
 GUJARATI_CONJUNCTS = "ક્ષ જ્ઞ ત્ર શ્ર પ્ર ક્ર ગ્ર સ્વ દ્ર હ્ર"
 
@@ -52,18 +56,19 @@ def _glyph_name(font, gid):
         return f"gid{gid}"
 
 
-def _hb_glyph_names(text):
+def _hb_glyph_names(text, font_file="fonts/Lohit-Gujarati.ttf"):
     from fontTools.ttLib import TTFont as FTFont
     import uharfbuzz as hb
 
-    hb_font = get_hb_font()
-    if not hb_font:
-        pytest.skip("HarfBuzz font unavailable")
+    with open(font_file, "rb") as f:
+        font_bytes = f.read()
+    face = hb.Face(font_bytes)
+    hb_font = hb.Font(face)
     buf = hb.Buffer()
     buf.add_str(text)
     buf.guess_segment_properties()
     hb.shape(hb_font, buf)
-    ft = FTFont("fonts/Lohit-Gujarati.ttf")
+    ft = FTFont(font_file)
     return [_glyph_name(ft, g.codepoint) for g in buf.glyph_infos]
 
 
@@ -117,8 +122,9 @@ class TestHarfBuzzConjunctShaping:
     """The shaping layer: every conjunct must become ONE ligature glyph."""
 
     def test_conjuncts_shape_to_single_ligature_glyphs(self):
+        # Lohit glyph names (explicit font file) — checks the exact ligature.
         for conjunct, ligature in EXPECTED_LIGATURES.items():
-            names = _hb_glyph_names(conjunct)
+            names = _hb_glyph_names(conjunct, "fonts/Lohit-Gujarati.ttf")
             assert len(names) == 1, f"{conjunct} should be 1 glyph, got {names}"
             assert names[0] == ligature, f"{conjunct} shaped to {names[0]}, expected {ligature}"
 
@@ -127,6 +133,30 @@ class TestHarfBuzzConjunctShaping:
         names = _hb_glyph_names("ક્ષ")
         assert len(names) == 1
         assert "ssaguj" in names[0]
+
+    def test_noto_fonts_shape_conjuncts_to_single_glyphs(self):
+        # Noto Sans/Serif Gujarati must ALSO ligate the critical conjuncts to
+        # exactly one glyph (different glyph names than Lohit — only count
+        # matters). સ્વ is correctly rendered with a prebase form (2 glyphs,
+        # identical to Chromium) — it must never expand to separated letters.
+        for font_file in ("fonts/NotoSansGujarati-Regular.ttf", "fonts/NotoSerifGujarati-Regular.ttf"):
+            for conjunct in GUJARATI_CONJUNCTS.split(" "):
+                names = _hb_glyph_names(conjunct, font_file)
+                assert ".notdef" not in names, f"{font_file} {conjunct} -> {names}"
+                if conjunct == "સ્વ":
+                    assert len(names) <= 2, f"{conjunct} shaped to {names}"
+                else:
+                    assert len(names) == 1, f"{font_file} {conjunct} should be 1 glyph, got {names}"
+
+    def test_noto_fonts_cover_latin_and_digits(self):
+        # Mixed Gujarati + English + numbers: the selected Gujarati font must
+        # contain Latin letters and digits so nothing renders as a box.
+        from fontTools.ttLib import TTFont as FTFont
+        for font_file in ("fonts/NotoSansGujarati-Regular.ttf", "fonts/NotoSerifGujarati-Regular.ttf"):
+            cmap = FTFont(font_file).getBestCmap()
+            assert all(ord(c) in cmap for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"), font_file
+            assert all(ord(c) in cmap for c in "abcdefghijklmnopqrstuvwxyz"), font_file
+            assert all(ord(c) in cmap for c in "0123456789./-()"), font_file
 
     def test_legal_paragraph_shapes_without_error(self):
         names = _hb_glyph_names(GUJARATI_LEGAL_PARAGRAPH)
@@ -139,17 +169,31 @@ class TestPdfEngineUsesHarfBuzz:
         raw = base64.b64decode(generate_pdf_hb(blocks, language="gu"))
         assert raw[:4] == b"%PDF"
 
-    def test_pdf_embeds_lohit_subset(self):
+    def test_pdf_embeds_default_noto_subset(self):
+        # Default Gujarati font is Noto Sans Gujarati.
         blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
         raw = base64.b64decode(generate_pdf_hb(blocks, language="gu"))
-        assert b"Lohit" in raw
+        assert b"NotoSansGujarati-Regular" in raw
 
     def test_generate_pdf_uses_hb_path_for_gujarati(self):
         # Even on machines WITH playwright installed, Gujarati must take the
         # HarfBuzz path (the one that exists on Render).
         blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
         raw = base64.b64decode(generate_pdf(blocks, language="gu"))
-        assert b"Lohit" in raw
+        assert b"NotoSansGujarati-Regular" in raw
+
+    def test_font_family_setting_selects_embedded_font(self):
+        # Template-level font control: each family embeds its own font.
+        cases = [
+            ("NotoSansGujarati", b"NotoSansGujarati-Regular"),
+            ("NotoSerifGujarati", b"NotoSerifGujarati-Regular"),
+            ("LohitGujarati", b"Lohit-Gujarati"),
+            ("Noto Sans Gujarati", b"NotoSansGujarati-Regular"),  # display name
+        ]
+        blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
+        for family, marker in cases:
+            raw = base64.b64decode(generate_pdf_hb(blocks, language="gu", settings={"gujarati_font": family}))
+            assert marker in raw, f"family {family} did not embed {marker}"
 
     def test_actual_text_spans_contain_exact_gujarati(self):
         """The PDF must declare the exact logical text (selectable/searchable).
@@ -219,6 +263,32 @@ class TestPdfEngineUsesHarfBuzz:
         joined = "\n".join(spans)
         assert "12345/2024" in joined
         assert "ગાંધીનગર" in joined
+
+    def test_mixed_scripts_extract_without_boxes(self):
+        """Gujarati + English + numbers must all be present and extractable.
+
+        This is the reported "boxes for English/numeric values in Gujarati
+        templates" bug: with the old Lohit-only pipeline, Latin letters were
+        absent from the font and rendered as .notdef boxes. Noto fonts embed
+        full Latin + digits, so every character must survive.
+        """
+        pymupdf = pytest.importorskip("pymupdf")
+        text = (
+            "Special Civil Application No. 123/2026\n"
+            "CIVIL SUIT NO. 123/2026\n"
+            "કેસ નં. 123/2026\n"
+            "તા. 15/08/2026\n"
+            "અમદાવાદ-1\n"
+            "ADVOCATE: Mr. ROHIT SHARMA\n"
+        )
+        blocks = [{"text": ln, "align": "left", "bold": False} for ln in text.split("\n") if ln.strip()]
+        raw = base64.b64decode(generate_pdf_hb(blocks, language="gu"))
+        doc = pymupdf.open(stream=raw, filetype="pdf")
+        flat = "".join(c for c in "".join(p.get_text() for p in doc)
+                        if unicodedata.category(c)[0] in "LMN")
+        for needle in ("CIVILSUITNO1232026", "SpecialCivilApplicationNo1232026",
+                       "ADVOCATEMrROHITSHARMA", "કેસનં1232026", "તા15082026", "અમદાવાદ1"):
+            assert needle in flat, f"{needle} missing (boxes?): {flat!r}"
 
     def test_repeated_generation_no_crash(self):
         for _ in range(3):

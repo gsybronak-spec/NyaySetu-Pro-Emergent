@@ -110,6 +110,83 @@ def _resolve_pagesize(page_size):
 
 FONT_DIR = Path(__file__).parent / "fonts"
 
+# ---- Gujarati font stack (all SIL OFL 1.1 licensed, bundled in backend/fonts) ----
+# Noto Sans Gujarati is the default: modern GSUB/GPOS shaping AND full Latin +
+# digits in one font, so mixed text like "કેસ નં. 123/2026" or
+# "CIVIL SUIT NO. 123/2026" renders without boxes. Noto Serif Gujarati is the
+# serif alternative. Lohit Gujarati is retained as a compatibility fallback
+# only (it lacks Latin letters).
+GUJARATI_FONT_FILES = {
+    "NotoSansGujarati": "NotoSansGujarati-Regular.ttf",
+    "NotoSerifGujarati": "NotoSerifGujarati-Regular.ttf",
+    "LohitGujarati": "Lohit-Gujarati.ttf",
+}
+GUJARATI_FONT_ORDER = ["NotoSansGujarati", "NotoSerifGujarati", "LohitGujarati"]
+GUJARATI_FONT_VERSIONS = {
+    "NotoSansGujarati": "noto-sans-gujarati-2.101",
+    "NotoSerifGujarati": "noto-serif-gujarati-2.002",
+    "LohitGujarati": "lohit-gujarati-2.94.3",
+}
+# Admin-facing names ("Noto Sans Gujarati") and internal TTFont keys
+# ("NotoSansGujarati") both resolve to the same canonical key.
+GUJARATI_FONT_ALIASES = {
+    "notosansgujarati": "NotoSansGujarati",
+    "notosansgujarati-regular": "NotoSansGujarati",
+    "notoserifgujarati": "NotoSerifGujarati",
+    "notoserifgujarati-regular": "NotoSerifGujarati",
+    "lohitgujarati": "LohitGujarati",
+    "lohit": "LohitGujarati",
+}
+
+
+def _gujarati_font_key(family) -> str:
+    """Resolve any admin-facing font name to a canonical family key."""
+    key = str(family or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    canonical = GUJARATI_FONT_ALIASES.get(key)
+    if canonical:
+        return canonical
+    for name in GUJARATI_FONT_ORDER:
+        if name.lower() == key:
+            return name
+    return "NotoSansGujarati"
+
+
+def _gujarati_font_file(family) -> Path:
+    """Path of the font file for a family, falling through the stack if missing."""
+    key = _gujarati_font_key(family)
+    p = FONT_DIR / GUJARATI_FONT_FILES[key]
+    if p.exists():
+        return p
+    for k in GUJARATI_FONT_ORDER:
+        pp = FONT_DIR / GUJARATI_FONT_FILES[k]
+        if pp.exists():
+            return pp
+    raise FileNotFoundError("No Gujarati font available in backend/fonts")
+
+
+def _gujarati_font_family(family) -> str:
+    """Canonical family key actually used (falls through the stack if missing)."""
+    key = _gujarati_font_key(family)
+    if (FONT_DIR / GUJARATI_FONT_FILES[key]).exists():
+        return key
+    for k in GUJARATI_FONT_ORDER:
+        if (FONT_DIR / GUJARATI_FONT_FILES[k]).exists():
+            return k
+    return "NotoSansGujarati"
+
+
+_font_base64_cache = {}
+
+
+def _font_base64(family) -> str:
+    """Base64 data-URI-ready bytes for a family (cached per family)."""
+    key = _gujarati_font_family(family)
+    if key not in _font_base64_cache:
+        with open(_gujarati_font_file(key), "rb") as f:
+            _font_base64_cache[key] = base64.b64encode(f.read()).decode("ascii")
+    return _font_base64_cache[key]
+
+
 # ---- Central document settings (Admin-configurable) ----
 DEFAULT_DOC_SETTINGS = {
     "page_size": "A4",
@@ -117,10 +194,10 @@ DEFAULT_DOC_SETTINGS = {
     "margin_bottom_cm": 2.5,
     "margin_left_cm": 2.5,
     "margin_right_cm": 2.5,
-    "gujarati_font": "LohitGujarati",     # Primary Gujarati TTFont (bundled)
+    "gujarati_font": "NotoSansGujarati",  # Primary Gujarati TTFont (bundled)
     "english_font": "Times-Roman",         # Standard High Court Times New Roman family (PDF)
     "english_font_docx": "Times New Roman",
-    "gujarati_font_docx": "Lohit Gujarati",
+    "gujarati_font_docx": "Noto Sans Gujarati",
     "body_size": 12,
     "heading_size": 13,
     "line_spacing": 18,
@@ -144,17 +221,15 @@ _hb_font = None
 
 
 def get_hb_font():
-    """Lazy-load uharfbuzz HarfBuzz font instance for Lohit-Gujarati.ttf."""
+    """Lazy-load uharfbuzz HarfBuzz font instance (Noto Sans Gujarati)."""
     global _hb_font
     if _hb_font is None:
         try:
             import uharfbuzz as hb
-            lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
-            if lohit_path.exists():
-                with open(lohit_path, "rb") as f:
-                    font_bytes = f.read()
-                face = hb.Face(font_bytes)
-                _hb_font = hb.Font(face)
+            with open(_gujarati_font_file("NotoSansGujarati"), "rb") as f:
+                font_bytes = f.read()
+            face = hb.Face(font_bytes)
+            _hb_font = hb.Font(face)
         except Exception:
             _hb_font = False
     return _hb_font if _hb_font else None
@@ -187,12 +262,17 @@ def register_fonts():
     if _fonts_registered:
         return
 
-    # 1. Lohit Gujarati (bundled)
-    lohit = FONT_DIR / "Lohit-Gujarati.ttf"
-    if lohit.exists():
-        pdfmetrics.registerFont(TTFont("LohitGujarati", str(lohit)))
-        # Map bold variant to LohitGujarati face to prevent missing-glyph boxes
-        pdfmetrics.registerFont(TTFont("LohitGujarati-Bold", str(lohit)))
+    # 1. Gujarati font stack (Noto Sans -> Noto Serif -> Lohit). Bold maps to
+    # the same face to prevent missing-glyph boxes (no bold Gujarati variants).
+    for key in GUJARATI_FONT_ORDER:
+        p = FONT_DIR / GUJARATI_FONT_FILES[key]
+        if not p.exists():
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont(key, str(p)))
+            pdfmetrics.registerFont(TTFont(f"{key}-Bold", str(p)))
+        except Exception:
+            pass
 
     # 2. Times New Roman (bundled TTF if present in backend/fonts)
     times_reg = FONT_DIR / "TimesNewRoman.ttf"
@@ -309,12 +389,18 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
     """Generate PDF using Playwright Chromium headless browser.
 
     Uses Chromium's native HarfBuzz OpenType shaping engine for 100% accurate
-    Gujarati matra, halant, and conjunct rendering.
+    Gujarati matra, halant, and conjunct rendering. Uses the SAME resolved
+    Gujarati font as the HarfBuzz engine so every render path is consistent.
     """
     s = get_doc_settings(settings)
-    lohit_b64 = get_lohit_base64()
-
-    font_family = "'LohitGujarati', sans-serif" if language == "gu" else "'Times New Roman', Times, serif"
+    if language == "gu":
+        fam = _gujarati_font_family(s.get("gujarati_font"))
+        guj_b64 = _font_base64(fam)
+        font_family = f"'{fam}', sans-serif"
+    else:
+        fam = None
+        guj_b64 = ""
+        font_family = "'Times New Roman', Times, serif"
 
     body_html_parts = []
     para_space = s.get("paragraph_spacing", 6)
@@ -344,8 +430,8 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
 <meta charset="utf-8">
 <style>
 @font-face {{
-  font-family: 'LohitGujarati';
-  src: url('data:font/ttf;base64,{lohit_b64}') format('truetype');
+  font-family: '{fam or 'LohitGujarati'}';
+  src: url('data:font/ttf;base64,{guj_b64}') format('truetype');
   font-weight: normal;
   font-style: normal;
 }}
@@ -434,8 +520,8 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
 
     registered = pdfmetrics.getRegisteredFontNames()
     if language == "gu":
-        req_font = s.get("gujarati_font", "LohitGujarati")
-        font_normal = req_font if req_font in registered else "LohitGujarati"
+        family = _gujarati_font_family(s.get("gujarati_font"))
+        font_normal = family if family in registered else "NotoSansGujarati"
         font_bold = f"{font_normal}-Bold" if f"{font_normal}-Bold" in registered else font_normal
     else:
         req_font = s.get("english_font", "Times-Roman")
@@ -478,8 +564,8 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
 _HB_PUA_START = 0xE000
 
 
-def _new_hb_font():
-    """Fresh per-generation HarfBuzz font instance.
+def _new_hb_font(family="NotoSansGujarati"):
+    """Fresh per-generation HarfBuzz font instance for the selected family.
 
     The old design cached one module-level hb.Font and reused it for every
     generation. HarfBuzz Font objects carry internal GSUB/GPOS caches and are
@@ -489,8 +575,7 @@ def _new_hb_font():
     isolated: no shared mutable shaping state, no cross-request leaks.
     """
     import uharfbuzz as hb
-    lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
-    with open(lohit_path, "rb") as f:
+    with open(_gujarati_font_file(family), "rb") as f:
         font_bytes = f.read()
     face = hb.Face(font_bytes)
     return hb.Font(face)
@@ -611,20 +696,20 @@ def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float
     return lines, space_adv
 
 
-def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
+def _register_hb_subset_font(used_gids, tmpdir, family="NotoSansGujarati") -> tuple:
     """Create a TTF whose cmap maps each used glyph to a PUA codepoint.
 
-    Keeps the original Lohit cmap (so Latin digits/letters embedded in Gujarati
-    text keep extracting correctly) and adds PUA entries for every glyph
-    HarfBuzz selected (incl. GSUB-only conjunct ligatures like
+    Keeps the source font's original cmap (so Latin digits/letters embedded in
+    Gujarati text keep extracting correctly) and adds PUA entries for every
+    glyph HarfBuzz selected (incl. GSUB-only conjunct ligatures like
     'kaguj_viramaguj_ssaguj'). Returns (font_name, gid->PUA mapping).
     """
     from fontTools.ttLib import TTFont as FTFont
     from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
 
     import uuid
-    lohit_path = FONT_DIR / "Lohit-Gujarati.ttf"
-    ft = FTFont(str(lohit_path))
+    path = _gujarati_font_file(family)
+    ft = FTFont(str(path))
     glyph_order = ft.getGlyphOrder()
     base_cmap = {cp: name for cp, name in (ft.getBestCmap() or {}).items() if cp <= 0xFFFF}
     synthetic = dict(base_cmap)
@@ -644,9 +729,9 @@ def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
     cmap.tables = [sub]
     # Unique per-generation name — no shared counter, no cross-call collision.
     tag = uuid.uuid4().hex[:10]
-    out_path = str(Path(tmpdir) / f"lohit_hb_{tag}.ttf")
+    out_path = str(Path(tmpdir) / f"guj_hb_{tag}.ttf")
     ft.save(out_path)
-    font_name = f"LohitHB{tag}"
+    font_name = f"GujHB{tag}"
     pdfmetrics.registerFont(TTFont(font_name, out_path))
     return font_name, gid_to_pua
 
@@ -654,15 +739,17 @@ def _register_hb_subset_font(used_gids, tmpdir) -> tuple:
 def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -> str:
     """Generate a Gujarati PDF with correct HarfBuzz shaping (no Chromium)."""
     with _unique_subset_tag():
-        return _generate_pdf_hb_inner(blocks, language, settings)
+        b64, _meta = _generate_pdf_hb_inner(blocks, language, settings)
+        return b64
 
 
-def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = None) -> str:
+def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = None):
     import tempfile
     from reportlab.pdfgen import canvas as pdfcanvas
 
     # Per-generation font instance: no shared shaping state between calls.
-    hb_font = _new_hb_font()
+    family = _gujarati_font_family((settings or {}).get("gujarati_font"))
+    hb_font = _new_hb_font(family)
     if not hb_font:
         raise RuntimeError("HarfBuzz font unavailable")
     upem = hb_font.face.upem
@@ -697,7 +784,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
 
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory() as tmpdir:
-        font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir)
+        font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir, family)
         c = pdfcanvas.Canvas(buf, pagesize=pagesize)
         y = page_h - margin_t
         for idx, entry in enumerate(shaped):
@@ -759,15 +846,21 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
             pdfmetrics._fonts.pop(font_name, None)
         except Exception:
             pass
-    return base64.b64encode(buf.getvalue()).decode("utf-8")
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    meta = {
+        "engine": "harfbuzz",
+        "font_family": family,
+        "font_version": GUJARATI_FONT_VERSIONS.get(family, "unknown"),
+    }
+    return b64, meta
 
 
-def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> str:
-    """Public PDF generation API.
+def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = None) -> tuple:
+    """Public PDF generation API returning (base64, metadata).
 
     Gujarati content -> HarfBuzz engine (correct conjunct shaping, runs on
-    Render without Chromium). English content -> Playwright Chromium with
-    ReportLab fallback. Gujarati NEVER falls through to the unshaped ReportLab
+    Render without Chromium). English content -> ReportLab with Playwright
+    Chromium fallback. Gujarati NEVER falls through to the unshaped ReportLab
     path — that would silently corrupt Indic text (broken conjuncts / garbage
     glyphs). If both shaped engines fail, the exception propagates so the
     caller can surface a clear error and refund instead of shipping corrupted
@@ -776,11 +869,15 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
     has_gujarati = language == "gu" or any(re.search(r"[\u0A80-\u0AFF]", (b.get("text") or "")) for b in blocks)
     if has_gujarati:
         try:
-            return generate_pdf_hb(blocks, language, settings)
+            with _unique_subset_tag():
+                return _generate_pdf_hb_inner(blocks, language, settings)
         except Exception:
             # Playwright/Chromium shapes Gujarati correctly too (it IS
             # HarfBuzz), so it is an acceptable secondary shaped engine.
-            return generate_pdf_playwright(blocks, language, settings)
+            return generate_pdf_playwright(blocks, language, settings), {
+                "engine": "chromium",
+                "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
+            }
     # English: ReportLab is the PRIMARY engine. It applies a cryptographically
     # unique subset tag per generation (see _unique_subset_tag), which is the
     # property Android's font cache needs — Chromium/Playwright's PDF writer
@@ -789,9 +886,89 @@ def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> s
     # local/dev output byte-identical in behavior to production (Render has no
     # Chromium). Playwright remains a fallback only if ReportLab fails.
     try:
-        return generate_pdf_reportlab(blocks, language, settings)
+        with _unique_subset_tag():
+            return _generate_pdf_reportlab_inner(blocks, language, settings), {
+                "engine": "reportlab",
+                "font_family": None,
+            }
     except Exception:
-        return generate_pdf_playwright(blocks, language, settings)
+        return generate_pdf_playwright(blocks, language, settings), {
+            "engine": "chromium",
+            "font_family": None,
+        }
+
+
+def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> str:
+    """Public PDF generation API (base64 only; see generate_pdf_detailed)."""
+    b64, _meta = generate_pdf_detailed(blocks, language, settings)
+    return b64
+
+
+# ---- Image export ("Download as Image") ----
+#
+# The image is a rasterization of the EXACT PDF the document engine produces
+# (same layout, margins, fonts, shaping) via pypdfium2/PDFium — a pure-wheel
+# dependency that runs on Windows and Render/Linux without system packages.
+# If PDF generation fails entirely, the Chromium/Playwright HTML path is tried
+# (same HTML representation used by the PDF fallback), then its PDF is
+# rasterized — so an image is still produced whenever ANY renderer works.
+
+GENERATOR_VERSION = "2.0.0-guj-font-stack"
+
+
+def _pdf_bytes_from_b64(b64: str) -> bytes:
+    raw = base64.b64decode(b64)
+    if not raw.startswith(b"%PDF"):
+        raise ValueError("invalid PDF artifact (missing %PDF signature)")
+    return raw
+
+
+def rasterize_pdf_pages(pdf_bytes: bytes, scale: float = 2.0) -> list:
+    """Render every page of a PDF to PNG bytes (pypdfium2 / PDFium)."""
+    import pypdfium2 as pdfium
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    pages = []
+    try:
+        for i in range(len(pdf)):
+            bitmap = pdf[i].render(scale=scale)
+            pil = bitmap.to_pil()
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            pages.append(buf.getvalue())
+    finally:
+        pdf.close()
+    return pages
+
+
+def generate_document_images(blocks: list, language: str = "en", settings: dict = None, scale: float = 2.0) -> list:
+    """Generate the document as per-page PNGs (same layout as the PDF)."""
+    try:
+        pdf_b64 = generate_pdf(blocks, language, settings)
+    except Exception:
+        # PDF engines failed -> try Chromium HTML (still HarfBuzz-shaped).
+        pdf_b64 = generate_pdf_playwright(blocks, language, settings)
+    return rasterize_pdf_pages(_pdf_bytes_from_b64(pdf_b64), scale)
+
+
+def build_image_payload(pages: list, base_name: str = "document") -> tuple:
+    """Single page -> (base64, mime, filename). Multi-page -> a ZIP of page-N.png.
+
+    Returns (base64, mime_type, filename).
+    """
+    import zipfile
+    if len(pages) == 1:
+        return base64.b64encode(pages[0]).decode("utf-8"), "image/png", f"{base_name}.png"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for i, png in enumerate(pages, start=1):
+            z.writestr(f"page-{i}.png", png)
+    return base64.b64encode(buf.getvalue()).decode("utf-8"), "application/zip", f"{base_name}.zip"
+
+
+def document_sha256(b64: str) -> str:
+    """SHA-256 of the decoded artifact (for download integrity)."""
+    import hashlib
+    return hashlib.sha256(base64.b64decode(b64)).hexdigest()
 
 
 def _odt_cm(value) -> str:

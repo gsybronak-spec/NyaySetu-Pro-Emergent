@@ -43,7 +43,7 @@ export function decodeBase64(base64: string): Uint8Array {
 }
 
 /** Returns an error string when the bytes do not match the expected format. */
-export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx" | "odt"): string | null {
+export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx" | "odt" | "png"): string | null {
   if (bytes.length < 4) {
     return "The server returned an incomplete document. Please try again.";
   }
@@ -52,6 +52,17 @@ export function validateFileBytes(bytes: Uint8Array, format: "pdf" | "docx" | "o
     if (head !== "%PDF") {
       return "The server returned an invalid PDF file. Please try again.";
     }
+  } else if (format === "png") {
+    // Single page -> PNG; multiple pages -> ZIP of page-N.png.
+    const head = String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]);
+    if (head === "PK") {
+      return null; // multi-page image ZIP
+    }
+    const pngSig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    if (bytes.length < 8 || bytes.slice(0, 8).some((b, i) => b !== pngSig[i])) {
+      return "The server returned an invalid image file. Please try again.";
+    }
+    return null;
   } else {
     // DOCX/ODT are ZIP archives — magic bytes PK\x03\x04 (or PK\x05\x06 empty zip).
     const head = String.fromCharCode(bytes[0], bytes[1]);
@@ -89,7 +100,7 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
  * (native share sheet used). Throws a user-readable Error on any failure —
  * it never silently drops the file.
  */
-export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt"): Promise<"downloaded" | "shared"> {
+export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt" | "png"): Promise<"downloaded" | "shared"> {
   const bytes = decodeBase64(res.base64);
   const invalid = validateFileBytes(bytes, format);
   if (invalid) throw new Error(invalid);

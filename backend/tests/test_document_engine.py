@@ -264,9 +264,9 @@ class TestDocxGeneration:
             if p.alignment == WD_ALIGN_PARAGRAPH.CENTER and any(r.bold for r in p.runs)
         ]
         assert any("માનનીય ન્યાયાલય" in p.text or "મુદત" in p.text for p in centered_bold)
-        # Font name = Lohit Gujarati on at least one run
+        # Font name = default Noto Sans Gujarati on at least one run
         fonts = {run.font.name for p in paragraphs for run in p.runs if run.font.name}
-        assert "Lohit Gujarati" in fonts, f"Fonts used: {fonts}"
+        assert "Noto Sans Gujarati" in fonts, f"Fonts used: {fonts}"
 
     def test_en_docx_font_times(self, token):
         r = requests.post(

@@ -65,7 +65,7 @@ export default function TemplateEditor() {
       margin_bottom_cm: 2.5,
       margin_left_cm: 2.5,
       margin_right_cm: 2.5,
-      gujarati_font: 'LohitGujarati',
+      gujarati_font: 'Noto Sans Gujarati',
       english_font: 'Times-Roman',
       body_size: 12,
       heading_size: 13,
@@ -100,7 +100,7 @@ export default function TemplateEditor() {
               margin_bottom_cm: 2.5,
               margin_left_cm: 2.5,
               margin_right_cm: 2.5,
-              gujarati_font: 'LohitGujarati',
+              gujarati_font: 'Noto Sans Gujarati',
               english_font: 'Times-Roman',
               body_size: 12,
               heading_size: 13,
@@ -829,14 +829,15 @@ export default function TemplateEditor() {
               </select>
             </div>
             <div className="form-group">
-              <label>Default Gujarati Font</label>
+              <label>Document Font (Gujarati)</label>
               <select 
-                value={template.settings?.gujarati_font || 'LohitGujarati'} 
+                value={template.settings?.gujarati_font || 'Noto Sans Gujarati'} 
                 onChange={e => handleSettingsChange('gujarati_font', e.target.value)} 
                 disabled={isLocked}
               >
-                <option value="LohitGujarati">Lohit Gujarati (HarfBuzz OpenType Verified)</option>
-                <option value="NirmalaUI">Nirmala UI (Windows System)</option>
+                <option value="Noto Sans Gujarati">Noto Sans Gujarati (Recommended — full Latin + digits)</option>
+                <option value="Noto Serif Gujarati">Noto Serif Gujarati (Serif style)</option>
+                <option value="Lohit Gujarati">Lohit Gujarati (Compatibility)</option>
               </select>
             </div>
             <div className="form-group">

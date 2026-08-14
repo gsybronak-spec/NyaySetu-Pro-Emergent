@@ -46,7 +46,7 @@ export default function TemplateApplication() {
   const [busy, setBusy] = useState(false);
   // Which format is being generated right now (drives the per-button loading
   // copy "Generating PDF…" / "Generating Word…").
-  const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | null>(null);
+  const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | "png" | null>(null);
   const [filename, setFilename] = useState("");
   // Inline success/error feedback: Alert.alert is a NO-OP on web
   // (react-native-web), so the download result must also be visible in the UI
@@ -209,7 +209,7 @@ export default function TemplateApplication() {
     }
   };
 
-  const download = async (format: "pdf" | "docx" | "odt") => {
+  const download = async (format: "pdf" | "docx" | "odt" | "png") => {
     setBusy(true);
     setDownloading(format);
     setNotice(null);
@@ -252,6 +252,15 @@ export default function TemplateApplication() {
         // Delivery/validation failure — the file was not handed to the browser.
         setNotice({ tone: "err", text: msg });
         Alert.alert("Unable to download the document", `${msg}`);
+      } else if (format === "pdf") {
+        // PDF rendering failed (e.g. font/engine hiccup) — credit is already
+        // refunded server-side; offer the image export as an immediate fallback.
+        setNotice({ tone: "err", text: "PDF generation failed. Your credit was refunded — try Download as Image." });
+        Alert.alert("PDF generation failed", "Your credit has been refunded. Try downloading the same document as an image instead.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Download as Image", onPress: () => download("png") },
+        ]);
+        console.warn("[download] pdf generation failed", msg);
       } else {
         setNotice({ tone: "err", text: "Unable to download the document. Please try again. Failed generations are refunded automatically." });
         Alert.alert("Unable to download the document", "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
@@ -728,7 +737,32 @@ export default function TemplateApplication() {
                   <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
                 )}
               </Pressable>
+              <Pressable
+                testID="download-png"
+                onPress={() => download("png")}
+                disabled={busy}
+                style={[styles.formatCard, isDesktop && { flex: 1 }, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <View style={[styles.formatIcon, { backgroundColor: "#8A5A0020" }]}>
+                  <Ionicons name="image-outline" size={22} color="#8A5A00" />
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
+                    {downloading === "png" ? "Generating Image…" : "Image Document"}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>PNG pages — share when PDF unavailable</Text>
+                </View>
+                {downloading === "png" ? (
+                  <ActivityIndicator size="small" color={colors.brandPrimary} />
+                ) : (
+                  <Ionicons name="download-outline" size={20} color={colors.brandPrimary} />
+                )}
+              </Pressable>
             </View>
+
+            <Text style={{ color: colors.muted, fontSize: 12, marginTop: Spacing.sm }}>
+              PDF — print &amp; file · Word — edit · Writer (ODT) — LibreOffice · Image — PNG pages (one file per page in a ZIP when the document spans multiple pages)
+            </Text>
 
             <View style={[styles.note, { backgroundColor: colors.surfaceSecondary }]}>
               <Ionicons name="information-circle-outline" size={16} color={colors.muted} />

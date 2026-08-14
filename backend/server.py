@@ -10,6 +10,7 @@ import hashlib
 import logging
 import secrets
 import threading
+import base64
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional, Union
@@ -26,7 +27,19 @@ from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
 from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
-from doc_generator import generate_pdf, generate_docx, generate_odt, render_template, build_blocks
+from doc_generator import (
+    generate_pdf,
+    generate_pdf_detailed,
+    generate_docx,
+    generate_odt,
+    generate_document_images,
+    build_image_payload,
+    document_sha256,
+    GENERATOR_VERSION,
+    _gujarati_font_family as _resolve_gujarati_font_family_doc,
+    render_template,
+    build_blocks,
+)
 from docx_import import analyze_docx, decode_upload, DocxImportError
 from odt_import import analyze_odt, OdtImportError
 
@@ -1967,8 +1980,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
     _validate_page_size(req.page_size)
-    if req.format not in ("pdf", "docx", "odt"):
-        raise HTTPException(422, "format must be 'pdf', 'docx' or 'odt'")
+    if req.format not in ("pdf", "docx", "odt", "png"):
+        raise HTTPException(422, "format must be 'pdf', 'docx', 'odt' or 'png'")
     if not rate_limit(f"download:{user['id']}", 30, 60):
         raise HTTPException(429, "Too many downloads. Please try again later.")
     t = await _get_template_by_id(req.template_id)
@@ -1995,6 +2008,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
 
     # Generate document — if this fails, refund the credit
     app_id = str(uuid.uuid4())
+    gen_meta = {}
     try:
         case = None
         if req.case_id:
@@ -2019,8 +2033,15 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         elif req.format == "odt":
             b64 = generate_odt(blocks, req.language, doc_settings)
             mime = "application/vnd.oasis.opendocument.text"
+        elif req.format == "png":
+            # Image export: rasterize the EXACT document PDF (same layout,
+            # margins, fonts, shaping) into per-page PNGs. Single page -> one
+            # PNG; multiple pages -> a ZIP of page-1.png ... page-N.png.
+            pages = generate_document_images(blocks, req.language, doc_settings)
+            b64, mime, img_filename = build_image_payload(pages, (req.filename or "document").rsplit(".", 1)[0])
+            gen_meta = {"engine": "rasterize", "font_family": _resolve_gujarati_font_family_doc(doc_settings)}
         else:
-            b64 = generate_pdf(blocks, req.language, doc_settings)
+            b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
             mime = "application/pdf"
     except Exception as e:
         # Refund credit on generation failure — user must not be unfairly charged
@@ -2044,7 +2065,20 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
 
     # Log usage + record the credit consumption as a transaction (Phase 24/25:
     # transaction history must show actual activity with a type).
-    filename = req.filename or f"{t['id']}_{now().strftime('%Y%m%d_%H%M%S')}.{req.format}"
+    default_base = f"{t['id']}_{now().strftime('%Y%m%d_%H%M%S')}"
+    if req.format == "png":
+        filename = img_filename  # .png for one page, .zip for multiple pages
+    else:
+        filename = req.filename or f"{default_base}.{req.format}"
+    # Download-integrity + artifact metadata (document artifact / cache safety):
+    # every artifact is fingerprinted so an old engine's corrupted output can
+    # never be served again — and so we can prove which engine/font built it.
+    try:
+        raw_size = len(base64.b64decode(b64))
+        artifact_sha = document_sha256(b64)
+    except Exception:
+        raw_size = 0
+        artifact_sha = ""
     await db.applications.insert_one({
         "id": app_id,
         "user_id": user["id"],
@@ -2054,6 +2088,12 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "language": req.language,
         "format": req.format,
         "filename": filename,
+        "file_size": raw_size,
+        "sha256": artifact_sha,
+        "generator_version": GENERATOR_VERSION,
+        "engine": (gen_meta or {}).get("engine"),
+        "font_family": (gen_meta or {}).get("font_family"),
+        "font_version": (gen_meta or {}).get("font_version"),
         "created_at": now().isoformat(),
     })
     await db.transactions.insert_one({
@@ -2076,7 +2116,10 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     # Delete related draft
     await db.drafts.delete_many({"user_id": user["id"], "template_id": t["id"], "case_id": req.case_id})
 
-    return {"filename": filename, "mime_type": mime, "base64": b64}
+    resp = {"filename": filename, "mime_type": mime, "base64": b64}
+    if gen_meta:
+        resp["artifact"] = gen_meta
+    return resp
 
 
 @api.get("/applications/history")

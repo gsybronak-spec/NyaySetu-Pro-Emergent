@@ -380,9 +380,9 @@ class TestDocumentGeneration:
 
         def fake_pdf(blocks, language, settings):
             captured["settings"] = settings
-            return _b64.b64encode(b"%PDF-1.4 fake").decode()
+            return _b64.b64encode(b"%PDF-1.4 fake").decode(), {"engine": "fake"}
 
-        monkeypatch.setattr(server, "generate_pdf", fake_pdf)
+        monkeypatch.setattr(server, "generate_pdf_detailed", fake_pdf)
         _, token = await create_test_lawyer()
         r = await client.post(f"{API}/applications/download", json={
             "template_id": TEMPLATE_ID, "language": "gu",
