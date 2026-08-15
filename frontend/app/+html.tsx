@@ -12,6 +12,12 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, shrink-to-fit=no"
         />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
         <link rel="manifest" href="/manifest.json?v=2" />
         <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.v2.png" />
         <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.v2.png" />
@@ -34,6 +40,9 @@ export default function Root({ children }: PropsWithChildren) {
               body > div:first-child { position: fixed !important; top: 0; left: 0; right: 0; bottom: 0; }
               [role="tablist"] [role="tab"] * { overflow: visible !important; }
               [role="heading"], [role="heading"] * { overflow: visible !important; }
+              body, input, textarea, select, button, div, span, p, a, h1, h2, h3, h4, h5, h6 {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Anek Gujarati", sans-serif;
+              }
             `,
           }}
         />

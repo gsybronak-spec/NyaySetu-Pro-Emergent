@@ -6,7 +6,12 @@ const distHtmlPath = path.join(__dirname, '..', 'dist', 'index.html');
 if (fs.existsSync(distHtmlPath)) {
   let html = fs.readFileSync(distHtmlPath, 'utf8');
   
-  const pwaTags = `
+  const pwaAndFontTags = `
+    <!-- Google Fonts: Anek Gujarati & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    
     <!-- PWA & Android / iOS High-Resolution Icons -->
     <link rel="manifest" href="/manifest.json?v=2" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.v2.png" />
@@ -17,11 +22,17 @@ if (fs.existsSync(distHtmlPath)) {
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="NyaySetu Pro" />
-    <meta name="application-name" content="NyaySetu Pro" />`;
+    <meta name="application-name" content="NyaySetu Pro" />
+    
+    <style>
+      body, input, textarea, select, button, div, span, p, a, h1, h2, h3, h4, h5, h6 {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Anek Gujarati", sans-serif;
+      }
+    </style>`;
   
-  if (!html.includes('rel="manifest"')) {
-    html = html.replace('</head>', `${pwaTags}\n  </head>`);
+  if (!html.includes('family=Anek+Gujarati')) {
+    html = html.replace('</head>', `${pwaAndFontTags}\n  </head>`);
     fs.writeFileSync(distHtmlPath, html, 'utf8');
-    console.log('✓ Successfully injected PWA manifest and high-res icon meta tags into dist/index.html');
+    console.log('✓ Successfully injected Anek Gujarati web fonts and PWA meta tags into dist/index.html');
   }
 }
