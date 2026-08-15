@@ -258,6 +258,8 @@ class SetPasswordReq(BaseModel):
 
 class ProfileUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
+    advocate_name_en: Optional[str] = Field(None, max_length=200)
+    advocate_name_gu: Optional[str] = Field(None, max_length=200)
     email: Optional[str] = Field(None, max_length=200)
     bar_council_no: Optional[str] = Field(None, max_length=50)
     state: Optional[str] = Field(None, max_length=100)
@@ -1293,6 +1295,109 @@ async def police_stations(district_id: Optional[str] = None):
         return [p for p in items if p["district_id"] == district_id]
     return items
 
+
+@api.get("/catalog/template-base-fields")
+async def get_template_base_fields():
+    """Expose base header fields metadata needed to dynamically construct the No-Case base form."""
+    return {
+        "base_fields": [
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જિલ્લો",
+                "type": "select",
+                "required": True,
+                "source": "districts",
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka (Optional)",
+                "label_gu": "તાલુકો (વૈકલ્પિક)",
+                "type": "select",
+                "required": False,
+                "source": "talukas",
+                "depends_on": "district",
+            },
+            {
+                "key": "court",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટનું નામ",
+                "type": "court_select",
+                "required": True,
+                "source": "courts",
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસનો પ્રકાર",
+                "type": "select",
+                "required": True,
+                "source": "case_types",
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": True,
+                "placeholder_en": "e.g. 1234/2026",
+                "placeholder_gu": "દા.ત. ૧૨૩૪/૨૦૨૬",
+            },
+            {
+                "key": "party_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર ૧ ની ભૂમિકા",
+                "type": "role_chips",
+                "required": True,
+                "default": "plaintiff",
+                "options": [
+                    {"value": "plaintiff", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "applicant", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "complainant", "label_en": "Complainant", "label_gu": "ફરિયાદી"},
+                ],
+            },
+            {
+                "key": "party_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર ૧ નું નામ",
+                "type": "text",
+                "required": True,
+                "placeholder_en": "Full Name of Party 1",
+                "placeholder_gu": "પક્ષકાર ૧ નું પૂરું નામ",
+            },
+            {
+                "key": "opposite_party_role",
+                "label_en": "Party 2 (Opposite) Role",
+                "label_gu": "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા",
+                "type": "role_chips",
+                "required": True,
+                "default": "defendant",
+                "options": [
+                    {"value": "defendant", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "opponent", "label_en": "Opponent / Respondent", "label_gu": "સામાવાળા"},
+                    {"value": "accused", "label_en": "Accused", "label_gu": "આરોપી"},
+                ],
+            },
+            {
+                "key": "opposite_party",
+                "label_en": "Party 2 (Opposite) Name",
+                "label_gu": "પક્ષકાર ૨ (સામાવાળા) નું નામ",
+                "type": "text",
+                "required": True,
+                "placeholder_en": "Full Name of Opposite Party",
+                "placeholder_gu": "સામાવાળા પક્ષકારનું પૂરું નામ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Name",
+                "label_gu": "એડવોકેટનું નામ",
+                "type": "text",
+                "required": True,
+                "autofill_source": "profile",
+            },
+        ]
+    }
+
 async def _load_plans() -> list:
     """DB plans if any exist, else the seed PLANS (backward compat when the
     plans collection has not been initialized)."""
@@ -1829,34 +1934,102 @@ async def get_template(template_id: str):
 # APPLICATION GENERATION
 # ============================================================
 
-def format_advocate_name(name: Optional[str] = None) -> str:
-    """Display an advocate name as \"Adv. <Name>\" without double-prefixing.
+# ============================================================
+# PARTY ROLES ARCHITECTURE & BILINGUAL MAPPING
+# ============================================================
 
-    Mirrors the frontend helper (src/utils/advocate.ts) so documents render the
-    same professional format regardless of generation path. Client-provided
-    values are untouched; only the server-side default is formatted."""
+ROLE_MAP = {
+    "plaintiff": {"gu": "વાદી", "en": "Plaintiff"},
+    "defendant": {"gu": "પ્રતિવાદી", "en": "Defendant"},
+    "applicant": {"gu": "અરજદાર", "en": "Applicant"},
+    "opponent": {"gu": "સામાવાળા", "en": "Opponent"},
+    "complainant": {"gu": "ફરિયાદી", "en": "Complainant"},
+    "accused": {"gu": "આરોપી", "en": "Accused"},
+}
+
+_ROLE_CANONICAL_LOOKUP = {
+    # Canonical keys
+    "plaintiff": "plaintiff",
+    "defendant": "defendant",
+    "applicant": "applicant",
+    "opponent": "opponent",
+    "complainant": "complainant",
+    "accused": "accused",
+    # Gujarati strings
+    "વાદી": "plaintiff",
+    "પ્રતિવાદી": "defendant",
+    "અરજદાર": "applicant",
+    "સામાવાળા": "opponent",
+    "સામેવાળા": "opponent",
+    "ફરિયાદી": "complainant",
+    "ફરીયાદી": "complainant",
+    "આરોપી": "accused",
+    # English strings
+    "plaintiff": "plaintiff",
+    "defendant": "defendant",
+    "applicant": "applicant",
+    "opponent": "opponent",
+    "respondent": "opponent",
+    "complainant": "complainant",
+    "accused": "accused",
+}
+
+def resolve_party_role_label(role: Optional[str], language: str = "gu") -> str:
+    """Resolve a canonical or legacy role string into the appropriate language label."""
+    if not role:
+        return "ફરિયાદી" if language == "gu" else "Complainant"
+    r_str = str(role).strip()
+    r_lower = r_str.lower()
+    canonical = _ROLE_CANONICAL_LOOKUP.get(r_lower) or _ROLE_CANONICAL_LOOKUP.get(r_str)
+    if canonical and canonical in ROLE_MAP:
+        return ROLE_MAP[canonical]["gu"] if language == "gu" else ROLE_MAP[canonical]["en"]
+    return r_str
+
+def format_advocate_name(name: Optional[str] = None, language: str = "en") -> str:
+    """Display an advocate name with language-appropriate title without double-prefixing."""
     n = (name or "").strip()
     if not n:
-        return "Advocate"
-    return n if re.match(r"^adv\.?\s", n, re.IGNORECASE) else f"Adv. {n}"
+        return "એડવોકેટ" if language == "gu" else "Advocate"
+    if language == "gu":
+        if re.match(r"^(એડવોકેટ|વકીલ|adv\.?)\s*", n, re.IGNORECASE):
+            return re.sub(r"^adv\.?\s*", "એડવોકેટ ", n, flags=re.IGNORECASE)
+        return f"એડવોકેટ {n}"
+    else:
+        if re.match(r"^adv\.?\s", n, re.IGNORECASE):
+            return n
+        if re.match(r"^(એડવોકેટ|વકીલ)\s*", n):
+            return re.sub(r"^(એડવોકેટ|વકીલ)\s*", "Adv. ", n)
+        return f"Adv. {n}"
 
 
 async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
     ctx = dict(values or {})
-    # Advocate (server-side default only; a client-provided advocate_name wins)
-    ctx.setdefault("advocate_name", format_advocate_name(user.get("name")))
+    # Advocate name resolution:
+    # 1. Client-provided advocate_name wins
+    # 2. If language == "gu" -> user.get("advocate_name_gu") or user.get("name")
+    # 3. If language == "en" -> user.get("advocate_name_en") or user.get("name")
+    if not ctx.get("advocate_name"):
+        if language == "gu":
+            adv_name = user.get("advocate_name_gu") or user.get("name")
+        else:
+            adv_name = user.get("advocate_name_en") or user.get("name")
+        ctx["advocate_name"] = format_advocate_name(adv_name, language)
+
     # Today (formatted)
     ctx["today"] = now().strftime("%d-%m-%Y")
+
     # Guard: if a client sent a raw district id (e.g. "ahmedabad") instead of a
     # label, resolve it here so documents never print raw catalog ids.
     if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
         d = _DISTRICT_MAP[ctx["district"]]
         ctx["district"] = d["gu"] if language == "gu" else d["en"]
+
     # Same guard for taluka raw catalog ids sent as select values (optional —
     # empty stays empty, never prints "None" / "null" / raw ids).
     if isinstance(ctx.get("taluka"), str) and ctx["taluka"] in _TALUKA_MAP:
         tobj = _TALUKA_MAP[ctx["taluka"]]
         ctx["taluka"] = tobj["gu"] if language == "gu" else tobj["en"]
+
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
     if isinstance(ctx.get("court"), str) and ctx["court"] in _COURT_MAP:
@@ -1865,6 +2038,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
         ctx["case_type"] = ctobj["gu"] if language == "gu" else ctobj["en"]
+
     if case:
         did = case.get("district_id") or user.get("district")
         d = next((x for x in DISTRICTS if x["id"] == did), None)
@@ -1894,11 +2068,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
         ctx.setdefault("opposite_party", case.get("opposite_party") or "")
-        # Party roles (v2 catalog): stored on the Case, inherited by every
-        # application. Gujarati legal defaults as a safety net when a case was
-        # created before roles were recorded — never "None"/empty in output.
-        ctx.setdefault("party_role", case.get("party_role") or "ફરીયાદી")
-        ctx.setdefault("opposite_party_role", case.get("opposite_party_role") or "આરોપી")
+        # Party roles (v2 catalog): stored on the Case, inherited by every application.
+        raw_p_role = ctx.get("party_role") or case.get("party_role") or "complainant"
+        raw_opp_role = ctx.get("opposite_party_role") or case.get("opposite_party_role") or "accused"
+        ctx["party_role"] = resolve_party_role_label(raw_p_role, language)
+        ctx["opposite_party_role"] = resolve_party_role_label(raw_opp_role, language)
         # Police station (label or custom)
         ps_obj = _PS_MAP.get(case.get("police_station_id"))
         if ps_obj:
@@ -1933,60 +2107,80 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx.setdefault("party_name", "")
         ctx.setdefault("opposite_party", "")
         ctx.setdefault("police_station", "")
-        ctx.setdefault("party_role", "ફરીયાદી")
-        ctx.setdefault("opposite_party_role", "આરોપી")
+        raw_p_role = ctx.get("party_role") or "complainant"
+        raw_opp_role = ctx.get("opposite_party_role") or "accused"
+        ctx["party_role"] = resolve_party_role_label(raw_p_role, language)
+        ctx["opposite_party_role"] = resolve_party_role_label(raw_opp_role, language)
         if not ctx.get("client_name"):
             ctx["client_name"] = ""
 
     # ---- Derived values for the document-return application (never user-entered) ----
-    # case_status -> conditional Gujarati clause + verb tense, literal per the
-    # source document: "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ [ચાલવા પર છે./ આપની કોર્ટમા
-    # ડિસ્પોસ્ડ થયેલ છે]" and "કામમા રજૂ કરવામાં આવેલ [છે/હતો]". Both the current
-    # (ડિસ્પોઝ્ડ) and source-document (ડિસ્પોસ્ડ) spellings are accepted so
-    # previously saved drafts keep working.
     status = ctx.get("case_status")
-    if status == "ચાલુ":
-        ctx["case_status_clause"] = "ચાલવા પર છે"
-        ctx["tense"] = "છે"
-    elif status in ("ડિસ્પોઝ્ડ", "ડિસ્પોસ્ડ"):
-        ctx["case_status_clause"] = "આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે"
-        ctx["tense"] = "હતો"
+    if language == "gu":
+        if status == "ચાલુ":
+            ctx["case_status_clause"] = "ચાલવા પર છે"
+            ctx["tense"] = "છે"
+        elif status in ("ડિસ્પોઝ્ડ", "ડિસ્પોસ્ડ", "Disposed"):
+            ctx["case_status_clause"] = "આપની કોર્ટમા ડિસ્પોસ્ડ થયેલ છે"
+            ctx["tense"] = "હતો"
+        else:
+            ctx["case_status_clause"] = ""
+            ctx["tense"] = "છે"
     else:
-        ctx["case_status_clause"] = ""
-        ctx["tense"] = "છે"
+        if status in ("ચાલુ", "Ongoing"):
+            ctx["case_status_clause"] = "is pending"
+            ctx["tense"] = "is"
+        elif status in ("ડિસ્પોઝ્ડ", "ડિસ્પોસ્ડ", "Disposed"):
+            ctx["case_status_clause"] = "has been disposed of"
+            ctx["tense"] = "was"
+        else:
+            ctx["case_status_clause"] = ""
+            ctx["tense"] = "is"
+
     # Conditional "અન્ય/Other" fields (v2 catalog): when a select/radio is set
     # to "other", the companion "<key>_other" text field holds the real value
     # and replaces it in the rendered document (never prints the literal
     # English word "other"). Generic rule, no per-template wiring needed.
     for k in list(ctx.keys()):
-        if ctx.get(k) == "other" and ctx.get(f"{k}_other"):
-            ctx[k] = ctx[f"{k}_other"]
-    # Signature/pleading role — the side the advocate represents. The v2
-    # catalog's advocate_side select ("party"/"opposite", options named after
-    # the linked case's parties) maps to the case-level roles; the legacy
-    # applicant_role/opposite_party_role radios remain supported.
+        if ctx.get(k) == "other":
+            ctx[k] = ctx.get(f"{k}_other") or ""
+
+    # Signature/pleading role — the side the advocate represents.
     side = ctx.get("advocate_side")
     if side == "party":
-        ctx["selected_party_role"] = ctx.get("party_role") or "ફરીયાદી"
+        ctx["selected_party_role"] = ctx["party_role"]
     elif side == "opposite":
-        ctx["selected_party_role"] = ctx.get("opposite_party_role") or "આરોપી"
+        ctx["selected_party_role"] = ctx["opposite_party_role"]
+    elif side == "other":
+        ctx["selected_party_role"] = ctx.get("advocate_other") or ("ત્રાહિત પક્ષ" if language == "gu" else "Third Party")
     else:
-        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ""
+        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ctx["party_role"]
+
     # Party lines — "<role> <name>" for the case header block (never prints a
     # lone role or a leading space when a name/role is missing).
-    ctx["party_line"] = f"{ctx.get('party_role') or ''} {ctx.get('party_name') or ''}".strip()
-    ctx["opposite_party_line"] = f"{ctx.get('opposite_party_role') or ''} {ctx.get('opposite_party') or ''}".strip()
+    p_name = (ctx.get("party_name") or "").strip()
+    opp_name = (ctx.get("opposite_party") or "").strip()
+    p_role = (ctx.get("party_role") or "").strip()
+    opp_role = (ctx.get("opposite_party_role") or "").strip()
+
+    ctx["party_line"] = f"{p_role} {p_name}".strip()
+    ctx["opposite_party_line"] = f"{opp_role} {opp_name}".strip()
+
     # Case-or-crime line (Jamin Bond): case number wins; crime registration
     # number is used only when the charge-sheet is not yet filed (no case no.).
     if ctx.get("case_number"):
-        ctx["case_or_crime"] = f"કેસ નં. {ctx.get('case_number')}"
+        pfx = "કેસ નં." if language == "gu" else "Case No."
+        ctx["case_or_crime"] = f"{pfx} {ctx.get('case_number')}"
     elif ctx.get("crime_reg_number"):
-        ctx["case_or_crime"] = f"ગુન્હા રજી. નં. {ctx.get('crime_reg_number')}"
+        pfx = "ગુન્હા રજી. નં." if language == "gu" else "Crime Reg. No."
+        ctx["case_or_crime"] = f"{pfx} {ctx.get('crime_reg_number')}"
     else:
         ctx["case_or_crime"] = ""
+
     # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર")
     _tal = (ctx.get("taluka") or "").strip()
     ctx["taluka_place"] = f"{_tal}, {ctx.get('district') or ''}" if _tal else (ctx.get("district") or "")
+
     # Date display — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
     # canonical stored value is YYYY-MM-DD. Derived key keeps {{date}} untouched
     # for every other template. Legacy DD-MM-YYYY values pass through unchanged.

@@ -1,6 +1,17 @@
-/** Display an advocate name as "Adv. <Name>" without double-prefixing. */
-export function formatAdvocateName(name?: string | null, fallback = "Advocate"): string {
+/** Display an advocate name with language-appropriate prefix without double-prefixing. */
+export function formatAdvocateName(name?: string | null, language: "en" | "gu" = "en", fallback?: string): string {
   const n = (name || "").trim();
-  if (!n) return fallback;
-  return /^adv\.?\s/i.test(n) ? n : `Adv. ${n}`;
+  if (!n) return fallback || (language === "gu" ? "એડવોકેટ" : "Advocate");
+  if (language === "gu") {
+    if (/^(એડવોકેટ|વકીલ|adv\.?)\s*/i.test(n)) {
+      return n.replace(/^adv\.?\s*/i, "એડવોકેટ ");
+    }
+    return `એડવોકેટ ${n}`;
+  } else {
+    if (/^adv\.?\s/i.test(n)) return n;
+    if (/^(એડવોકેટ|વકીલ)\s*/.test(n)) {
+      return n.replace(/^(એડવોકેટ|વકીલ)\s*/, "Adv. ");
+    }
+    return `Adv. ${n}`;
+  }
 }

@@ -28,6 +28,96 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 
 type Step = "fields" | "preview" | "output";
 
+const BASE_FIELD_KEYS = new Set([
+  "district",
+  "taluka",
+  "court",
+  "case_type",
+  "case_number",
+  "party_name",
+  "party_role",
+  "opposite_party",
+  "opposite_party_role",
+  "advocate_name",
+]);
+
+const PARTY_1_ROLES = [
+  { value: "plaintiff", label_en: "Plaintiff", label_gu: "વાદી" },
+  { value: "applicant", label_en: "Applicant", label_gu: "અરજદાર" },
+  { value: "complainant", label_en: "Complainant", label_gu: "ફરિયાદી" },
+];
+
+const PARTY_2_ROLES = [
+  { value: "defendant", label_en: "Defendant", label_gu: "પ્રતિવાદી" },
+  { value: "opponent", label_en: "Opponent / Respondent", label_gu: "સામાવાળા" },
+  { value: "accused", label_en: "Accused", label_gu: "આરોપી" },
+];
+
+const NORMALIZE_ROLE_MAP: Record<string, string> = {
+  plaintiff: "plaintiff",
+  defendant: "defendant",
+  applicant: "applicant",
+  opponent: "opponent",
+  complainant: "complainant",
+  accused: "accused",
+  "વાદી": "plaintiff",
+  "પ્રતિવાદી": "defendant",
+  "અરજદાર": "applicant",
+  "સામાવાળા": "opponent",
+  "સામેવાળા": "opponent",
+  "ફરિયાદી": "complainant",
+  "ફરીયાદી": "complainant",
+  "આરોપી": "accused",
+  Plaintiff: "plaintiff",
+  Defendant: "defendant",
+  Applicant: "applicant",
+  Opponent: "opponent",
+  Respondent: "opponent",
+  Complainant: "complainant",
+  Accused: "accused",
+};
+
+function RoleChips({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ marginBottom: Spacing.md }}>
+      <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm }}>
+        {options.map((o) => {
+          const active = value === o.value;
+          return (
+            <Pressable
+              key={o.value}
+              testID={`role-chip-${o.value}`}
+              onPress={() => onChange(o.value)}
+              style={[
+                styles.langChip,
+                {
+                  backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
+                  borderColor: active ? colors.brandPrimary : colors.border,
+                  minHeight: 40,
+                },
+              ]}
+            >
+              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function TemplateApplication() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
@@ -44,33 +134,40 @@ export default function TemplateApplication() {
   const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  // Which format is being generated right now (drives the per-button loading
-  // copy "Generating PDF…" / "Generating Word…").
   const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | "png" | null>(null);
   const [filename, setFilename] = useState("");
-  // Inline success/error feedback: Alert.alert is a NO-OP on web
-  // (react-native-web), so the download result must also be visible in the UI
-  // or users would get zero feedback — exactly the reported symptom.
   const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
-  const [extraOptions, setExtraOptions] = useState<Record<string, any[]>>({});
-  // Page size is template-controlled (admin-configured per template, e.g.
-  // affidavit -> Legal). The lawyer does NOT choose it; the backend resolves
-  // template settings -> global default. No page_size is sent here.
+
+  // Catalog datasets for No-Case mode
+  const [districts, setDistricts] = useState<any[]>([]);
+  const [talukas, setTalukas] = useState<any[]>([]);
+  const [courts, setCourts] = useState<any[]>([]);
+  const [caseTypes, setCaseTypes] = useState<any[]>([]);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
   const draftTimer = useRef<any>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        const t = await api.template(templateId);
+        const [t, me, dists, cts] = await Promise.all([
+          api.template(templateId),
+          api.me().catch(() => null),
+          api.districts().catch(() => []),
+          api.caseTypes().catch(() => []),
+        ]);
         setTemplate(t);
+        setUserProfile(me);
+        setDistricts(Array.isArray(dists) ? dists : []);
+        setCaseTypes(Array.isArray(cts) ? cts : []);
         setFilename(`${t.name_en.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+
         const initialValues: Record<string, any> = {};
+
         if (caseId) {
           const c = await api.getCase(caseId);
           setCaseData(c);
           if (c.language) setLanguage(c.language);
-          // Case/party data — catalog selects autofill by catalog id so the dropdowns
-          // match and the backend resolves ids to the correct-language labels.
           if (c.party_name) initialValues["party_name"] = c.party_name;
           if (c.client_name || c.party_name) initialValues["client_name"] = c.client_name || c.party_name;
           if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
@@ -85,35 +182,42 @@ export default function TemplateApplication() {
           if (c.client_address) initialValues["client_address"] = c.client_address;
           if (c.law_label) initialValues["law"] = c.law_label;
           if (c.section_label) initialValues["section"] = c.section_label;
-          // Admin-configured custom fields (D2) — merged so templates can reference them
+          initialValues["party_role"] = NORMALIZE_ROLE_MAP[c.party_role || ""] || "plaintiff";
+          initialValues["opposite_party_role"] = NORMALIZE_ROLE_MAP[c.opposite_party_role || ""] || "defendant";
+
           if (c.custom_fields) {
             for (const [k, v] of Object.entries(c.custom_fields)) {
               if (v !== null && v !== undefined && v !== "") initialValues[k] = v;
             }
           }
-          initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+        } else {
+          // No-case default party roles
+          initialValues["party_role"] = "plaintiff";
+          initialValues["opposite_party_role"] = "defendant";
+          if (me?.district) initialValues["district"] = me.district;
+          if (me?.court) initialValues["court"] = me.court;
         }
-        // Advocate dropdown: single option from the logged-in advocate's profile
-        // (the app has no advocate catalog — the logged-in advocate drafts the document).
-        const me = await api.me().catch(() => null);
-        if (me?.name) {
-          // Display and autofill the professional advocate name ("Adv. <Name>",
-          // no double prefix) so generated documents carry the same format.
-          const advName = formatAdvocateName(me.name);
-          setExtraOptions((p) => ({ ...p, advocate_name: [{ value: advName, label_en: advName, label_gu: advName }] }));
-          if (!initialValues.advocate_name) initialValues["advocate_name"] = advName;
-        }
-        // Date fields default to today when unset (still editable).
+
+        // Advocate name from profile (language-aware default)
+        const advName = formatAdvocateName(
+          (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
+          language
+        );
+        initialValues["advocate_name"] = advName;
+        initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+
+        // Date fields default to today when unset (always editable)
         for (const f of t.fields || []) {
           if (f.type === "date" && !initialValues[f.key]) initialValues[f.key] = new Date().toISOString().slice(0, 10);
         }
+        if (!initialValues["date"]) initialValues["date"] = new Date().toISOString().slice(0, 10);
+
         setValues((prev) => ({ ...initialValues, ...prev }));
+
         if (params.draft === "1") {
           const drafts = await api.drafts();
           const d = drafts.find((x: any) => x.template_id === templateId && (x.case_id || undefined) === caseId);
           if (d) {
-            // Merge draft over defaults so autofilled values (advocate, today's
-            // date) survive when the draft does not contain them.
             setValues((prev) => ({ ...prev, ...(d.values || {}) }));
             setLanguage(d.language || "en");
           }
@@ -125,6 +229,17 @@ export default function TemplateApplication() {
       }
     })();
   }, [templateId, caseId]);
+
+  // Load talukas & courts when district changes in No-Case mode
+  useEffect(() => {
+    if (values.district) {
+      api.talukas(values.district).then((t) => setTalukas(Array.isArray(t) ? t : [])).catch(() => setTalukas([]));
+      api.courts(values.district).then((c) => setCourts(Array.isArray(c) ? c : [])).catch(() => setCourts([]));
+    } else {
+      setTalukas([]);
+      setCourts([]);
+    }
+  }, [values.district]);
 
   // Autosave draft when values change
   useEffect(() => {
@@ -138,8 +253,25 @@ export default function TemplateApplication() {
 
   const update = (k: string, v: any) => setValues((prev) => ({ ...prev, [k]: v }));
 
-  // Dates are stored internally as YYYY-MM-DD; documents render them in the
-  // app's existing legal style (DD-MM-YYYY). Convert before preview/download.
+  // When language switches, update advocate name default if untouched
+  const handleLanguageChange = (newLang: "en" | "gu") => {
+    setLanguage(newLang);
+    if (userProfile) {
+      const currentAdv = values.advocate_name;
+      const oldDefault = formatAdvocateName(
+        (language === "gu" ? userProfile.advocate_name_gu : userProfile.advocate_name_en) || userProfile.name,
+        language
+      );
+      if (!currentAdv || currentAdv === oldDefault) {
+        const newDefault = formatAdvocateName(
+          (newLang === "gu" ? userProfile.advocate_name_gu : userProfile.advocate_name_en) || userProfile.name,
+          newLang
+        );
+        update("advocate_name", newDefault);
+      }
+    }
+  };
+
   const toDocValues = (v: Record<string, any>) => {
     const out: Record<string, any> = {};
     for (const [k, val] of Object.entries(v)) {
@@ -148,27 +280,28 @@ export default function TemplateApplication() {
     return out;
   };
 
-  const fields = template?.fields || [];
-
-  // Case-owned application fields. When an application is opened FROM a case,
-  // these values come from the case (the source of truth) and must not be
-  // re-entered: they are shown read-only in the AUTO-FILLED FROM CASE card and
-  // skipped from the editable field list. A field only counts as inherited when
-  // the case actually HAS the value (taluka stays optional).
+  // Case-owned application fields read-only card
   const CASE_OWNED_LABELS: [string, string, string][] = [
     ["case_number", "Case No.", "કેસ નં."],
-    ["party_name", "Party / Applicant", "અરજદાર / ફરિયાદી"],
-    ["opposite_party", "Opposite Party", "સામેવાળા / આરોપી"],
+    ["party_name", "Party / Applicant", "અરજદાર / વાદી / ફરિયાદી"],
+    ["opposite_party", "Opposite Party", "સામાવાળા / પ્રતિવાદી / આરોપી"],
     ["court", "Court", "કોર્ટ"],
     ["district", "District", "જિલ્લો"],
     ["taluka", "Taluka", "તાલુકો"],
     ["case_type", "Case Type", "કેસનો પ્રકાર"],
-    ["party_role", "Party Role", "પક્ષકારની ભૂમિકા"],
-    ["opposite_party_role", "Opposite Party Role", "સામાવાળાની ભૂમિકા"],
+    ["party_role", "Party 1 Role", "પક્ષકાર ૧ ની ભૂમિકા"],
+    ["opposite_party_role", "Party 2 (Opposite) Role", "સામાવાળા પક્ષકારની ભૂમિકા"],
   ];
 
   const inheritedRows = useMemo(() => {
     if (!caseData) return [];
+    const pRoleLabel = language === "gu"
+      ? (PARTY_1_ROLES.find((r) => r.value === values.party_role)?.label_gu || caseData.party_role)
+      : (PARTY_1_ROLES.find((r) => r.value === values.party_role)?.label_en || caseData.party_role);
+    const oppRoleLabel = language === "gu"
+      ? (PARTY_2_ROLES.find((r) => r.value === values.opposite_party_role)?.label_gu || caseData.opposite_party_role)
+      : (PARTY_2_ROLES.find((r) => r.value === values.opposite_party_role)?.label_en || caseData.opposite_party_role);
+
     const src: Record<string, string | undefined> = {
       case_number: caseData.case_number,
       party_name: caseData.party_name,
@@ -177,8 +310,8 @@ export default function TemplateApplication() {
       district: caseData.district_label || caseData.district_id,
       taluka: caseData.taluka_label,
       case_type: caseData.case_type_label,
-      party_role: caseData.party_role,
-      opposite_party_role: caseData.opposite_party_role,
+      party_role: pRoleLabel,
+      opposite_party_role: oppRoleLabel,
     };
     const rows: { key: string; label: string; value: string }[] = [];
     for (const [key, lEn, lGu] of CASE_OWNED_LABELS) {
@@ -186,18 +319,60 @@ export default function TemplateApplication() {
       if (v) rows.push({ key, label: language === "gu" ? lGu : lEn, value: String(v) });
     }
     return rows;
-  }, [caseData, language]);
+  }, [caseData, language, values.party_role, values.opposite_party_role]);
 
-  const inheritedKeys = useMemo(() => new Set(inheritedRows.map((r) => r.key)), [inheritedRows]);
+  // Separate template application fields into app-specific vs date field
+  const templateFields = useMemo(() => template?.fields || [], [template]);
 
-  const missingRequired = useMemo(
-    () => fields.filter((f: any) => f.required && !values[f.key]).map((f: any) => f.key),
-    [fields, values]
-  );
+  const appSpecificFields = useMemo(() => {
+    return templateFields.filter((f: any) => {
+      if (caseId && BASE_FIELD_KEYS.has(f.key)) return false;
+      if (f.key === "date") return false;
+      return true;
+    });
+  }, [templateFields, caseId]);
+
+  const dateField = useMemo(() => {
+    const found = templateFields.find((f: any) => f.key === "date");
+    return found || {
+      key: "date",
+      label_en: "Application Date",
+      label_gu: "અરજીની તારીખ",
+      type: "date",
+      required: true,
+    };
+  }, [templateFields]);
+
+  // Validation
+  const missingRequired = useMemo(() => {
+    const missing: string[] = [];
+    if (!caseId) {
+      // Required base fields in No-Case mode
+      if (!values.district) missing.push("district");
+      if (!values.court) missing.push("court");
+      if (!values.case_type) missing.push("case_type");
+      if (!values.case_number && templateId !== "jamin_bond") missing.push("case_number");
+      if (!values.party_name) missing.push("party_name");
+      if (!values.opposite_party) missing.push("opposite_party");
+      if (!values.advocate_name) missing.push("advocate_name");
+    }
+    for (const f of appSpecificFields) {
+      if (f.required && !values[f.key]) {
+        if (!f.depends_on || values[f.depends_on] === f.show_when) {
+          missing.push(f.key);
+        }
+      }
+    }
+    if (!values.date) missing.push("date");
+    return missing;
+  }, [caseId, values, appSpecificFields, templateId]);
 
   const genPreview = async () => {
     if (missingRequired.length > 0) {
-      Alert.alert("Missing Information", "Please fill all required fields before continuing.");
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને બધી જરૂરી વિગતો ભરો." : "Please fill all required fields before continuing."
+      );
       return;
     }
     setBusy(true);
@@ -229,11 +404,7 @@ export default function TemplateApplication() {
       if (!res?.base64) {
         throw new Error("The server returned an empty document. Please try again.");
       }
-      // Delivers the file (real browser download on web, share sheet on
-      // native) and VALIDATES the bytes are actually the requested format
-      // before we claim success. Throws with a readable message otherwise.
       await saveDocument({ filename: res.filename, mime_type: res.mime_type, base64: res.base64 }, format);
-      // Only reachable after the download was actually initiated/saved.
       const okText = `${res.filename} generated successfully. 1 template credit consumed.`;
       setNotice({ tone: "ok", text: `Download started — ${res.filename}. 1 template credit consumed.` });
       Alert.alert(
@@ -253,12 +424,9 @@ export default function TemplateApplication() {
         setNotice({ tone: "err", text: "Too many requests. Please wait a moment before trying again." });
         Alert.alert("Too Many Requests", "Please wait a moment before trying again.");
       } else if (msg.toLowerCase().includes("unable to download") || msg.toLowerCase().includes("invalid") || msg.toLowerCase().includes("empty")) {
-        // Delivery/validation failure — the file was not handed to the browser.
         setNotice({ tone: "err", text: msg });
         Alert.alert("Unable to download the document", `${msg}`);
       } else if (format === "pdf") {
-        // PDF rendering failed (e.g. font/engine hiccup) — credit is already
-        // refunded server-side; offer the image export as an immediate fallback.
         setNotice({ tone: "err", text: "PDF generation failed. Your credit was refunded — try Download as Image." });
         Alert.alert("PDF generation failed", "Your credit has been refunded. Try downloading the same document as an image instead.", [
           { text: "Cancel", style: "cancel" },
@@ -274,6 +442,115 @@ export default function TemplateApplication() {
       setBusy(false);
       setDownloading(null);
     }
+  };
+
+  const renderFieldInput = (f: any) => {
+    if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
+    const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
+    const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en || o.label_gu);
+    const fvalue = values[f.key];
+
+    if (f.type === "date") {
+      return (
+        <DateField
+          key={f.key}
+          testID={`date-${f.key}`}
+          label={label}
+          value={fvalue}
+          onChange={(v) => update(f.key, v)}
+          placeholder={language === "gu" ? "તારીખ પસંદ કરો" : "Select date"}
+        />
+      );
+    }
+
+    if (f.type === "select") {
+      let rawOpts = f.options || [];
+      if (f.source === "case_parties" && caseData) {
+        rawOpts = [
+          {
+            value: "party",
+            label_en: caseData.party_name ? `${caseData.party_name} (Applicant side)` : "Applicant side",
+            label_gu: caseData.party_name ? `${caseData.party_name} (ફરિયાદી/અરજદાર/વાદી)` : "ફરિયાદી / અરજદાર / વાદી તરફથી",
+          },
+          {
+            value: "opposite",
+            label_en: caseData.opposite_party ? `${caseData.opposite_party} (Opposite side)` : "Opposite party side",
+            label_gu: caseData.opposite_party ? `${caseData.opposite_party} (સામાવાળા/પ્રતિવાદી/આરોપી)` : "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી",
+          },
+        ];
+        if (f.key === "advocate_side" && templateId === "certified_report") {
+          rawOpts.push({ value: "other", label_en: "Other", label_gu: "અન્ય" });
+        }
+      }
+      const opts = rawOpts.map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
+      return (
+        <Dropdown
+          key={f.key}
+          testID={`field-${f.key}`}
+          label={label}
+          placeholder={language === "gu" ? "પસંદ કરો..." : "Select..."}
+          value={fvalue || null}
+          options={opts}
+          onChange={(v) => update(f.key, v)}
+        />
+      );
+    }
+
+    if (f.type === "radio") {
+      const opts = f.options || [];
+      return (
+        <View key={f.key} style={{ marginBottom: Spacing.md }}>
+          <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm }}>
+            {opts.map((o: any) => {
+              const v = o.value ?? o.key;
+              const active = fvalue === v;
+              return (
+                <Pressable
+                  key={v}
+                  testID={`field-${f.key}-opt-${v}`}
+                  onPress={() => update(f.key, v)}
+                  style={[
+                    styles.langChip,
+                    {
+                      backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
+                      borderColor: active ? colors.brandPrimary : colors.border,
+                      minHeight: 40,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{pickLabel(o)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      );
+    }
+
+    const kt =
+      f.type === "number"
+        ? "number-pad"
+        : f.type === "mobile"
+        ? "phone-pad"
+        : f.type === "email"
+        ? "email-address"
+        : "default";
+
+    return (
+      <Field
+        key={f.key}
+        testID={`field-${f.key}`}
+        label={label}
+        multiline={f.type === "textarea"}
+        placeholder={language === "gu" ? f.placeholder_gu || f.placeholder : f.placeholder_en || f.placeholder}
+        keyboardType={kt as any}
+        maxLength={f.type === "mobile" ? 15 : undefined}
+        autoCapitalize={f.type === "email" ? "none" : undefined}
+        value={fvalue || ""}
+        onChangeText={(v) => update(f.key, v)}
+      />
+    );
   };
 
   if (loading) {
@@ -320,7 +597,7 @@ export default function TemplateApplication() {
                   )}
                 </View>
                 <Text style={{ color: active ? colors.onSurface : colors.muted, fontSize: 10, marginTop: 4, fontWeight: "600" }}>
-                  {s === "fields" ? "Details" : s === "preview" ? "Preview" : "Download"}
+                  {s === "fields" ? (language === "gu" ? "વિગતો" : "Details") : s === "preview" ? (language === "gu" ? "પ્રીવ્યૂ" : "Preview") : (language === "gu" ? "ડાઉનલોડ" : "Download")}
                 </Text>
               </View>
             );
@@ -334,10 +611,13 @@ export default function TemplateApplication() {
           >
             <View style={isDesktop ? { maxWidth: 1100, width: "100%", flexDirection: "row", gap: Spacing.xxl, alignItems: "flex-start" } : undefined}>
             <View style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>
+            
             {/* Language toggle if no case */}
             {!caseId && (
               <>
-                <Text style={[styles.lbl, { color: colors.onSurface }]}>Document Language</Text>
+                <Text style={[styles.lbl, { color: colors.onSurface }]}>
+                  {language === "gu" ? "દસ્તાવેજની ભાષા" : "Document Language"}
+                </Text>
                 <View style={{ flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.lg, marginTop: Spacing.sm }}>
                   {[
                     { id: "en", label: "English" },
@@ -348,7 +628,7 @@ export default function TemplateApplication() {
                       <Pressable
                         key={l.id}
                         testID={`tpl-lang-${l.id}`}
-                        onPress={() => setLanguage(l.id as any)}
+                        onPress={() => handleLanguageChange(l.id as any)}
                         style={[styles.langChip, { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border }]}
                       >
                         <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{l.label}</Text>
@@ -359,9 +639,9 @@ export default function TemplateApplication() {
               </>
             )}
 
-            {/* Auto-filled from case — read-only, inherited, never re-entered */}
-            {inheritedRows.length > 0 && (
-              <View style={[styles.autofill, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40" }]}>
+            {/* Case Mode: Auto-filled from case — read-only, inherited, never re-entered */}
+            {caseId && inheritedRows.length > 0 && (
+              <View style={[styles.autofill, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40", marginBottom: Spacing.lg }]}>
                 <View style={{ flexDirection: "row", alignItems: "center", marginBottom: Spacing.xs }}>
                   <Ionicons name="sparkles" size={16} color={colors.onBrandTertiary} />
                   <Text style={{ color: colors.onBrandTertiary, fontWeight: "800", fontSize: 12, marginLeft: 6, letterSpacing: 0.5 }}>
@@ -369,7 +649,7 @@ export default function TemplateApplication() {
                   </Text>
                 </View>
                 <Text style={{ color: colors.onBrandTertiary, opacity: 0.8, fontSize: 11, marginBottom: Spacing.sm }}>
-                  Taken from the linked case — locked, no need to enter again.
+                  {language === "gu" ? "કેસમાંથી મેળવેલ વિગતો — ફરીથી ભરવાની જરૂર નથી." : "Taken from the linked case — locked, no need to enter again."}
                 </Text>
                 {inheritedRows.map((r) => (
                   <View
@@ -388,170 +668,140 @@ export default function TemplateApplication() {
               </View>
             )}
 
-            <Text style={[styles.lbl, { color: colors.onSurface, marginTop: caseData ? Spacing.lg : 0 }]}>
-              Application Details
+            {/* No-Case Mode: Render dynamic Base / Header Fields */}
+            {!caseId && (
+              <View style={{ marginBottom: Spacing.lg }}>
+                <Text style={[styles.lbl, { color: colors.onSurface, marginBottom: Spacing.xs }]}>
+                  {language === "gu" ? "કેસ અને કોર્ટ વિગત" : "Case & Court Details"}
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>
+                  {language === "gu" ? "આ અરજી માટે જરૂરી મુખ્ય વિગતો" : "Basic court & party details required for this application"}
+                </Text>
+
+                <Dropdown
+                  testID="field-district"
+                  label={(language === "gu" ? "જિલ્લો" : "District") + " *"}
+                  placeholder={language === "gu" ? "જિલ્લો પસંદ કરો" : "Select district"}
+                  value={values.district || null}
+                  options={districts.map((d: any) => ({
+                    id: d.id,
+                    label: language === "gu" ? `${d.gu} (${d.en})` : `${d.en} (${d.gu})`,
+                  }))}
+                  onChange={(v) => {
+                    update("district", v);
+                    update("taluka", "");
+                  }}
+                />
+
+                <Dropdown
+                  testID="field-taluka"
+                  label={language === "gu" ? "તાલુકો (વૈકલ્પિક)" : "Taluka (Optional)"}
+                  placeholder={language === "gu" ? "તાલુકો પસંદ કરો" : "Select taluka"}
+                  value={values.taluka || null}
+                  options={talukas.map((t: any) => ({
+                    id: t.id,
+                    label: language === "gu" ? `${t.gu} (${t.en})` : `${t.en} (${t.gu})`,
+                  }))}
+                  onChange={(v) => update("taluka", v)}
+                />
+
+                <Dropdown
+                  testID="field-court"
+                  label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
+                  placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
+                  value={values.court || null}
+                  options={courts.map((c: any) => ({
+                    id: c.id,
+                    label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+                  }))}
+                  onChange={(v) => update("court", v)}
+                />
+
+                <Dropdown
+                  testID="field-case_type"
+                  label={(language === "gu" ? "કેસનો પ્રકાર" : "Case Type") + " *"}
+                  placeholder={language === "gu" ? "કેસનો પ્રકાર પસંદ કરો" : "Select case type"}
+                  value={values.case_type || null}
+                  options={caseTypes.map((ct: any) => ({
+                    id: ct.id,
+                    label: language === "gu" ? `${ct.gu} (${ct.en})` : `${ct.en} (${ct.gu})`,
+                  }))}
+                  onChange={(v) => update("case_type", v)}
+                />
+
+                <Field
+                  testID="field-case_number"
+                  label={(language === "gu" ? "કેસ નંબર" : "Case Number") + (templateId === "jamin_bond" ? "" : " *")}
+                  placeholder={
+                    templateId === "jamin_bond"
+                      ? (language === "gu" ? "દા.ત. ૧૨૩૪/૨૦૨૬ અથવા ગુન્હા રજી. નં." : "e.g. 1234/2026 or Crime Reg. No.")
+                      : (language === "gu" ? "દા.ત. ૧૨૩૪/૨૦૨૬" : "e.g. 1234/2026")
+                  }
+                  value={values.case_number || ""}
+                  onChangeText={(v) => update("case_number", v)}
+                />
+
+                <RoleChips
+                  label={language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
+                  options={PARTY_1_ROLES.map((r) => ({
+                    value: r.value,
+                    label: language === "gu" ? r.label_gu : r.label_en,
+                  }))}
+                  value={values.party_role || "plaintiff"}
+                  onChange={(v) => update("party_role", v)}
+                />
+
+                <Field
+                  testID="field-party_name"
+                  label={(language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Party 1 Full Name") + " *"}
+                  placeholder={language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Full Name of Party 1"}
+                  value={values.party_name || ""}
+                  onChangeText={(v) => update("party_name", v)}
+                />
+
+                <RoleChips
+                  label={language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
+                  options={PARTY_2_ROLES.map((r) => ({
+                    value: r.value,
+                    label: language === "gu" ? r.label_gu : r.label_en,
+                  }))}
+                  value={values.opposite_party_role || "defendant"}
+                  onChange={(v) => update("opposite_party_role", v)}
+                />
+
+                <Field
+                  testID="field-opposite_party"
+                  label={(language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) નું નામ" : "Party 2 (Opposite) Name") + " *"}
+                  placeholder={language === "gu" ? "સામાવાળા પક્ષકારનું પૂરું નામ" : "Full Name of Opposite Party"}
+                  value={values.opposite_party || ""}
+                  onChangeText={(v) => update("opposite_party", v)}
+                />
+
+                <Field
+                  testID="field-advocate_name"
+                  label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
+                  placeholder={language === "gu" ? "દા.ત. એડવોકેટ રોનક સોલંકી" : "e.g. Adv. Ronak Solanki"}
+                  value={values.advocate_name || ""}
+                  onChangeText={(v) => update("advocate_name", v)}
+                />
+              </View>
+            )}
+
+            {/* Application-Specific Fields */}
+            <Text style={[styles.lbl, { color: colors.onSurface, marginTop: Spacing.md }]}>
+              {language === "gu" ? "અરજીની વિગત" : "Application Details"}
             </Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: 4 }}>
-              Only the fields required for this application.
+              {language === "gu" ? "આ અરજી માટે જરૂરી ચોક્કસ વિગતો" : "Only the fields required specifically for this application."}
             </Text>
 
-            {fields.map((f: any) => {
-              // Inherited case values are shown in the AUTO-FILLED card above —
-              // never re-render them as editable inputs.
-              if (inheritedKeys.has(f.key)) return null;
-              // Conditional fields (v2 catalog — the "અન્ય/Other" pattern):
-              // only show the companion text field when the parent select/radio
-              // actually has the "other" value.
-              if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
-              const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
-              const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en);
-              const fvalue = values[f.key];
-              if (f.type === "date") {
-                return (
-                  <DateField
-                    key={f.key}
-                    testID={`date-${f.key}`}
-                    label={label}
-                    value={fvalue}
-                    onChange={(v) => update(f.key, v)}
-                    placeholder="Select date"
-                  />
-                );
-              }
-              if (f.type === "select") {
-                const districtVal = values.district;
-                // Case-party select (v2 catalog): options are the two parties of
-                // the linked case — "party"/"opposite" values, party names as
-                // labels. Without a case, fall back to the declared options.
-                let rawOpts = f.options || [];
-                if (f.source === "case_parties" && caseData) {
-                  rawOpts = [
-                    { value: "party", label_en: caseData.party_name || "Applicant side", label_gu: caseData.party_name || "ફરિયાદી / અરજદાર / વાદી" },
-                    { value: "opposite", label_en: caseData.opposite_party || "Opposite side", label_gu: caseData.opposite_party || "આરોપી / સામાવાળા / પ્રતિવાદી" },
-                  ];
-                }
-                const opts = (extraOptions[f.key] || rawOpts)
-                  .filter((o: any) => !o.district_id || !districtVal || o.district_id === districtVal)
-                  .map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
-                return (
-                  <Dropdown
-                    key={f.key}
-                    testID={`field-${f.key}`}
-                    label={label}
-                    placeholder="Select..."
-                    value={fvalue || null}
-                    options={opts}
-                    onChange={(v) => {
-                      update(f.key, v);
-                      // Keep district <-> taluka association: drop a taluka that does
-                      // not belong to the newly selected district.
-                      if (f.key === "district" && values.taluka) {
-                        const talukaField = fields.find((x: any) => x.key === "taluka");
-                        const belongs = (talukaField?.options || []).some(
-                          (o: any) => o.value === values.taluka && o.district_id === v
-                        );
-                        if (!belongs) update("taluka", "");
-                      }
-                    }}
-                  />
-                );
-              }
-              if (f.type === "radio") {
-                const opts = f.options || [];
-                return (
-                  <View key={f.key} style={{ marginBottom: Spacing.md }}>
-                    <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.sm }}>
-                      {opts.map((o: any) => {
-                        const v = o.value ?? o.key;
-                        const active = fvalue === v;
-                        return (
-                          <Pressable
-                            key={v}
-                            testID={`field-${f.key}-opt-${v}`}
-                            onPress={() => update(f.key, v)}
-                            style={[
-                              styles.langChip,
-                              {
-                                backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
-                                borderColor: active ? colors.brandPrimary : colors.border,
-                                minHeight: 40,
-                              },
-                            ]}
-                          >
-                            <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{pickLabel(o)}</Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  </View>
-                );
-              }
-              if (f.type === "checkbox") {
-                const opts = f.options || [];
-                if (opts.length === 0) {
-                  const checked = fvalue === "Yes";
-                  return (
-                    <Pressable
-                      key={f.key}
-                      testID={`field-${f.key}`}
-                      onPress={() => update(f.key, checked ? "No" : "Yes")}
-                      style={[styles.autofill, { borderColor: colors.border, marginBottom: Spacing.md }]}
-                    >
-                      <Ionicons name={checked ? "checkbox" : "square-outline"} size={20} color={checked ? colors.brandPrimary : colors.muted} />
-                      <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{label}</Text>
-                    </Pressable>
-                  );
-                }
-                const selected = (fvalue ? String(fvalue).split(",") : []).filter(Boolean);
-                const toggle = (v: string) => {
-                  const next = selected.includes(v) ? selected.filter((x) => x !== v) : [...selected, v];
-                  update(f.key, next.join(","));
-                };
-                return (
-                  <View key={f.key} style={{ marginBottom: Spacing.md }}>
-                    <Text style={[styles.fieldLbl, { color: colors.onSurfaceSecondary }]}>{label}</Text>
-                    {opts.map((o: any) => {
-                      const v = o.value ?? o.key;
-                      const on = selected.includes(v);
-                      return (
-                        <Pressable
-                          key={v}
-                          testID={`field-${f.key}-opt-${v}`}
-                          onPress={() => toggle(v)}
-                          style={[styles.autofill, { borderColor: colors.border, marginBottom: Spacing.xs }]}
-                        >
-                          <Ionicons name={on ? "checkbox" : "square-outline"} size={20} color={on ? colors.brandPrimary : colors.muted} />
-                          <Text style={{ color: colors.onSurface, fontSize: 14, marginLeft: Spacing.sm, flex: 1 }}>{pickLabel(o)}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                );
-              }
-              const kt =
-                f.type === "number"
-                  ? "number-pad"
-                  : f.type === "mobile"
-                  ? "phone-pad"
-                  : f.type === "email"
-                  ? "email-address"
-                  : "default";
-              return (
-                <Field
-                  key={f.key}
-                  testID={`field-${f.key}`}
-                  label={label}
-                  multiline={f.type === "textarea"}
-                  placeholder={f.placeholder}
-                  keyboardType={kt as any}
-                  maxLength={f.type === "mobile" ? 15 : undefined}
-                  autoCapitalize={f.type === "email" ? "none" : undefined}
-                  value={fvalue || ""}
-                  onChangeText={(v) => update(f.key, v)}
-                />
-              );
-            })}
+            {appSpecificFields.map((f: any) => renderFieldInput(f))}
+
+            {/* Date Field — ALWAYS THE LAST FIELD */}
+            <View style={{ marginTop: Spacing.sm }}>
+              {renderFieldInput(dateField)}
+            </View>
+
             </View>
 
             {/* Desktop summary panel */}
@@ -654,7 +904,9 @@ export default function TemplateApplication() {
               ]}
             >
               <Ionicons name="create-outline" size={18} color={colors.brandPrimary} />
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", marginLeft: 8 }}>Edit Details</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", marginLeft: 8 }}>
+                {language === "gu" ? "વિગતો સુધારો" : "Edit Details"}
+              </Text>
             </Pressable>
           </ScrollView>
         )}
@@ -686,11 +938,15 @@ export default function TemplateApplication() {
                 </Text>
               </View>
             )}
-            <Text style={[styles.lbl, { color: colors.onSurface }]}>Rename File</Text>
+            <Text style={[styles.lbl, { color: colors.onSurface }]}>
+              {language === "gu" ? "ફાઇલનું નામ" : "Rename File"}
+            </Text>
             <View style={{ height: Spacing.sm }} />
             <Field testID="filename-input" value={filename} onChangeText={setFilename} placeholder="File name" />
 
-            <Text style={[styles.lbl, { color: colors.onSurface, marginTop: Spacing.md }]}>Select Format</Text>
+            <Text style={[styles.lbl, { color: colors.onSurface, marginTop: Spacing.md }]}>
+              {language === "gu" ? "ફોર્મેટ પસંદ કરો" : "Select Format"}
+            </Text>
             <View style={{ gap: Spacing.md, marginTop: Spacing.sm, flexDirection: isDesktop ? "row" : "column" }}>
               <Pressable
                 testID="download-pdf"
@@ -703,9 +959,11 @@ export default function TemplateApplication() {
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
                   <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
-                    {downloading === "pdf" ? "Generating PDF…" : "PDF Document"}
+                    {downloading === "pdf" ? (language === "gu" ? "PDF બને છે…" : "Generating PDF…") : "PDF Document"}
                   </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>Ready to print & file</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {language === "gu" ? "પ્રિન્ટ અને ફાઇલિંગ માટે તૈયાર" : "Ready to print & file"}
+                  </Text>
                 </View>
                 {downloading === "pdf" ? (
                   <ActivityIndicator size="small" color={colors.brandPrimary} />
@@ -724,9 +982,11 @@ export default function TemplateApplication() {
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
                   <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
-                    {downloading === "docx" ? "Generating Word…" : "Word Document"}
+                    {downloading === "docx" ? (language === "gu" ? "Word ફાઇલ બને છે…" : "Generating Word…") : "Word Document"}
                   </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>Editable .docx format</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {language === "gu" ? "સુધારી શકાય તેવું .docx ફોર્મેટ" : "Editable .docx format"}
+                  </Text>
                 </View>
                 {downloading === "docx" ? (
                   <ActivityIndicator size="small" color={colors.brandPrimary} />
@@ -745,7 +1005,7 @@ export default function TemplateApplication() {
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
                   <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
-                    {downloading === "odt" ? "Generating Writer…" : "Writer Document"}
+                    {downloading === "odt" ? (language === "gu" ? "Writer ફાઇલ બને છે…" : "Generating Writer…") : "Writer Document"}
                   </Text>
                   <Text style={{ color: colors.muted, fontSize: 12 }}>LibreOffice .odt format</Text>
                 </View>
@@ -766,9 +1026,11 @@ export default function TemplateApplication() {
                 </View>
                 <View style={{ flex: 1, marginLeft: Spacing.md }}>
                   <Text style={{ color: colors.onSurface, fontWeight: "700" }}>
-                    {downloading === "png" ? "Generating Image…" : "Image Document"}
+                    {downloading === "png" ? (language === "gu" ? "Image બને છે…" : "Generating Image…") : "Image Document"}
                   </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12 }}>PNG pages — share when PDF unavailable</Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {language === "gu" ? "PNG ઇમેજ પેજીસ" : "PNG pages — share when PDF unavailable"}
+                  </Text>
                 </View>
                 {downloading === "png" ? (
                   <ActivityIndicator size="small" color={colors.brandPrimary} />
@@ -779,13 +1041,15 @@ export default function TemplateApplication() {
             </View>
 
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: Spacing.sm }}>
-              PDF — print &amp; file · Word — edit · Writer (ODT) — LibreOffice · Image — PNG pages (one file per page in a ZIP when the document spans multiple pages)
+              PDF — print &amp; file · Word — edit · Writer (ODT) — LibreOffice · Image — PNG pages
             </Text>
 
             <View style={[styles.note, { backgroundColor: colors.surfaceSecondary }]}>
               <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
               <Text style={{ color: colors.muted, fontSize: 11, flex: 1, marginLeft: 6 }}>
-                Generating consumes 1 template credit. Review your document — you remain responsible for its accuracy before filing.
+                {language === "gu"
+                  ? "દસ્તાવેજ બનાવવાથી ૧ ક્રેડિટ વપરાશે. કોર્ટમાં રજૂ કરતા પહેલાં અરજીની ચકાસણી કરવી."
+                  : "Generating consumes 1 template credit. Review your document — you remain responsible for its accuracy before filing."}
               </Text>
             </View>
             {busy && <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: Spacing.lg }} />}
@@ -797,14 +1061,23 @@ export default function TemplateApplication() {
         {step === "fields" && (
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
-              <Button testID="continue-preview-btn" title="Preview Document" loading={busy} onPress={genPreview} />
+              <Button
+                testID="continue-preview-btn"
+                title={language === "gu" ? "અરજીનું પ્રીવ્યૂ જુઓ" : "Preview Document"}
+                loading={busy}
+                onPress={genPreview}
+              />
             </View>
           </View>
         )}
         {step === "preview" && (
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
-              <Button testID="to-output-btn" title="Confirm & Download" onPress={() => setStep("output")} />
+              <Button
+                testID="to-output-btn"
+                title={language === "gu" ? "ખાતરી કરો અને ડાઉનલોડ કરો" : "Confirm & Download"}
+                onPress={() => setStep("output")}
+              />
             </View>
           </View>
         )}
@@ -837,7 +1110,6 @@ const styles = StyleSheet.create({
   notice: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginBottom: Spacing.lg, borderWidth: 1 },
   note: { flexDirection: "row", alignItems: "flex-start", padding: Spacing.md, borderRadius: Radius.md, marginTop: Spacing.lg },
   footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
-  // Desktop
   docDesktop: {
     maxWidth: 780,
     width: "100%",

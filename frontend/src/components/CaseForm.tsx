@@ -134,6 +134,42 @@ function RoleChips({
   );
 }
 
+const PARTY_1_ROLE_OPTIONS = [
+  { value: "plaintiff", label_en: "Plaintiff", label_gu: "વાદી" },
+  { value: "applicant", label_en: "Applicant", label_gu: "અરજદાર" },
+  { value: "complainant", label_en: "Complainant", label_gu: "ફરિયાદી" },
+];
+
+const PARTY_2_ROLE_OPTIONS = [
+  { value: "defendant", label_en: "Defendant", label_gu: "પ્રતિવાદી" },
+  { value: "opponent", label_en: "Opponent / Respondent", label_gu: "સામાવાળા" },
+  { value: "accused", label_en: "Accused", label_gu: "આરોપી" },
+];
+
+const NORMALIZE_ROLE_MAP: Record<string, string> = {
+  plaintiff: "plaintiff",
+  defendant: "defendant",
+  applicant: "applicant",
+  opponent: "opponent",
+  complainant: "complainant",
+  accused: "accused",
+  "વાદી": "plaintiff",
+  "પ્રતિવાદી": "defendant",
+  "અરજદાર": "applicant",
+  "સામાવાળા": "opponent",
+  "સામેવાળા": "opponent",
+  "ફરિયાદી": "complainant",
+  "ફરીયાદી": "complainant",
+  "આરોપી": "accused",
+  Plaintiff: "plaintiff",
+  Defendant: "defendant",
+  Applicant: "applicant",
+  Opponent: "opponent",
+  Respondent: "opponent",
+  Complainant: "complainant",
+  Accused: "accused",
+};
+
 interface Props {
   title: string;
   submitLabel: string;
@@ -145,7 +181,16 @@ interface Props {
 export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Props) {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
-  const [form, setForm] = useState<CaseFormValues>({ ...DEFAULTS, ...initial });
+  const [form, setForm] = useState<CaseFormValues>(() => {
+    const rawP = initial?.party_role || "";
+    const rawOpp = initial?.opposite_party_role || "";
+    return {
+      ...DEFAULTS,
+      ...initial,
+      party_role: NORMALIZE_ROLE_MAP[rawP] || rawP || "plaintiff",
+      opposite_party_role: NORMALIZE_ROLE_MAP[rawOpp] || rawOpp || "defendant",
+    };
+  });
   const [caseTypes, setCaseTypes] = useState<any[]>([]);
   const [laws, setLaws] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
@@ -602,23 +647,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
                 <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
                 <RoleChips
-                  label={form.language === "gu" ? "પક્ષકારની ભૂમિકા (ફરિયાદી / અરજદાર / વાદી)" : "Party Role (ફરિયાદી / અરજદાર / વાદી)"}
-                  options={[
-                    { value: "ફરિયાદી", label: "ફરિયાદી" },
-                    { value: "અરજદાર", label: "અરજદાર" },
-                    { value: "વાદી", label: "વાદી" },
-                  ]}
+                  label={form.language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
+                  options={PARTY_1_ROLE_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: form.language === "gu" ? o.label_gu : o.label_en,
+                  }))}
                   value={form.party_role}
                   onChange={(v) => update("party_role", v)}
                 />
                 <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
                 <RoleChips
-                  label={form.language === "gu" ? "સામાવાળાની ભૂમિકા (આરોપી / સામાવાળા / પ્રતિવાદી)" : "Opposite Party Role (આરોપી / સામાવાળા / પ્રતિવાદી)"}
-                  options={[
-                    { value: "આરોપી", label: "આરોપી" },
-                    { value: "સામાવાળા", label: "સામાવાળા" },
-                    { value: "પ્રતિવાદી", label: "પ્રતિવાદી" },
-                  ]}
+                  label={form.language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
+                  options={PARTY_2_ROLE_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: form.language === "gu" ? o.label_gu : o.label_en,
+                  }))}
                   value={form.opposite_party_role}
                   onChange={(v) => update("opposite_party_role", v)}
                 />
@@ -889,23 +932,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
           <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
           <RoleChips
-            label={form.language === "gu" ? "પક્ષકારની ભૂમિકા (ફરિયાદી / અરજદાર / વાદી)" : "Party Role (ફરિયાદી / અરજદાર / વાદી)"}
-            options={[
-              { value: "ફરિયાદી", label: "ફરિયાદી" },
-              { value: "અરજદાર", label: "અરજદાર" },
-              { value: "વાદી", label: "વાદી" },
-            ]}
+            label={form.language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
+            options={PARTY_1_ROLE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: form.language === "gu" ? o.label_gu : o.label_en,
+            }))}
             value={form.party_role}
             onChange={(v) => update("party_role", v)}
           />
           <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
           <RoleChips
-            label={form.language === "gu" ? "સામાવાળાની ભૂમિકા (આરોપી / સામાવાળા / પ્રતિવાદી)" : "Opposite Party Role (આરોપી / સામાવાળા / પ્રતિવાદી)"}
-            options={[
-              { value: "આરોપી", label: "આરોપી" },
-              { value: "સામાવાળા", label: "સામાવાળા" },
-              { value: "પ્રતિવાદી", label: "પ્રતિવાદી" },
-            ]}
+            label={form.language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
+            options={PARTY_2_ROLE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: form.language === "gu" ? o.label_gu : o.label_en,
+            }))}
             value={form.opposite_party_role}
             onChange={(v) => update("opposite_party_role", v)}
           />

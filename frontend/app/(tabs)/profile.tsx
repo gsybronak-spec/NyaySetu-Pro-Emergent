@@ -76,12 +76,15 @@ export default function Profile() {
           <View style={[styles.dUserCard, { backgroundColor: colors.brand }]}>
             <View style={[styles.avatar, { backgroundColor: colors.brandPrimary }]}>
               <Text style={{ color: colors.onBrandPrimary, fontSize: 26, fontWeight: "800" }}>
-                {(user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
+                {(user?.advocate_name_en || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
               </Text>
             </View>
             <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700", marginTop: Spacing.md }}>
-              {formatAdvocateName(user?.name)}
+              {formatAdvocateName(user?.advocate_name_en || user?.name, "en")}
             </Text>
+            {user?.advocate_name_gu ? (
+              <Text style={{ color: "#E2E8F0", fontSize: 14, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
+            ) : null}
             <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 2 }}>+91 {user?.mobile}</Text>
             {user?.email ? <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }} numberOfLines={1}>{user.email}</Text> : null}
             {user?.bar_council_no ? (
@@ -136,11 +139,14 @@ export default function Profile() {
         <View style={[styles.userCard, { backgroundColor: colors.brand }]}>
           <View style={[styles.avatar, { backgroundColor: colors.brandPrimary }]}>
             <Text style={{ color: colors.onBrandPrimary, fontSize: 22, fontWeight: "800" }}>
-              {(user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
+              {(user?.advocate_name_en || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatAdvocateName(user?.name)}</Text>
+            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatAdvocateName(user?.advocate_name_en || user?.name, "en")}</Text>
+            {user?.advocate_name_gu ? (
+              <Text style={{ color: "#E2E8F0", fontSize: 13, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
+            ) : null}
             <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>+91 {user?.mobile}</Text>
             {user?.bar_council_no ? (
               <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>

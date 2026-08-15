@@ -109,6 +109,7 @@ export const api = {
   caseFormConfig: (id: string) => request(`/catalog/case-forms/${id}`),
   listCaseForms: () => request("/catalog/case-forms"),
   caseTypes: () => request("/catalog/case-types"),
+  templateBaseFields: () => request("/catalog/template-base-fields"),
   laws: () => request("/catalog/laws"),
   lawSections: (id: string) => request(`/catalog/laws/${id}/sections`),
   districts: () => request("/catalog/districts"),

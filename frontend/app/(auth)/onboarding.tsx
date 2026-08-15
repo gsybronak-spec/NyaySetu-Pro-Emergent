@@ -14,13 +14,14 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 
 export default function Onboarding() {
   const { colors, isDark } = useTheme();
-  const { refresh } = useAuth();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [barNo, setBarNo] = useState("");
-  const [state, setState] = useState("Gujarat");
-  const [district, setDistrict] = useState<string | null>(null);
-  const [court, setCourt] = useState("");
+  const { user, refresh } = useAuth();
+  const [nameEn, setNameEn] = useState(user?.advocate_name_en || user?.name || "");
+  const [nameGu, setNameGu] = useState(user?.advocate_name_gu || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [barNo, setBarNo] = useState(user?.bar_council_no || "");
+  const [state, setState] = useState(user?.state || "Gujarat");
+  const [district, setDistrict] = useState<string | null>(user?.district || null);
+  const [court, setCourt] = useState(user?.court || "");
   const [districts, setDistricts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -32,7 +33,9 @@ export default function Onboarding() {
     setLoading(true);
     try {
       await api.updateProfile({
-        name: name || undefined,
+        name: nameEn || undefined,
+        advocate_name_en: nameEn || undefined,
+        advocate_name_gu: nameGu || undefined,
         email: email || undefined,
         bar_council_no: barNo || undefined,
         state: state || undefined,
@@ -60,7 +63,8 @@ export default function Onboarding() {
         </Text>
 
         <ScrollView contentContainerStyle={{ padding: Spacing.xl, paddingTop: Spacing.md }} keyboardShouldPersistTaps="handled">
-          <Field testID="ob-name" label="Advocate Name" placeholder="Full name" value={name} onChangeText={setName} />
+          <Field testID="ob-name-en" label="Advocate Name (English)" placeholder="e.g. Adv. Ronak Solanki" value={nameEn} onChangeText={setNameEn} />
+          <Field testID="ob-name-gu" label="Advocate Name (Gujarati) / વકીલનું નામ" placeholder="દા.ત. એડવોકેટ રોનક સોલંકી" value={nameGu} onChangeText={setNameGu} />
           <Field testID="ob-email" label="Email" placeholder="you@example.com" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail} />
           <Field testID="ob-bar" label="Bar Council / Enrollment Number" placeholder="e.g. G/1234/2020" value={barNo} onChangeText={setBarNo} />
           <Field testID="ob-state" label="State" placeholder="State" value={state} onChangeText={setState} />
@@ -77,7 +81,7 @@ export default function Onboarding() {
           <View style={[styles.info, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40" }]}>
             <Ionicons name="information-circle" size={18} color={colors.onBrandTertiary} />
             <Text style={{ color: colors.onBrandTertiary, fontSize: 12, flex: 1, marginLeft: 8 }}>
-              This information auto-fills your court applications.
+              This information auto-fills your court applications in the chosen language.
             </Text>
           </View>
 
