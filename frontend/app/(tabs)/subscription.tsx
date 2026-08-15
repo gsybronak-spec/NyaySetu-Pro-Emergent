@@ -229,7 +229,7 @@ export default function Subscription() {
   // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: Spacing.xxxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
           style={styles.hero}

@@ -131,7 +131,7 @@ export default function Profile() {
   // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: Spacing.xxxl }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Text style={[styles.h1, { color: colors.onSurface }]}>Profile</Text>
         </View>

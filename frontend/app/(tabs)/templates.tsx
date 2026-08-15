@@ -192,7 +192,7 @@ export default function Templates() {
         keyExtractor={(t) => t.id}
         numColumns={2}
         columnWrapperStyle={{ gap: Spacing.md, paddingHorizontal: Spacing.lg }}
-        contentContainerStyle={{ gap: Spacing.md, paddingBottom: Spacing.xxxl }}
+        contentContainerStyle={{ gap: Spacing.md, paddingBottom: 110 }}
         renderItem={({ item }) => (
           <Pressable
             testID={`tpl-${item.id}`}

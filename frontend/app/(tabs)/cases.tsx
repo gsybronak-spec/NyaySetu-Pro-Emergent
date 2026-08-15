@@ -339,7 +339,7 @@ export default function Cases() {
       <FlatList
         data={cases}
         keyExtractor={(c) => c.id}
-        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Spacing.xxxl }}
+        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: 110 }}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
         ListEmptyComponent={
           !loading ? (
