@@ -18,7 +18,7 @@ export default function TabsLayout() {
   if (ready && !user) return <Redirect href="/(auth)/login" />;
 
   const bottomInset = insets.bottom;
-  const tabHeight = 60 + (bottomInset > 0 ? bottomInset : 0);
+  const tabHeight = 64 + (bottomInset > 0 ? bottomInset : 8);
 
   return (
     <Tabs
@@ -32,11 +32,22 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
+          borderTopWidth: 1,
           height: tabHeight,
+          paddingTop: 6,
           paddingBottom: bottomInset > 0 ? bottomInset : 8,
-          paddingTop: 8,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },
+        tabBarItemStyle: {
+          paddingVertical: 2,
+          justifyContent: "center",
+          alignItems: "center",
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: "600",
+          marginTop: 2,
+          marginBottom: 2,
+        },
       }}
     >
       <Tabs.Screen
