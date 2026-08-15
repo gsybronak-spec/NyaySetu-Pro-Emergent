@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 
@@ -15,6 +15,7 @@ import { DesktopPage } from "@/src/components/DesktopPage";
 export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
 
@@ -131,7 +132,10 @@ export default function Profile() {
   // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
+      >
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
           <Text style={[styles.h1, { color: colors.onSurface }]}>Profile</Text>
         </View>

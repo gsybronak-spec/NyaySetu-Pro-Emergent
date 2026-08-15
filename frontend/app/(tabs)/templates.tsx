@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -13,6 +13,7 @@ import { DesktopPage } from "@/src/components/DesktopPage";
 export default function Templates() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ cat?: string }>();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
@@ -144,8 +145,8 @@ export default function Templates() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={{ maxHeight: 56, marginBottom: Spacing.sm }}
-        contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.sm, paddingVertical: Spacing.sm }}
+        style={{ height: 48, marginBottom: Spacing.xs, flexGrow: 0 }}
+        contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.sm, alignItems: "center" }}
       >
         {cats.map((c) => {
           const active = (c === "All" && !cat) || cat === c;
@@ -188,11 +189,12 @@ export default function Templates() {
         </View>
       ) : (
       <FlatList
+        style={{ flex: 1 }}
         data={items}
         keyExtractor={(t) => t.id}
         numColumns={2}
         columnWrapperStyle={{ gap: Spacing.md, paddingHorizontal: Spacing.lg }}
-        contentContainerStyle={{ gap: Spacing.md, paddingBottom: 110 }}
+        contentContainerStyle={{ gap: Spacing.md, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
         renderItem={({ item }) => (
           <Pressable
             testID={`tpl-${item.id}`}

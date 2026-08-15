@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from "expo-router";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -10,10 +11,14 @@ export default function TabsLayout() {
   const { colors, isDark } = useTheme();
   const { ready, user } = useAuth();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
 
   // Route guard (C4): never render protected tabs for a missing/expired session.
   // The root index also redirects, but this covers sessions that expire mid-use.
   if (ready && !user) return <Redirect href="/(auth)/login" />;
+
+  const bottomInset = insets.bottom;
+  const tabHeight = 60 + (bottomInset > 0 ? bottomInset : 0);
 
   return (
     <Tabs
@@ -27,8 +32,8 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 62,
-          paddingBottom: 8,
+          height: tabHeight,
+          paddingBottom: bottomInset > 0 ? bottomInset : 8,
           paddingTop: 8,
         },
         tabBarLabelStyle: { fontSize: 11, fontWeight: "600" },

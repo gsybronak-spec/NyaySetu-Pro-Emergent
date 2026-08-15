@@ -16,7 +16,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0B1B3D"
+        "backgroundColor": "#000000"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.nyaysetupro.l2myp0",
@@ -35,7 +35,7 @@
           "image": "./assets/images/splash-image.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#0B1B3D"
+          "backgroundColor": "#000000"
         }
       ],
       "@react-native-community/datetimepicker"

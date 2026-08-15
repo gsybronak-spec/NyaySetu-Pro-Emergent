@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
 
@@ -30,6 +30,7 @@ function timeAgo(iso?: string) {
 export default function Cases() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
   const [cases, setCases] = useState<any[]>([]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("All");
@@ -337,9 +338,10 @@ export default function Cases() {
         </View>
       ) : (
       <FlatList
+        style={{ flex: 1 }}
         data={cases}
         keyExtractor={(c) => c.id}
-        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: 110 }}
+        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
         ListEmptyComponent={
           !loading ? (

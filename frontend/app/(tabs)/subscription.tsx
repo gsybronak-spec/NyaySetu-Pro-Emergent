@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -67,6 +67,7 @@ async function buyWithRazorpay(planId: string): Promise<{ balance: number; total
 export default function Subscription() {
   const { colors, isDark } = useTheme();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
   const [plans, setPlans] = useState<any[]>([]);
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
   const [buying, setBuying] = useState<string | null>(null);
@@ -229,7 +230,10 @@ export default function Subscription() {
   // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
+      >
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
           style={styles.hero}

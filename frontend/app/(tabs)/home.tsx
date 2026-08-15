@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -17,6 +17,7 @@ export default function Home() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
   const { isDesktop } = useResponsive();
+  const insets = useSafeAreaInsets();
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
   const [templates, setTemplates] = useState<any[]>([]);
@@ -270,7 +271,8 @@ export default function Home() {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 110 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {loadError && (
