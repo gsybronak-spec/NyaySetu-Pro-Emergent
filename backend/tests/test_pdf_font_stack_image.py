@@ -91,18 +91,21 @@ class TestFontStack:
         assert doc_generator._gujarati_font_family("LohitGujarati") == "LohitGujarati"
         assert doc_generator._gujarati_font_family("bogus-font") == "NotoSansGujarati"
 
-    @pytest.mark.parametrize("family,marker", [
-        ("NotoSansGujarati", b"NotoSansGujarati-Regular"),
-        ("NotoSerifGujarati", b"NotoSerifGujarati-Regular"),
-        ("LohitGujarati", b"Lohit-Gujarati"),
-        ("Noto Sans Gujarati", b"NotoSansGujarati-Regular"),
-        ("Noto Serif Gujarati", b"NotoSerifGujarati-Regular"),
+    @pytest.mark.parametrize("family", [
+        "NotoSansGujarati",
+        "NotoSerifGujarati",
+        "LohitGujarati",
+        "Noto Sans Gujarati",
+        "Noto Serif Gujarati",
     ])
-    def test_family_embeds_its_font(self, family, marker):
+    def test_family_embeds_its_font(self, family):
         b64, meta = doc_generator.generate_pdf_detailed(_blocks(), "gu", {"gujarati_font": family})
         raw = base64.b64decode(b64)
         assert raw[:4] == b"%PDF"
-        assert marker in raw, f"{family} did not embed {marker}"
+        # Each generated PDF embeds a per-generation unique font identity
+        # (GujHB-{uuid}) to prevent Android viewer cache collisions —
+        # the original PostScript name is no longer present in the PDF bytes.
+        assert b"GujHB-" in raw, f"{family} did not embed a unique GujHB font"
         assert meta["engine"] == "harfbuzz"
         assert meta["font_family"] == doc_generator._gujarati_font_family(family)
         assert meta.get("font_version")

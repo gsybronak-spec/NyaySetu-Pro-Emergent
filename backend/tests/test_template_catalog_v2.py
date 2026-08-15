@@ -290,7 +290,8 @@ class TestV2DocumentGeneration:
         assert len(raw) > 100, "empty/corrupt artifact"
         if fmt == "pdf":
             assert raw[:4] == b"%PDF"
-            assert b"NotoSansGujarati" in raw
+            # Per-generation unique font identity prevents Android cache collision.
+            assert b"GujHB-" in raw
         elif fmt == "docx":
             assert raw[:2] == b"PK"
         elif fmt == "odt":

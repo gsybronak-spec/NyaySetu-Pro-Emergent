@@ -703,6 +703,12 @@ def _register_hb_subset_font(used_gids, tmpdir, family="NotoSansGujarati") -> tu
     Gujarati text keep extracting correctly) and adds PUA entries for every
     glyph HarfBuzz selected (incl. GSUB-only conjunct ligatures like
     'kaguj_viramaguj_ssaguj'). Returns (font_name, gid->PUA mapping).
+
+    Each generated font gets a unique internal PostScript name (name table
+    nameID 6) so PDF viewers that cache embedded fonts by their internal name
+    (Android's PDFium, MuPDF, etc.) never collide glyph mappings across
+    documents — the root cause of the "first PDF correct, subsequent PDFs
+    corrupted" bug.
     """
     from fontTools.ttLib import TTFont as FTFont
     from fontTools.ttLib.tables._c_m_a_p import CmapSubtable
@@ -729,11 +735,39 @@ def _register_hb_subset_font(used_gids, tmpdir, family="NotoSansGujarati") -> tu
     cmap.tables = [sub]
     # Unique per-generation name — no shared counter, no cross-call collision.
     tag = uuid.uuid4().hex[:10]
+
+    # ---- Unique internal font identity (Android cache-collision fix) ----
+    #
+    # Android's PDFium and other mobile PDF viewers cache embedded fonts by
+    # their INTERNAL PostScript name (name table nameID 6), not by the
+    # /BaseFont value in the PDF dictionary.  Without unique internal names,
+    # opening PDF #2 after PDF #1 on the same device reuses PDF #1's cached
+    # glyph mapping — even though the PDF /BaseFont carries a unique subset
+    # prefix — because the internal name tables are identical.  This causes
+    # Gujarati conjuncts, matras, and digits to render with wrong glyphs
+    # (the "first download perfect, second+ broken" corruption).
+    #
+    # Fix: rewrite nameID 1 (family), 4 (full name), and 6 (PostScript name)
+    # to include the per-generation UUID tag.  This makes every generated
+    # font truly unique at the level that viewer caches key on.
+    unique_ps_name = f"GujHB-{tag}"
+    unique_family = f"NyaySetu GujHB {tag[:6]}"
+    unique_full = f"NyaySetu GujHB {tag}"
+    name_table = ft["name"]
+    for record in name_table.names:
+        if record.nameID == 6:  # PostScript name (the cache key)
+            record.string = unique_ps_name.encode("utf-16-be") if record.platformID == 3 else unique_ps_name.encode("ascii", errors="replace")
+        elif record.nameID == 1:  # Font family
+            record.string = unique_family.encode("utf-16-be") if record.platformID == 3 else unique_family.encode("ascii", errors="replace")
+        elif record.nameID == 4:  # Full font name
+            record.string = unique_full.encode("utf-16-be") if record.platformID == 3 else unique_full.encode("ascii", errors="replace")
+
     out_path = str(Path(tmpdir) / f"guj_hb_{tag}.ttf")
     ft.save(out_path)
     font_name = f"GujHB{tag}"
     pdfmetrics.registerFont(TTFont(font_name, out_path))
     return font_name, gid_to_pua
+
 
 
 def generate_pdf_hb(blocks: list, language: str = "en", settings: dict = None) -> str:

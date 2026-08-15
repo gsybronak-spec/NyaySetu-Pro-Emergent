@@ -173,27 +173,28 @@ class TestPdfEngineUsesHarfBuzz:
         # Default Gujarati font is Noto Sans Gujarati.
         blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
         raw = base64.b64decode(generate_pdf_hb(blocks, language="gu"))
-        assert b"NotoSansGujarati-Regular" in raw
+        # Each generated PDF embeds a per-generation unique font identity
+        # (GujHB-{uuid}) to prevent Android viewer cache collisions —
+        # the original PostScript name (NotoSansGujarati-Regular) is no
+        # longer present in the PDF bytes.
+        assert b"GujHB-" in raw
 
     def test_generate_pdf_uses_hb_path_for_gujarati(self):
         # Even on machines WITH playwright installed, Gujarati must take the
         # HarfBuzz path (the one that exists on Render).
         blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
         raw = base64.b64decode(generate_pdf(blocks, language="gu"))
-        assert b"NotoSansGujarati-Regular" in raw
+        assert b"GujHB-" in raw
 
     def test_font_family_setting_selects_embedded_font(self):
-        # Template-level font control: each family embeds its own font.
-        cases = [
-            ("NotoSansGujarati", b"NotoSansGujarati-Regular"),
-            ("NotoSerifGujarati", b"NotoSerifGujarati-Regular"),
-            ("LohitGujarati", b"Lohit-Gujarati"),
-            ("Noto Sans Gujarati", b"NotoSansGujarati-Regular"),  # display name
-        ]
+        # Template-level font control: each family embeds a per-generation
+        # unique font (GujHB-{uuid}) whose shaping comes from the selected
+        # family, preventing Android viewer cache collisions.
         blocks = [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}]
-        for family, marker in cases:
+        for family in ("NotoSansGujarati", "NotoSerifGujarati", "LohitGujarati",
+                       "Noto Sans Gujarati"):
             raw = base64.b64decode(generate_pdf_hb(blocks, language="gu", settings={"gujarati_font": family}))
-            assert marker in raw, f"family {family} did not embed {marker}"
+            assert b"GujHB-" in raw, f"family {family} did not embed a unique GujHB font"
 
     def test_actual_text_spans_contain_exact_gujarati(self):
         """The PDF must declare the exact logical text (selectable/searchable).
