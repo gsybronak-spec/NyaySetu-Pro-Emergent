@@ -142,7 +142,7 @@ class TestBlocksClassification:
         point_blocks = [b for b in blocks if re.match(r"^[૧૨૩]\.", b["text"].strip())]
         assert len(point_blocks) >= 3, f"expected 3 numbered points, got {[b['text'] for b in point_blocks]}"
         for pb in point_blocks:
-            assert pb["align"] == "left", f"Point wrongly centered: {pb}"
+            assert pb["align"] in ("justify", "left"), f"Point wrongly centered: {pb}"
             assert pb["bold"] is False, f"Point wrongly bold: {pb}"
 
         # Court heading + title should be center+bold
@@ -172,10 +172,10 @@ class TestBlocksClassification:
         # AFFIDAVIT + VERIFICATION centered+bold
         assert any(b["text"] == "AFFIDAVIT" and b["align"] == "center" and b["bold"] for b in blocks)
         assert any(b["text"] == "VERIFICATION" and b["align"] == "center" and b["bold"] for b in blocks)
-        # Any numbered points 1./2./3. must be left+not-bold
+        # Any numbered points 1./2./3. must be justify/left + not-bold
         for b in blocks:
             if re.match(r"^\d+\.", b["text"].strip()):
-                assert b["align"] == "left" and b["bold"] is False, f"numbered point wrong: {b}"
+                assert b["align"] in ("justify", "left") and b["bold"] is False, f"numbered point wrong: {b}"
 
 
 # --------- REAL FILE GENERATION ---------
@@ -252,10 +252,10 @@ class TestDocxGeneration:
         doc = Document(io.BytesIO(raw))
         paragraphs = [p for p in doc.paragraphs if p.text.strip()]
         assert len(paragraphs) > 5
-        # Find numbered points & check they are LEFT / not bold
+        # Find numbered points & check they are not centered / not bold
         for p in paragraphs:
             if re.match(r"^[૧૨૩]\.", p.text.strip()):
-                assert p.alignment in (WD_ALIGN_PARAGRAPH.LEFT, None), f"Gujarati point centered: {p.text}"
+                assert p.alignment in (WD_ALIGN_PARAGRAPH.JUSTIFY, WD_ALIGN_PARAGRAPH.LEFT, None), f"Gujarati point centered: {p.text}"
                 for run in p.runs:
                     assert not run.bold, f"Gujarati point bold: {p.text}"
         # Find title / court heading -> center+bold
@@ -298,10 +298,10 @@ class TestDocxGeneration:
                     if p.alignment == WD_ALIGN_PARAGRAPH.CENTER and any(r.bold for r in p.runs)]
         assert "AFFIDAVIT" in cb_texts
         assert "VERIFICATION" in cb_texts
-        # numbered points left/not-bold
+        # numbered points justify/left / not-bold
         for p in paragraphs:
             if re.match(r"^\d+\.", p.text.strip()):
-                assert p.alignment in (WD_ALIGN_PARAGRAPH.LEFT, None)
+                assert p.alignment in (WD_ALIGN_PARAGRAPH.JUSTIFY, WD_ALIGN_PARAGRAPH.LEFT, None)
                 for run in p.runs:
                     assert not run.bold
 
@@ -399,8 +399,8 @@ class TestPhaseADocumentEngine:
         blocks = build_blocks(content, title_en="APPLICATION FOR BAIL")
         assert blocks[0]["align"] == "center" and blocks[0]["bold"] is True
         assert blocks[2]["align"] == "center" and blocks[2]["bold"] is True
-        assert blocks[4]["align"] == "left" and blocks[4]["bold"] is False
-        assert blocks[5]["align"] == "left" and blocks[5]["bold"] is False
+        assert blocks[4]["align"] in ("justify", "left") and blocks[4]["bold"] is False
+        assert blocks[5]["align"] in ("justify", "left") and blocks[5]["bold"] is False
 
 
 # --------- PDF vs DOCX consistency ---------

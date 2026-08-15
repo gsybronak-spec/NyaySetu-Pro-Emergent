@@ -40,6 +40,10 @@ from doc_generator import (
     _gujarati_font_family as _resolve_gujarati_font_family_doc,
     render_template,
     build_blocks,
+    get_doc_settings,
+    normalize_legal_text,
+    NYAYSETU_LEGAL_FORMAT_V1,
+    MASTER_LEGAL_DOC_SETTINGS,
 )
 from docx_import import analyze_docx, decode_upload, DocxImportError
 from odt_import import analyze_odt, OdtImportError
@@ -1763,17 +1767,17 @@ async def _get_published_templates() -> list:
         if t_id in db_by_id:
             db_t = db_by_id[t_id]
             if db_t.get("status") == "published":
-                merged.append(db_t)
+                merged.append({**db_t, "format_version": db_t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1})
             # If draft or archived, hide from public lawyer templates list
         else:
             # Not in DB yet -> seed template is active by default
-            merged.append(seed_t)
+            merged.append({**seed_t, "format_version": seed_t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1})
 
     # Add newly created templates from DB that are published and not in seed
     seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
     for db_t in db_templates:
         if db_t["id"] not in seed_ids and db_t.get("status") == "published":
-            merged.append(db_t)
+            merged.append({**db_t, "format_version": db_t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1})
 
     return sorted(merged, key=lambda x: x.get("category", ""))
 
@@ -1783,9 +1787,12 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if t:
         if t.get("status") == "published":
-            return t
+            return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
         return None  # Draft or archived in DB -> hidden from public lawyer API
-    return next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
+    seed_t = next((x for x in [*TEMPLATES, *TEMPLATES_V2] if x["id"] == template_id), None)
+    if seed_t:
+        return {**seed_t, "format_version": seed_t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+    return None
 
 
 @api.get("/templates")
@@ -2071,14 +2078,8 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
                               (t.get("settings") or {}).get("block_align"))
 
-        doc_settings = {"page_size": page_size}
         tpl_settings = t.get("settings") or {}
-        for _k in ("margin_top_cm", "margin_bottom_cm", "margin_left_cm",
-                   "margin_right_cm", "body_size", "heading_size", "line_spacing",
-                   "paragraph_spacing", "alignment", "gujarati_font", "english_font",
-                   "gujarati_font_docx", "english_font_docx"):
-            if tpl_settings.get(_k) is not None:
-                doc_settings[_k] = tpl_settings[_k]
+        doc_settings = get_doc_settings({**tpl_settings, "page_size": page_size})
         if req.format == "docx":
             b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -3463,21 +3464,10 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(get_admi
         "jurisdiction": req.jurisdiction,
         "fields": [f.model_dump() for f in req.fields],
         "placeholders": req.placeholders,
-        "content_en": req.content_en,
-        "content_gu": req.content_gu,
-        "settings": req.settings or {
-            "margin_top_cm": 2.5,
-            "margin_bottom_cm": 2.5,
-            "margin_left_cm": 2.5,
-            "margin_right_cm": 2.5,
-            "gujarati_font": "LohitGujarati",
-            "english_font": "Times-Roman",
-            "body_size": 12,
-            "heading_size": 13,
-            "line_spacing": 18,
-            "paragraph_spacing": 6,
-            "page_size": "A4",
-        },
+        "content_en": normalize_legal_text(req.content_en),
+        "content_gu": normalize_legal_text(req.content_gu),
+        "format_version": NYAYSETU_LEGAL_FORMAT_V1,
+        "settings": get_doc_settings(req.settings),
         "status": "draft",
         "version": 1,
         "locked": False,
