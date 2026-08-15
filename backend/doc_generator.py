@@ -455,14 +455,16 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
         # 3. Case Details / Number
         is_case_details = bool(
-            re.search(r"(?:Special\s+Civil\s+Application|Civil\s+Suit|Criminal\s+Case|CMA|MACP|F\.?I\.?R\.?|કેસ|દાવા|અરજી|મુ\.અ\.|ગુ\.ર\.|Case|Suit|Application)\b.*(?:નં\.|નંબર|No\.|NO\.)", line, re.IGNORECASE)
+            re.search(r"(?:Special\s+Civil\s+Application|Civil\s+Suit|Criminal\s+Case|CMA|MACP|F\.?I\.?R\.?|કેસ|દાવા|અરજી|મુ\.અ\.|ગુ\.ર\.|પરચુરણ|પ\.અ\.|Case|Suit|Application)\s*(?:નં\.|નંબર|No\.|NO\.)", line, re.IGNORECASE)
+            or ("નં." in line and any(k in line for k in ("કેસ", "દાવો", "દાવા", "અરજી", "ગુ.ર.", "મુ.અ.", "F.I.R.", "FIR", "CMA", "MACP")))
+            or ("No." in line and any(k in line for k in ("Case", "Suit", "Application", "CMA", "MACP", "FIR", "Petition")))
             or line.startswith("{{case_type}}")
             or line.startswith("{{case_or_crime}}")
             or line.startswith("કેસ નં.")
             or line.startswith("દાવા નં.")
             or line.startswith("દિવાની કેસ નં.")
-            or line.startswith("ક્રિમિનલ કેસ નં.")
-        ) and len(line) < 85
+            or line.startswith("ક્રિમિનલ")
+        ) and len(line) < 85 and not bool(re.match(r"^(\d+|[૧-૯૦]+)[\.\)]", line))
 
         # 4. Exact Title or All-Caps / Prominent Title
         latin = re.sub(r"[^A-Za-z]", "", line)
@@ -481,7 +483,10 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
         )
 
         # 5. Date & Place
-        is_date_place = bool(re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]", line, re.IGNORECASE))
+        is_date_place = bool(
+            re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
+            or (curr_non_idx >= len(nonempty_lines) - 3 and len(line) < 45 and not line.startswith("સદર") and not line.startswith("આથી") and not bool(re.match(r"^(\d+|[૧-૯૦]+)[\.\)]", line)) and any(b.get("section") == "date_place" for b in blocks if b.get("section") != "spacer"))
+        )
 
         # 6. Advocate Signature
         is_signature = bool(
