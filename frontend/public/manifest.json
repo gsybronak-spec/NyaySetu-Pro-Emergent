@@ -1,0 +1,38 @@
+{
+  "short_name": "NyaySetu Pro",
+  "name": "NyaySetu Pro — Legal Drafting Platform",
+  "description": "Professional Legal Drafting Application for Advocates",
+  "id": "/",
+  "start_url": "/?pwa=1",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B1B3D",
+  "theme_color": "#0B1B3D",
+  "icons": [
+    {
+      "src": "/icons/pwa-192x192.v2.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-512x512.v2.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/pwa-maskable-512x512.v2.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": [
+    "business",
+    "productivity",
+    "utilities"
+  ],
+  "lang": "en"
+}
