@@ -43,7 +43,8 @@ export default function Profile() {
       label: user?.has_password ? "Change Password" : "Set Password",
       onPress: () => router.push("/(auth)/set-password"),
     },
-    { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates`, onPress: () => router.push("/(tabs)/subscription") },
+    { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription") },
+    { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription") },
     { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions") },
     { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral") },
     {

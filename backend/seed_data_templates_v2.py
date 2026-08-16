@@ -1035,6 +1035,7 @@ IN THE COURT OF {{court}},
 {{party_line}}
 Versus
 {{opposite_party_line}}
+----------------------------------------------------
 
 We, as {{selected_party_role}}, in the above-mentioned suit, hereby give Advocate Shri {{advocate_name}} the authority and power to accept service of process, to appear before the Court, to make documents, to deposit money, to take back money, to obtain court-fee refund in his name, to receive amounts, to withdraw the suit on our behalf, to file appeal and to carry out other legal proceedings, and to carry out all necessary legal proceedings in connection with the said suit.
 
@@ -1063,6 +1064,7 @@ Party's name :- {{party_sign_name}}      Advocate's name :- {{advocate_name}}
 {{party_line}}
 વિરુદ્ધ
 {{opposite_party_line}}
+----------------------------------------------------
 
 અમો {{selected_party_role}} તરીકે ઉપર દર્શાવેલ દાવામાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી કરારદાદ કબુલ કરવા તથા કોર્ટમાં હાજર રહેવા, દસ્તાવેજો કરવા, પૈસા રજુ કરવા, પૈસા પરત લેવા, તેમના નામનો કોર્ટફીઝ રીફંડનો દાખલો લેવા, રકમો લેવા, અમારા વતી દાવો પરત ખેંચી લેવા, અપીલ કરવા તેમજ અન્ય કાયદેસરની કાર્યવાહી કરવા અને સદર દાવા સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
 
@@ -1111,6 +1113,7 @@ IN THE COURT OF {{court}},
 {{party_line}}
 Versus
 {{opposite_party_line}}
+----------------------------------------------------
 
 We, as {{selected_party_role}}, in the above-mentioned case, hereby give Advocate Shri {{advocate_name}} the authority and power to appear on our behalf, to make applications, to give purshis, to produce documents, to give evidence, to examine and cross-examine witnesses, to compromise, to obtain certified copies, to file appeal, to file revision and to carry out other legal proceedings, and to carry out all necessary legal proceedings in connection with the said case.
 
@@ -1139,6 +1142,7 @@ Party's name :- {{party_sign_name}}      Advocate's name :- {{advocate_name}}
 {{party_line}}
 વિરુદ્ધ
 {{opposite_party_line}}
+----------------------------------------------------
 
 અમો {{selected_party_role}} તરીકે ઉપર દર્શાવેલ કેસમાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી હાજર રહેવા, અરજીઓ કરવા, પુરશીશ આપવા, દસ્તાવેજો રજૂ કરવા, પુરાવા આપવા, સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા, સમાધાન કરવા, પ્રમાણિત નકલ મેળવવા અપીલ કરવા, રિવિઝન કરવા તેમજ અન્ય કાયદેસરની કાર્યવાહી કરવા અને સદર કેસ સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
 

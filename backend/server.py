@@ -1901,19 +1901,55 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
 
 
 @api.get("/templates")
-async def list_templates(q: Optional[str] = None, category: Optional[str] = None):
+async def list_templates(q: Optional[str] = None, category: Optional[str] = None, authorization: Optional[str] = Header(None)):
+    user = None
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization[7:].strip()
+            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+        except Exception:
+            pass
+
     all_templates = await _get_published_templates()
-    items = [public_template(t) for t in all_templates]
+    fav_set = set(user.get("favourite_templates") or []) if user else set()
+    custom_order = user.get("template_order") or [] if user else []
+
+    items = []
+    for t in all_templates:
+        p = public_template(t)
+        if user is not None:
+            p["is_favorite"] = p["id"] in fav_set
+        items.append(p)
+
     if category:
-        items = [t for t in items if t["category"].lower() == category.lower()]
+        if category.lower() == "favorites":
+            items = [t for t in items if t.get("is_favorite")]
+        else:
+            items = [t for t in items if t["category"].lower() == category.lower()]
+
     if q:
         ql = q.lower().strip()
         matched = []
         for t in all_templates:
             all_aliases = [t["name_en"].lower(), t["name_gu"].lower()] + [a.lower() for a in t.get("aliases", [])]
             if any(ql in a for a in all_aliases):
-                matched.append(public_template(t))
+                p = public_template(t)
+                if user is not None:
+                    p["is_favorite"] = p["id"] in fav_set
+                matched.append(p)
+        if category:
+            if category.lower() == "favorites":
+                matched = [t for t in matched if t.get("is_favorite")]
+            else:
+                matched = [t for t in matched if t["category"].lower() == category.lower()]
         items = matched
+
+    # Sort if user has custom order
+    if custom_order and user is not None:
+        order_index = {tid: idx for idx, tid in enumerate(custom_order)}
+        items.sort(key=lambda x: order_index.get(x["id"], 999999))
+
     return items
 
 
@@ -2273,7 +2309,13 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
                               (t.get("settings") or {}).get("block_align"))
 
         tpl_settings = t.get("settings") or {}
-        doc_settings = get_doc_settings({**tpl_settings, "page_size": page_size})
+        doc_settings = get_doc_settings({
+            **tpl_settings,
+            "page_size": page_size,
+            "template_id": t["id"],
+            "raw_content": rendered,
+            "ctx": ctx,
+        })
         if req.format == "docx":
             b64 = generate_docx(blocks, req.language, doc_settings)
             mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -2709,6 +2751,54 @@ async def remove_fav_court(court_id: str, user=Depends(get_user)):
     await db.users.update_one({"id": user["id"]}, {"$pull": {"favourite_courts": court_id}})
     u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     return {"favourite_courts": u.get("favourite_courts") or []}
+
+
+# ============================================================
+# TEMPLATE FAVOURITES & ORDERING
+# ============================================================
+
+@api.get("/favourites/templates")
+async def get_fav_templates(user=Depends(get_user)):
+    return {"favourite_templates": user.get("favourite_templates") or []}
+
+
+@api.post("/favourites/templates/{template_id}")
+async def add_fav_template(template_id: str, user=Depends(get_user)):
+    all_tpls = await _get_published_templates()
+    if not any(t["id"] == template_id for t in all_tpls):
+        raise HTTPException(404, "Template not found")
+    await db.users.update_one({"id": user["id"]}, {"$addToSet": {"favourite_templates": template_id}})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"favourite_templates": u.get("favourite_templates") or []}
+
+
+@api.delete("/favourites/templates/{template_id}")
+async def remove_fav_template(template_id: str, user=Depends(get_user)):
+    await db.users.update_one({"id": user["id"]}, {"$pull": {"favourite_templates": template_id}})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {"favourite_templates": u.get("favourite_templates") or []}
+
+
+@api.get("/user/template-preferences")
+async def get_template_preferences(user=Depends(get_user)):
+    return {
+        "favourite_templates": user.get("favourite_templates") or [],
+        "template_order": user.get("template_order") or [],
+    }
+
+
+class TemplateOrderReq(BaseModel):
+    template_order: list[str]
+
+
+@api.put("/user/template-order")
+async def update_template_order(req: TemplateOrderReq, user=Depends(get_user)):
+    await db.users.update_one({"id": user["id"]}, {"$set": {"template_order": req.template_order}})
+    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return {
+        "favourite_templates": u.get("favourite_templates") or [],
+        "template_order": u.get("template_order") or [],
+    }
 
 
 

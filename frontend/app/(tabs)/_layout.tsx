@@ -74,6 +74,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="subscription"
         options={{
+          href: null,
           title: "Plans",
           tabBarIcon: ({ color, size }) => <Ionicons name="diamond" size={size} color={color} />,
         }}

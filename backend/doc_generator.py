@@ -6,7 +6,9 @@ same blocks so the final files match the preview exactly.
 """
 
 import io
+import os
 import re
+import tempfile
 import zipfile
 import base64
 from pathlib import Path
@@ -17,6 +19,7 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.pdfgen import canvas as pdfcanvas
 
 # ---- Unique per-PDF embedded-font identity (Android cache-collision fix) ----
 #
@@ -737,6 +740,8 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
             story.append(Spacer(1, para_space))
             continue
         safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        if b.get("section") == "title":
+            safe = f"<u>{safe}</u>"
         style = ParagraphStyle(
             "p",
             fontName=font_bold if b["bold"] else font_normal,
@@ -1020,7 +1025,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     max_width = page_w - margin_l - margin_r
 
     # Shape every word up front so the font subset covers all used glyphs.
-    shaped = []  # per block: list of lines {words:[{gid,adv,xoff,yoff}], width, is_last, indent}
+    shaped = []  # per block: list of lines {words:[{gid,adv,xoff,yoff}], width, is_last, indent}, size, align, space_adv, is_title
     used_gids = set()
     for b in blocks:
         text = (b.get("text") or "").strip()
@@ -1029,13 +1034,14 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
             continue
         size = heading_size if b.get("bold") else body_size
         align = b.get("align", "left")
+        is_title = b.get("section") == "title"
         block_indent = para_indent_pt if (b.get("indent") and align in ("justify", "left")) else 0.0
         lines, space_adv = _wrap_hb_lines(hb_font, upem, text, size, max_width, indent_pt=block_indent)
         for ln in lines:
             for w in ln["words"]:
                 for g in w:
                     used_gids.add(g["gid"])
-        shaped.append((lines, size, align, space_adv))
+        shaped.append((lines, size, align, space_adv, is_title))
 
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1050,7 +1056,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                     c.showPage()
                     y = page_h - margin_t
                 continue
-            lines, size, align, space_adv = entry
+            lines, size, align, space_adv, is_title = entry
             c.setFont(font_name, size)
             for ln in lines:
                 width = ln["width"]
@@ -1082,6 +1088,12 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                         x_pos += space_adv + extra
                 if ln.get("text"):
                     c._code.append("EMC")
+
+                if is_title:
+                    c.setLineWidth(1.0)
+                    ux = margin_l + (max_width - width) / 2.0 if align == "center" else x
+                    c.line(ux, y - 2.5, ux + width, y - 2.5)
+
                 y -= line_spacing
                 if y < margin_b:
                     c.showPage()
@@ -1110,36 +1122,318 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     return b64, meta
 
 
-def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = None) -> tuple:
-    """Public PDF generation API returning (base64, metadata).
+def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings: dict = None, ctx: dict = None):
+    """Specialized precision renderer for Vakalatnama documents to mirror the authoritative source PDFs."""
+    s = get_doc_settings(settings)
+    pagesize = _resolve_pagesize(s.get("page_size", "A4"))
+    page_w, page_h = pagesize
 
-    Gujarati content -> HarfBuzz engine (correct conjunct shaping, runs on
-    Render without Chromium). English content -> ReportLab with Playwright
-    Chromium fallback. Gujarati NEVER falls through to the unshaped ReportLab
-    path — that would silently corrupt Indic text (broken conjuncts / garbage
-    glyphs). If both shaped engines fail, the exception propagates so the
-    caller can surface a clear error and refund instead of shipping corrupted
-    output.
-    """
+    margin_l = 85.0
+    margin_r = 85.0
+    margin_t = 65.0
+    margin_b = 55.0
+    max_width = page_w - margin_l - margin_r
+
+    family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
+    hb_font = _new_hb_font(family)
+    if not hb_font:
+        raise RuntimeError("HarfBuzz font unavailable for Vakalatnama")
+    upem = hb_font.face.upem
+
+    raw_lines = [ln.strip() for ln in content.splitlines()]
+    sections = [[]]
+    for ln in raw_lines:
+        if not ln:
+            continue
+        if len(ln) >= 10 and re.match(r"^[\-\=\—\–]{10,}$", ln):
+            sections.append([])
+        else:
+            sections[-1].append(ln)
+
+    advocate_lines = sections[0] if len(sections) > 0 else []
+    meta_lines = sections[1] if len(sections) > 1 else []
+    rest_lines = []
+    for s_idx in range(2, len(sections)):
+        rest_lines.extend(sections[s_idx])
+
+    court_lines = []
+    case_line = ""
+    applicant_line = ""
+    versus_line = "વિરુદ્ધ" if language == "gu" else "Versus"
+    opponent_line = ""
+    saw_vs = False
+
+    for ln in meta_lines:
+        if "વકીલાતનામું" in ln or "VAKALATNAMA" in ln:
+            continue
+        if "સાહેબશ્રીની કોર્ટમાં" in ln or "IN THE COURT OF" in ln or ln.startswith("મહેરબાન"):
+            court_lines.append(ln)
+        elif court_lines and not case_line and not applicant_line and not any(k in ln for k in ("નં.", "No.", "વિરુદ્ધ", "Versus")):
+            court_lines.append(ln)
+        elif any(k in ln for k in ("નં.", "No.", "દાવો નં.", "કેસ નં.", "દાવા નં.")):
+            case_line = ln
+        elif ln in ("વિરુદ્ધ", "Versus", "વિરૂદ્ધ"):
+            saw_vs = True
+        elif not saw_vs and not applicant_line:
+            applicant_line = ln
+        elif saw_vs and not opponent_line:
+            opponent_line = ln
+
+    body_lines = []
+    date_lines = []
+    for ln in rest_lines:
+        if ln.startswith("તા.") or ln.startswith("સ્થળ.") or ln.startswith("Date") or ln.startswith("Place"):
+            date_lines.append(ln)
+        elif "સહી" in ln or "Signature" in ln or "પક્ષકારનું નામ" in ln or "Party's name" in ln:
+            pass
+        else:
+            body_lines.append(ln)
+
+    if not applicant_line and ctx:
+        applicant_line = ctx.get("party_line") or ""
+    if not opponent_line and ctx:
+        opponent_line = ctx.get("opposite_party_line") or ""
+    if not case_line and ctx:
+        c_type = ctx.get("case_type") or "દાવા"
+        c_num = ctx.get("case_number") or "____ / 20__"
+        case_line = f"{c_type} નં. {c_num}"
+
+    if applicant_line and ":-" not in applicant_line:
+        applicant_line = re.sub(r"\s*[:\-]+\s*", " :- ", applicant_line)
+        if " :- " not in applicant_line:
+            parts = applicant_line.split(" ", 1)
+            applicant_line = f"{parts[0]} :- {parts[1]}" if len(parts) > 1 else f"{parts[0]} :-"
+    if opponent_line and ":-" not in opponent_line:
+        opponent_line = re.sub(r"\s*[:\-]+\s*", " :- ", opponent_line)
+        if " :- " not in opponent_line:
+            parts = opponent_line.split(" ", 1)
+            opponent_line = f"{parts[0]} :- {parts[1]}" if len(parts) > 1 else f"{parts[0]} :-"
+
+    p_name = (ctx or {}).get("party_sign_name") or (ctx or {}).get("party_name") or ""
+    a_name = (ctx or {}).get("advocate_name") or (advocate_lines[0] if advocate_lines else "")
+
+    all_strings = raw_lines + advocate_lines + court_lines + [case_line, applicant_line, versus_line, opponent_line] + body_lines + date_lines + [
+        "વકીલાતનામું", "VAKALATNAMA", "વિરુદ્ધ", "Versus", "પક્ષકારની સહી :- __________________",
+        "એડવોકેટની સહી :- __________________", f"પક્ષકારનું નામ :- {p_name}", f"એડવોકેટનું નામ :- {a_name}",
+        "પક્ષકારની સહી :-", "એડવોકેટની સહી :-", "પક્ષકારનું નામ :-", "એડવોકેટનું નામ :-",
+        "Party's signature :- __________________", "Advocate's signature :- __________________",
+        f"Party's name :- {p_name}", f"Advocate's name :- {a_name}",
+        "[વકીલ શ્રીનુ નામ]", "[લાયકાત]", "[સરનામુ]", "[મોબાઈલ નં]", "[સનદ નં]",
+        "[દાવા] નં. [____ / 20__]", "[કેસ પ્રકાર] નં. [____ / 20__]", "મહેરબાન [________] સાહેબશ્રીની કોર્ટમાં,",
+        "[____]", "તા. [   ]", "સ્થળ. [   ]", "મહેરબાન ________ સાહેબશ્રીની કોર્ટમાં,",
+        "દાવા નં. ____ / 20__", "કેસ પ્રકાર નં. ____ / 20__", "[અરજદાર/વાદી] :-", "[સામાવાળા/પ્રતિવાદી] :-",
+        "[ફરીયાદી/અરજદાર/વાદી] :-", "[આરોપી/સામાવાળા/પ્રતિવાદી] :-"
+    ]
+
+    used_gids = set()
+    for s_item in all_strings:
+        for word in s_item.split():
+            for g in _shape_hb_word(hb_font, upem, word, 12.0):
+                used_gids.add(g["gid"])
+                
+    for bln in body_lines:
+        lines_wrap, _ = _wrap_hb_lines(hb_font, upem, bln, 10.5, max_width, indent_pt=28.0)
+        for ln in lines_wrap:
+            for w in ln["words"]:
+                for g in w:
+                    used_gids.add(g["gid"])
+
+    buf = io.BytesIO()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir, family)
+        c = pdfcanvas.Canvas(buf, pagesize=pagesize)
+
+        def draw_hb_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
+            if not text.strip():
+                return
+            c.setFont(font_name, size_pt)
+            w_shaped = _shape_hb_word(hb_font, upem, text, size_pt)
+            line_w = sum(g["adv"] for g in w_shaped)
+            if align == "center":
+                cur_x = x_start + (width_limit - line_w) / 2.0
+            elif align == "right":
+                cur_x = x_start + width_limit - line_w
+            else:
+                cur_x = x_start
+                
+            for g in w_shaped:
+                if g["gid"] in gid_to_pua:
+                    ch = chr(gid_to_pua[g["gid"]])
+                    c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], ch)
+                cur_x += g["adv"]
+                
+            if underline:
+                c.setLineWidth(1.0)
+                if align == "center":
+                    ux = x_start + (width_limit - line_w) / 2.0
+                elif align == "right":
+                    ux = x_start + width_limit - line_w
+                else:
+                    ux = x_start
+                c.line(ux, y_pos - 2.5, ux + line_w, y_pos - 2.5)
+
+        y = page_h - margin_t
+        
+        # 1. Top Header: Justice Symbol (Left) & Advocate Details (Right)
+        justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
+        img_size = 94.0
+        if os.path.exists(justice_img_path):
+            c.drawImage(justice_img_path, margin_l, y - img_size + 14, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
+
+        adv_y = y
+        for i, aln in enumerate(advocate_lines):
+            sz = 13.5 if i == 0 else 10.0
+            draw_hb_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=(i == 0))
+            adv_y -= (sz * 1.55)
+
+        y = min(y - img_size - 4, adv_y - 8)
+
+        # Full-width horizontal separator line 1
+        c.setLineWidth(1.0)
+        c.line(margin_l, y, margin_l + max_width, y)
+        y -= 26
+
+        # 2. Prominent Centered Title: "વકીલાતનામું"
+        title_text = "વકીલાતનામું" if language == "gu" else "VAKALATNAMA"
+        draw_hb_line(title_text, 16.0, margin_l, y, align="center", width_limit=max_width, is_bold=True)
+        y -= 28
+
+        # 3. Court Details (Centered)
+        for cln in court_lines:
+            draw_hb_line(cln, 11.0, margin_l, y, align="center", width_limit=max_width)
+            y -= 17
+        y -= 4
+
+        # 4. Case Details (Right Aligned)
+        if case_line:
+            draw_hb_line(case_line, 11.0, margin_l, y, align="right", width_limit=max_width)
+            y -= 22
+        else:
+            y -= 10
+
+        # 5. Parties Block
+        if applicant_line:
+            draw_hb_line(applicant_line, 11.0, margin_l, y, align="left", width_limit=max_width)
+            y -= 18
+            
+        draw_hb_line(versus_line, 11.0, margin_l, y, align="center", width_limit=max_width, is_bold=True)
+        y -= 18
+        
+        if opponent_line:
+            draw_hb_line(opponent_line, 11.0, margin_l, y, align="left", width_limit=max_width)
+            y -= 18
+            
+        y -= 6
+
+        # Full-width horizontal separator line 2
+        c.setLineWidth(1.0)
+        c.line(margin_l, y, margin_l + max_width, y)
+        y -= 22
+
+        # 6. Legal Body Paragraphs
+        for bln in body_lines:
+            lines_wrap, space_adv = _wrap_hb_lines(hb_font, upem, bln, 10.5, max_width, indent_pt=28.0)
+            for ln in lines_wrap:
+                w_list = ln["words"]
+                width = ln["width"]
+                line_indent = ln.get("indent", 0.0)
+                line_avail = max_width - line_indent
+                extra = 0.0
+                if not ln.get("is_last", False) and len(w_list) > 1:
+                    extra = (line_avail - width) / max(len(w_list) - 1, 1)
+                
+                cur_x = margin_l + line_indent
+                c.setFont(font_name, 10.5)
+                for wi, w in enumerate(w_list):
+                    for g in w:
+                        if g["gid"] in gid_to_pua:
+                            ch = chr(gid_to_pua[g["gid"]])
+                            c.drawString(cur_x + g["xoff"], y + g["yoff"], ch)
+                        cur_x += g["adv"]
+                    if wi < len(w_list) - 1:
+                        cur_x += space_adv + extra
+                y -= 17.5
+            y -= 8.0
+
+        y -= 6.0
+
+        # 7. Date and Place (Left)
+        date_y = y
+        for dln in date_lines:
+            draw_hb_line(dln, 10.5, margin_l, date_y, align="left", width_limit=max_width)
+            date_y -= 17.0
+        if not date_lines:
+            draw_hb_line(f"તા. {(ctx or {}).get('date_display', '')}", 10.5, margin_l, date_y, align="left", width_limit=max_width)
+            date_y -= 17.0
+            draw_hb_line(f"સ્થળ. {(ctx or {}).get('taluka_place', '')}", 10.5, margin_l, date_y, align="left", width_limit=max_width)
+
+        # 8. Signatures Block (Two Columns: Left = Client, Right = Advocate)
+        sig_y = y - 35.0
+        col_w = max_width / 2.0
+        
+        lbl_p_sig = "પક્ષકારની સહી :- __________________" if language == "gu" else "Party's signature :- __________________"
+        lbl_a_sig = "એડવોકેટની સહી :- __________________" if language == "gu" else "Advocate's signature :- __________________"
+        p_name_display = p_name if p_name else "__________________"
+        a_name_display = a_name if a_name else "__________________"
+        lbl_p_name = f"પક્ષકારનું નામ :- {p_name_display}" if language == "gu" else f"Party's name :- {p_name_display}"
+        lbl_a_name = f"એડવોકેટનું નામ :- {a_name_display}" if language == "gu" else f"Advocate's name :- {a_name_display}"
+        
+        draw_hb_line(lbl_p_sig, 10.5, margin_l, sig_y, align="left", width_limit=col_w)
+        draw_hb_line(lbl_a_sig, 10.5, margin_l + col_w, sig_y, align="left", width_limit=col_w)
+        
+        sig_y -= 38.0
+        
+        draw_hb_line(lbl_p_name, 10.5, margin_l, sig_y, align="left", width_limit=col_w)
+        draw_hb_line(lbl_a_name, 10.5, margin_l + col_w, sig_y, align="left", width_limit=col_w)
+
+        c.save()
+        try:
+            pdfmetrics._fonts.pop(font_name, None)
+        except Exception:
+            pass
+
+    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    meta = {
+        "engine": "harfbuzz_vakalatnama",
+        "font_family": family,
+        "font_version": GUJARATI_FONT_VERSIONS.get(family, "unknown"),
+    }
+    return b64, meta
+
+
+def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = None, template_id: str = "", raw_content: str = "", ctx: dict = None, **kwargs) -> tuple:
+    """Public PDF generation API returning (base64, metadata)."""
+    s = settings or {}
+    tid = template_id or s.get("template_id", "")
+    r_content = raw_content or s.get("raw_content", "")
+    r_ctx = ctx or s.get("ctx")
+
+    # Check if this document is a Vakalatnama (Civil or Criminal)
+    is_vak = (
+        tid in ("vakilatnama_civil", "vakilatnama_criminal")
+        or s.get("is_vakalatnama")
+        or any(b.get("section") == "title" and ("વકીલાતનામું" in (b.get("text") or "") or "VAKALATNAMA" in (b.get("text") or "")) for b in blocks)
+        or ("વકીલાતનામું" in (r_content or "") or "VAKALATNAMA" in (r_content or "").upper())
+    )
+
+    if is_vak:
+        try:
+            with _unique_subset_tag():
+                full_content = r_content or "\n".join(b.get("text", "") for b in blocks)
+                return _generate_pdf_vakalatnama_inner(full_content, language, s, r_ctx)
+        except Exception as e:
+            logger_err = str(e)
+
     has_gujarati = language == "gu" or any(re.search(r"[\u0A80-\u0AFF]", (b.get("text") or "")) for b in blocks)
     if has_gujarati:
         try:
             with _unique_subset_tag():
                 return _generate_pdf_hb_inner(blocks, language, settings)
         except Exception:
-            # Playwright/Chromium shapes Gujarati correctly too (it IS
-            # HarfBuzz), so it is an acceptable secondary shaped engine.
             return generate_pdf_playwright(blocks, language, settings), {
                 "engine": "chromium",
                 "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
             }
-    # English: ReportLab is the PRIMARY engine. It applies a cryptographically
-    # unique subset tag per generation (see _unique_subset_tag), which is the
-    # property Android's font cache needs — Chromium/Playwright's PDF writer
-    # always names subsets AAAAAA+/BAAAAA+ regardless of content, recreating
-    # the cache-collision bug for English documents. ReportLab also keeps
-    # local/dev output byte-identical in behavior to production (Render has no
-    # Chromium). Playwright remains a fallback only if ReportLab fails.
     try:
         with _unique_subset_tag():
             return _generate_pdf_reportlab_inner(blocks, language, settings), {
@@ -1153,9 +1447,10 @@ def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = N
         }
 
 
-def generate_pdf(blocks: list, language: str = "en", settings: dict = None) -> str:
+
+def generate_pdf(blocks: list, language: str = "en", settings: dict = None, template_id: str = "", raw_content: str = "", ctx: dict = None) -> str:
     """Public PDF generation API (base64 only; see generate_pdf_detailed)."""
-    b64, _meta = generate_pdf_detailed(blocks, language, settings)
+    b64, _meta = generate_pdf_detailed(blocks, language, settings, template_id=template_id, raw_content=raw_content, ctx=ctx)
     return b64
 
 
@@ -1195,10 +1490,10 @@ def rasterize_pdf_pages(pdf_bytes: bytes, scale: float = 2.0) -> list:
     return pages
 
 
-def generate_document_images(blocks: list, language: str = "en", settings: dict = None, scale: float = 2.0) -> list:
+def generate_document_images(blocks: list, language: str = "en", settings: dict = None, scale: float = 2.0, template_id: str = "", raw_content: str = "", ctx: dict = None) -> list:
     """Generate the document as per-page PNGs (same layout as the PDF)."""
     try:
-        pdf_b64 = generate_pdf(blocks, language, settings)
+        pdf_b64 = generate_pdf(blocks, language, settings, template_id=template_id, raw_content=raw_content, ctx=ctx)
     except Exception:
         # PDF engines failed -> try Chromium HTML (still HarfBuzz-shaped).
         pdf_b64 = generate_pdf_playwright(blocks, language, settings)
@@ -1265,9 +1560,9 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
     style_parts = []
     next_style = 1
 
-    def style_id_for(align: str, bold: bool, indent: bool = False) -> str:
+    def style_id_for(align: str, bold: bool, indent: bool = False, underline: bool = False) -> str:
         nonlocal next_style
-        key = (align, bold, indent)
+        key = (align, bold, indent, underline)
         if key in style_ids:
             return style_ids[key]
         sid = f"P{next_style}"
@@ -1278,6 +1573,8 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
             text_props += f' fo:font-weight="bold" style:font-size="{heading_size:.1f}pt"'
         else:
             text_props += f' fo:font-weight="normal" style:font-size="{body_size:.1f}pt"'
+        if underline:
+            text_props += ' style:text-underline-style="solid" style:text-underline-width="auto" style:text-underline-color="font-color"'
         indent_xml = ' fo:text-indent="0.85cm"' if indent else ''
         style_parts.append(
             f'<style:style style:name="{sid}" style:family="paragraph">'
@@ -1301,7 +1598,8 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
         align = b.get("align", "left")
         if align == "justify":
             align = "justify"
-        sid = style_id_for(align, bool(b.get("bold", False)), bool(b.get("indent", False)))
+        is_title = b.get("section") == "title"
+        sid = style_id_for(align, bool(b.get("bold", False)), bool(b.get("indent", False)), is_title)
         body_parts.append(f'<text:p text:style-name="{sid}">{escape(text)}</text:p>')
 
     content_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -1411,6 +1709,8 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
 
         run = p.add_run(b["text"])
         run.font.name = font_name
+        if b.get("section") == "title":
+            run.font.underline = True
         # ensure complex-script (Gujarati) also uses the font
         try:
             from docx.oxml.ns import qn

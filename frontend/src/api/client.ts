@@ -143,6 +143,11 @@ export const api = {
     const qs = params.toString();
     return request(`/templates${qs ? `?${qs}` : ""}`);
   },
+  favTemplates: () => request("/favourites/templates"),
+  addFavTemplate: (id: string) => request(`/favourites/templates/${id}`, "POST"),
+  removeFavTemplate: (id: string) => request(`/favourites/templates/${id}`, "DELETE"),
+  templatePreferences: () => request("/user/template-preferences"),
+  updateTemplateOrder: (template_order: string[]) => request("/user/template-order", "PUT", { template_order }),
   template: (id: string) => request(`/templates/${id}`),
   previewApp: (data: any) => request("/applications/preview", "POST", data),
   // Downloads may need longer: document generation + a cold Render instance can

@@ -693,7 +693,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   favouriteIds={favCourts}
                   onToggleFavourite={toggleFavCourt}
                   options={[
-                    ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en })),
+                    ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
                     { id: "other", label: "Other (type manually)", pinnable: false },
                   ]}
                   onChange={(v) => update("court_id", v)}
@@ -978,7 +978,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             favouriteIds={favCourts}
             onToggleFavourite={toggleFavCourt}
             options={[
-              ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en })),
+              ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
               { id: "other", label: "Other (type manually)", pinnable: false },
             ]}
             onChange={(v) => update("court_id", v)}
