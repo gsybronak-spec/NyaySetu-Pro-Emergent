@@ -1472,21 +1472,37 @@ _CATALOG_KINDS = {
 
 _CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
 
+_CATALOG_CACHE: dict[str, list] = {}
+
+def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
+    global _CATALOG_CACHE
+    if kind:
+        _CATALOG_CACHE.pop(kind, None)
+    else:
+        _CATALOG_CACHE.clear()
+
 
 async def _load_catalog(kind: str) -> list:
     """DB catalog entries if the collection has any, else the seed list
-    (backward compat for uninitialized databases)."""
+    (backward compat for uninitialized databases).
+    Cached in-memory to prevent repeated MongoDB roundtrips on static catalogs."""
+    if kind in _CATALOG_CACHE:
+        return _CATALOG_CACHE[kind]
     coll, seed_list = _CATALOG_KINDS[kind]
     items = await db[coll].find({}, {"_id": 0}).to_list(1000)
     if items:
+        _CATALOG_CACHE[kind] = items
         return items
-    return [dict(x, active=True) for x in seed_list]
+    res = [dict(x, active=True) for x in seed_list]
+    _CATALOG_CACHE[kind] = res
+    return res
 
 
 async def _refresh_catalog_maps() -> None:
     """Rebuild in-memory catalog maps + valid-id sets from MongoDB. Called at
     startup and after every admin catalog mutation so labels, validation and
     document rendering see admin-managed entries immediately."""
+    _invalidate_catalog_cache()
     global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP
     global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
     _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}

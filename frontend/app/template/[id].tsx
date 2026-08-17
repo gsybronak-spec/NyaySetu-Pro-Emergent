@@ -23,6 +23,7 @@ import { formatAdvocateName } from "@/src/utils/advocate";
 import { saveDocument } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
+import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 
@@ -139,10 +140,10 @@ export default function TemplateApplication() {
   const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
 
   // Catalog datasets for No-Case mode
-  const [districts, setDistricts] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>(() => catalogCache.peekDistricts());
   const [talukas, setTalukas] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
-  const [caseTypes, setCaseTypes] = useState<any[]>([]);
+  const [caseTypes, setCaseTypes] = useState<any[]>(() => catalogCache.peekCaseTypes());
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const draftTimer = useRef<any>(null);
@@ -153,8 +154,8 @@ export default function TemplateApplication() {
         const [t, me, dists, cts] = await Promise.all([
           api.template(templateId),
           api.me().catch(() => null),
-          api.districts().catch(() => []),
-          api.caseTypes().catch(() => []),
+          catalogCache.getDistricts(),
+          catalogCache.getCaseTypes(),
         ]);
         setTemplate(t);
         setUserProfile(me);
@@ -233,11 +234,11 @@ export default function TemplateApplication() {
   // Load talukas & courts when district changes in No-Case mode
   useEffect(() => {
     if (values.district) {
-      api.talukas(values.district).then((t) => setTalukas(Array.isArray(t) ? t : [])).catch(() => setTalukas([]));
-      api.courts(values.district).then((c) => setCourts(Array.isArray(c) ? c : [])).catch(() => setCourts([]));
+      catalogCache.getTalukas(values.district).then(setTalukas);
+      catalogCache.getCourts(values.district).then(setCourts);
     } else {
       setTalukas([]);
-      setCourts([]);
+      catalogCache.getCourts(undefined).then(setCourts);
     }
   }, [values.district]);
 

@@ -10,6 +10,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
+import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 
@@ -191,14 +192,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       opposite_party_role: NORMALIZE_ROLE_MAP[rawOpp] || rawOpp || "defendant",
     };
   });
-  const [caseTypes, setCaseTypes] = useState<any[]>([]);
-  const [laws, setLaws] = useState<any[]>([]);
+  const [caseTypes, setCaseTypes] = useState<any[]>(() => catalogCache.peekCaseTypes());
+  const [laws, setLaws] = useState<any[]>(() => catalogCache.peekLaws());
   const [sections, setSections] = useState<any[]>([]);
-  const [districts, setDistricts] = useState<any[]>([]);
-  const [talukas, setTalukas] = useState<any[]>([]);
-  const [courts, setCourts] = useState<any[]>([]);
+  const [districts, setDistricts] = useState<any[]>(() => catalogCache.peekDistricts());
+  const [talukas, setTalukas] = useState<any[]>(() => catalogCache.peekTalukas(initial?.district_id || undefined));
+  const [courts, setCourts] = useState<any[]>(() => catalogCache.peekCourts(initial?.district_id || undefined));
   const [policeStations, setPoliceStations] = useState<any[]>([]);
-  const [favCourts, setFavCourts] = useState<string[]>([]);
+  const [favCourts, setFavCourts] = useState<string[]>(() => catalogCache.peekFavCourts());
 
   // Mobile Lookup State
   const [searchMobile, setSearchMobile] = useState<string>("");
@@ -210,15 +211,15 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const [customValues, setCustomValues] = useState<Record<string, any>>(initial?.custom_fields || {});
 
   useEffect(() => {
-    api.caseTypes().then((r) => setCaseTypes(Array.isArray(r) ? r : [])).catch(() => setCaseTypes([]));
-    api.laws().then((r) => setLaws(Array.isArray(r) ? r : [])).catch(() => setLaws([]));
-    api.districts().then((r) => setDistricts(Array.isArray(r) ? r : [])).catch(() => setDistricts([]));
-    api.favCourts().then((r) => setFavCourts(Array.isArray(r?.favourite_courts) ? r.favourite_courts : [])).catch(() => setFavCourts([]));
+    catalogCache.getCaseTypes().then(setCaseTypes);
+    catalogCache.getLaws().then(setLaws);
+    catalogCache.getDistricts().then(setDistricts);
+    catalogCache.getFavCourts().then(setFavCourts);
   }, []);
 
   useEffect(() => {
     if (form.case_type_id) {
-      api.caseFormConfig(form.case_type_id)
+      catalogCache.getCaseFormConfig(form.case_type_id)
         .then((cfg) => {
           if (cfg && Array.isArray(cfg.fields)) {
             setDynamicFields(cfg.fields);
@@ -239,10 +240,26 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   }, [form.law_id]);
 
   useEffect(() => {
-    api.talukas(form.district_id || undefined).then((r) => setTalukas(Array.isArray(r) ? r : [])).catch(() => setTalukas([]));
-    api.courts(form.district_id || undefined).then((r) => setCourts(r || [])).catch(() => {});
-    api.policeStations(form.district_id || undefined).then((r) => setPoliceStations(r || [])).catch(() => {});
+    if (form.district_id) {
+      catalogCache.getTalukas(form.district_id).then(setTalukas);
+      catalogCache.getCourts(form.district_id).then(setCourts);
+      api.policeStations(form.district_id).then((r) => setPoliceStations(r || [])).catch(() => {});
+    } else {
+      setTalukas([]);
+      catalogCache.getCourts(undefined).then(setCourts);
+      api.policeStations(undefined).then((r) => setPoliceStations(r || [])).catch(() => {});
+    }
   }, [form.district_id]);
+
+  const onDistrictChange = (dId: string) => {
+    setForm((f) => ({
+      ...f,
+      district_id: dId,
+      taluka_id: null,
+      court_id: null,
+      court_custom: "",
+    }));
+  };
 
   const language = form.language;
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
@@ -672,7 +689,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   searchable
                   value={form.district_id}
                   options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
-                  onChange={(v) => update("district_id", v)}
+                  onChange={onDistrictChange}
                 />
                 <Dropdown
                   testID="taluka"
@@ -957,7 +974,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             searchable
             value={form.district_id}
             options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
-            onChange={(v) => update("district_id", v)}
+            onChange={onDistrictChange}
           />
           <Dropdown
             testID="taluka"

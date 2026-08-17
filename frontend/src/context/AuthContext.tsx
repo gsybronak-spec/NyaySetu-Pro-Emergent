@@ -40,14 +40,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const t = await getToken();
     if (!t) {
       setUser(null);
+      await storage.remove("nyaysetu_user_profile");
       return;
     }
+    // Load cached profile immediately for instant UI render
+    try {
+      const cached = await storage.get("nyaysetu_user_profile", null as any);
+      if (cached && typeof cached === "object" && cached.id) {
+        setUser(cached);
+      }
+    } catch {
+      // Ignore cache read error
+    }
+
     try {
       const u = await api.me();
-      setUser(u);
-    } catch {
-      await setToken(null);
-      setUser(null);
+      if (u && typeof u === "object") {
+        setUser(u);
+        await storage.set("nyaysetu_user_profile", u);
+      }
+    } catch (err: any) {
+      console.warn("[AuthContext] Background refresh failed, preserving session", err);
+      // Only 401 triggers logout (handled by client.ts onUnauthorized callback).
+      // On network errors, 5xx, timeouts, or cold starts: KEEP existing session and token!
     }
   }, []);
 
@@ -58,7 +73,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // C4: any 401 from the API clears the in-memory session so the tabs route
   // guard redirects to login instead of leaving the user on a broken screen.
   useEffect(() => {
-    setOnUnauthorized(() => setUser(null));
+    setOnUnauthorized(async () => {
+      setUser(null);
+      await storage.remove("nyaysetu_user_profile");
+    });
     return () => setOnUnauthorized(null);
   }, []);
 
@@ -77,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.verifyOtp(mobile, otp, referralCode);
       await setToken(res.token);
       setUser(res.user);
+      if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return { is_new: res.is_new };
     } finally {
       setLoading(false);
@@ -89,6 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.login(identifier, password, referralCode);
       await setToken(res.token);
       setUser(res.user);
+      if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return { is_new: res.is_new };
     } finally {
       setLoading(false);
@@ -108,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       await setToken(res.token);
       setUser(res.user);
+      if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return { is_new: res.is_new };
     } finally {
       setLoading(false);
@@ -120,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.googleExchange(code, redirectUri, referralCode);
       await setToken(res.token);
       setUser(res.user);
+      if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return { is_new: res.is_new };
     } finally {
       setLoading(false);
@@ -132,6 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.firebaseAuth(idToken, referralCode);
       await setToken(res.token);
       setUser(res.user);
+      if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return { is_new: res.is_new };
     } finally {
       setLoading(false);
@@ -141,6 +164,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await setToken(null);
     setUser(null);
+    await storage.remove("nyaysetu_user_profile");
     // Clear the Firebase client session too (no-op when Firebase is not
     // configured). The NyaySetu JWT removal is authoritative either way.
     await firebaseSignOutClient();

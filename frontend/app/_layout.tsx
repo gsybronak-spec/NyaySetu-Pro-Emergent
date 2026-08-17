@@ -8,6 +8,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { ThemeProvider } from "@/src/theme/ThemeContext";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { catalogCache } from "@/src/services/catalogCache";
 
 LogBox.ignoreAllLogs(true);
 
@@ -21,6 +22,14 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded, error]);
+
+  useEffect(() => {
+    // Pre-warm master catalogs in background on startup
+    catalogCache.getDistricts().catch(() => {});
+    catalogCache.getCaseTypes().catch(() => {});
+    catalogCache.getLaws().catch(() => {});
+    catalogCache.getCourts().catch(() => {});
+  }, []);
 
   if (!loaded && !error) return null;
 
