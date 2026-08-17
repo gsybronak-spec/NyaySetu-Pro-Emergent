@@ -26,7 +26,7 @@ import bcrypt
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
-from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
+from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, LEGACY_COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from seed_data_templates_v2 import TEMPLATES_V2
 from doc_generator import (
     generate_pdf,
@@ -1509,7 +1509,9 @@ async def _refresh_catalog_maps() -> None:
     _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
     _DISTRICT_MAP = {d["id"]: d for d in await _load_catalog("districts")}
     _TALUKA_MAP = {t["id"]: t for t in await _load_catalog("talukas")}
-    _COURT_MAP = {c["id"]: c for c in await _load_catalog("courts")}
+    _loaded_courts = {c["id"]: c for c in await _load_catalog("courts")}
+    _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
+    _COURT_MAP = {**_legacy_courts, **_loaded_courts}
     _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
     _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
     _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}

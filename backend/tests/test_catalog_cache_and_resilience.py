@@ -91,3 +91,22 @@ def test_concurrent_catalog_requests():
         res = client.get("/api/catalog/districts")
         assert res.status_code == 200
         assert len(res.json()) == 34
+
+
+def test_authoritative_catalogs_count():
+    """Verify exact counts of authoritative master catalogs: 34 Districts, 255 Talukas, 47 Courts, 23 Case Types."""
+    server._invalidate_catalog_cache()
+    districts = client.get("/api/catalog/districts").json()
+    talukas = client.get("/api/catalog/talukas").json()
+    courts = client.get("/api/catalog/courts").json()
+    case_types = client.get("/api/catalog/case-types").json()
+
+    assert len(districts) == 34, f"Expected 34 districts, got {len(districts)}"
+    assert len(talukas) == 255, f"Expected 255 talukas, got {len(talukas)}"
+    assert len(courts) == 47, f"Expected 47 courts, got {len(courts)}"
+    assert len(case_types) == 23, f"Expected 23 case types, got {len(case_types)}"
+
+    # Ensure all court IDs are unique
+    court_ids = [c["id"] for c in courts]
+    assert len(set(court_ids)) == 47, "Duplicate court IDs detected"
+

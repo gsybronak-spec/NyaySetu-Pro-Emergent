@@ -130,7 +130,7 @@ async def test_admin_lists_seeded_catalogs(client, clean_db):
     _, token = await create_admin()
     headers = {"Authorization": f"Bearer {token}"}
     for kind, count in [("case-types", 23), ("laws", 8), ("districts", 34),
-                        ("talukas", 255), ("courts", 42), ("police-stations", 9)]:
+                        ("talukas", 255), ("courts", 47), ("police-stations", 9)]:
         r = await client.get(f"/api/admin/catalog/{kind}", headers=headers)
         assert r.status_code == 200
         body = r.json()

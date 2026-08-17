@@ -115,20 +115,15 @@ class TestCatalogCourtsAndPolice:
         r = session.get(f"{API}/catalog/courts", params={"district_id": "ahmedabad"})
         assert r.status_code == 200
         items = r.json()
-        assert len(items) >= 3, f"Expected specific+generic courts, got {len(items)}"
+        assert len(items) == 47, f"Expected 47 courts, got {len(items)}"
         d_ids = {c["district_id"] for c in items}
-        assert "ahmedabad" in d_ids
         assert "generic" in d_ids
-        # ahmedabad-specific should come first
-        first_specific_idx = next((i for i, c in enumerate(items) if c["district_id"] == "ahmedabad"), -1)
-        first_generic_idx = next((i for i, c in enumerate(items) if c["district_id"] == "generic"), -1)
-        assert first_specific_idx < first_generic_idx, "Specific courts should precede generic courts"
 
     def test_courts_all_no_filter(self, session):
         r = session.get(f"{API}/catalog/courts")
         assert r.status_code == 200
         items = r.json()
-        assert len(items) >= 5
+        assert len(items) == 47
 
     def test_police_stations_surat_only(self, session):
         r = session.get(f"{API}/catalog/police-stations", params={"district_id": "surat"})
@@ -144,7 +139,7 @@ class TestCaseCourtPoliceLabels:
     def test_case_with_court_and_police_ids_returns_labels_en(self, session, auth):
         # Pick real ids from catalog
         courts = session.get(f"{API}/catalog/courts", params={"district_id": "ahmedabad"}).json()
-        ah_court = next(c for c in courts if c["district_id"] == "ahmedabad")
+        test_court = courts[0]
         ps = session.get(f"{API}/catalog/police-stations", params={"district_id": "surat"}).json()
         ah_ps = ps[0]
 
@@ -155,7 +150,7 @@ class TestCaseCourtPoliceLabels:
             "complaint_type": "police",
             "party_name": "TEST P",
             "district_id": "ahmedabad",
-            "court_id": ah_court["id"],
+            "court_id": test_court["id"],
             "police_station_id": ah_ps["id"],
         }
         r = session.post(f"{API}/cases", headers=H(auth), json=payload)
@@ -164,23 +159,23 @@ class TestCaseCourtPoliceLabels:
         auth["case_labeled_id"] = cid
 
         g = session.get(f"{API}/cases/{cid}", headers=H(auth)).json()
-        assert g["court_label"] == ah_court["en"], f"expected {ah_court['en']} got {g.get('court_label')}"
+        assert g["court_label"] == test_court["en"], f"expected {test_court['en']} got {g.get('court_label')}"
         assert g["police_station_label"] == ah_ps["en"]
 
     def test_case_gujarati_labels(self, session, auth):
         courts = session.get(f"{API}/catalog/courts", params={"district_id": "ahmedabad"}).json()
-        ah_court = next(c for c in courts if c["district_id"] == "ahmedabad")
+        test_court = courts[0]
         payload = {
             "language": "gu",
             "nickname": "TEST_iter4_gu",
             "case_type_id": "criminal_complaint",
             "district_id": "ahmedabad",
-            "court_id": ah_court["id"],
+            "court_id": test_court["id"],
         }
         r = session.post(f"{API}/cases", headers=H(auth), json=payload)
         cid = r.json()["id"]
         g = session.get(f"{API}/cases/{cid}", headers=H(auth)).json()
-        assert g["court_label"] == ah_court["gu"], f"Gujarati label expected. Got {g.get('court_label')}"
+        assert g["court_label"] == test_court["gu"], f"Gujarati label expected. Got {g.get('court_label')}"
 
     def test_court_other_uses_custom(self, session, auth):
         payload = {

@@ -1,5 +1,5 @@
 // Authoritative master catalog baseline for NyaySetu Pro (v2.1)
-// Generated directly from backend/seed_data.py (34 Districts, 255 Talukas, 46 Courts)
+// Generated directly from backend/seed_data.py (34 Districts, 255 Talukas, 47 Courts)
 
 export const SEED_DISTRICTS = [
   {
@@ -1709,256 +1709,286 @@ export const SEED_TALUKAS = [
 
 export const SEED_COURTS = [
   {
-    "id": "gen_district",
-    "district_id": "generic",
-    "en": "District Court",
-    "gu": "જિલ્લા ન્યાયાલય"
+    "id": "principal_district_and_sessions_judge_d12c22",
+    "en": "PRINCIPAL DISTRICT AND SESSIONS JUDGE",
+    "gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "gen_sessions",
-    "district_id": "generic",
-    "en": "Sessions Court",
-    "gu": "સેશન્સ ન્યાયાલય"
+    "id": "2nd_additional_district_judge_522bbb",
+    "en": "2nd ADDITIONAL DISTRICT JUDGE",
+    "gu": "બીજા એડિશનલ ડીસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "gen_jmfc",
-    "district_id": "generic",
-    "en": "Court of JMFC",
-    "gu": "જે.એમ.એફ.સી. ન્યાયાલય"
+    "id": "3rd_additional_district_judge_dbec67",
+    "en": "3rd ADDITIONAL DISTRICT JUDGE",
+    "gu": "ત્રીજા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "gen_civil_senior",
-    "district_id": "generic",
-    "en": "Principal Senior Civil Judge",
-    "gu": "મુખ્ય વરિષ્ઠ સિવિલ જજ"
+    "id": "4th_additional_district_judge_2673de",
+    "en": "4th ADDITIONAL DISTRICT JUDGE",
+    "gu": "ચોથા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "gen_civil_junior",
-    "district_id": "generic",
-    "en": "Civil Judge (Junior Division)",
-    "gu": "સિવિલ જજ (જુનિયર ડિવિઝન)"
+    "id": "5th_additional_district_judge_19adda",
+    "en": "5th ADDITIONAL DISTRICT JUDGE",
+    "gu": "પાંચમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "gen_family",
-    "district_id": "generic",
-    "en": "Family Court",
-    "gu": "ફેમિલી કોર્ટ"
+    "id": "6th_additional_district_judge_fbb72d",
+    "en": "6th ADDITIONAL DISTRICT JUDGE",
+    "gu": "છઠ્ઠા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "ahd_metro",
-    "district_id": "ahmedabad",
-    "en": "Metropolitan Magistrate Court, Ahmedabad",
-    "gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ કોર્ટ, અમદાવાદ"
+    "id": "7th_additional_district_judge_398fee",
+    "en": "7th ADDITIONAL DISTRICT JUDGE",
+    "gu": "સાતમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "ahd_city_civil",
-    "district_id": "ahmedabad",
-    "en": "City Civil Court, Ahmedabad",
-    "gu": "સિટી સિવિલ કોર્ટ, અમદાવાદ"
+    "id": "8th_additional_district_judge_c68ab1",
+    "en": "8th ADDITIONAL DISTRICT JUDGE",
+    "gu": "આઠમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_ahmedabad",
-    "district_id": "ahmedabad",
-    "en": "District & Sessions Court, Ahmedabad",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, અમદાવાદ"
+    "id": "9th_additional_district_judge_e53af1",
+    "en": "9th ADDITIONAL DISTRICT JUDGE",
+    "gu": "નવમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_gandhinagar",
-    "district_id": "gandhinagar",
-    "en": "District & Sessions Court, Gandhinagar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ગાંધીનગર"
+    "id": "10th_additional_district_judge_aa08cd",
+    "en": "10th ADDITIONAL DISTRICT JUDGE",
+    "gu": "દસમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "surat_district",
-    "district_id": "surat",
-    "en": "District & Sessions Court, Surat",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, સુરત"
+    "id": "11th_additional_district_judge_d978d2",
+    "en": "11th ADDITIONAL DISTRICT JUDGE",
+    "gu": "અગ્યારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "vad_district",
-    "district_id": "vadodara",
-    "en": "District & Sessions Court, Vadodara",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા"
+    "id": "12th_additional_district_judge_0dbcb2",
+    "en": "12th ADDITIONAL DISTRICT JUDGE",
+    "gu": "બારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "rajkot_district",
-    "district_id": "rajkot",
-    "en": "District & Sessions Court, Rajkot",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ"
+    "id": "13th_additional_district_judge_e5a99c",
+    "en": "13th ADDITIONAL DISTRICT JUDGE",
+    "gu": "તેરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_bhavnagar",
-    "district_id": "bhavnagar",
-    "en": "District & Sessions Court, Bhavnagar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ભાવનગર"
+    "id": "14th_additional_district_judge_949d31",
+    "en": "14th ADDITIONAL DISTRICT JUDGE",
+    "gu": "ચૌદમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_jamnagar",
-    "district_id": "jamnagar",
-    "en": "District & Sessions Court, Jamnagar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, જામનગર"
+    "id": "15th_additional_district_judge_1ca00f",
+    "en": "15th ADDITIONAL DISTRICT JUDGE",
+    "gu": "પંદરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_junagadh",
-    "district_id": "junagadh",
-    "en": "District & Sessions Court, Junagadh",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, જૂનાગઢ"
+    "id": "chief_judicial_magistrate_0abfd0",
+    "en": "CHIEF JUDICIAL MAGISTRATE",
+    "gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_anand",
-    "district_id": "anand",
-    "en": "District & Sessions Court, Anand",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, આણંદ"
+    "id": "principal_senior_civil_judge_623c03",
+    "en": "PRINCIPAL SENIOR CIVIL JUDGE",
+    "gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+    "district_id": "generic"
   },
   {
-    "id": "dst_kutch",
-    "district_id": "kutch",
-    "en": "District & Sessions Court, Bhuj",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ભુજ"
+    "id": "additional_senior_civil_judge___acjm_546aa7",
+    "en": "ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_mehsana",
-    "district_id": "mehsana",
-    "en": "District & Sessions Court, Mehsana",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, મહેસાણા"
+    "id": "2nd_additional_senior_civil_judge___acjm_321a9b",
+    "en": "2nd ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "બીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_patan",
-    "district_id": "patan",
-    "en": "District & Sessions Court, Patan",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, પાટણ"
+    "id": "3rd_additional_senior_civil_judge___acjm_7782ed",
+    "en": "3rd ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ત્રીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_amreli",
-    "district_id": "amreli",
-    "en": "District & Sessions Court, Amreli",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, અમરેલી"
+    "id": "4th_additional_senior_civil_judge___jmfc_0ef8e3",
+    "en": "4th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ચોથા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_aravalli",
-    "district_id": "aravalli",
-    "en": "District & Sessions Court, Modasa",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, મોડાસા"
+    "id": "5th_additional_senior_civil_judge___acjm_fec557",
+    "en": "5th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "પાંચમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_banaskantha",
-    "district_id": "banaskantha",
-    "en": "District & Sessions Court, Palanpur",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, પાલનપુર"
+    "id": "6th_additional_senior_civil_judge___acjm_7438c8",
+    "en": "6th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "છઠ્ઠા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_bharuch",
-    "district_id": "bharuch",
-    "en": "District & Sessions Court, Bharuch",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ભરૂચ"
+    "id": "7th_additional_senior_civil_judge___acjm_15d43c",
+    "en": "7th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "સાતમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_botad",
-    "district_id": "botad",
-    "en": "District & Sessions Court, Botad",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, બોટાદ"
+    "id": "8th_additional_senior_civil_judge___acjm_471d11",
+    "en": "8th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "આઠમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_chhota_udaipur",
-    "district_id": "chhota_udaipur",
-    "en": "District & Sessions Court, Chhota Udaipur",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, છોટાઉદેપુર"
+    "id": "9th_additional_senior_civil_judge___acjm_b10c35",
+    "en": "9th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "નવમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_dahod",
-    "district_id": "dahod",
-    "en": "District & Sessions Court, Dahod",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, દાહોદ"
+    "id": "10th_additional_senior_civil_judge___acj_79f5ff",
+    "en": "10th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "દસમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_dang",
-    "district_id": "dang",
-    "en": "District & Sessions Court, Ahwa",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, આહવા"
+    "id": "11th_additional_senior_civil_judge___acj_68da3e",
+    "en": "11th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "અગ્યારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_devbhoomi_dwarka",
-    "district_id": "devbhoomi_dwarka",
-    "en": "District & Sessions Court, Khambhalia",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ખંભાળિયા"
+    "id": "12th_additional_senior_civil_judge___acj_fa4696",
+    "en": "12th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "બારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_gir_somnath",
-    "district_id": "gir_somnath",
-    "en": "District & Sessions Court, Veraval",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વેરાવળ"
+    "id": "13th_additional_senior_civil_judge___acj_e1660e",
+    "en": "13th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "તેરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_kheda",
-    "district_id": "kheda",
-    "en": "District & Sessions Court, Nadiad",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, નડીઆદ"
+    "id": "14th_additional_senior_civil_judge___acj_16dc8f",
+    "en": "14th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ચૌદમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_mahisagar",
-    "district_id": "mahisagar",
-    "en": "District & Sessions Court, Lunawada",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, લુણાવાડા"
+    "id": "15th_additional_senior_civil_judge___acj_5aa729",
+    "en": "15th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "પંદરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_morbi",
-    "district_id": "morbi",
-    "en": "District & Sessions Court, Morbi",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, મોરબી"
+    "id": "additional_civil_judge___jmfc_613fc1",
+    "en": "ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_narmada",
-    "district_id": "narmada",
-    "en": "District & Sessions Court, Rajpipla",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, રાજપીપળા"
+    "id": "2nd_additional_civil_judge___jmfc_d41bf9",
+    "en": "2nd ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "બીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_navsari",
-    "district_id": "navsari",
-    "en": "District & Sessions Court, Navsari",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, નવસારી"
+    "id": "3rd_additional_civil_judge___jmfc_b38461",
+    "en": "3rd ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ત્રીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_panchmahal",
-    "district_id": "panchmahal",
-    "en": "District & Sessions Court, Godhra",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, ગોધરા"
+    "id": "4th_additional_civil_judge___jmfc_6a64db",
+    "en": "4th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ચોથા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_porbandar",
-    "district_id": "porbandar",
-    "en": "District & Sessions Court, Porbandar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, પોરબંદર"
+    "id": "5th_additional_civil_judge___jmfc_08e089",
+    "en": "5th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "પાંચમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_sabarkantha",
-    "district_id": "sabarkantha",
-    "en": "District & Sessions Court, Himmatnagar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, હિંમતનગર"
+    "id": "6th_additional_civil_judge___jmfc_d46629",
+    "en": "6th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "છઠ્ઠા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_surendranagar",
-    "district_id": "surendranagar",
-    "en": "District & Sessions Court, Surendranagar",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, સુરેન્દ્રનગર"
+    "id": "7th_additional_civil_judge___jmfc_ce626f",
+    "en": "7th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "સાતમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_tapi",
-    "district_id": "tapi",
-    "en": "District & Sessions Court, Vyara",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વ્યારા"
+    "id": "8th_additional_civil_judge___jmfc_8123a9",
+    "en": "8th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "આઠમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_valsad",
-    "district_id": "valsad",
-    "en": "District & Sessions Court, Valsad",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, વલસાડ"
+    "id": "9th_additional_civil_judge___jmfc_942060",
+    "en": "9th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "નવમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   },
   {
-    "id": "dst_vav_tharad",
-    "district_id": "vav_tharad",
-    "en": "District & Sessions Court, Tharad",
-    "gu": "જિલ્લા અને સેશન્સ કોર્ટ, થરાદ"
+    "id": "10th_additional_civil_judge___jmfc_fb7f64",
+    "en": "10th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "દસમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "11th_additional_civil_judge___jmfc_5c5515",
+    "en": "11th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "અગ્યારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "12th_additional_civil_judge___jmfc_966c26",
+    "en": "12th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "બારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "13th_additional_civil_judge___jmfc_75df11",
+    "en": "13th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "તેરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "14th_additional_civil_judge___jmfc_6bf30d",
+    "en": "14th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ચૌદમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "15th_additional_civil_judge___jmfc_487d3a",
+    "en": "15th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "પંદરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
   }
 ];
 
