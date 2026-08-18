@@ -1733,9 +1733,11 @@ async def list_cases(user=Depends(get_user), q: Optional[str] = None,
     if status != "all":
         # Treat missing status as active (legacy docs)
         if status == "active":
-            query["status"] = {"$ne": "archived"}
+            query["status"] = {"$nin": ["archived", "deleted"]}
         else:
             query["status"] = status
+    else:
+        query["status"] = {"$ne": "deleted"}
     cursor = db.cases.find(query, {"_id": 0}).sort("updated_at", -1)
     items = await cursor.to_list(500)
     items = [enrich_case(c) for c in items]
@@ -1817,9 +1819,16 @@ async def restore_case(case_id: str, user=Depends(get_user)):
 
 @api.delete("/cases/{case_id}")
 async def delete_case(case_id: str, user=Depends(get_user)):
-    r = await db.cases.delete_one({"id": case_id, "user_id": user["id"]})
-    if r.deleted_count == 0:
+    # Soft delete the case instead of hard deleting it to preserve audit history
+    # for previously generated legal documents/applications.
+    r = await db.cases.update_one(
+        {"id": case_id, "user_id": user["id"]},
+        {"$set": {"status": "deleted", "updated_at": now().isoformat()}}
+    )
+    if r.matched_count == 0:
         raise HTTPException(404, "Case not found")
+    # Clean up associated working drafts which do not hold legal weight.
+    await db.drafts.delete_many({"case_id": case_id, "user_id": user["id"]})
     return {"success": True}
 
 
