@@ -1,3 +1,4 @@
+import { storage } from "@/src/utils/storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, getToken, setOnUnauthorized, setToken } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
@@ -39,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     const t = await getToken();
     if (!t) {
+      await setToken(null);
       setUser(null);
       await storage.remove("nyaysetu_user_profile");
       return;
@@ -74,6 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // guard redirects to login instead of leaving the user on a broken screen.
   useEffect(() => {
     setOnUnauthorized(async () => {
+      await setToken(null);
       setUser(null);
       await storage.remove("nyaysetu_user_profile");
     });
