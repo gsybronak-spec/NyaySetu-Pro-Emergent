@@ -15,6 +15,7 @@ export async function getToken(): Promise<string | null> {
 // C4: called when any API returns 401, so the auth context can clear the
 // session and route guards can redirect to login (not just drop the token).
 let onUnauthorized: (() => void) | null = null;
+let isUnauthorizedHandling = false;
 export function setOnUnauthorized(cb: (() => void) | null) {
   onUnauthorized = cb;
 }
@@ -74,7 +75,11 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     // the message, so only notify when a token was actually present.
     if (res.status === 401 && token) {
       setToken(null);
-      onUnauthorized?.();
+      if (!isUnauthorizedHandling) {
+        isUnauthorizedHandling = true;
+        onUnauthorized?.();
+        setTimeout(() => (isUnauthorizedHandling = false), 1000);
+      }
     }
     const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
