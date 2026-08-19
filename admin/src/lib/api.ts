@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || 'https://nyaysetu-backend-nwp2.onrender.com';
+const BASE = import.meta.env.VITE_API_BASE || 'https://backend-gold-iota-nyngopebeg.vercel.app';
 
 async function request(path: string, method = 'GET', body?: unknown) {
   const token = localStorage.getItem('admin_token');
