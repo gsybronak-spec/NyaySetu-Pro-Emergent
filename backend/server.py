@@ -2885,6 +2885,8 @@ async def global_search(q: str, user=Depends(get_user)):
 # ============================================================
 
 @api.get("/")
+@app.get("/")
+@app.get("/healthz")
 async def root():
     return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0"}
 
