@@ -1,6 +1,71 @@
 const BASE = import.meta.env.VITE_API_BASE || 'https://backend-gold-iota-nyngopebeg.vercel.app';
 
-async function request(path: string, method = 'GET', body?: unknown) {
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string | null, error?: Error) => void> = [];
+
+function subscribeTokenRefresh(cb: (token: string | null, error?: Error) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function onRefreshed(token: string | null, error?: Error) {
+  refreshSubscribers.forEach((cb) => cb(token, error));
+  refreshSubscribers = [];
+}
+
+async function performSilentRefresh(): Promise<string> {
+  const refreshToken = localStorage.getItem('admin_refresh_token');
+  if (!refreshToken) {
+    throw new Error('No refresh token available');
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/admin/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+  } catch (err: any) {
+    // Network/infrastructure failure — NOT an auth revocation.
+    // Do NOT wipe credentials on network error.
+    throw new Error('Network failure during session refresh');
+  }
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!res.ok) {
+    // If the refresh endpoint explicitly rejected with 401, the persistent session is revoked/expired
+    if (res.status === 401) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_refresh_token');
+      localStorage.removeItem('admin_user');
+      window.dispatchEvent(new Event('admin:unauthorized'));
+    }
+    const msg = json?.detail || json?.message || `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+
+  if (json?.token) {
+    localStorage.setItem('admin_token', json.token);
+    if (json.refresh_token) {
+      localStorage.setItem('admin_refresh_token', json.refresh_token);
+    }
+    if (json.admin) {
+      localStorage.setItem('admin_user', JSON.stringify(json.admin));
+    }
+    return json.token;
+  }
+
+  throw new Error('Invalid refresh response structure');
+}
+
+async function request(path: string, method = 'GET', body?: unknown, isRetry = false): Promise<any> {
   const token = localStorage.getItem('admin_token');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -13,8 +78,8 @@ async function request(path: string, method = 'GET', body?: unknown) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch (err: any) {
-    // Network-level failure (backend unreachable / connection reset / CORS).
-    // Surface a readable message instead of the raw browser 'Failed to fetch'.
+    // Network-level failure (backend unreachable / connection reset / CORS / cold start).
+    // NEVER wipe credentials on network failures.
     throw new Error('Server connection failed. Check that the backend is reachable and try again.');
   }
 
@@ -27,13 +92,64 @@ async function request(path: string, method = 'GET', body?: unknown) {
   }
 
   if (!res.ok) {
+    // Handle 401 Unauthorized
     if (res.status === 401) {
-      localStorage.removeItem('admin_token');
-      window.dispatchEvent(new Event('admin:unauthorized'));
+      const isAuthEndpoint = path.startsWith('/auth/login') || path.startsWith('/auth/refresh');
+      
+      // If it's a login endpoint or already retried once, do NOT attempt silent refresh
+      if (isAuthEndpoint || isRetry) {
+        if (path.startsWith('/auth/refresh')) {
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_refresh_token');
+          localStorage.removeItem('admin_user');
+          window.dispatchEvent(new Event('admin:unauthorized'));
+        }
+        const msg = json?.detail || json?.message || `HTTP ${res.status}`;
+        throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      }
+
+      // If a refresh is already in flight, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((newToken, refreshErr) => {
+            if (refreshErr || !newToken) {
+              reject(refreshErr || new Error('Session expired. Please log in again.'));
+            } else {
+              resolve(request(path, method, body, true));
+            }
+          });
+        });
+      }
+
+      // Check if we have a refresh token
+      const refreshToken = localStorage.getItem('admin_refresh_token');
+      if (!refreshToken) {
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+        window.dispatchEvent(new Event('admin:unauthorized'));
+        throw new Error('Session expired. Please log in again.');
+      }
+
+      // Initiate single silent refresh
+      isRefreshing = true;
+      try {
+        const newToken = await performSilentRefresh();
+        isRefreshing = false;
+        onRefreshed(newToken);
+        return request(path, method, body, true);
+      } catch (refreshErr: any) {
+        isRefreshing = false;
+        onRefreshed(null, refreshErr);
+        throw refreshErr;
+      }
     }
+
+    // For ALL other HTTP statuses (400, 403, 404, 409, 422, 429, 500, 502, 503):
+    // NEVER wipe credentials or trigger logout.
     const msg = json?.detail || json?.message || `HTTP ${res.status}`;
     throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
+
   return json;
 }
 
@@ -41,7 +157,10 @@ export const adminApi = {
   login: (email: string, password: string) =>
     request('/auth/login', 'POST', { email, password }),
   me: () => request('/auth/me'),
-  logout: () => request('/auth/logout', 'POST'),
+  refresh: (refreshToken?: string) =>
+    request('/auth/refresh', 'POST', { refresh_token: refreshToken || localStorage.getItem('admin_refresh_token') }),
+  logout: (refreshToken?: string) =>
+    request('/auth/logout', 'POST', { refresh_token: refreshToken || localStorage.getItem('admin_refresh_token') }),
   dashboardStats: () => request('/dashboard/stats'),
   adminListTemplates: (status?: string, category?: string, q?: string) => {
     const params = new URLSearchParams();

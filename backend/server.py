@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import httpx
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -3057,6 +3057,9 @@ class AdminLoginReq(BaseModel):
     email: str = Field(..., max_length=200)
     password: str = Field(..., max_length=200)
 
+class AdminRefreshReq(BaseModel):
+    refresh_token: Optional[str] = Field(None, max_length=500)
+
 class FieldOptionDef(BaseModel):
     label_en: str = Field("", max_length=200)
     label_gu: str = Field("", max_length=200)
@@ -3210,20 +3213,48 @@ class SettingsUpdateReq(BaseModel):
 # ADMIN PORTAL — JWT & AUTH HELPERS
 # ============================================================
 
-ADMIN_TOKEN_EXPIRY_HOURS = 8
+ADMIN_ACCESS_TOKEN_EXPIRY_MINUTES = int(os.environ.get("ADMIN_ACCESS_TOKEN_EXPIRY_MINUTES", "15"))
+ADMIN_SESSION_EXPIRY_DAYS = int(os.environ.get("ADMIN_SESSION_EXPIRY_DAYS", "30"))
+ADMIN_TOKEN_EXPIRY_HOURS = 8  # Retained for backward compatibility if referenced
 
 
-def make_admin_token(admin_id: str, email: str, role: str) -> str:
-    """Create a JWT for admin users. Contains token_type='admin' to distinguish from lawyer JWTs."""
+def make_admin_token(admin_id: str, email: str, role: str, session_id: Optional[str] = None) -> str:
+    """Create a short-lived JWT for admin users. Contains token_type='admin' to distinguish from lawyer JWTs."""
     payload = {
         "sub": admin_id,
         "email": email,
         "role": role,
         "token_type": "admin",
         "iat": int(now().timestamp()),
-        "exp": int((now() + timedelta(hours=ADMIN_TOKEN_EXPIRY_HOURS)).timestamp()),
+        "exp": int((now() + timedelta(minutes=ADMIN_ACCESS_TOKEN_EXPIRY_MINUTES)).timestamp()),
     }
+    if session_id:
+        payload["session_id"] = session_id
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+
+async def create_admin_session(admin_id: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> tuple[str, str]:
+    """Create a persistent admin session in MongoDB. Returns (raw_refresh_token, session_id).
+    The raw refresh token is NEVER stored in the database — only its SHA-256 hash."""
+    raw_refresh_token = secrets.token_urlsafe(64)
+    token_hash = hashlib.sha256(raw_refresh_token.encode("utf-8")).hexdigest()
+    session_id = str(uuid.uuid4())
+    ts = now().isoformat()
+    expires_at = (now() + timedelta(days=ADMIN_SESSION_EXPIRY_DAYS)).isoformat()
+    session_doc = {
+        "id": session_id,
+        "admin_id": admin_id,
+        "token_hash": token_hash,
+        "created_at": ts,
+        "last_used_at": ts,
+        "expires_at": expires_at,
+        "revoked": False,
+        "revoked_at": None,
+        "ip_address": ip_address,
+        "user_agent": user_agent,
+    }
+    await db.admin_sessions.insert_one(session_doc)
+    return raw_refresh_token, session_id
 
 
 async def get_admin(authorization: Optional[str] = Header(None)) -> dict:
@@ -3326,8 +3357,8 @@ admin_api = APIRouter(prefix="/api/admin")
 
 
 @admin_api.post("/auth/login")
-async def admin_login(req: AdminLoginReq):
-    """Admin login with email + password → JWT."""
+async def admin_login(req: AdminLoginReq, request: Request = None, response: Response = None):
+    """Admin login with email + password → Short-lived Access JWT + Long-lived Persistent Refresh Session."""
     email = req.email.strip().lower()
     if not email:
         raise HTTPException(400, "Email is required")
@@ -3350,9 +3381,65 @@ async def admin_login(req: AdminLoginReq):
         {"id": admin["id"]},
         {"$set": {"last_login": now().isoformat()}},
     )
+    ip_addr = (request.headers.get("x-forwarded-for") or (request.client.host if request and request.client else None)) if request else None
+    u_agent = request.headers.get("user-agent") if request else None
+    refresh_token, session_id = await create_admin_session(admin["id"], ip_address=ip_addr, user_agent=u_agent)
+    token = make_admin_token(admin["id"], admin["email"], admin["role"], session_id=session_id)
     await audit_log(admin=admin, action="admin_login", target=admin["id"], metadata={"email": email})
-    token = make_admin_token(admin["id"], admin["email"], admin["role"])
-    return {"token": token, "admin": admin_public(admin)}
+    
+    if response:
+        response.set_cookie(
+            key="admin_refresh_token",
+            value=refresh_token,
+            max_age=ADMIN_SESSION_EXPIRY_DAYS * 86400,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            path="/api/admin/auth",
+        )
+    return {"token": token, "refresh_token": refresh_token, "admin": admin_public(admin)}
+
+
+@admin_api.post("/auth/refresh")
+async def admin_refresh(
+    req: Optional[AdminRefreshReq] = None,
+    request: Request = None,
+    response: Response = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Silently renew an expired admin access token using a valid persistent refresh session."""
+    refresh_token = (req.refresh_token if req and req.refresh_token else None)
+    if not refresh_token and request:
+        refresh_token = request.cookies.get("admin_refresh_token")
+    if not refresh_token and authorization and authorization.startswith("Bearer "):
+        refresh_token = authorization.split(" ", 1)[1]
+    
+    if not refresh_token:
+        raise HTTPException(401, "Missing refresh token")
+    
+    token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+    session = await db.admin_sessions.find_one({"token_hash": token_hash}, {"_id": 0})
+    if not session:
+        raise HTTPException(401, "Invalid refresh token")
+    if session.get("revoked", False):
+        raise HTTPException(401, "Session has been revoked")
+    if session.get("expires_at", "") <= now().isoformat():
+        raise HTTPException(401, "Session has expired")
+    
+    admin = await db.admin_users.find_one({"id": session["admin_id"]}, {"_id": 0})
+    if not admin:
+        raise HTTPException(401, "Admin account not found")
+    if not admin.get("active", False):
+        raise HTTPException(401, "Admin account is disabled")
+    
+    # Update last_used_at timestamp on the session
+    await db.admin_sessions.update_one(
+        {"id": session["id"]},
+        {"$set": {"last_used_at": now().isoformat()}},
+    )
+    
+    new_token = make_admin_token(admin["id"], admin["email"], admin["role"], session_id=session["id"])
+    return {"token": new_token, "refresh_token": refresh_token, "admin": admin_public(admin)}
 
 
 @admin_api.get("/auth/me")
@@ -3362,8 +3449,56 @@ async def admin_me(admin=Depends(get_admin)):
 
 
 @admin_api.post("/auth/logout")
-async def admin_logout(admin=Depends(get_admin)):
-    """Logout is client-side (clear JWT). Server acknowledges."""
+async def admin_logout(
+    req: Optional[AdminRefreshReq] = None,
+    request: Request = None,
+    response: Response = None,
+    authorization: Optional[str] = Header(None),
+):
+    """Explicit admin logout: revokes active session, clears cookie, and records audit log."""
+    refresh_token = (req.refresh_token if req and req.refresh_token else None)
+    if not refresh_token and request:
+        refresh_token = request.cookies.get("admin_refresh_token")
+    
+    admin_record = None
+    session_id_to_revoke = None
+    
+    if authorization and authorization.startswith("Bearer "):
+        bearer_token = authorization.split(" ", 1)[1]
+        try:
+            payload = jwt.decode(bearer_token, JWT_SECRET, algorithms=["HS256"])
+            if payload.get("token_type") == "admin":
+                admin_record = await db.admin_users.find_one({"id": payload.get("sub")}, {"_id": 0})
+                session_id_to_revoke = payload.get("session_id")
+        except Exception:
+            pass
+
+    if refresh_token:
+        token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+        session = await db.admin_sessions.find_one({"token_hash": token_hash})
+        if session:
+            await db.admin_sessions.update_one(
+                {"token_hash": token_hash},
+                {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
+            )
+            if not admin_record:
+                admin_record = await db.admin_users.find_one({"id": session.get("admin_id")}, {"_id": 0})
+
+    if session_id_to_revoke:
+        await db.admin_sessions.update_one(
+            {"id": session_id_to_revoke},
+            {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
+        )
+
+    if response:
+        response.delete_cookie(key="admin_refresh_token", path="/api/admin/auth")
+
+    await audit_log(
+        admin=admin_record,
+        action="admin_logout",
+        target=admin_record.get("id") if admin_record else "unknown",
+        metadata={"explicit": True},
+    )
     return {"success": True, "message": "Logged out"}
 
 
@@ -5801,9 +5936,13 @@ async def create_indexes():
     await _ensure_index(db.otps, "mobile", unique=True)
     otp_ttl = await _get_setting("otp_ttl_seconds")
     await _ensure_ttl_index(db.otps, "ttl_at", otp_ttl + 60)
-    # Admin users & Templates
+    # Admin users & Sessions & Templates
     await _ensure_index(db.admin_users, "id", unique=True)
     await _ensure_index(db.admin_users, "email", unique=True)
+    await _ensure_index(db.admin_sessions, "id", unique=True)
+    await _ensure_index(db.admin_sessions, "token_hash", unique=True)
+    await _ensure_index(db.admin_sessions, "admin_id")
+    await _ensure_index(db.admin_sessions, "expires_at")
     await _ensure_index(db.templates, "id", unique=True)
     await _ensure_index(db.templates, "slug", unique=True)
     await _ensure_index(db.templates, [("status", 1), ("category", 1)])
