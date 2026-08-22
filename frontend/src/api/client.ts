@@ -2,24 +2,109 @@ import { storage } from "@/src/utils/storage";
 
 const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://backend-gold-iota-nyngopebeg.vercel.app";
 const TOKEN_KEY = "nyaysetu_token";
+const REFRESH_TOKEN_KEY = "nyaysetu_refresh_token";
+
+export async function setTokens(accessToken: string | null, refreshToken?: string | null) {
+  if (accessToken) {
+    await storage.secureSet(TOKEN_KEY, accessToken);
+  } else {
+    await storage.secureRemove(TOKEN_KEY);
+  }
+  if (refreshToken !== undefined) {
+    if (refreshToken) {
+      await storage.secureSet(REFRESH_TOKEN_KEY, refreshToken);
+    } else {
+      await storage.secureRemove(REFRESH_TOKEN_KEY);
+    }
+  }
+}
 
 export async function setToken(t: string | null) {
-  if (t) await storage.secureSet(TOKEN_KEY, t);
-  else await storage.secureRemove(TOKEN_KEY);
+  await setTokens(t);
 }
 
 export async function getToken(): Promise<string | null> {
   return storage.secureGet(TOKEN_KEY, null as any);
 }
 
-// C4: called when any API returns 401, so the auth context can clear the
-// session and route guards can redirect to login (not just drop the token).
+export async function getRefreshToken(): Promise<string | null> {
+  return storage.secureGet(REFRESH_TOKEN_KEY, null as any);
+}
+
+// C4: called when any API definitively rejects authentication (revoked/expired refresh),
+// so the auth context can clear the session and route guards can redirect to login.
 let onUnauthorized: (() => void) | null = null;
 export function setOnUnauthorized(cb: (() => void) | null) {
   onUnauthorized = cb;
 }
 
 const REQUEST_TIMEOUT_MS = 30000;
+
+// Mutex and subscriber queue for concurrent silent token renewal
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string | null, err?: any) => void> = [];
+
+function subscribeTokenRefresh(cb: (token: string | null, err?: any) => void) {
+  refreshSubscribers.push(cb);
+}
+
+function onTokenRefreshed(token: string | null, err?: any) {
+  const subscribers = [...refreshSubscribers];
+  refreshSubscribers = [];
+  subscribers.forEach((cb) => cb(token, err));
+}
+
+export async function performSilentRefresh(): Promise<string> {
+  const refreshToken = await getRefreshToken();
+  if (!refreshToken) {
+    throw new Error("No refresh token available");
+  }
+
+  let res: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    res = await fetch(`${BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    // Network error or timeout — DO NOT purge credentials.
+    console.warn("[api] silent refresh network error (preserving session)", e);
+    throw new Error(describeNetworkError(e));
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const text = await res.text();
+  let json: any = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = { raw: text };
+  }
+
+  if (!res.ok) {
+    // If refresh definitively fails with 401/403 (revoked/expired session), purge local credentials
+    if (res.status === 401 || res.status === 403) {
+      console.warn("[api] session refresh definitively rejected, clearing credentials");
+      await setTokens(null, null);
+      onUnauthorized?.();
+    }
+    const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
+    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+  }
+
+  if (!json?.token) {
+    throw new Error("Invalid refresh response from server");
+  }
+
+  await setTokens(json.token, json.refresh_token || refreshToken);
+  return json.token;
+}
 
 export function describeNetworkError(e: unknown): string {
   // User-friendly copy for fetch-level failures; technical detail goes to console.
@@ -38,7 +123,21 @@ export function describeStatusError(status: number): string | null {
   return null;
 }
 
-async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS) {
+// Paths that bypass automatic 401 silent refresh
+const AUTH_BYPASS_PATHS = [
+  "/auth/login",
+  "/auth/register",
+  "/auth/verify-otp",
+  "/auth/send-otp",
+  "/auth/forgot-password",
+  "/auth/reset-password",
+  "/auth/google",
+  "/auth/firebase",
+  "/auth/refresh",
+  "/auth/logout",
+];
+
+async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS, isRetry = false): Promise<any> {
   const token = await getToken();
   const headers: any = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -60,6 +159,39 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     clearTimeout(timer);
   }
 
+  // Handle 401 on protected endpoints with silent token renewal
+  const isAuthBypass = AUTH_BYPASS_PATHS.some((p) => path.startsWith(p));
+  if (res.status === 401 && !isAuthBypass && !isRetry) {
+    const refreshToken = await getRefreshToken();
+    if (refreshToken) {
+      if (isRefreshing) {
+        // Wait for active refresh to complete, then retry
+        return new Promise((resolve, reject) => {
+          subscribeTokenRefresh((newToken, err) => {
+            if (err || !newToken) {
+              reject(err || new Error("Unauthorized"));
+            } else {
+              request(path, method, body, timeoutMs, true).then(resolve).catch(reject);
+            }
+          });
+        });
+      }
+
+      isRefreshing = true;
+      try {
+        const newToken = await performSilentRefresh();
+        onTokenRefreshed(newToken, null);
+        isRefreshing = false;
+        // Retry original request with newly issued access token
+        return request(path, method, body, timeoutMs, true);
+      } catch (refreshErr) {
+        onTokenRefreshed(null, refreshErr);
+        isRefreshing = false;
+        throw refreshErr;
+      }
+    }
+  }
+
   const text = await res.text();
   let json: any = null;
   try {
@@ -67,15 +199,8 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
   } catch {
     json = { raw: text };
   }
+
   if (!res.ok) {
-    // 401 from an authenticated screen means the session died; clear it and let
-    // the route guards redirect. Password-login 401 must NOT clear an existing
-    // session (there isn't one) — clearing is harmless but the caller relies on
-    // the message, so only notify when a token was actually present.
-    if (res.status === 401 && token) {
-      setToken(null);
-      onUnauthorized?.();
-    }
     const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
@@ -96,13 +221,14 @@ export const api = {
   setPassword: (new_password: string) => request("/auth/set-password", "POST", { new_password }),
   googleSession: (session_id: string, referral_code?: string) =>
     request("/auth/google-session", "POST", { session_id, referral_code }),
-  // Firebase Auth: exchange a VERIFIED Firebase ID token for the NyaySetu JWT.
-  // The backend verifies the token server-side (never trusts client identity).
+  // Firebase Auth: exchange a VERIFIED Firebase ID token for the NyaySetu JWT + session.
   firebaseAuth: (id_token: string, referral_code?: string) =>
     request("/auth/firebase", "POST", { id_token, referral_code }),
   // Native Google OAuth: exchange the authorization code server-side.
   googleExchange: (code: string, redirect_uri: string, referral_code?: string) =>
     request("/auth/google", "POST", { code, redirect_uri, referral_code }),
+  refreshSession: () => performSilentRefresh(),
+  logout: (refresh_token?: string) => request("/auth/logout", "POST", { refresh_token }),
   me: () => request("/profile/me"),
   updateProfile: (data: any) => request("/profile/update", "PUT", data),
   lookupClient: (mobile: string) => request(`/clients/lookup?mobile=${encodeURIComponent(mobile)}`),

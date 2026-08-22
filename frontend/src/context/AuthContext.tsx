@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { api, getToken, setOnUnauthorized, setToken } from "@/src/api/client";
+import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
 import { storage } from "@/src/utils/storage";
 
@@ -55,8 +55,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    const t = await getToken();
-    if (!t) {
+    const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
+    if (!token && !refreshToken) {
       setUser(null);
       await storage.remove("nyaysetu_user_profile");
       return;
@@ -78,8 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await storage.set("nyaysetu_user_profile", u);
       }
     } catch (err: any) {
-      console.warn("[AuthContext] Background refresh failed, preserving session", err);
-      // Only 401 triggers logout (handled by client.ts onUnauthorized callback).
+      console.warn("[AuthContext] Background user validation failed, preserving session", err);
+      // Only definitive refresh failure triggers logout (handled by client.ts onUnauthorized callback).
       // On network errors, 5xx, timeouts, or cold starts: KEEP existing session and token!
     }
   }, []);
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refresh().finally(() => setReady(true));
   }, [refresh]);
 
-  // C4: any 401 from the API clears the in-memory session so the tabs route
+  // C4: any definitive unauthorized session clears the in-memory session so the tabs route
   // guard redirects to login instead of leaving the user on a broken screen.
   useEffect(() => {
     setOnUnauthorized(async () => {
@@ -97,6 +97,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => setOnUnauthorized(null);
   }, []);
+
+  // Multi-tab synchronization (web): listen for storage events to sync login/logout
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.addEventListener) return;
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "nyaysetu_token" || e.key === "nyaysetu_refresh_token") {
+        if (!e.newValue) {
+          setUser(null);
+          storage.remove("nyaysetu_user_profile").catch(() => {});
+        } else {
+          refresh();
+        }
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [refresh]);
 
   const signInOtp = async (mobile: string) => {
     setLoading(true);
@@ -111,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const res = await api.verifyOtp(mobile, otp, referralCode);
-      await setToken(res.token);
+      await setTokens(res.token, res.refresh_token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return {
@@ -128,7 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const res = await api.login(identifier, password, referralCode);
-      await setToken(res.token);
+      await setTokens(res.token, res.refresh_token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return {
@@ -152,7 +169,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: data.email,
         referral_code: data.referralCode,
       });
-      await setToken(res.token);
+      await setTokens(res.token, res.refresh_token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return {
@@ -169,7 +186,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const res = await api.googleExchange(code, redirectUri, referralCode);
-      await setToken(res.token);
+      await setTokens(res.token, res.refresh_token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return {
@@ -186,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const res = await api.firebaseAuth(idToken, referralCode);
-      await setToken(res.token);
+      await setTokens(res.token, res.refresh_token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
       return {
@@ -200,7 +217,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await setToken(null);
+    try {
+      const refreshToken = await getRefreshToken();
+      await api.logout(refreshToken || undefined);
+    } catch (e) {
+      console.warn("[AuthContext] Logout API call error (proceeding with local cleanup)", e);
+    }
+    await setTokens(null, null);
     setUser(null);
     await storage.remove("nyaysetu_user_profile");
     // Clear the Firebase client session too (no-op when Firebase is not

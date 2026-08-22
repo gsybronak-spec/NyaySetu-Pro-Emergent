@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import List, Optional, Union
 
 import httpx
-from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -216,6 +216,9 @@ class FirebaseAuthReq(BaseModel):
     id_token: str = Field(..., max_length=8192)
     referral_code: Optional[str] = Field(None, max_length=20)
 
+class UserRefreshReq(BaseModel):
+    refresh_token: Optional[str] = Field(None, max_length=4000)
+
 class SendOtpReq(BaseModel):
     mobile: str = Field(..., max_length=15)
 
@@ -376,17 +379,44 @@ class CaseFormConfigReq(BaseModel):
 # HELPERS
 # ============================================================
 
+USER_ACCESS_TOKEN_EXPIRY_MINUTES = 15
+USER_SESSION_EXPIRY_DAYS = 90
+
 def now():
     return datetime.now(timezone.utc)
 
-def make_token(user_id: str, token_version: int = 0) -> str:
+def make_token(user_id: str, token_version: int = 0, session_id: Optional[str] = None) -> str:
     payload = {
         "sub": user_id,
         "ver": token_version,
         "iat": int(now().timestamp()),
-        "exp": int((now() + timedelta(days=90)).timestamp()),
+        "exp": int((now() + timedelta(minutes=USER_ACCESS_TOKEN_EXPIRY_MINUTES)).timestamp()),
+        "token_type": "user",
     }
+    if session_id:
+        payload["session_id"] = session_id
     return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+
+async def create_user_session(user_id: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> tuple[str, str]:
+    session_id = str(uuid.uuid4())
+    raw_refresh_token = secrets.token_urlsafe(64)
+    token_hash = hashlib.sha256(raw_refresh_token.encode("utf-8")).hexdigest()
+    created = now()
+    expires = created + timedelta(days=USER_SESSION_EXPIRY_DAYS)
+    session_doc = {
+        "id": session_id,
+        "user_id": user_id,
+        "token_hash": token_hash,
+        "created_at": created.isoformat(),
+        "last_used_at": created.isoformat(),
+        "expires_at": expires.isoformat(),
+        "revoked": False,
+        "revoked_at": None,
+        "ip_address": ip_address,
+        "user_agent": user_agent,
+    }
+    await db.user_sessions.insert_one(session_doc)
+    return session_id, raw_refresh_token
 
 async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
@@ -396,6 +426,9 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
         user_id = payload["sub"]
     except Exception:
+        raise HTTPException(401, "Invalid token")
+    # Role isolation: admin tokens cannot be used as user tokens
+    if payload.get("token_type") == "admin":
         raise HTTPException(401, "Invalid token")
     user = await db.users.find_one({"id": user_id}, {"_id": 0})
     if not user:
@@ -672,7 +705,7 @@ async def send_otp(req: SendOtpReq):
 
 
 @api.post("/auth/verify-otp")
-async def verify_otp(req: VerifyOtpReq):
+async def verify_otp(req: VerifyOtpReq, request: Request = None, response: Response = None):
     mobile = req.mobile.strip()
     otp = req.otp.strip()
     if not rate_limit(f"otp_verify:{mobile}", 10, 60):
@@ -703,8 +736,23 @@ async def verify_otp(req: VerifyOtpReq):
     elif user.get("active") is False:
         raise HTTPException(403, "Account disabled. Contact support.")
 
-    token = make_token(user["id"], user.get("token_version", 0))
-    return {"token": token, "user": _public_user(user), "is_new": is_new}
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent") if request else None
+    session_id, refresh_token = await create_user_session(user["id"], ip_address, user_agent)
+    token = make_token(user["id"], user.get("token_version", 0), session_id)
+
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {"token": token, "refresh_token": refresh_token, "user": _public_user(user), "is_new": is_new}
 
 
 # ============================================================
@@ -712,7 +760,7 @@ async def verify_otp(req: VerifyOtpReq):
 # ============================================================
 
 @api.post("/auth/register")
-async def register(req: RegisterReq):
+async def register(req: RegisterReq, request: Request = None, response: Response = None):
     """Create an account with a password. OTP-verified (single-use) so the mobile
     number is confirmed before the account exists; no duplicate users are created.
     Returns the same JWT/session contract as OTP/Google auth (auto-login)."""
@@ -757,12 +805,28 @@ async def register(req: RegisterReq):
     )
     await apply_referral(req.referral_code, user)
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
-    token = make_token(user["id"], fresh.get("token_version", 0))
-    return {"token": token, "user": _public_user(fresh), "is_new": True}
+
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent") if request else None
+    session_id, refresh_token = await create_user_session(user["id"], ip_address, user_agent)
+    token = make_token(user["id"], fresh.get("token_version", 0), session_id)
+
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {"token": token, "refresh_token": refresh_token, "user": _public_user(fresh), "is_new": True}
 
 
 @api.post("/auth/login")
-async def login(req: LoginReq):
+async def login(req: LoginReq, request: Request = None, response: Response = None):
     """Password login by mobile or email. Generic error on any mismatch so the
     response never reveals whether a user or which field was wrong. Rate-limited."""
     identifier = req.identifier.strip()
@@ -784,8 +848,24 @@ async def login(req: LoginReq):
         raise HTTPException(401, "Invalid mobile/email or password.")
     if user.get("active") is False:
         raise HTTPException(403, "Account disabled. Contact support.")
-    token = make_token(user["id"], user.get("token_version", 0))
-    return {"token": token, "user": _public_user(user), "is_new": False}
+
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent") if request else None
+    session_id, refresh_token = await create_user_session(user["id"], ip_address, user_agent)
+    token = make_token(user["id"], user.get("token_version", 0), session_id)
+
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {"token": token, "refresh_token": refresh_token, "user": _public_user(user), "is_new": False}
 
 
 @api.post("/auth/forgot-password")
@@ -852,6 +932,96 @@ async def set_password(req: SetPasswordReq, user=Depends(get_user)):
         {"$set": {"password_hash": hash_password(req.new_password)}},
     )
     return {"success": True, "message": "Password set successfully. You can now login with your mobile/email and password."}
+
+
+@api.post("/auth/refresh")
+async def refresh_user_token(
+    req: Optional[UserRefreshReq] = None,
+    authorization: Optional[str] = Header(None),
+    nyaysetu_refresh_token: Optional[str] = Cookie(None),
+    response: Response = None,
+):
+    """Silent token renewal: validates the persistent 90-day refresh session,
+    extends sliding expiration, and issues a fresh 15-minute access token."""
+    raw_refresh = None
+    if req and req.refresh_token:
+        raw_refresh = req.refresh_token.strip()
+    elif authorization and authorization.startswith("Bearer "):
+        raw_refresh = authorization.split(" ", 1)[1].strip()
+    elif nyaysetu_refresh_token:
+        raw_refresh = nyaysetu_refresh_token.strip()
+
+    if not raw_refresh:
+        raise HTTPException(401, "Missing refresh token")
+
+    token_hash = hashlib.sha256(raw_refresh.encode("utf-8")).hexdigest()
+    session = await db.user_sessions.find_one({"token_hash": token_hash}, {"_id": 0})
+    if not session:
+        raise HTTPException(401, "Invalid refresh token")
+    if session.get("revoked"):
+        raise HTTPException(401, "Session has been revoked")
+    if datetime.fromisoformat(session["expires_at"]) < now():
+        raise HTTPException(401, "Session has expired")
+
+    user = await db.users.find_one({"id": session["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(401, "User not found")
+    if user.get("active") is False:
+        raise HTTPException(401, "Account disabled. Contact support.")
+
+    # Update last_used_at and extend sliding expiration by 90 days
+    new_expires = now() + timedelta(days=USER_SESSION_EXPIRY_DAYS)
+    await db.user_sessions.update_one(
+        {"token_hash": token_hash},
+        {"$set": {"last_used_at": now().isoformat(), "expires_at": new_expires.isoformat()}},
+    )
+
+    access_token = make_token(user["id"], user.get("token_version", 0), session.get("id"))
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=raw_refresh,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {
+        "token": access_token,
+        "refresh_token": raw_refresh,
+        "user": _public_user(user),
+    }
+
+
+@api.post("/auth/logout")
+async def logout_user(
+    req: Optional[UserRefreshReq] = None,
+    authorization: Optional[str] = Header(None),
+    nyaysetu_refresh_token: Optional[str] = Cookie(None),
+    response: Response = None,
+):
+    """Explicit logout: revokes the persistent session in MongoDB and clears the refresh cookie."""
+    raw_refresh = None
+    if req and req.refresh_token:
+        raw_refresh = req.refresh_token.strip()
+    elif authorization and authorization.startswith("Bearer "):
+        raw_refresh = authorization.split(" ", 1)[1].strip()
+    elif nyaysetu_refresh_token:
+        raw_refresh = nyaysetu_refresh_token.strip()
+
+    if raw_refresh:
+        token_hash = hashlib.sha256(raw_refresh.encode("utf-8")).hexdigest()
+        await db.user_sessions.update_one(
+            {"token_hash": token_hash},
+            {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
+        )
+
+    if response:
+        response.delete_cookie(key="nyaysetu_refresh_token", path="/")
+
+    return {"success": True, "message": "Logged out successfully"}
 
 
 @api.post("/auth/google-session")
@@ -935,7 +1105,7 @@ async def _google_userinfo(access_token: str) -> tuple:
 
 
 @api.post("/auth/google")
-async def google_code_exchange(req: GoogleCodeReq):
+async def google_code_exchange(req: GoogleCodeReq, request: Request = None, response: Response = None):
     """Native Google OAuth Authorization Code exchange (replaces Emergent flow).
 
     The frontend opens Google's consent URL directly and sends the returned
@@ -992,8 +1162,23 @@ async def google_code_exchange(req: GoogleCodeReq):
             await db.users.update_one({"id": user["id"]}, {"$set": updates})
             user.update(updates)
 
-    token = make_token(user["id"], user.get("token_version", 0))
-    return {"token": token, "user": _public_user(user), "is_new": is_new}
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent") if request else None
+    session_id, refresh_token = await create_user_session(user["id"], ip_address, user_agent)
+    token = make_token(user["id"], user.get("token_version", 0), session_id)
+
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {"token": token, "refresh_token": refresh_token, "user": _public_user(user), "is_new": is_new}
 
 
 # ============================================================
@@ -1094,7 +1279,7 @@ async def verify_firebase_id_token(id_token: str) -> dict:
 
 
 @api.post("/auth/firebase")
-async def firebase_auth(req: FirebaseAuthReq):
+async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response: Response = None):
     """Exchange a verified Firebase ID token for the existing NyaySetu session.
 
     Flow: Firebase client SDK authenticates (email/password, phone OTP, or
@@ -1162,8 +1347,23 @@ async def firebase_auth(req: FirebaseAuthReq):
         await db.users.update_one({"id": user["id"]}, {"$set": updates})
         user.update(updates)
 
-    token = make_token(user["id"], user.get("token_version", 0))
-    return {"token": token, "user": _public_user(user), "is_new": is_new}
+    ip_address = request.client.host if request and request.client else None
+    user_agent = request.headers.get("user-agent") if request else None
+    session_id, refresh_token = await create_user_session(user["id"], ip_address, user_agent)
+    token = make_token(user["id"], user.get("token_version", 0), session_id)
+
+    if response:
+        response.set_cookie(
+            key="nyaysetu_refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+            path="/",
+        )
+
+    return {"token": token, "refresh_token": refresh_token, "user": _public_user(user), "is_new": is_new}
 
 
 # ============================================================
@@ -5936,6 +6136,11 @@ async def create_indexes():
     await _ensure_index(db.otps, "mobile", unique=True)
     otp_ttl = await _get_setting("otp_ttl_seconds")
     await _ensure_ttl_index(db.otps, "ttl_at", otp_ttl + 60)
+    # User Sessions
+    await _ensure_index(db.user_sessions, "id", unique=True)
+    await _ensure_index(db.user_sessions, "token_hash", unique=True)
+    await _ensure_index(db.user_sessions, "user_id")
+    await _ensure_index(db.user_sessions, "expires_at")
     # Admin users & Sessions & Templates
     await _ensure_index(db.admin_users, "id", unique=True)
     await _ensure_index(db.admin_users, "email", unique=True)
