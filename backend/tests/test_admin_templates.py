@@ -72,12 +72,12 @@ async def clean_db():
     """Drop all test collections before/after the test."""
     for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
                       "applications", "transactions", "referrals",
-                      "templates", "template_versions"]:
+                      "templates", "template_versions", "template_revisions", "system_settings", "audit_logs"]:
         await db[coll_name].drop()
     yield
     for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
                       "applications", "transactions", "referrals",
-                      "templates", "template_versions"]:
+                      "templates", "template_versions", "template_revisions", "system_settings", "audit_logs"]:
         await db[coll_name].drop()
 
 

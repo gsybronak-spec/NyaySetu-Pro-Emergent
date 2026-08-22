@@ -2197,10 +2197,9 @@ def public_template(t: dict) -> dict:
 
 
 async def _ensure_seed_complete() -> None:
-    """Ensure database has been initialized with seed templates if seed_complete is missing or database is empty."""
+    """Ensure database has been initialized with seed templates on first run."""
     setting = await db.system_settings.find_one({"key": "seed_complete"})
-    template_count = await db.templates.count_documents({})
-    if not setting or setting.get("value") is not True or template_count == 0:
+    if not setting or setting.get("value") is not True:
         await seed_templates()
 
 
@@ -5439,7 +5438,7 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     await db.templates.delete_one({"id": template_id})
     await create_admin_audit_log(
         admin=admin,
-        action="template_delete",
+        action="template_deleted",
         entity_type="template",
         entity_id=template_id,
         old_value=t,
@@ -5447,7 +5446,7 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     )
     return {
         "success": True,
-        "message": f"Template '{template_id}' deleted from catalog. Historical revisions preserved.",
+        "message": f"Template '{template_id}' permanently deleted from catalog. Historical revisions preserved.",
     }
 
 
@@ -5785,7 +5784,7 @@ async def seed_templates(force: bool = False) -> dict:
     all_seeds = [*TEMPLATES, *TEMPLATES_V2]
     if not force:
         template_count = await db.templates.count_documents({})
-        if setting and setting.get("value") is True and template_count > 0:
+        if setting and setting.get("value") is True:
             logger.info("Template seeding skipped — seed_complete=True in system_settings.")
             return {
                 "success": True,

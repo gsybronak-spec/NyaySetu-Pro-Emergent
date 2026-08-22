@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
+import { useAdminAuth } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
 
 // Default system auto-fill placeholders. Unlike the old hardcoded palette,
@@ -51,11 +52,19 @@ interface TemplateField {
 export default function TemplateEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { admin } = useAdminAuth();
+  const isSuperAdmin = admin?.role === 'super_admin';
   const isEdit = !!id;
   
   const [loading, setLoading] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleteModal, setDeleteModal] = useState<{
+    open: boolean;
+    confirmText: string;
+    loading: boolean;
+    error: string;
+  } | null>(null);
   
   // Preview & Validation
   const [previewEn, setPreviewEn] = useState('');
@@ -470,6 +479,19 @@ export default function TemplateEditor() {
     }
   };
 
+  const handleExecuteDelete = async () => {
+    if (!deleteModal || deleteModal.confirmText !== 'DELETE' || !id) return;
+    setDeleteModal(prev => prev ? { ...prev, loading: true, error: '' } : null);
+    try {
+      await adminApi.adminDeleteTemplate(id);
+      setDeleteModal(null);
+      alert(`Template '${id}' has been permanently deleted from the catalog.`);
+      navigate('/templates');
+    } catch (err: any) {
+      setDeleteModal(prev => prev ? { ...prev, loading: false, error: err.message } : null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="dashboard-loading">
@@ -509,6 +531,16 @@ export default function TemplateEditor() {
             </>
           ) : (
             <button className="btn-primary" onClick={handleBranchDraft} disabled={saving}>✏️ Create Draft Version (v{(template.version || 1) + 1})</button>
+          )}
+          {isSuperAdmin && isEdit && (
+            <button
+              className="btn-danger"
+              style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#fff' }}
+              onClick={() => setDeleteModal({ open: true, confirmText: '', loading: false, error: '' })}
+              disabled={saving}
+            >
+              🗑️ Delete
+            </button>
           )}
         </div>
       </div>
@@ -1149,6 +1181,78 @@ export default function TemplateEditor() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Permanent Delete Modal */}
+      {deleteModal?.open && (
+        <div className="modal-overlay" onClick={() => { if (!deleteModal.loading) setDeleteModal(null); }}>
+          <div className="modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #fee2e2' }}>
+              <h3 style={{ color: '#b91c1c', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚠️ Permanently Delete Template?
+              </h3>
+              <button className="btn-icon" disabled={deleteModal.loading} onClick={() => setDeleteModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {deleteModal.error && (
+                <div className="dashboard-error" style={{ marginBottom: '12px' }}>
+                  <p>{deleteModal.error}</p>
+                </div>
+              )}
+
+              <p style={{ fontSize: '0.9rem', color: '#374151', lineHeight: '1.5', margin: '0 0 16px' }}>
+                This will <strong>permanently remove</strong> the template from the active template catalog. Historical revisions and past generated documents will remain intact, but lawyers will no longer be able to create new applications with this template.
+              </p>
+
+              <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', rowGap: '6px', columnGap: '8px', color: '#1f2937' }}>
+                  <strong>Template Name:</strong> <span>{template.name_en}</span>
+                  <strong>Gujarati Name:</strong> <span className="text-gu">{template.name_gu}</span>
+                  <strong>Template ID:</strong> <code>{template.id}</code>
+                  <strong>Current Status:</strong> <div><StatusBadge status={template.status} /></div>
+                  <strong>Version:</strong> <span>v{template.version || 1}</span>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px', display: 'block' }}>
+                  To confirm permanent deletion, type <code style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>DELETE</code> below:
+                </label>
+                <input
+                  type="text"
+                  placeholder="Type DELETE to confirm"
+                  value={deleteModal.confirmText}
+                  onChange={e => setDeleteModal({ ...deleteModal, confirmText: e.target.value })}
+                  disabled={deleteModal.loading}
+                  style={{ width: '100%', borderColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : undefined }}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                disabled={deleteModal.loading}
+                onClick={() => setDeleteModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-danger"
+                style={{
+                  backgroundColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : '#9ca3af',
+                  borderColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : '#9ca3af',
+                  cursor: deleteModal.confirmText === 'DELETE' ? 'pointer' : 'not-allowed',
+                  color: '#fff',
+                }}
+                disabled={deleteModal.confirmText !== 'DELETE' || deleteModal.loading}
+                onClick={handleExecuteDelete}
+              >
+                {deleteModal.loading ? 'Deleting...' : 'Permanently Delete Template'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
