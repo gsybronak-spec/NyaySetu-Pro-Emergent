@@ -219,7 +219,7 @@ export default function Subscription() {
               Payments powered by Razorpay. Credits added after successful verification.
             </Text>
           </View>
-          <Pressable testID="txn-link" onPress={() => router.push("/transactions")}>
+          <Pressable testID="txn-link" onPress={() => router.push("/transactions" as any)}>
             <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Transaction History →</Text>
           </Pressable>
         </View>

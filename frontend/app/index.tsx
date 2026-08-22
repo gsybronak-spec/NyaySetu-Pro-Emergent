@@ -22,7 +22,8 @@ export default function Index() {
     );
   }
 
-  return <Redirect href={user ? "/(tabs)/home" : "/(auth)/login"} />;
+  const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? true;
+  return <Redirect href={user ? (isComplete ? "/(tabs)/home" : "/profile-completion" as any) : "/(auth)/login"} />;
 }
 
 const styles = StyleSheet.create({

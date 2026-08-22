@@ -423,9 +423,29 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
     t_en = (title_en or "").strip()
     t_gu = (title_gu or "").strip()
     nonempty = 0
+    in_table = False
+    table_rows = []
 
     for raw in raw_lines:
         line = raw.strip()
+        
+        if line == "[TABLE_START]":
+            in_table = True
+            table_rows = []
+            continue
+        if in_table:
+            if line == "[TABLE_END]":
+                blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "table", "rows": table_rows})
+                in_table = False
+            else:
+                if line:
+                    table_rows.append([cell.strip() for cell in line.split(" | ")])
+            continue
+
+        if line == "--- PAGE BREAK ---":
+            blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "page_break"})
+            continue
+
         if not line:
             blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "spacer"})
             continue
@@ -735,9 +755,48 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
     para_space = s.get("paragraph_spacing", 6)
     para_indent = float(s.get("first_line_indent_pt", 24.0))
     story = []
+    from reportlab.platypus import PageBreak as RLPageBreak, Table as RLTable, TableStyle as RLTableStyle
+    from reportlab.lib import colors
+    
     for b in blocks:
-        if not b["text"]:
+        if b.get("section") == "spacer":
             story.append(Spacer(1, para_space))
+            continue
+        if b.get("section") == "page_break":
+            story.append(RLPageBreak())
+            continue
+        if b.get("section") == "table":
+            table_data = []
+            for row in b.get("rows", []):
+                table_row = []
+                for cell in row:
+                    safe = cell.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    style = ParagraphStyle(
+                        "p",
+                        fontName=font_normal,
+                        fontSize=s["body_size"],
+                        leading=s["line_spacing"],
+                        alignment=0, # Left
+                    )
+                    table_row.append(Paragraph(safe, style))
+                table_data.append(table_row)
+            
+            if table_data:
+                # equally distribute width
+                cols = len(table_data[0])
+                page_w = pagesize[0]
+                margin_l = s["margin_left_cm"] * 28.35
+                margin_r = s["margin_right_cm"] * 28.35
+                max_width = page_w - margin_l - margin_r
+                col_width = max_width / max(1, cols)
+                
+                t = RLTable(table_data, colWidths=[col_width]*cols)
+                t.setStyle(RLTableStyle([
+                    ('INNERGRID', (0,0), (-1,-1), 0.25, colors.black),
+                    ('BOX', (0,0), (-1,-1), 0.25, colors.black),
+                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                ]))
+                story.append(t)
             continue
         safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         if b.get("section") == "title":
@@ -1028,6 +1087,27 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     shaped = []  # per block: list of lines {words:[{gid,adv,xoff,yoff}], width, is_last, indent}, size, align, space_adv, is_title
     used_gids = set()
     for b in blocks:
+        if b.get("section") == "page_break":
+            shaped.append({"type": "page_break"})
+            continue
+        if b.get("section") == "table":
+            table_shaped = []
+            cols = len(b.get("rows", [[]])[0]) if b.get("rows") else 1
+            col_width = max_width / max(1, cols)
+            for row in b.get("rows", []):
+                row_shaped = []
+                for cell in row:
+                    cell_text = cell.strip()
+                    lines, space_adv = _wrap_hb_lines(hb_font, upem, cell_text, body_size, col_width - 10)
+                    for ln in lines:
+                        for w in ln["words"]:
+                            for g in w:
+                                used_gids.add(g["gid"])
+                    row_shaped.append((lines, space_adv))
+                table_shaped.append(row_shaped)
+            shaped.append({"type": "table", "rows": table_shaped, "cols": cols, "col_width": col_width})
+            continue
+
         text = (b.get("text") or "").strip()
         if not text:
             shaped.append([])
@@ -1049,6 +1129,45 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
         c = pdfcanvas.Canvas(buf, pagesize=pagesize)
         y = page_h - margin_t
         for idx, entry in enumerate(shaped):
+            if isinstance(entry, dict):
+                if entry.get("type") == "page_break":
+                    c.showPage()
+                    c.setFont(font_name, body_size)
+                    y = page_h - margin_t
+                    continue
+                elif entry.get("type") == "table":
+                    col_width = entry["col_width"]
+                    c.setFont(font_name, body_size)
+                    for row_shaped in entry["rows"]:
+                        max_lines = max((len(cell_lines) for cell_lines, _ in row_shaped), default=1)
+                        row_height = max_lines * (body_size * 1.5) + 10
+                        if y - row_height < margin_b:
+                            c.showPage()
+                            c.setFont(font_name, body_size)
+                            y = page_h - margin_t
+                        
+                        for c_idx, (cell_lines, cell_space_adv) in enumerate(row_shaped):
+                            cell_x = margin_l + c_idx * col_width
+                            c.rect(cell_x, y - row_height, col_width, row_height)
+                            
+                            cell_y = y - 5 - body_size
+                            for ln in cell_lines:
+                                x_pos = cell_x + 5
+                                if ln.get("text"):
+                                    c._code.append(f"/Span<</ActualText <FEFF{ln['text'].encode('utf-16-be').hex().upper()}> >> BDC")
+                                for wi, w in enumerate(ln["words"]):
+                                    for g in w:
+                                        ch = chr(gid_to_pua[g["gid"]])
+                                        c.drawString(x_pos + g["xoff"], cell_y + g["yoff"], ch)
+                                        x_pos += g["adv"]
+                                    if wi < len(ln["words"]) - 1:
+                                        x_pos += cell_space_adv
+                                if ln.get("text"):
+                                    c._code.append("EMC")
+                                cell_y -= (body_size * 1.5)
+                        y -= row_height
+                    continue
+
             if not entry:
                 # blank block -> paragraph spacer
                 y -= para_space
@@ -1591,8 +1710,30 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
 
     body_parts = []
     for b in blocks:
+        if b.get("section") == "page_break":
+            body_parts.append('<text:p><text:soft-page-break/></text:p>')
+            continue
+        if b.get("section") == "table":
+            table_data = b.get("rows", [])
+            if not table_data:
+                continue
+            cols = len(table_data[0]) if table_data else 1
+            table_xml = ['<table:table>']
+            table_xml.append(f'<table:table-column table:number-columns-repeated="{cols}"/>')
+            for row in table_data:
+                table_xml.append('<table:table-row>')
+                for cell in row:
+                    table_xml.append('<table:table-cell>')
+                    sid = style_id_for("left", False, False, False)
+                    table_xml.append(f'<text:p text:style-name="{sid}">{escape(cell.strip())}</text:p>')
+                    table_xml.append('</table:table-cell>')
+                table_xml.append('</table:table-row>')
+            table_xml.append('</table:table>')
+            body_parts.append(''.join(table_xml))
+            continue
+            
         text = b.get("text", "") or ""
-        if not text:
+        if not text and b.get("section") == "spacer":
             body_parts.append('<text:p text:style-name="P_empty"/>')
             continue
         align = b.get("align", "left")
@@ -1603,7 +1744,7 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
         body_parts.append(f'<text:p text:style-name="{sid}">{escape(text)}</text:p>')
 
     content_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
-<office:document-content xmlns:office="{ODT_NS['office']}" xmlns:style="{ODT_NS['style']}" xmlns:text="{ODT_NS['text']}" xmlns:fo="{ODT_NS['fo']}" office:version="1.2">
+<office:document-content xmlns:office="{ODT_NS['office']}" xmlns:style="{ODT_NS['style']}" xmlns:text="{ODT_NS['text']}" xmlns:fo="{ODT_NS['fo']}" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" office:version="1.2">
 <office:automatic-styles>
 {''.join(style_parts)}
 <style:style style:name="P_empty" style:family="paragraph">
@@ -1687,8 +1828,29 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
     normal.font.name = font_name
     normal.font.size = Pt(s["body_size"])
 
+    from docx.enum.text import WD_BREAK
     for b in blocks:
-        if not b["text"]:
+        if b.get("section") == "page_break":
+            p = doc.add_paragraph()
+            run = p.add_run()
+            run.add_break(WD_BREAK.PAGE)
+            continue
+        if b.get("section") == "table":
+            table_data = b.get("rows", [])
+            if not table_data:
+                continue
+            table = doc.add_table(rows=len(table_data), cols=len(table_data[0]))
+            table.style = 'Table Grid'
+            for r_idx, row in enumerate(table_data):
+                for c_idx, cell_text in enumerate(row):
+                    cell = table.cell(r_idx, c_idx)
+                    cell.text = cell_text
+                    for paragraph in cell.paragraphs:
+                        for r in paragraph.runs:
+                            r.font.name = font_name
+                            r.font.size = Pt(s["body_size"])
+            continue
+        if b.get("section") == "spacer" or not b.get("text"):
             p = doc.add_paragraph("")
             p.paragraph_format.space_after = Pt(s.get("paragraph_spacing", 6))
             continue

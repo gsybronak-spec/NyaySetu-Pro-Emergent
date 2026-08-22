@@ -9,7 +9,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
-import { formatAdvocateName } from "@/src/utils/advocate";
+import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
 
@@ -61,7 +61,7 @@ export default function Home() {
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
-  const advocateName = formatAdvocateName(user?.name);
+  const advocateName = formatDisplayName(user, "Advocate");
 
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
@@ -79,7 +79,7 @@ export default function Home() {
         actions={
           <Pressable
             testID="home-search-btn"
-            onPress={() => router.push("/search")}
+            onPress={() => router.push("/search" as any)}
             style={[styles.desktopSearch, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
           >
             <Ionicons name="search" size={16} color={colors.muted} />
@@ -264,7 +264,7 @@ export default function Home() {
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md }}>
-          <Pressable testID="home-search-btn" onPress={() => router.push("/search")}>
+          <Pressable testID="home-search-btn" onPress={() => router.push("/search" as any)}>
             <Ionicons name="search" size={22} color={colors.onSurface} />
           </Pressable>
         </View>

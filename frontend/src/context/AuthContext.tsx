@@ -1,17 +1,35 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { api, getToken, setOnUnauthorized, setToken } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
+import { storage } from "@/src/utils/storage";
 
 interface User {
   id: string;
-  mobile: string;
+  mobile?: string | null;
   name?: string | null;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
+  gender?: string | null;
+  dob?: string | null;
   email?: string | null;
+  picture?: string | null;
   bar_council_no?: string | null;
+  advocate_name_en?: string | null;
+  advocate_name_gu?: string | null;
   state?: string | null;
   district?: string | null;
-  court?: string | null;
+  user_type?: string | null;
+  provider?: string | null;
   has_password?: boolean;
+  is_profile_complete?: boolean;
+  profile_completed?: boolean;
+}
+
+interface AuthResult {
+  is_new: boolean;
+  is_profile_complete?: boolean;
+  profile_completed?: boolean;
 }
 
 interface AuthCtx {
@@ -19,11 +37,11 @@ interface AuthCtx {
   ready: boolean;
   loading: boolean;
   signInOtp: (mobile: string) => Promise<void>;
-  verifyOtp: (mobile: string, otp: string, referralCode?: string) => Promise<{ is_new: boolean }>;
-  signInPassword: (identifier: string, password: string, referralCode?: string) => Promise<{ is_new: boolean }>;
-  registerAccount: (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => Promise<{ is_new: boolean }>;
-  completeGoogleCode: (code: string, redirectUri: string, referralCode?: string) => Promise<{ is_new: boolean }>;
-  firebaseExchange: (idToken: string, referralCode?: string) => Promise<{ is_new: boolean }>;
+  verifyOtp: (mobile: string, otp: string, referralCode?: string) => Promise<AuthResult>;
+  signInPassword: (identifier: string, password: string, referralCode?: string) => Promise<AuthResult>;
+  registerAccount: (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => Promise<AuthResult>;
+  completeGoogleCode: (code: string, redirectUri: string, referralCode?: string) => Promise<AuthResult>;
+  firebaseExchange: (idToken: string, referralCode?: string) => Promise<AuthResult>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: User | null) => void;
@@ -89,33 +107,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const verifyOtp = async (mobile: string, otp: string, referralCode?: string) => {
+  const verifyOtp = async (mobile: string, otp: string, referralCode?: string): Promise<AuthResult> => {
     setLoading(true);
     try {
       const res = await api.verifyOtp(mobile, otp, referralCode);
       await setToken(res.token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-      return { is_new: res.is_new };
+      return {
+        is_new: res.is_new,
+        is_profile_complete: res.user?.is_profile_complete ?? res.user?.profile_completed,
+        profile_completed: res.user?.profile_completed ?? res.user?.is_profile_complete,
+      };
     } finally {
       setLoading(false);
     }
   };
 
-  const signInPassword = async (identifier: string, password: string, referralCode?: string) => {
+  const signInPassword = async (identifier: string, password: string, referralCode?: string): Promise<AuthResult> => {
     setLoading(true);
     try {
       const res = await api.login(identifier, password, referralCode);
       await setToken(res.token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-      return { is_new: res.is_new };
+      return {
+        is_new: res.is_new,
+        is_profile_complete: res.user?.is_profile_complete ?? res.user?.profile_completed,
+        profile_completed: res.user?.profile_completed ?? res.user?.is_profile_complete,
+      };
     } finally {
       setLoading(false);
     }
   };
 
-  const registerAccount = async (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }) => {
+  const registerAccount = async (data: { mobile: string; otp: string; password: string; name?: string; email?: string; referralCode?: string }): Promise<AuthResult> => {
     setLoading(true);
     try {
       const res = await api.register({
@@ -129,33 +155,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await setToken(res.token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-      return { is_new: res.is_new };
+      return {
+        is_new: res.is_new,
+        is_profile_complete: res.user?.is_profile_complete ?? res.user?.profile_completed,
+        profile_completed: res.user?.profile_completed ?? res.user?.is_profile_complete,
+      };
     } finally {
       setLoading(false);
     }
   };
 
-  const completeGoogleCode = async (code: string, redirectUri: string, referralCode?: string) => {
+  const completeGoogleCode = async (code: string, redirectUri: string, referralCode?: string): Promise<AuthResult> => {
     setLoading(true);
     try {
       const res = await api.googleExchange(code, redirectUri, referralCode);
       await setToken(res.token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-      return { is_new: res.is_new };
+      return {
+        is_new: res.is_new,
+        is_profile_complete: res.user?.is_profile_complete ?? res.user?.profile_completed,
+        profile_completed: res.user?.profile_completed ?? res.user?.is_profile_complete,
+      };
     } finally {
       setLoading(false);
     }
   };
 
-  const firebaseExchange = async (idToken: string, referralCode?: string) => {
+  const firebaseExchange = async (idToken: string, referralCode?: string): Promise<AuthResult> => {
     setLoading(true);
     try {
       const res = await api.firebaseAuth(idToken, referralCode);
       await setToken(res.token);
       setUser(res.user);
       if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-      return { is_new: res.is_new };
+      return {
+        is_new: res.is_new,
+        is_profile_complete: res.user?.is_profile_complete ?? res.user?.profile_completed,
+        profile_completed: res.user?.profile_completed ?? res.user?.is_profile_complete,
+      };
     } finally {
       setLoading(false);
     }

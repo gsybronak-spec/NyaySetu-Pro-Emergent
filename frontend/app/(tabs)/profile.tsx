@@ -8,7 +8,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
-import { formatAdvocateName } from "@/src/utils/advocate";
+import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 
@@ -37,16 +37,16 @@ export default function Profile() {
   };
 
   const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
-    { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/(auth)/onboarding") },
+    { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/profile/edit" as any) },
     {
       icon: "key-outline",
       label: user?.has_password ? "Change Password" : "Set Password",
-      onPress: () => router.push("/(auth)/set-password"),
+      onPress: () => router.push("/(auth)/set-password" as any),
     },
-    { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription") },
-    { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription") },
-    { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions") },
-    { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral") },
+    { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription" as any) },
+    { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription" as any) },
+    { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions" as any) },
+    { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral" as any) },
     {
       icon: "moon-outline",
       label: "Dark Mode",
@@ -62,9 +62,9 @@ export default function Profile() {
     },
     { icon: "mail-outline", label: "Contact Support", onPress: () => Alert.alert("Support", "Email us at support@nyaysetupro.in") },
     { icon: "information-circle-outline", label: "About Us", onPress: () => Alert.alert("About NyaySetu Pro", "The New Era of Advocacy — helping Indian Advocates draft routine court documents faster and more affordably.") },
-    { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy") },
-    { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms") },
-    { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund") },
+    { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy" as any) },
+    { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms" as any) },
+    { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund" as any) },
   ];
 
   // ------------------------- DESKTOP -------------------------
@@ -78,17 +78,17 @@ export default function Profile() {
           <View style={[styles.dUserCard, { backgroundColor: colors.brand }]}>
             <View style={[styles.avatar, { backgroundColor: colors.brandPrimary }]}>
               <Text style={{ color: colors.onBrandPrimary, fontSize: 26, fontWeight: "800" }}>
-                {(user?.advocate_name_en || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
+                {(user?.first_name || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
               </Text>
             </View>
             <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700", marginTop: Spacing.md }}>
-              {formatAdvocateName(user?.advocate_name_en || user?.name, "en")}
+              {formatDisplayName(user, "User")}
             </Text>
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 14, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
             ) : null}
-            <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 2 }}>+91 {user?.mobile}</Text>
-            {user?.email ? <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }} numberOfLines={1}>{user.email}</Text> : null}
+            <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 2 }}>{user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}</Text>
+            {user?.email && user?.mobile ? <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }} numberOfLines={1}>{user.email}</Text> : null}
             {user?.bar_council_no ? (
               <View style={styles.dBarChip}>
                 <Ionicons name="ribbon" size={13} color="#C5A059" />
@@ -144,15 +144,15 @@ export default function Profile() {
         <View style={[styles.userCard, { backgroundColor: colors.brand }]}>
           <View style={[styles.avatar, { backgroundColor: colors.brandPrimary }]}>
             <Text style={{ color: colors.onBrandPrimary, fontSize: 22, fontWeight: "800" }}>
-              {(user?.advocate_name_en || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
+              {(user?.first_name || user?.name || user?.mobile || "A").charAt(0).toUpperCase()}
             </Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatAdvocateName(user?.advocate_name_en || user?.name, "en")}</Text>
+            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatDisplayName(user, "User")}</Text>
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 13, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
             ) : null}
-            <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>+91 {user?.mobile}</Text>
+            <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>{user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}</Text>
             {user?.bar_council_no ? (
               <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>
             ) : null}

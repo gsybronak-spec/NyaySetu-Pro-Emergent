@@ -56,7 +56,7 @@ export function useGoogleAuth() {
       setBusy(true);
       try {
         const referral = (await storage.getItem(PENDING_REF_KEY, "")) || undefined;
-        const { is_new } = await completeGoogleCode(code, redirectUri, referral);
+        const { is_new, is_profile_complete, profile_completed } = await completeGoogleCode(code, redirectUri, referral);
         await storage.removeItem(PENDING_REF_KEY);
         if (Platform.OS === "web") {
           // Clean the code from the URL after success
@@ -65,7 +65,8 @@ export function useGoogleAuth() {
             window.history.replaceState(window.history.state, "", clean);
           } catch {}
         }
-        router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+        const isComplete = profile_completed ?? is_profile_complete ?? false;
+        router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
       } catch (e: any) {
         setGoogleError(e?.message || "Google login failed. Please try again.");
       } finally {

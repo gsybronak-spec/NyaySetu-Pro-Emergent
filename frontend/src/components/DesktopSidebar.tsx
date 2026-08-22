@@ -6,7 +6,7 @@ import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
-import { formatAdvocateName } from "@/src/utils/advocate";
+import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { DESKTOP_SIDEBAR_WIDTH } from "@/src/components/DesktopPage";
 
 const NAV_ITEMS: { route: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -81,7 +81,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
 
         <Pressable
           testID="desktop-nav-search"
-          onPress={() => router.push("/search")}
+          onPress={() => router.push("/search" as any)}
           style={({ pressed }) => [styles.navItem, pressed && { opacity: 0.8 }]}
         >
           <Ionicons name="search" size={19} color={"#A6B1C2"} />
@@ -96,10 +96,10 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         </View>
         <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
           <Text style={styles.userName} numberOfLines={1}>
-            {formatAdvocateName(user?.name) || "Advocate"}
+            {formatDisplayName(user, "Advocate")}
           </Text>
           <Text style={styles.userMobile} numberOfLines={1}>
-            +91 {user?.mobile}
+            {user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}
           </Text>
         </View>
         <Pressable

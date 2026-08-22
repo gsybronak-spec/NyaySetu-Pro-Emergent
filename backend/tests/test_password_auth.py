@@ -610,3 +610,167 @@ class TestCorsCustomDomain:
         })
         assert r.status_code == 400
         assert r.headers.get("access-control-allow-origin") is None
+
+
+# ============================================================
+# PROFILE ONBOARDING & COMPLETENESS
+# ============================================================
+
+class TestProfileOnboarding:
+    @pytest.mark.asyncio
+    async def test_google_user_onboarding_flow(self, client, clean_db):
+        # 1. New Google user created
+        user = await server.create_new_user(email="testuser@gmail.com", name="Ronak Patel", provider="google")
+        assert user["profile_completed"] is False
+        assert user["is_profile_complete"] is False
+        assert user["first_name"] == "Ronak"
+        assert user["last_name"] == "Patel"
+
+        token = server.make_token(user["id"])
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Check /api/profile/me before onboarding
+        res = await client.get(f"{API}/profile/me", headers=headers)
+        assert res.status_code == 200
+        me = res.json()
+        assert me["profile_completed"] is False
+        assert me["is_profile_complete"] is False
+        assert me["email"] == "testuser@gmail.com"
+
+        # 3. Try updating with invalid mobile length
+        res_inv = await client.put(f"{API}/profile/update", json={
+            "first_name": "Ronak",
+            "last_name": "Patel",
+            "mobile": "12345"
+        }, headers=headers)
+        assert res_inv.status_code == 400
+        assert "valid 10-digit Indian mobile" in res_inv.json()["detail"]
+
+        # 4. Try updating with invalid starting digit
+        res_inv2 = await client.put(f"{API}/profile/update", json={
+            "first_name": "Ronak",
+            "last_name": "Patel",
+            "mobile": "2837482910"
+        }, headers=headers)
+        assert res_inv2.status_code == 400
+        assert "valid 10-digit Indian mobile" in res_inv2.json()["detail"]
+
+        # 5. Advocate without bar council number
+        res_adv_inv = await client.put(f"{API}/profile/update", json={
+            "first_name": "Ronak",
+            "last_name": "Patel",
+            "mobile": "9876543210",
+            "user_type": "Advocate",
+            "bar_council_no": "",
+            "state": "Gujarat",
+            "district": "ahmedabad",
+        }, headers=headers)
+        assert res_adv_inv.status_code == 400
+        assert "Bar Council / Enrollment Number is required" in res_adv_inv.json()["detail"]
+
+        # 6. Successfully complete profile setup for Advocate
+        res_valid = await client.put(f"{API}/profile/update", json={
+            "first_name": "Ronak",
+            "middle_name": "K",
+            "last_name": "Patel",
+            "mobile": "9876543210",
+            "user_type": "Advocate",
+            "bar_council_no": "G/1234/2020",
+            "state": "Gujarat",
+            "district": "ahmedabad",
+        }, headers=headers)
+        assert res_valid.status_code == 200
+        updated = res_valid.json()
+        assert updated["name"] == "Ronak K Patel"
+        assert updated["advocate_name_en"] == "Adv. Ronak K Patel"
+        assert updated["mobile"] == "9876543210"
+        assert updated["user_type"] == "Advocate"
+        assert updated["bar_council_no"] == "G/1234/2020"
+        assert updated["profile_completed"] is True
+        assert updated["is_profile_complete"] is True
+
+        # 7. Verify subsequent /api/profile/me
+        res_me = await client.get(f"{API}/profile/me", headers=headers)
+        assert res_me.status_code == 200
+        me2 = res_me.json()
+        assert me2["name"] == "Ronak K Patel"
+        assert me2["profile_completed"] is True
+        assert me2["is_profile_complete"] is True
+
+    @pytest.mark.asyncio
+    async def test_law_student_profile_flow(self, client, clean_db):
+        user = await server.create_new_user(email="student@gmail.com", name="Priya Shah", provider="google")
+        token = server.make_token(user["id"])
+        headers = {"Authorization": f"Bearer {token}"}
+
+        res = await client.put(f"{API}/profile/update", json={
+            "first_name": "Priya",
+            "last_name": "Shah",
+            "mobile": "9876543211",
+            "user_type": "Law Student",
+            "state": "Gujarat",
+            "district": "surat",
+        }, headers=headers)
+        assert res.status_code == 200
+        updated = res.json()
+        assert updated["name"] == "Priya Shah"
+        assert updated["advocate_name_en"] == "Priya Shah"
+        assert updated["user_type"] == "Law Student"
+        assert updated["profile_completed"] is True
+
+    @pytest.mark.asyncio
+    async def test_edit_profile_preserves_on_google_relogin(self, client, clean_db, monkeypatch):
+        # 1. First Google login creates user
+        async def fake_token(code, redirect_uri):
+            return 200, {"access_token": "tok_onboard"}
+        async def fake_userinfo(access_token):
+            return 200, {"email": "jaydeep@gmail.com", "email_verified": True, "name": "gsybronak", "picture": "https://google.com/pic.jpg"}
+        monkeypatch.setattr(server, "GOOGLE_OAUTH_CLIENT_ID", "dummy_client_id")
+        monkeypatch.setattr(server, "GOOGLE_OAUTH_CLIENT_SECRET", "dummy_client_secret")
+        monkeypatch.setattr(server, "_google_token_exchange", fake_token)
+        monkeypatch.setattr(server, "_google_userinfo", fake_userinfo)
+
+        r1 = await client.post(f"{API}/auth/google", json={"code": "c1", "redirect_uri": "https://test/"})
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["is_new"] is True
+        assert d1["user"]["profile_completed"] is False
+        token = d1["token"]
+
+        # 2. User edits profile / completes onboarding
+        r2 = await client.put(f"{API}/profile/update", json={
+            "first_name": "Jaydeep",
+            "last_name": "Jadav",
+            "mobile": "9876543299",
+            "user_type": "Advocate",
+            "bar_council_no": "G/999/2021",
+            "state": "Gujarat",
+            "district": "ahmedabad",
+        }, headers={"Authorization": f"Bearer {token}"})
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert d2["name"] == "Jaydeep Jadav"
+        assert d2["advocate_name_en"] == "Adv. Jaydeep Jadav"
+        assert d2["profile_completed"] is True
+
+        # 3. User logs in with Google AGAIN in future session
+        r3 = await client.post(f"{API}/auth/google", json={"code": "c2", "redirect_uri": "https://test/"})
+        assert r3.status_code == 200
+        d3 = r3.json()
+        assert d3["is_new"] is False
+        # Manually edited name must NOT be overwritten by Google name "gsybronak"
+        assert d3["user"]["name"] == "Jaydeep Jadav"
+        assert d3["user"]["first_name"] == "Jaydeep"
+        assert d3["user"]["advocate_name_en"] == "Adv. Jaydeep Jadav"
+        assert d3["user"]["profile_completed"] is True
+
+    @pytest.mark.asyncio
+    async def test_existing_user_already_complete(self, client, clean_db):
+        reg = await register_user(client, mobile="9876500099", name="Existing Advocate")
+        assert reg.status_code == 200
+        data = reg.json()
+        assert data["user"]["profile_completed"] is True
+        assert data["user"]["is_profile_complete"] is True
+
+
+

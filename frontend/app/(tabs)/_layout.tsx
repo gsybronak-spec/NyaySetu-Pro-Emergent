@@ -14,8 +14,9 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   // Route guard (C4): never render protected tabs for a missing/expired session.
-  // The root index also redirects, but this covers sessions that expire mid-use.
   if (ready && !user) return <Redirect href="/(auth)/login" />;
+  const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? false;
+  if (ready && user && !isComplete) return <Redirect href={"/profile-completion" as any} />;
 
   const bottomInset = insets.bottom;
   const tabHeight = 64 + (bottomInset > 0 ? bottomInset : 8);

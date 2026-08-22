@@ -33,12 +33,14 @@ export default function Otp() {
           return;
         }
         const idToken = await firebaseConfirmPhoneOtp(confirmation, otp);
-        const { is_new } = await firebaseExchange(idToken, referral ? String(referral) : undefined);
-        router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+        const { is_new, is_profile_complete, profile_completed } = await firebaseExchange(idToken, referral ? String(referral) : undefined);
+        const isComplete = profile_completed ?? is_profile_complete ?? true;
+        router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
         return;
       }
-      const { is_new } = await verifyOtp(String(mobile), otp, referral ? String(referral) : undefined);
-      router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+      const { is_new, is_profile_complete, profile_completed } = await verifyOtp(String(mobile), otp, referral ? String(referral) : undefined);
+      const isComplete = profile_completed ?? is_profile_complete ?? true;
+      router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
     } catch (e: any) {
       setErr(e.message);
     }

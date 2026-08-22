@@ -67,8 +67,9 @@ export default function Login() {
       try {
         const fb = await firebaseEmailPasswordLogin(id, password);
         if (fb) {
-          const { is_new } = await firebaseExchange(fb.idToken, referral.trim() || undefined);
-          router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+          const { is_new, is_profile_complete, profile_completed } = await firebaseExchange(fb.idToken, referral.trim() || undefined);
+          const isComplete = profile_completed ?? is_profile_complete ?? true;
+          router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
           return;
         }
       } catch (e: any) {
@@ -80,8 +81,9 @@ export default function Login() {
       }
     }
     try {
-      const { is_new } = await signInPassword(id, password, referral.trim() || undefined);
-      router.replace(is_new ? "/(auth)/onboarding" : "/(tabs)/home");
+      const { is_new, is_profile_complete, profile_completed } = await signInPassword(id, password, referral.trim() || undefined);
+      const isComplete = profile_completed ?? is_profile_complete ?? true;
+      router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
     } catch (e: any) {
       setErr(e?.message || "Invalid mobile/email or password.");
     }
@@ -191,7 +193,7 @@ export default function Login() {
 
                 <Pressable
                   testID="login-forgot-password"
-                  onPress={() => router.push("/(auth)/forgot-password")}
+                  onPress={() => router.push("/(auth)/forgot-password" as any)}
                   style={{ alignSelf: "flex-end", marginBottom: Spacing.md }}
                 >
                   <Text style={{ color: "#C5A059", fontSize: 13, fontWeight: "600" }}>Forgot Password?</Text>
@@ -287,7 +289,7 @@ export default function Login() {
 
             <Pressable
               testID="login-create-account"
-              onPress={() => router.push("/(auth)/signup")}
+              onPress={() => router.push("/(auth)/signup" as any)}
               style={{ marginTop: Spacing.lg, alignItems: "center" }}
             >
               <Text style={{ color: "#A6B1C2", fontSize: 13 }}>

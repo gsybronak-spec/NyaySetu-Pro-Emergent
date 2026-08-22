@@ -2,7 +2,7 @@
 // Concrete implementations live in index.ts (native) and index.web.ts (web).
 
 export type StorageItemKey = string;
-export type StorageItemValue = string | number | boolean | null;
+export type StorageItemValue = any;
 
 // Helper for subclasses to enforce that they don't declare methods beyond
 // StorageBase. Use as: type _ = AssertNoExtras<Exclude<keyof Storage, keyof StorageBase>>;
@@ -47,4 +47,24 @@ export abstract class StorageBase {
     value: Value,
   ): Promise<boolean>;
   abstract secureRemove(key: string): Promise<boolean>;
+
+  // Convenience aliases for getItem/setItem/removeItem
+  async get<Fallback extends StorageItemValue = any>(
+    key: string,
+    fallback: Fallback,
+  ): Promise<Fallback | null> {
+    return this.getItem(key, fallback);
+  }
+
+  async set<Value extends StorageItemValue = any>(
+    key: string,
+    value: Value,
+  ): Promise<boolean> {
+    return this.setItem(key, value);
+  }
+
+  async remove(key: string): Promise<boolean> {
+    return this.removeItem(key);
+  }
 }
+

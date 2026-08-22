@@ -1,0 +1,104 @@
+=== TOTAL COUNTS ===
+Districts: Production = 34 | seed_data.py = 34
+Talukas:   Production = 255 | seed_data.py = 255
+Courts:    Production = 47 | seed_data.py = 42
+
+Common Court IDs: 0
+Court IDs in Production but NOT in seed_data.py (47):
+  + ID: principal_district_and_sessions_judge_d12c22 | District: generic | EN: PRINCIPAL DISTRICT AND SESSIONS JUDGE | GU: પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ
+  + ID: 2nd_additional_district_judge_522bbb | District: generic | EN: 2nd ADDITIONAL DISTRICT JUDGE | GU: બીજા એડિશનલ ડીસ્ટ્રીક્ટ જજ
+  + ID: 3rd_additional_district_judge_dbec67 | District: generic | EN: 3rd ADDITIONAL DISTRICT JUDGE | GU: ત્રીજા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 4th_additional_district_judge_2673de | District: generic | EN: 4th ADDITIONAL DISTRICT JUDGE | GU: ચોથા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 5th_additional_district_judge_19adda | District: generic | EN: 5th ADDITIONAL DISTRICT JUDGE | GU: પાંચમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 6th_additional_district_judge_fbb72d | District: generic | EN: 6th ADDITIONAL DISTRICT JUDGE | GU: છઠ્ઠા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 7th_additional_district_judge_398fee | District: generic | EN: 7th ADDITIONAL DISTRICT JUDGE | GU: સાતમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 8th_additional_district_judge_c68ab1 | District: generic | EN: 8th ADDITIONAL DISTRICT JUDGE | GU: આઠમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 9th_additional_district_judge_e53af1 | District: generic | EN: 9th ADDITIONAL DISTRICT JUDGE | GU: નવમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 10th_additional_district_judge_aa08cd | District: generic | EN: 10th ADDITIONAL DISTRICT JUDGE | GU: દસમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 11th_additional_district_judge_d978d2 | District: generic | EN: 11th ADDITIONAL DISTRICT JUDGE | GU: અગ્યારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 12th_additional_district_judge_0dbcb2 | District: generic | EN: 12th ADDITIONAL DISTRICT JUDGE | GU: બારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 13th_additional_district_judge_e5a99c | District: generic | EN: 13th ADDITIONAL DISTRICT JUDGE | GU: તેરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 14th_additional_district_judge_949d31 | District: generic | EN: 14th ADDITIONAL DISTRICT JUDGE | GU: ચૌદમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: 15th_additional_district_judge_1ca00f | District: generic | EN: 15th ADDITIONAL DISTRICT JUDGE | GU: પંદરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ
+  + ID: chief_judicial_magistrate_0abfd0 | District: generic | EN: CHIEF JUDICIAL MAGISTRATE | GU: ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ
+  + ID: principal_senior_civil_judge_623c03 | District: generic | EN: PRINCIPAL SENIOR CIVIL JUDGE | GU: પ્રિન્સિપાલ સિનિયર સિવિલ જજ
+  + ID: additional_senior_civil_judge___acjm_546aa7 | District: generic | EN: ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 2nd_additional_senior_civil_judge___acjm_321a9b | District: generic | EN: 2nd ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: બીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 3rd_additional_senior_civil_judge___acjm_7782ed | District: generic | EN: 3rd ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: ત્રીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 4th_additional_senior_civil_judge___jmfc_0ef8e3 | District: generic | EN: 4th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: ચોથા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 5th_additional_senior_civil_judge___acjm_fec557 | District: generic | EN: 5th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: પાંચમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 6th_additional_senior_civil_judge___acjm_7438c8 | District: generic | EN: 6th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: છઠ્ઠા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 7th_additional_senior_civil_judge___acjm_15d43c | District: generic | EN: 7th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: સાતમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 8th_additional_senior_civil_judge___acjm_471d11 | District: generic | EN: 8th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: આઠમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 9th_additional_senior_civil_judge___acjm_b10c35 | District: generic | EN: 9th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: નવમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 10th_additional_senior_civil_judge___acj_79f5ff | District: generic | EN: 10th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: દસમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 11th_additional_senior_civil_judge___acj_68da3e | District: generic | EN: 11th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: અગ્યારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 12th_additional_senior_civil_judge___acj_fa4696 | District: generic | EN: 12th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: બારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 13th_additional_senior_civil_judge___acj_e1660e | District: generic | EN: 13th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: તેરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 14th_additional_senior_civil_judge___acj_16dc8f | District: generic | EN: 14th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: ચૌદમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: 15th_additional_senior_civil_judge___acj_5aa729 | District: generic | EN: 15th ADDITIONAL SENIOR CIVIL JUDGE & ACJM | GU: પંદરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.
+  + ID: additional_civil_judge___jmfc_613fc1 | District: generic | EN: ADDITIONAL CIVIL JUDGE & JMFC | GU: એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 2nd_additional_civil_judge___jmfc_d41bf9 | District: generic | EN: 2nd ADDITIONAL CIVIL JUDGE & JMFC | GU: બીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 3rd_additional_civil_judge___jmfc_b38461 | District: generic | EN: 3rd ADDITIONAL CIVIL JUDGE & JMFC | GU: ત્રીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 4th_additional_civil_judge___jmfc_6a64db | District: generic | EN: 4th ADDITIONAL CIVIL JUDGE & JMFC | GU: ચોથા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 5th_additional_civil_judge___jmfc_08e089 | District: generic | EN: 5th ADDITIONAL CIVIL JUDGE & JMFC | GU: પાંચમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 6th_additional_civil_judge___jmfc_d46629 | District: generic | EN: 6th ADDITIONAL CIVIL JUDGE & JMFC | GU: છઠ્ઠા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 7th_additional_civil_judge___jmfc_ce626f | District: generic | EN: 7th ADDITIONAL CIVIL JUDGE & JMFC | GU: સાતમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 8th_additional_civil_judge___jmfc_8123a9 | District: generic | EN: 8th ADDITIONAL CIVIL JUDGE & JMFC | GU: આઠમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 9th_additional_civil_judge___jmfc_942060 | District: generic | EN: 9th ADDITIONAL CIVIL JUDGE & JMFC | GU: નવમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 10th_additional_civil_judge___jmfc_fb7f64 | District: generic | EN: 10th ADDITIONAL CIVIL JUDGE & JMFC | GU: દસમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 11th_additional_civil_judge___jmfc_5c5515 | District: generic | EN: 11th ADDITIONAL CIVIL JUDGE & JMFC | GU: અગ્યારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 12th_additional_civil_judge___jmfc_966c26 | District: generic | EN: 12th ADDITIONAL CIVIL JUDGE & JMFC | GU: બારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 13th_additional_civil_judge___jmfc_75df11 | District: generic | EN: 13th ADDITIONAL CIVIL JUDGE & JMFC | GU: તેરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 14th_additional_civil_judge___jmfc_6bf30d | District: generic | EN: 14th ADDITIONAL CIVIL JUDGE & JMFC | GU: ચૌદમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+  + ID: 15th_additional_civil_judge___jmfc_487d3a | District: generic | EN: 15th ADDITIONAL CIVIL JUDGE & JMFC | GU: પંદરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.
+
+Court IDs in seed_data.py but NOT in Production (42):
+  - ID: gen_district | District: generic | EN: District Court | GU: જિલ્લા ન્યાયાલય
+  - ID: gen_sessions | District: generic | EN: Sessions Court | GU: સેશન્સ ન્યાયાલય
+  - ID: gen_jmfc | District: generic | EN: Court of JMFC | GU: જે.એમ.એફ.સી. ન્યાયાલય
+  - ID: gen_civil_senior | District: generic | EN: Principal Senior Civil Judge | GU: મુખ્ય વરિષ્ઠ સિવિલ જજ
+  - ID: gen_civil_junior | District: generic | EN: Civil Judge (Junior Division) | GU: સિવિલ જજ (જુનિયર ડિવિઝન)
+  - ID: gen_family | District: generic | EN: Family Court | GU: ફેમિલી કોર્ટ
+  - ID: ahd_metro | District: ahmedabad | EN: Metropolitan Magistrate Court, Ahmedabad | GU: મેટ્રોપોલિટન મેજિસ્ટ્રેટ કોર્ટ, અમદાવાદ
+  - ID: ahd_city_civil | District: ahmedabad | EN: City Civil Court, Ahmedabad | GU: સિટી સિવિલ કોર્ટ, અમદાવાદ
+  - ID: dst_ahmedabad | District: ahmedabad | EN: District & Sessions Court, Ahmedabad | GU: જિલ્લા અને સેશન્સ કોર્ટ, અમદાવાદ
+  - ID: dst_gandhinagar | District: gandhinagar | EN: District & Sessions Court, Gandhinagar | GU: જિલ્લા અને સેશન્સ કોર્ટ, ગાંધીનગર
+  - ID: surat_district | District: surat | EN: District & Sessions Court, Surat | GU: જિલ્લા અને સેશન્સ કોર્ટ, સુરત
+  - ID: vad_district | District: vadodara | EN: District & Sessions Court, Vadodara | GU: જિલ્લા અને સેશન્સ કોર્ટ, વડોદરા
+  - ID: rajkot_district | District: rajkot | EN: District & Sessions Court, Rajkot | GU: જિલ્લા અને સેશન્સ કોર્ટ, રાજકોટ
+  - ID: dst_bhavnagar | District: bhavnagar | EN: District & Sessions Court, Bhavnagar | GU: જિલ્લા અને સેશન્સ કોર્ટ, ભાવનગર
+  - ID: dst_jamnagar | District: jamnagar | EN: District & Sessions Court, Jamnagar | GU: જિલ્લા અને સેશન્સ કોર્ટ, જામનગર
+  - ID: dst_junagadh | District: junagadh | EN: District & Sessions Court, Junagadh | GU: જિલ્લા અને સેશન્સ કોર્ટ, જૂનાગઢ
+  - ID: dst_anand | District: anand | EN: District & Sessions Court, Anand | GU: જિલ્લા અને સેશન્સ કોર્ટ, આણંદ
+  - ID: dst_kutch | District: kutch | EN: District & Sessions Court, Bhuj | GU: જિલ્લા અને સેશન્સ કોર્ટ, ભુજ
+  - ID: dst_mehsana | District: mehsana | EN: District & Sessions Court, Mehsana | GU: જિલ્લા અને સેશન્સ કોર્ટ, મહેસાણા
+  - ID: dst_patan | District: patan | EN: District & Sessions Court, Patan | GU: જિલ્લા અને સેશન્સ કોર્ટ, પાટણ
+  - ID: dst_amreli | District: amreli | EN: District & Sessions Court, Amreli | GU: જિલ્લા અને સેશન્સ કોર્ટ, અમરેલી
+  - ID: dst_aravalli | District: aravalli | EN: District & Sessions Court, Modasa | GU: જિલ્લા અને સેશન્સ કોર્ટ, મોડાસા
+  - ID: dst_banaskantha | District: banaskantha | EN: District & Sessions Court, Palanpur | GU: જિલ્લા અને સેશન્સ કોર્ટ, પાલનપુર
+  - ID: dst_bharuch | District: bharuch | EN: District & Sessions Court, Bharuch | GU: જિલ્લા અને સેશન્સ કોર્ટ, ભરૂચ
+  - ID: dst_botad | District: botad | EN: District & Sessions Court, Botad | GU: જિલ્લા અને સેશન્સ કોર્ટ, બોટાદ
+  - ID: dst_chhota_udaipur | District: chhota_udaipur | EN: District & Sessions Court, Chhota Udaipur | GU: જિલ્લા અને સેશન્સ કોર્ટ, છોટાઉદેપુર
+  - ID: dst_dahod | District: dahod | EN: District & Sessions Court, Dahod | GU: જિલ્લા અને સેશન્સ કોર્ટ, દાહોદ
+  - ID: dst_dang | District: dang | EN: District & Sessions Court, Ahwa | GU: જિલ્લા અને સેશન્સ કોર્ટ, આહવા
+  - ID: dst_devbhoomi_dwarka | District: devbhoomi_dwarka | EN: District & Sessions Court, Khambhalia | GU: જિલ્લા અને સેશન્સ કોર્ટ, ખંભાળિયા
+  - ID: dst_gir_somnath | District: gir_somnath | EN: District & Sessions Court, Veraval | GU: જિલ્લા અને સેશન્સ કોર્ટ, વેરાવળ
+  - ID: dst_kheda | District: kheda | EN: District & Sessions Court, Nadiad | GU: જિલ્લા અને સેશન્સ કોર્ટ, નડીઆદ
+  - ID: dst_mahisagar | District: mahisagar | EN: District & Sessions Court, Lunawada | GU: જિલ્લા અને સેશન્સ કોર્ટ, લુણાવાડા
+  - ID: dst_morbi | District: morbi | EN: District & Sessions Court, Morbi | GU: જિલ્લા અને સેશન્સ કોર્ટ, મોરબી
+  - ID: dst_narmada | District: narmada | EN: District & Sessions Court, Rajpipla | GU: જિલ્લા અને સેશન્સ કોર્ટ, રાજપીપળા
+  - ID: dst_navsari | District: navsari | EN: District & Sessions Court, Navsari | GU: જિલ્લા અને સેશન્સ કોર્ટ, નવસારી
+  - ID: dst_panchmahal | District: panchmahal | EN: District & Sessions Court, Godhra | GU: જિલ્લા અને સેશન્સ કોર્ટ, ગોધરા
+  - ID: dst_porbandar | District: porbandar | EN: District & Sessions Court, Porbandar | GU: જિલ્લા અને સેશન્સ કોર્ટ, પોરબંદર
+  - ID: dst_sabarkantha | District: sabarkantha | EN: District & Sessions Court, Himmatnagar | GU: જિલ્લા અને સેશન્સ કોર્ટ, હિંમતનગર
+  - ID: dst_surendranagar | District: surendranagar | EN: District & Sessions Court, Surendranagar | GU: જિલ્લા અને સેશન્સ કોર્ટ, સુરેન્દ્રનગર
+  - ID: dst_tapi | District: tapi | EN: District & Sessions Court, Vyara | GU: જિલ્લા અને સેશન્સ કોર્ટ, વ્યારા
+  - ID: dst_valsad | District: valsad | EN: District & Sessions Court, Valsad | GU: જિલ્લા અને સેશન્સ કોર્ટ, વલસાડ
+  - ID: dst_vav_tharad | District: vav_tharad | EN: District & Sessions Court, Tharad | GU: જિલ્લા અને સેશન્સ કોર્ટ, થરાદ
+
+Districts missing in seed: []
+Districts missing in prod: []
+
+Talukas missing in seed: 0
+Talukas missing in prod: 0

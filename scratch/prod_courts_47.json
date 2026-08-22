@@ -1,0 +1,284 @@
+[
+  {
+    "id": "principal_district_and_sessions_judge_d12c22",
+    "en": "PRINCIPAL DISTRICT AND SESSIONS JUDGE",
+    "gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "2nd_additional_district_judge_522bbb",
+    "en": "2nd ADDITIONAL DISTRICT JUDGE",
+    "gu": "બીજા એડિશનલ ડીસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "3rd_additional_district_judge_dbec67",
+    "en": "3rd ADDITIONAL DISTRICT JUDGE",
+    "gu": "ત્રીજા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "4th_additional_district_judge_2673de",
+    "en": "4th ADDITIONAL DISTRICT JUDGE",
+    "gu": "ચોથા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "5th_additional_district_judge_19adda",
+    "en": "5th ADDITIONAL DISTRICT JUDGE",
+    "gu": "પાંચમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "6th_additional_district_judge_fbb72d",
+    "en": "6th ADDITIONAL DISTRICT JUDGE",
+    "gu": "છઠ્ઠા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "7th_additional_district_judge_398fee",
+    "en": "7th ADDITIONAL DISTRICT JUDGE",
+    "gu": "સાતમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "8th_additional_district_judge_c68ab1",
+    "en": "8th ADDITIONAL DISTRICT JUDGE",
+    "gu": "આઠમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "9th_additional_district_judge_e53af1",
+    "en": "9th ADDITIONAL DISTRICT JUDGE",
+    "gu": "નવમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "10th_additional_district_judge_aa08cd",
+    "en": "10th ADDITIONAL DISTRICT JUDGE",
+    "gu": "દસમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "11th_additional_district_judge_d978d2",
+    "en": "11th ADDITIONAL DISTRICT JUDGE",
+    "gu": "અગ્યારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "12th_additional_district_judge_0dbcb2",
+    "en": "12th ADDITIONAL DISTRICT JUDGE",
+    "gu": "બારમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "13th_additional_district_judge_e5a99c",
+    "en": "13th ADDITIONAL DISTRICT JUDGE",
+    "gu": "તેરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "14th_additional_district_judge_949d31",
+    "en": "14th ADDITIONAL DISTRICT JUDGE",
+    "gu": "ચૌદમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "15th_additional_district_judge_1ca00f",
+    "en": "15th ADDITIONAL DISTRICT JUDGE",
+    "gu": "પંદરમા એડિશનલ ડિસ્ટ્રીક્ટ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "chief_judicial_magistrate_0abfd0",
+    "en": "CHIEF JUDICIAL MAGISTRATE",
+    "gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
+    "district_id": "generic"
+  },
+  {
+    "id": "principal_senior_civil_judge_623c03",
+    "en": "PRINCIPAL SENIOR CIVIL JUDGE",
+    "gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+    "district_id": "generic"
+  },
+  {
+    "id": "additional_senior_civil_judge___acjm_546aa7",
+    "en": "ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "2nd_additional_senior_civil_judge___acjm_321a9b",
+    "en": "2nd ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "બીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "3rd_additional_senior_civil_judge___acjm_7782ed",
+    "en": "3rd ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ત્રીજા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "4th_additional_senior_civil_judge___jmfc_0ef8e3",
+    "en": "4th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ચોથા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "5th_additional_senior_civil_judge___acjm_fec557",
+    "en": "5th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "પાંચમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "6th_additional_senior_civil_judge___acjm_7438c8",
+    "en": "6th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "છઠ્ઠા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "7th_additional_senior_civil_judge___acjm_15d43c",
+    "en": "7th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "સાતમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "8th_additional_senior_civil_judge___acjm_471d11",
+    "en": "8th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "આઠમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "9th_additional_senior_civil_judge___acjm_b10c35",
+    "en": "9th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "નવમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "10th_additional_senior_civil_judge___acj_79f5ff",
+    "en": "10th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "દસમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "11th_additional_senior_civil_judge___acj_68da3e",
+    "en": "11th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "અગ્યારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "12th_additional_senior_civil_judge___acj_fa4696",
+    "en": "12th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "બારમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "13th_additional_senior_civil_judge___acj_e1660e",
+    "en": "13th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "તેરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "14th_additional_senior_civil_judge___acj_16dc8f",
+    "en": "14th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "ચૌદમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "15th_additional_senior_civil_judge___acj_5aa729",
+    "en": "15th ADDITIONAL SENIOR CIVIL JUDGE & ACJM",
+    "gu": "પંદરમા એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી.",
+    "district_id": "generic"
+  },
+  {
+    "id": "additional_civil_judge___jmfc_613fc1",
+    "en": "ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "2nd_additional_civil_judge___jmfc_d41bf9",
+    "en": "2nd ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "બીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "3rd_additional_civil_judge___jmfc_b38461",
+    "en": "3rd ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ત્રીજા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "4th_additional_civil_judge___jmfc_6a64db",
+    "en": "4th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ચોથા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "5th_additional_civil_judge___jmfc_08e089",
+    "en": "5th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "પાંચમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "6th_additional_civil_judge___jmfc_d46629",
+    "en": "6th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "છઠ્ઠા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "7th_additional_civil_judge___jmfc_ce626f",
+    "en": "7th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "સાતમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "8th_additional_civil_judge___jmfc_8123a9",
+    "en": "8th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "આઠમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "9th_additional_civil_judge___jmfc_942060",
+    "en": "9th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "નવમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "10th_additional_civil_judge___jmfc_fb7f64",
+    "en": "10th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "દસમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "11th_additional_civil_judge___jmfc_5c5515",
+    "en": "11th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "અગ્યારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "12th_additional_civil_judge___jmfc_966c26",
+    "en": "12th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "બારમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "13th_additional_civil_judge___jmfc_75df11",
+    "en": "13th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "તેરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "14th_additional_civil_judge___jmfc_6bf30d",
+    "en": "14th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "ચૌદમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  },
+  {
+    "id": "15th_additional_civil_judge___jmfc_487d3a",
+    "en": "15th ADDITIONAL CIVIL JUDGE & JMFC",
+    "gu": "પંદરમા એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક.",
+    "district_id": "generic"
+  }
+]
