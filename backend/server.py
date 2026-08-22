@@ -87,6 +87,7 @@ elif os.environ.get("RENDER", "").strip().lower() == "true" and not _PRODUCTION:
 # Admin seed — loaded from env, NEVER hard-coded
 ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL")
 ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD")
+TEMPLATE_AUTO_SEED = os.environ.get("TEMPLATE_AUTO_SEED", "false").lower() == "true"
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -5804,8 +5805,11 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
 
 
 async def seed_templates(force: bool = False) -> dict:
-    """One-time idempotent initialization of seed templates into db.templates.
-    If seed_complete=True in db.system_settings and templates are present, skips execution (never overwrites or merges)."""
+    """One-time idempotent initialization of seed templates into db.templates."""
+    if not force and not TEMPLATE_AUTO_SEED:
+        logger.info("Template auto-seed is disabled in production. Skipping.")
+        return {"success": True, "skipped": True, "message": "Auto-seed disabled"}
+
     setting = await db.system_settings.find_one({"key": "seed_complete"})
     all_seeds = [*TEMPLATES, *TEMPLATES_V2]
     if not force:
