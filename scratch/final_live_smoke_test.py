@@ -17,7 +17,7 @@ routes_to_test = [
     ("/admin/settings", 200, "Admin Settings", ["<title>NyaySetu Pro - Admin Portal</title>"]),
     ("/admin/nyaysetu-logo.png", 200, "Admin Logo Asset", []),
     ("/admin/assets/index-DKaBQchA.css", 200, "Admin Scoped CSS", []),
-    ("/admin/assets/index-ClWveFqy.js", 200, "Admin Main Bundle", ["NyaySetu Pro", "case-forms"]),
+    ("/admin/assets/index-Zw1qS4eu.js", 200, "Admin Main Bundle (Session Persistence Enabled)", ["NyaySetu Pro", "admin_refresh_token", "case-forms"]),
 ]
 
 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
