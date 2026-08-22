@@ -5,6 +5,7 @@ const path = require('path');
 const adminDir = path.join(__dirname, '..', '..', 'admin');
 const adminDist = path.join(adminDir, 'dist');
 const targetAdminDist = path.join(__dirname, '..', 'dist', 'admin');
+const publicAdminDir = path.join(__dirname, '..', 'public', 'admin');
 
 if (fs.existsSync(adminDir)) {
   console.log('Building original Admin Portal in admin/...');
@@ -18,11 +19,21 @@ if (fs.existsSync(adminDir)) {
       fs.rmSync(targetAdminDist, { recursive: true, force: true });
     }
     fs.cpSync(adminDist, targetAdminDist, { recursive: true });
-    console.log('✓ Successfully bundled original Admin Portal into frontend/dist/admin/');
+    
+    // Also sync to public/admin for zero-config static hosting
+    if (fs.existsSync(publicAdminDir)) {
+      fs.rmSync(publicAdminDir, { recursive: true, force: true });
+    }
+    fs.cpSync(adminDist, publicAdminDir, { recursive: true });
+    
+    console.log('✓ Successfully bundled original Admin Portal into frontend/dist/admin/ and frontend/public/admin/');
   } else {
     console.error('Error: admin/dist was not produced by build.');
     process.exit(1);
   }
 } else {
-  console.warn('Warning: admin directory not found at', adminDir);
+  console.log('Using pre-bundled Admin Portal from public/admin');
+  if (fs.existsSync(publicAdminDir) && !fs.existsSync(targetAdminDist)) {
+    fs.cpSync(publicAdminDir, targetAdminDist, { recursive: true });
+  }
 }
