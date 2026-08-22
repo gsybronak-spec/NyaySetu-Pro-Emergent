@@ -225,6 +225,7 @@ export const adminApi = {
   listCatalog: (kind: string) => request(`/catalog/${kind}`),
   createCatalogItem: (kind: string, data: any) => request(`/catalog/${kind}`, 'POST', data),
   updateCatalogItem: (kind: string, id: string, data: any) => request(`/catalog/${kind}/${id}`, 'PUT', data),
+  deleteCatalogItem: (kind: string, id: string, hard = false) => request(`/catalog/${kind}/${id}?hard=${hard}`, 'DELETE'),
   setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
   listSettings: () => request('/settings'),
   updateSetting: (key: string, value: number | string) => request(`/settings/${key}`, 'PUT', { value }),

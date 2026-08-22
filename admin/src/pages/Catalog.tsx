@@ -154,6 +154,34 @@ export default function Catalog() {
     }
   };
 
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const confirmDelete = (item: CatalogItem) => {
+    setDeleteItem(item);
+    setDeleteConfirm('');
+    setDeleteError('');
+    setDeleteOpen(true);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteItem) return;
+    if (deleteConfirm !== 'DELETE') return;
+    setSaving(true);
+    try {
+      await adminApi.deleteCatalogItem(activeKind.kind, deleteItem.id, true);
+      setDeleteOpen(false);
+      setDeleteItem(null);
+      load(activeKind);
+    } catch (err: any) {
+      setDeleteError(err.message || 'Failed to permanently delete item.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const catChoices = ['Civil', 'Criminal', 'Other'];
 
   return (
@@ -238,6 +266,13 @@ export default function Catalog() {
                           >
                             {actingId === item.id ? '…' : item.active ? 'Deactivate' : 'Activate'}
                           </button>
+                          <button 
+                            className="btn-small btn-danger" 
+                            style={{ marginLeft: '4px' }}
+                            onClick={() => confirmDelete(item)}
+                          >
+                            🗑️ Delete
+                          </button>
                         </div>
                       </td>
                     )}
@@ -292,6 +327,52 @@ export default function Catalog() {
                 <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {deleteOpen && deleteItem && (
+        <div className="modal-overlay">
+          <div className="modal-card modal-card-danger">
+            <div className="modal-header">
+              <h3>Permanent Hard Delete</h3>
+              <button className="modal-close" onClick={() => setDeleteOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>You are about to <strong>PERMANENTLY DELETE</strong> this catalog record:</p>
+              <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', margin: '16px 0', fontFamily: 'monospace' }}>
+                <div><strong>Type:</strong> {activeKind.label}</div>
+                <div><strong>ID:</strong> {deleteItem.id}</div>
+                <div><strong>Name (EN):</strong> {deleteItem.en}</div>
+                <div><strong>Name (GU):</strong> {deleteItem.gu || '—'}</div>
+                <div><strong>Status:</strong> {deleteItem.active ? 'Active' : 'Inactive'}</div>
+              </div>
+              <p style={{ color: '#d32f2f', fontWeight: 600, fontSize: '0.9rem' }}>
+                WARNING: This action cannot be undone. If this record is referenced by any existing cases or applications, deletion will be blocked and you will receive a 409 Conflict error. In that scenario, you must mark it as Inactive instead.
+              </p>
+              <p style={{ marginTop: '16px' }}>Type <strong>DELETE</strong> below to confirm:</p>
+              <input 
+                className="form-input" 
+                value={deleteConfirm} 
+                onChange={e => setDeleteConfirm(e.target.value)} 
+                placeholder="DELETE" 
+                style={{ marginTop: '8px', border: '1px solid #d32f2f' }}
+              />
+              {deleteError && (
+                <div style={{ marginTop: '12px', padding: '8px', background: '#ffebee', color: '#c62828', borderRadius: '4px', fontSize: '0.9rem' }}>
+                  <strong>Deletion Failed:</strong><br/>{deleteError}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</button>
+              <button 
+                className="btn-danger" 
+                disabled={deleteConfirm !== 'DELETE' || saving} 
+                onClick={executeDelete}
+              >
+                {saving ? 'Deleting...' : 'Permanently Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

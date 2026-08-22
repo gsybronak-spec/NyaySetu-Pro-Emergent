@@ -4841,7 +4841,7 @@ async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusRe
 
 @admin_api.delete("/catalog/{kind}/{item_id}")
 async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False, admin=Depends(require_super_admin)):
-    """Safe/soft deletion of a catalog item. If hard=True, permanently removes record."""
+    """Safe/soft deletion of a catalog item. If hard=True, permanently removes record if not referenced."""
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, "Unknown catalog kind")
     coll = _CATALOG_KINDS[kind][0]
@@ -4850,6 +4850,31 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
         raise HTTPException(404, "Catalog entry not found")
     
     if hard:
+        # Check referential safety
+        ref = ""
+        if kind == "case-types":
+            if await db.cases.find_one({"case_type_id": item_id}): ref = "existing cases"
+        elif kind == "laws":
+            if await db.cases.find_one({"law_id": item_id}): ref = "existing cases"
+        elif kind == "districts":
+            if await db.users.find_one({"district": item_id}): ref = "existing users"
+            elif await db.cases.find_one({"district_id": item_id}): ref = "existing cases"
+            elif await db.courts.find_one({"district_id": item_id}): ref = "existing courts"
+            elif await db.talukas.find_one({"district_id": item_id}): ref = "existing talukas"
+            elif await db.police_stations.find_one({"district_id": item_id}): ref = "existing police stations"
+        elif kind == "talukas":
+            if await db.users.find_one({"taluka": item_id}): ref = "existing users"
+            elif await db.cases.find_one({"taluka_id": item_id}): ref = "existing cases"
+            elif await db.police_stations.find_one({"taluka_id": item_id}): ref = "existing police stations"
+            elif await db.courts.find_one({"taluka_id": item_id}): ref = "existing courts"
+        elif kind == "courts":
+            if await db.cases.find_one({"court_id": item_id}): ref = "existing cases"
+        elif kind == "police-stations":
+            if await db.cases.find_one({"police_station_id": item_id}): ref = "existing cases"
+            
+        if ref:
+            raise HTTPException(409, f"Cannot permanently delete '{item_id}' because it is currently referenced by {ref}. Please mark it as Inactive instead.")
+            
         await db[coll].delete_one({"id": item_id})
     else:
         await db[coll].update_one(
@@ -4859,13 +4884,14 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
-        action="catalog_delete",
-        entity_type="catalog",
-        entity_id=f"{kind}:{item_id}",
+        action="catalog_deleted" if hard else "catalog_deactivated",
+        entity_type=f"catalog/{kind}",
+        entity_id=item_id,
         old_value=existing,
-        metadata={"kind": kind, "hard": hard},
+        new_value=None if hard else {"active": False},
+        metadata={"hard": hard},
     )
-    return {"success": True, "message": f"Catalog item '{item_id}' {'deleted' if hard else 'deactivated'} successfully"}
+    return {"success": True, "message": f"Catalog item '{item_id}' {'permanently deleted' if hard else 'deactivated'} successfully"}
 
 def _validate_setting_value(key: str, value) -> None:
     """Validate a setting value against its schema. Raises HTTPException(422) on invalid."""
