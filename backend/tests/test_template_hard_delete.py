@@ -237,7 +237,7 @@ async def test_04_super_admin_can_delete_seeded_template(super_admin_token):
     """Scenario 4: Super Admin can permanently delete a seeded template."""
     # Seed templates
     await db.system_settings.delete_many({})
-    await seed_templates()
+    await seed_templates(force=True)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -411,7 +411,7 @@ async def test_13_sensitive_fields_not_leaked_in_audit_log(super_admin_token):
 async def test_14_deleted_template_does_not_resurrect_after_restart(super_admin_token):
     """Scenario 14: Deleted seeded template does not resurrect when _ensure_seed_complete() runs."""
     await db.system_settings.delete_many({})
-    await seed_templates()
+    await seed_templates(force=True)
 
     t_id = "vakalatnama"
     assert await db.templates.find_one({"id": t_id}) is not None

@@ -240,15 +240,12 @@ class TestSeedMigration:
 
 class TestLawyerTemplateAPI:
     @pytest.mark.asyncio
-    async def test_list_templates_seed_fallback(self, client, clean_db):
-        """With no templates in DB, lawyer API should fall back to seed_data."""
+    async def test_empty_templates_is_valid(self, client, clean_db):
+        """With no templates in DB, lawyer API should return empty list (NO auto-seed)."""
         r = await client.get("/api/templates")
         assert r.status_code == 200
         data = r.json()
-        assert len(data) == len(EXPECTED_IDS)
-        ids = [t["id"] for t in data]
-        for tid in EXPECTED_IDS:
-            assert tid in ids
+        assert len(data) == 0
 
     @pytest.mark.asyncio
     async def test_list_templates_from_db(self, client, clean_db):
@@ -263,6 +260,8 @@ class TestLawyerTemplateAPI:
     @pytest.mark.asyncio
     async def test_get_template_by_id(self, client, clean_db):
         """GET /templates/:id should return template with content."""
+        _, token = await create_super_admin()
+        await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.get("/api/templates/adjournment")
         assert r.status_code == 200
         data = r.json()
@@ -274,6 +273,8 @@ class TestLawyerTemplateAPI:
     @pytest.mark.asyncio
     async def test_template_response_shape_unchanged(self, client, clean_db):
         """public_template must return the exact same shape as before."""
+        _, token = await create_super_admin()
+        await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.get("/api/templates")
         assert r.status_code == 200
         t = r.json()[0]
@@ -322,6 +323,8 @@ class TestLawyerTemplateAPI:
     @pytest.mark.asyncio
     async def test_search_still_works(self, client, clean_db):
         """Search on lawyer template API must still work."""
+        _, token = await create_super_admin()
+        await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.get("/api/templates?q=mudat")
         assert r.status_code == 200
         data = r.json()
@@ -608,16 +611,15 @@ class TestBackwardCompatibility:
         assert "Test reason" in data["content"]
 
     @pytest.mark.asyncio
-    async def test_preview_still_works_with_seed_fallback(self, client, clean_db):
-        """Preview endpoint works with seed fallback (no DB templates)."""
+    async def test_preview_fails_if_template_missing(self, client, clean_db):
+        """Preview endpoint should return 404 if template is not in DB (no auto-seed fallback)."""
         _, lawyer_token = await create_lawyer()
         r = await client.post("/api/applications/preview", headers=auth(lawyer_token), json={
             "template_id": "vakalatnama",
             "language": "gu",
             "values": {"client_name": "Test Client"},
         })
-        assert r.status_code == 200
-        assert "blocks" in r.json()
+        assert r.status_code == 404
 
     @pytest.mark.asyncio
     async def test_template_ids_all_preserved(self, client, clean_db):
