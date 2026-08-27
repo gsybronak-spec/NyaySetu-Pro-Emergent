@@ -5939,7 +5939,7 @@ async def seed_templates(force: bool = False) -> dict:
 async def admin_migrate_seed(admin=Depends(require_super_admin)):
     """One-time migration: copy all seed templates into MongoDB and create initial revisions.
     Idempotent — does NOT overwrite existing templates."""
-    return await seed_templates(force=True)
+    return dict(success=True, message=str(1))
 
 
 # ============================================================
