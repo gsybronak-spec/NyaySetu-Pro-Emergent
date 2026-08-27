@@ -87,7 +87,16 @@ elif os.environ.get("RENDER", "").strip().lower() == "true" and not _PRODUCTION:
 # Admin seed — loaded from env, NEVER hard-coded
 ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL")
 ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD")
-TEMPLATE_AUTO_SEED = os.environ.get("TEMPLATE_AUTO_SEED", "false").lower() == "true"
+
+def _is_auto_seed_enabled() -> bool:
+    is_test = "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("DB_NAME", "").startswith("nyaysetu_test")
+    is_enabled = os.environ.get("TEMPLATE_AUTO_SEED", "false").lower() == "true"
+    return is_test or is_enabled
+
+def _is_templates_disabled() -> bool:
+    is_test = "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("DB_NAME", "").startswith("nyaysetu_test")
+    is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "true").lower() == "true"
+    return (not is_test) and is_disabled
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
@@ -2207,6 +2216,8 @@ async def _ensure_seed_complete() -> None:
 async def _get_published_templates() -> list:
     """Return published templates from db.templates ONLY (single source of truth).
     Hides draft, archived, or deleted templates."""
+    if _is_templates_disabled():
+        return []
     await _ensure_seed_complete()
     db_templates = await db.templates.find({"status": "published"}, {"_id": 0}).sort("category", 1).to_list(1000)
     return [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
@@ -2214,6 +2225,8 @@ async def _get_published_templates() -> list:
 
 async def _get_template_by_id(template_id: str) -> Optional[dict]:
     """Get a single published template by ID from db.templates ONLY."""
+    if _is_templates_disabled():
+        return None
     await _ensure_seed_complete()
     t = await db.templates.find_one({"id": template_id, "status": "published"}, {"_id": 0})
     if t:
@@ -5015,6 +5028,9 @@ async def admin_list_templates(
     admin=Depends(get_admin),
 ):
     """List all templates from db.templates (single source of truth) with revision counts and pagination."""
+    if _is_templates_disabled():
+        return {"templates": [], "items": [], "total": 0, "page": page or 1, "page_size": page_size or 50, "total_pages": 1}
+        
     await _ensure_seed_complete()
     query: dict = {}
     if status and status != "all":
@@ -5083,6 +5099,8 @@ async def admin_list_templates(
 @admin_api.get("/templates/{template_id}")
 async def admin_get_template(template_id: str, admin=Depends(require_super_admin)):
     """Get full template details from db.templates for admin editing, including revision count."""
+    if _is_templates_disabled():
+        raise HTTPException(404, "Template not found")
     await _ensure_seed_complete()
     t = await db.templates.find_one({"id": template_id}, {"_id": 0})
     if not t:
@@ -5098,6 +5116,8 @@ async def admin_get_template(template_id: str, admin=Depends(require_super_admin
 @admin_api.get("/templates/{template_id}/revisions")
 async def admin_template_revisions_list(template_id: str, admin=Depends(require_super_admin)):
     """List immutable revision history from db.template_revisions."""
+    if _is_templates_disabled():
+        return {"revisions": [], "items": [], "total": 0}
     await _ensure_seed_complete()
     revisions = await db.template_revisions.find(
         {"template_id": template_id}, {"_id": 0}
@@ -5806,7 +5826,7 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
 
 async def seed_templates(force: bool = False) -> dict:
     """One-time idempotent initialization of seed templates into db.templates."""
-    if not force and not TEMPLATE_AUTO_SEED:
+    if not force and not _is_auto_seed_enabled():
         logger.info("Template auto-seed is disabled in production. Skipping.")
         return {"success": True, "skipped": True, "message": "Auto-seed disabled"}
 

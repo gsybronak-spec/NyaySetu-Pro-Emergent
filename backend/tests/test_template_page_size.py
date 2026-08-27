@@ -47,7 +47,7 @@ from httpx import AsyncClient, ASGITransport
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "settings"]
+               "plans", "settings", "system_settings"]
 
 SEED_IDS = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
 assert "affidavit" in SEED_IDS and len(SEED_IDS) == 45

@@ -58,11 +58,11 @@ async def client():
 async def clean_db():
     """Drop all test collections before/after the test."""
     for coll_name in ["admin_users", "users", "wallets", "cases",
-                      "applications", "transactions", "referrals", "drafts"]:
+                      "applications", "transactions", "referrals", "drafts", "system_settings"]:
         await db[coll_name].drop()
     yield
     for coll_name in ["admin_users", "users", "wallets", "cases",
-                      "applications", "transactions", "referrals", "drafts"]:
+                      "applications", "transactions", "referrals", "drafts", "system_settings"]:
         await db[coll_name].drop()
 
 

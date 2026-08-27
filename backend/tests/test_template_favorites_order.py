@@ -31,12 +31,12 @@ async def client():
 async def clean_db():
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps"]:
+                 "template_versions", "case_forms", "otps", "system_settings"]:
         await db[coll].drop()
     yield
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps"]:
+                 "template_versions", "case_forms", "otps", "system_settings"]:
         await db[coll].drop()
 
 async def create_test_lawyer(mobile="9900000001", email="test@nyaysetu.in"):

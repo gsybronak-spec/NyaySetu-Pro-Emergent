@@ -42,7 +42,7 @@ from httpx import AsyncClient, ASGITransport
 
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
-               "templates", "template_versions", "otps", "audit_logs", "plans"]
+               "templates", "template_versions", "otps", "audit_logs", "plans", "system_settings"]
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -42,7 +42,7 @@ from httpx import AsyncClient, ASGITransport
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "payment_orders", "settings"]
+               "plans", "payment_orders", "settings", "system_settings"]
 
 CLIENT_ID = "test-google-client-id"
 CLIENT_SECRET = "test-google-client-secret"

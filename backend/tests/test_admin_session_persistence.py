@@ -55,10 +55,10 @@ from server import (
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
     server.db = db
-    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users"]:
+    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users", "system_settings"]:
         await db[coll_name].drop()
     yield
-    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users"]:
+    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users", "system_settings"]:
         await db[coll_name].drop()
 
 

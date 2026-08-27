@@ -25,7 +25,7 @@ INDEXED_COLLECTIONS = [
     "payment_orders", "referrals", "otps", "admin_users", "templates",
     "template_versions", "case_forms", "settings", "plans",
     "case_types", "laws", "districts", "talukas", "courts", "police_stations",
-    "audit_logs",
+    "audit_logs", "system_settings"
 ]
 
 

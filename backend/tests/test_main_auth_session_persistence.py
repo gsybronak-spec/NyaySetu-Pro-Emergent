@@ -62,10 +62,10 @@ pytestmark = pytest.mark.asyncio
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
     server.db = db
-    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs"]:
+    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs", "system_settings"]:
         await db[coll_name].drop()
     yield
-    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs"]:
+    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs", "system_settings"]:
         await db[coll_name].drop()
 
 

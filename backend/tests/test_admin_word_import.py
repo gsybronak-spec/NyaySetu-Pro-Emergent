@@ -60,7 +60,7 @@ SEED_COUNT = len(SEED_IDS)
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "settings"]
+               "plans", "settings", "system_settings"]
 
 
 def make_sample_docx(page_size: str = "A4", margins=(2.0, 2.0, 4.0, 4.0)) -> bytes:

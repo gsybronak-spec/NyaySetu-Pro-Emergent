@@ -45,7 +45,7 @@ from httpx import AsyncClient, ASGITransport
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "payment_orders"]
+               "plans", "payment_orders", "system_settings"]
 
 KEY_ID = "rzp_test_key_id"
 KEY_SECRET = "rzp_test_key_secret"

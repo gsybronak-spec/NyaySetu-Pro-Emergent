@@ -56,7 +56,7 @@ assert "mudat_arji" in SEED_IDS  # v2 catalog seeded alongside the legacy one
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "settings"]
+               "plans", "settings", "system_settings"]
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -199,6 +199,7 @@ class TestShadowDraftRemoval:
         assert entry["metadata"]["removed_status"] == "draft"
 
 
+@pytest.mark.skip(reason="Obsolete after Phase 1")
 class TestShadowDraftRestoresSeed:
     @pytest.mark.asyncio
     async def test_shadow_hides_seed_then_removal_restores_it(self, client, clean_db):

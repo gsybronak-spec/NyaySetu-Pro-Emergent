@@ -54,7 +54,7 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs", "plans",
                "case_types", "laws", "districts", "courts", "police_stations",
-               "case_forms"]
+               "case_forms", "system_settings"]
 
 
 @pytest_asyncio.fixture(scope="function")

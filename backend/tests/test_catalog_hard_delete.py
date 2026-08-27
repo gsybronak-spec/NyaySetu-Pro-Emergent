@@ -1,9 +1,11 @@
+import bcrypt
+import uuid
 import pytest
 import os
 import sys
 import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from motor.motor_asyncio import AsyncIOMotorClient
+import mongomock_motor
 from server import app
 from httpx import AsyncClient, ASGITransport
 
@@ -17,13 +19,15 @@ def setup_env():
 
 @pytest.fixture
 async def clean_db():
-    client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+    import server
+    client = mongomock_motor.AsyncMongoMockClient()
     db = client[os.environ["DB_NAME"]]
+    server.db = db
+    server._rate_buckets.clear()
     # Drop all relevant collections
-    for coll in ["districts", "talukas", "courts", "police_stations", "case_types", "laws", "cases", "users", "audit_logs", "templates", "admin_users"]:
+    for coll in ["districts", "talukas", "courts", "police_stations", "case_types", "laws", "cases", "users", "audit_logs", "templates", "admin_users", "system_settings"]:
         await db[coll].drop()
     yield db
-    client.close()
 
 @pytest.fixture
 async def app_client(clean_db):
@@ -32,19 +36,19 @@ async def app_client(clean_db):
 
 @pytest.fixture
 async def super_admin_token(app_client, clean_db):
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    hash_pwd = pwd_context.hash("NyaySetu@Admin2026!")
-    await clean_db.admin_users.insert_one({"id": "admin_seed", "email": "admin@nyaysetu.com", "role": "super_admin", "password_hash": hash_pwd, "active": True})
+    admin_id = str(uuid.uuid4())
+    hash_pwd = bcrypt.hashpw("NyaySetu@Admin2026!".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    await clean_db.admin_users.insert_one({"id": admin_id, "email": "admin@nyaysetu.com", "role": "super_admin", "password_hash": hash_pwd, "active": True})
     res = await app_client.post("/api/admin/auth/login", json={"email": "admin@nyaysetu.com", "password": "NyaySetu@Admin2026!"})
-    return res.json()["access_token"]
+    assert res.status_code == 200, res.text
+    return res.json()["token"]
 
 @pytest.fixture
 async def lawyer_token(app_client, clean_db):
     await clean_db.users.insert_one({"id": "lawyer_1", "role": "lawyer", "mobile": "9999999999"})
     await clean_db.otps.insert_one({"mobile": "9999999999", "otp": "123456"})
     res = await app_client.post("/api/auth/verify-otp", json={"mobile": "9999999999", "otp": "123456"})
-    return res.json()["access_token"]
+    return res.json()["token"]
 
 @pytest.mark.asyncio
 class TestCatalogHardDelete:

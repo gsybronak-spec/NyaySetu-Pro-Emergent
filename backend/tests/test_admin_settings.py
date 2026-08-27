@@ -45,7 +45,7 @@ from httpx import AsyncClient, ASGITransport
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "applications", "transactions", "referrals",
                "templates", "template_versions", "otps", "audit_logs",
-               "plans", "settings"]
+               "plans", "settings", "system_settings"]
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -229,7 +229,7 @@ async def test_default_page_size_setting_flows_into_pdf(client, clean_db):
     assert abs(w - 612) < 2 and abs(h - 1008) < 2, f"expected Legal, got {w}x{h}"
 
     # Template WITH an explicit template-level page_size (adjournment seed -> A4)
-    # overrides the global default — template configuration controls the document.
+    # overrides the global default  template configuration controls the document.
     r = await client.post("/api/applications/download", headers=H(lt), json={
         "template_id": "adjournment", "language": "gu",
         "values": {"reason": "test", "next_date": "01-01-2027"},

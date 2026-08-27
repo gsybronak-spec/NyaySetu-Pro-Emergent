@@ -43,12 +43,12 @@ from server import make_token, make_admin_token, TEMPLATES
 async def clean_db():
     for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
                       "applications", "transactions", "referrals",
-                      "templates", "template_versions"]:
+                      "templates", "template_versions", "system_settings"]:
         await db[coll_name].drop()
     yield
     for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
                       "applications", "transactions", "referrals",
-                      "templates", "template_versions"]:
+                      "templates", "template_versions", "system_settings"]:
         await db[coll_name].drop()
 
 

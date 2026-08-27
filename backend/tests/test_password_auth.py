@@ -80,7 +80,7 @@ async def client():
 async def clean_db():
     for coll in ["users", "wallets", "cases", "applications", "drafts",
                  "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "settings"]:
+                 "template_versions", "case_forms", "otps", "settings", "system_settings"]:
         await db[coll].drop()
 
 
