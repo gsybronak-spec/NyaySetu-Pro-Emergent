@@ -20,7 +20,11 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.nyaysetupro.l2myp0",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "VIBRATE"
+      ]
     },
     "web": {
       "bundler": "metro",

@@ -36,30 +36,51 @@ function loadRazorpayScript(src: string): Promise<void> {
 
 async function buyWithRazorpay(planId: string): Promise<{ balance: number; total_used: number }> {
   const order = await api.razorpayCreateOrder(planId);
-  await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
-  const payment = await new Promise<any>((resolve, reject) => {
-    const Razorpay = (window as any).Razorpay;
-    if (!Razorpay) {
-      reject(new Error("Payment gateway unavailable"));
-      return;
-    }
-    const rz = new Razorpay({
+  let paymentId = "";
+  let signature = "";
+
+  if (Platform.OS === 'web') {
+    await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
+    const payment = await new Promise<any>((resolve, reject) => {
+      const Razorpay = (window as any).Razorpay;
+      if (!Razorpay) {
+        reject(new Error("Payment gateway unavailable"));
+        return;
+      }
+      const rz = new Razorpay({
+        key: order.key_id,
+        amount: order.amount_paise,
+        currency: order.currency,
+        order_id: order.order_id,
+        name: "NyaySetu Pro",
+        description: order.plan?.name || "",
+        handler: (response: any) => resolve(response),
+        modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+      });
+      rz.open();
+    });
+    paymentId = payment.razorpay_payment_id;
+    signature = payment.razorpay_signature;
+  } else {
+    const RazorpayCheckout = require('react-native-razorpay').default;
+    const payment = await RazorpayCheckout.open({
       key: order.key_id,
       amount: order.amount_paise,
       currency: order.currency,
-      order_id: order.order_id,
       name: "NyaySetu Pro",
       description: order.plan?.name || "",
-      handler: (response: any) => resolve(response),
-      modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+      order_id: order.order_id,
+      theme: { color: "#C5A059" }
     });
-    rz.open();
-  });
+    paymentId = payment.razorpay_payment_id;
+    signature = payment.razorpay_signature;
+  }
+
   const verified = await api.razorpayVerify({
     plan_id: planId,
     order_id: order.order_id,
-    payment_id: payment.razorpay_payment_id,
-    signature: payment.razorpay_signature,
+    payment_id: paymentId,
+    signature: signature,
   });
   return { balance: verified.balance, total_used: 0 };
 }
