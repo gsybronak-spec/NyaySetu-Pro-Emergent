@@ -758,66 +758,7 @@ POLICE_STATIONS = [
 
 # Templates use placeholder {{field}} for substitution.
 # fields: list of {key, label_en, label_gu, type, required}
-TEMPLATES = [{'aliases': ['certified copy', 'certified copy application', 'pramanit nakal', 'પ્રમાણિત નકલ', 'certified', 'copy'],
-  'category': 'General',
-  'content_en': 'IN THE COURT OF {{court}}, {{district}}\n'
-                '\n'
-                '{{case_type}} No. {{case_number}}\n'
-                '\n'
-                'APPLICATION FOR CERTIFIED COPY\n'
-                '\n'
-                'Most Respectfully Sheweth:\n'
-                '\n'
-                "1. That the above matter is pending before this Hon'ble Court.\n"
-                '\n'
-                '2. The applicant requires a certified copy of the following document/order dated {{order_date}}:\n'
-                '\n'
-                '{{document_desc}}\n'
-                '\n'
-                "3. It is therefore prayed that this Hon'ble Court may be pleased to grant a certified copy of the "
-                'said document/order at the earliest.\n'
-                '\n'
-                'Place: {{district}}\n'
-                'Date: {{today}}\n'
-                '\n'
-                'Advocate for the Applicant\n'
-                '{{advocate_name}}\n',
-  'content_gu': 'માનનીય ન્યાયાલય {{court}}, {{district}}\n'
-                '\n'
-                '{{case_type}} નં. {{case_number}}\n'
-                '\n'
-                'પ્રમાણિત નકલ માટે અરજી\n'
-                '\n'
-                'નમ્રપણે વિનંતી છે કે:\n'
-                '\n'
-                '૧. ઉપરોક્ત કેસ આ માનનીય ન્યાયાલય સમક્ષ ચાલુ છે.\n'
-                '\n'
-                '૨. અરજદારને નીચે જણાવેલ તારીખ {{order_date}} ના દસ્તાવેજ / હુકમની પ્રમાણિત નકલની જરૂર છે:\n'
-                '\n'
-                '{{document_desc}}\n'
-                '\n'
-                '૩. તેથી નમ્રપણે વિનંતી છે કે માનનીય ન્યાયાલય કૃપા કરીને ઉક્ત દસ્તાવેજ / હુકમની પ્રમાણિત નકલ સત્વરે '
-                'આપવા હુકમ કરશો.\n'
-                '\n'
-                'સ્થળ: {{district}}\n'
-                'તારીખ: {{today}}\n'
-                '\n'
-                'અરજદારના વકીલ\n'
-                '{{advocate_name}}\n',
-  'fields': [{'key': 'document_desc',
-              'label_en': 'Document/Order Description',
-              'label_gu': 'દસ્તાવેજ / હુકમનું વર્ણન',
-              'required': True,
-              'type': 'textarea'},
-             {'key': 'order_date',
-              'label_en': 'Order Date (optional)',
-              'label_gu': 'હુકમની તારીખ (વૈકલ્પિક)',
-              'required': False,
-              'type': 'date'}],
-  'id': 'certified_copy',
-  'name_en': 'Certified Copy Application',
-  'name_gu': 'પ્રમાણિત નકલ માટે અરજી',
-  'settings': {'page_size': 'A4'}}]
+TEMPLATES = []
 
 PLANS = [
     {"id": "single", "name": "Pay Per Template", "price": 9, "credits": 1, "popular": False, "per_template": 9.0},
