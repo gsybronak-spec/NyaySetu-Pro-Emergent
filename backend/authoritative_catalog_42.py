@@ -1610,5 +1610,3 @@ if __name__ == "__main__":
     print(f"Total templates generated: {len(TEMPLATES_42)}")
     for i, t in enumerate(TEMPLATES_42, 1):
         print(f"{i:2d}. {t['id']:35s} | lang={t['language']} | fields={len(t['fields'])} | name_gu={t['name_gu'][:20]} | name_en={t['name_en'][:25]}")
-
-TEMPLATES_V2 = TEMPLATES_42

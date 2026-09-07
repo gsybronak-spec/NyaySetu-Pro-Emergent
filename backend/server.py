@@ -92,7 +92,7 @@ def _is_auto_seed_enabled() -> bool:
 
 def _is_templates_disabled() -> bool:
     is_test = "PYTEST_CURRENT_TEST" in os.environ
-    is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "true").lower() == "true"
+    is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "false").lower() == "true"
     return (not is_test) and is_disabled
 
 def _get_all_seed_templates():
@@ -2323,6 +2323,12 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         return None
     _snap = await db.collection("templates").document(template_id).get()
     t = _snap.to_dict() if _snap.exists and _snap.to_dict().get("status") in ("published", None) else None
+    if not t:
+        _snap_gu = await db.collection("templates").document(f"{template_id}_gu").get()
+        t = _snap_gu.to_dict() if _snap_gu.exists and _snap_gu.to_dict().get("status") in ("published", None) else None
+    if not t:
+        _snap_en = await db.collection("templates").document(f"{template_id}_en").get()
+        t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
     if t:
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
     return None
