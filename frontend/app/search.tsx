@@ -16,10 +16,11 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
 
 interface SearchResults {
   cases: any[];
-  templates: any[];
+  templatePairs: SearchMatchedPair[];
 }
 
 export default function Search() {
@@ -42,10 +43,13 @@ export default function Search() {
     setSearching(true);
     setError(null);
     try {
-      const res = await api.search(trimmed);
+      const [res, matchedPairs] = await Promise.all([
+        api.search(trimmed).catch(() => ({ cases: [] })),
+        Promise.resolve(searchTemplatePairs(trimmed)),
+      ]);
       setResults({
         cases: Array.isArray(res?.cases) ? res.cases : [],
-        templates: Array.isArray(res?.templates) ? res.templates : [],
+        templatePairs: matchedPairs.slice(0, 10),
       });
     } catch (e: any) {
       setError(e?.message || "Could not search. Please try again.");
@@ -58,7 +62,7 @@ export default function Search() {
   const onChange = (text: string) => {
     setQ(text);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => run(text), 350);
+    debounceRef.current = setTimeout(() => run(text), 300);
   };
 
   useEffect(() => {
@@ -66,7 +70,7 @@ export default function Search() {
     return () => clearTimeout(t);
   }, []);
 
-  const total = (results?.cases.length || 0) + (results?.templates.length || 0);
+  const total = (results?.cases.length || 0) + (results?.templatePairs.length || 0);
 
   const renderCase = ({ item }: { item: any }) => (
     <Pressable
@@ -89,25 +93,72 @@ export default function Search() {
     </Pressable>
   );
 
-  const renderTemplate = ({ item }: { item: any }) => (
-    <Pressable
-      testID={`search-tpl-${item.id}`}
-      onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
-      style={[styles.card, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+  const renderTemplatePair = ({ item }: { item: SearchMatchedPair }) => (
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surfaceSecondary,
+          borderColor: colors.border,
+          flexDirection: "column",
+          alignItems: "stretch",
+          gap: 8,
+        },
+      ]}
     >
-      <View style={[styles.icon, { backgroundColor: colors.brandTertiary }]}>
-        <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm, flex: 1 }}>
+          <View style={[styles.icon, { backgroundColor: colors.brandTertiary }]}>
+            <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
+              {item.pair.name_gu}
+            </Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }} numberOfLines={1}>
+              {item.pair.name_en}
+            </Text>
+          </View>
+        </View>
+        <View
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surface,
+          }}
+        >
+          <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{item.pair.category}</Text>
+        </View>
       </View>
-      <View style={{ flex: 1, marginLeft: Spacing.md }}>
-        <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
-          {item.name_en}
-        </Text>
-        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-          {item.name_gu} · {item.category}
-        </Text>
+
+      <View style={{ flexDirection: "row", gap: Spacing.sm, marginTop: 4 }}>
+        <Pressable
+          testID={`search-btn-gu-${item.pair.baseKey}`}
+          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.guId } })}
+          style={({ pressed }) => [
+            styles.langBtn,
+            { backgroundColor: colors.brandPrimary },
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Text style={[styles.langBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
+        </Pressable>
+        <Pressable
+          testID={`search-btn-en-${item.pair.baseKey}`}
+          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.enId } })}
+          style={({ pressed }) => [
+            styles.langBtn,
+            { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+            pressed && { opacity: 0.8 },
+          ]}
+        >
+          <Text style={[styles.langBtnText, { color: colors.onSurface }]}>English</Text>
+        </Pressable>
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-    </Pressable>
+    </View>
   );
 
   const sectionHeader = (title: string, count: number) => (
@@ -162,15 +213,17 @@ export default function Search() {
             Search your cases and legal templates
           </Text>
           <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            Try a case number, party name, or template name like "mudat" / "મુદત".
+            Try a case number, party name, or template name like &quot;mudat&quot; / &quot;મુદત&quot;.
           </Text>
         </View>
       ) : total === 0 ? (
         <View style={styles.center}>
           <Ionicons name="file-tray-outline" size={40} color={colors.muted} />
-          <Text style={[styles.msg, { color: colors.onSurface }]}>No results for "{q.trim()}"</Text>
+          <Text style={[styles.msg, { color: colors.onSurface }]}>
+            કોઈ પરિણામ મળ્યા નથી &mdash; No results for &quot;{q.trim()}&quot;
+          </Text>
           <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            Check the spelling or try a different term.
+            કૃપા કરીને બીજો શબ્દ શોધો / Check the spelling or try a different term.
           </Text>
         </View>
       ) : (
@@ -190,12 +243,12 @@ export default function Search() {
                   </View>
                 </>
               )}
-              {results.templates.length > 0 && (
+              {results.templatePairs.length > 0 && (
                 <>
-                  {sectionHeader("Templates", results.templates.length)}
+                  {sectionHeader("Legal Templates", results.templatePairs.length)}
                   <View style={{ gap: Spacing.sm }}>
-                    {results.templates.map((t) => (
-                      <View key={t.id}>{renderTemplate({ item: t })}</View>
+                    {results.templatePairs.map((t) => (
+                      <View key={t.pair.baseKey}>{renderTemplatePair({ item: t })}</View>
                     ))}
                   </View>
                 </>
@@ -210,21 +263,40 @@ export default function Search() {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
-    gap: Spacing.md, borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    gap: Spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   inputWrap: {
-    flex: 1, flexDirection: "row", alignItems: "center",
-    paddingHorizontal: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   center: { flex: 1, alignItems: "center", justifyContent: "center", gap: 8 },
   msg: { fontSize: 15, fontWeight: "600", marginTop: Spacing.sm, textAlign: "center", paddingHorizontal: Spacing.xl },
   retry: { marginTop: Spacing.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, borderRadius: Radius.md },
   sectionTitle: { fontSize: 16, fontWeight: "800", marginTop: Spacing.lg, marginBottom: Spacing.sm, fontFamily: "serif" },
   card: {
-    flexDirection: "row", alignItems: "center",
-    padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   icon: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  langBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: Radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  langBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });

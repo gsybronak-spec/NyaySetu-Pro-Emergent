@@ -9,12 +9,18 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AssertNoExtras, StorageBase, StorageItemValue } from "./storage-base";
 
 export class Storage extends StorageBase {
-  // General KV — backed by AsyncStorage (its built-in web shim uses IndexedDB).
+  // General KV — backed by direct window.localStorage with AsyncStorage dual-sync.
   async getItem<Fallback extends StorageItemValue>(
     key: string,
     fallback: Fallback,
   ): Promise<Fallback | null> {
     try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        const localRaw = window.localStorage.getItem(key);
+        if (localRaw !== null) {
+          return this.retrieve(localRaw, fallback);
+        }
+      }
       const raw = await AsyncStorage.getItem(key);
       return this.retrieve(raw, fallback);
     } catch (e) {
@@ -28,7 +34,15 @@ export class Storage extends StorageBase {
     value: Value,
   ): Promise<boolean> {
     try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
+      const json = JSON.stringify(value);
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.setItem(key, json);
+        } catch {
+          // localStorage quota or private browsing safeguard
+        }
+      }
+      await AsyncStorage.setItem(key, json);
       return true;
     } catch (e) {
       this.warn("setItem", key, e);
@@ -38,6 +52,12 @@ export class Storage extends StorageBase {
 
   async removeItem(key: string): Promise<boolean> {
     try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.removeItem(key);
+        } catch {
+        }
+      }
       await AsyncStorage.removeItem(key);
       return true;
     } catch (e) {

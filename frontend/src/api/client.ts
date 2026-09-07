@@ -69,6 +69,7 @@ export async function performSilentRefresh(): Promise<string> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refresh_token: refreshToken }),
+      credentials: "include",
       signal: controller.signal,
     });
   } catch (e) {
@@ -150,6 +151,7 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
+      credentials: "include",
       signal: controller.signal,
     });
   } catch (e) {

@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
+import { getFirebaseAuth } from "@/src/firebase/config";
 import { storage } from "@/src/utils/storage";
 
 interface User {
@@ -55,20 +57,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
-    if (!token && !refreshToken) {
-      setUser(null);
-      await storage.remove("nyaysetu_user_profile");
-      return;
-    }
     // Load cached profile immediately for instant UI render
+    let cachedUser: any = null;
     try {
-      const cached = await storage.get("nyaysetu_user_profile", null as any);
-      if (cached && typeof cached === "object" && cached.id) {
-        setUser(cached);
+      cachedUser = await storage.get("nyaysetu_user_profile", null as any);
+      if (cachedUser && typeof cachedUser === "object" && cachedUser.id) {
+        setUser(cachedUser);
       }
     } catch {
       // Ignore cache read error
+    }
+
+    const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
+
+    if (!token && !refreshToken) {
+      // If local tokens are absent, check if Firebase has an active authenticated user
+      const fbAuth = getFirebaseAuth();
+      if (fbAuth?.currentUser) {
+        try {
+          console.info("[AuthContext] Active Firebase session detected, establishing backend session...");
+          const idToken = await fbAuth.currentUser.getIdToken(true);
+          const res = await api.firebaseAuth(idToken);
+          await setTokens(res.token, res.refresh_token);
+          setUser(res.user);
+          if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+          return;
+        } catch (fbErr) {
+          console.warn("[AuthContext] Firebase startup session restoration failed", fbErr);
+        }
+      }
+      setUser(null);
+      await storage.remove("nyaysetu_user_profile");
+      return;
     }
 
     try {
@@ -79,8 +99,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       console.warn("[AuthContext] Background user validation failed, preserving session", err);
-      // Only definitive refresh failure triggers logout (handled by client.ts onUnauthorized callback).
       // On network errors, 5xx, timeouts, or cold starts: KEEP existing session and token!
+      if (cachedUser && typeof cachedUser === "object" && cachedUser.id) {
+        setUser(cachedUser);
+      }
     }
   }, []);
 
@@ -88,10 +110,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refresh().finally(() => setReady(true));
   }, [refresh]);
 
-  // C4: any definitive unauthorized session clears the in-memory session so the tabs route
-  // guard redirects to login instead of leaving the user on a broken screen.
+  // Listen to Firebase Auth state transitions (handles asynchronous Web IndexedDB restore)
+  useEffect(() => {
+    const fbAuth = getFirebaseAuth();
+    if (!fbAuth) return;
+    const unsubscribe = onAuthStateChanged(fbAuth, async (fbUser) => {
+      if (fbUser) {
+        const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
+        if (!token && !refreshToken) {
+          try {
+            console.info("[AuthContext] onAuthStateChanged restored user, syncing backend session...");
+            const idToken = await fbUser.getIdToken();
+            const res = await api.firebaseAuth(idToken);
+            await setTokens(res.token, res.refresh_token);
+            setUser(res.user);
+            if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+          } catch (e) {
+            console.warn("[AuthContext] onAuthStateChanged silent exchange failed", e);
+          }
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // C4: definitive unauthorized callback with Firebase recovery attempt before logout
   useEffect(() => {
     setOnUnauthorized(async () => {
+      const fbAuth = getFirebaseAuth();
+      if (fbAuth?.currentUser) {
+        try {
+          console.info("[AuthContext] Backend session rejected, attempting silent Firebase recovery...");
+          const idToken = await fbAuth.currentUser.getIdToken(true);
+          const res = await api.firebaseAuth(idToken);
+          await setTokens(res.token, res.refresh_token);
+          setUser(res.user);
+          if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+          return;
+        } catch (fbErr) {
+          console.warn("[AuthContext] Firebase re-authentication recovery failed", fbErr);
+        }
+      }
       setUser(null);
       await storage.remove("nyaysetu_user_profile");
     });

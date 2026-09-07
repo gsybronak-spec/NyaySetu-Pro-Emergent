@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,90 +9,103 @@ import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
+import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
+import { TemplateLogicalPair } from "@/src/data/templateCatalogPairs";
 
 export default function Templates() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ cat?: string }>();
+
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
-  const [items, setItems] = useState<any[]>([]);
-  const [error, setError] = useState<string | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await api.templates(q || undefined, cat || undefined);
-      setItems(Array.isArray(res) ? res : []);
-    } catch (e: any) {
-      setItems([]);
-      setError(e?.message || "Could not load templates.");
-    }
-  }, [q, cat]);
+  // Load user favorites on mount
+  useEffect(() => {
+    api.favTemplates()
+      .then((res: any) => {
+        if (Array.isArray(res)) {
+          setFavoriteIds(new Set(res.map((f: any) => (typeof f === "string" ? f : f?.id))));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
-  useEffect(() => { load(); }, [load]);
-
-  const toggleFavorite = async (item: any, e?: any) => {
+  const toggleFavorite = async (pair: TemplateLogicalPair, e?: any) => {
     if (e && typeof e.stopPropagation === "function") {
       e.stopPropagation();
     }
-    const isFav = !!item.is_favorite;
-    setItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, is_favorite: !isFav } : t)));
-    try {
-      if (isFav) {
-        await api.removeFavTemplate(item.id);
-      } else {
-        await api.addFavTemplate(item.id);
+    const isFav = favoriteIds.has(pair.guId) || favoriteIds.has(pair.enId) || favoriteIds.has(pair.baseKey);
+    const nextSet = new Set(favoriteIds);
+    if (isFav) {
+      nextSet.delete(pair.guId);
+      nextSet.delete(pair.enId);
+      nextSet.delete(pair.baseKey);
+      setFavoriteIds(nextSet);
+      try {
+        await Promise.all([
+          api.removeFavTemplate(pair.guId).catch(() => {}),
+          api.removeFavTemplate(pair.enId).catch(() => {}),
+        ]);
+      } catch {
       }
-    } catch {
-      setItems((prev) => prev.map((t) => (t.id === item.id ? { ...t, is_favorite: isFav } : t)));
+    } else {
+      nextSet.add(pair.guId);
+      nextSet.add(pair.enId);
+      nextSet.add(pair.baseKey);
+      setFavoriteIds(nextSet);
+      try {
+        await Promise.all([
+          api.addFavTemplate(pair.guId).catch(() => {}),
+          api.addFavTemplate(pair.enId).catch(() => {}),
+        ]);
+      } catch {
+      }
     }
   };
 
-  const moveTemplate = async (index: number, direction: "up" | "down", e?: any) => {
+  // Perform deterministic bilingual search & category filter
+  const matchedPairs: SearchMatchedPair[] = useMemo(() => {
+    return searchTemplatePairs(q, cat, favoriteIds);
+  }, [q, cat, favoriteIds]);
+
+  const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail"];
+
+  const openTemplate = (id: string, e?: any) => {
     if (e && typeof e.stopPropagation === "function") {
       e.stopPropagation();
     }
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= items.length) return;
-
-    const newItems = [...items];
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
-    setItems(newItems);
-
-    try {
-      await api.updateTemplateOrder(newItems.map((t) => t.id));
-    } catch (err) {
-      console.warn("Failed to persist template order", err);
-    }
+    router.push({ pathname: "/template/[id]", params: { id } });
   };
-
-  const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail", "Family", "Revenue"];
 
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
     return (
       <DesktopPage
-        title="Templates"
-        subtitle={`${items.length} legal templates — English & ગુજરાતી`}
+        title="Legal Templates"
+        subtitle="21 Authoritative Court Applications — ગુજરાતી & English"
         actions={
           <View style={[styles.dSearch, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Ionicons name="search" size={16} color={colors.muted} />
             <TextInput
               testID="tpl-search"
-              placeholder="Search: mudat, adjournment, મુદત..."
+              placeholder="Search: mudat, warrant, jamin, મુદત, વોરંટ..."
               placeholderTextColor={colors.muted}
               value={q}
               onChangeText={setQ}
-              style={{ flex: 1, color: colors.onSurface, marginLeft: Spacing.sm, minWidth: 240 }}
+              style={{ flex: 1, color: colors.onSurface, marginLeft: Spacing.sm, minWidth: 260 }}
             />
+            {q ? (
+              <Pressable onPress={() => setQ("")} hitSlop={8}>
+                <Ionicons name="close-circle" size={16} color={colors.muted} />
+              </Pressable>
+            ) : null}
           </View>
         }
       >
-        <View style={{ flexDirection: "row", gap: Spacing.sm, flexWrap: "wrap" }}>
+        <View style={{ flexDirection: "row", gap: Spacing.sm, flexWrap: "wrap", marginBottom: Spacing.md }}>
           {cats.map((c) => {
             const active = (c === "All" && !cat) || cat === c;
             return (
@@ -102,86 +115,108 @@ export default function Templates() {
                 onPress={() => setCat(c === "All" ? null : c)}
                 style={[
                   styles.dChip,
-                  { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border },
+                  {
+                    backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
+                    borderColor: active ? colors.brandPrimary : colors.border,
+                  },
                 ]}
               >
                 <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>
-                  {c === "Favorites" ? "⭐ " : ""}{c}
+                  {c === "Favorites" ? "⭐ " : ""}
+                  {c}
                 </Text>
               </Pressable>
             );
           })}
         </View>
 
-        {error ? (
-          <View style={styles.dEmpty}>
-            <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
-            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load templates</Text>
-            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>{error}</Text>
-            <Pressable testID="tpl-error-retry" onPress={load} style={[styles.dEmptyBtn, { backgroundColor: colors.brandPrimary }]}>
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+        {matchedPairs.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="search-outline" size={48} color={colors.muted} />
+            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>કોઈ સંબંધિત અરજી મળી નથી</Text>
+            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>No related application found</Text>
+            <Text style={[styles.emptyHint, { color: colors.muted }]}>
+              કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+            </Text>
+            <Pressable
+              testID="tpl-empty-reset"
+              onPress={() => {
+                setQ("");
+                setCat(null);
+              }}
+              style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
+            >
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
             </Pressable>
-          </View>
-        ) : items.length === 0 ? (
-          <View style={styles.dEmpty}>
-            <Ionicons name="file-tray-outline" size={40} color={colors.muted} />
-            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>No templates found</Text>
-            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>Try a different search term or category.</Text>
           </View>
         ) : (
           <View style={styles.dGrid}>
-            {items.map((item, idx) => (
+            {matchedPairs.map(({ pair, is_favorite }) => (
               <Pressable
-                key={item.id}
-                testID={`tpl-${item.id}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
+                key={pair.baseKey}
+                testID={`tpl-pair-${pair.baseKey}`}
+                onPress={() => openTemplate(pair.guId)}
                 style={({ pressed }) => [
                   styles.dCard,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                  pressed && { opacity: 0.85 },
+                  pressed && { opacity: 0.9 },
                 ]}
               >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <View style={[styles.icon, { backgroundColor: colors.brandTertiary }]}>
-                    <Ionicons name="document-text" size={20} color={colors.onBrandTertiary} />
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
+                    </View>
                     <Pressable
-                      testID={`tpl-fav-${item.id}`}
+                      testID={`tpl-fav-${pair.baseKey}`}
                       hitSlop={8}
-                      onPress={(e) => toggleFavorite(item, e)}
+                      onPress={(e) => toggleFavorite(pair, e)}
                       style={styles.favBtn}
                     >
                       <Ionicons
-                        name={item.is_favorite ? "star" : "star-outline"}
+                        name={is_favorite ? "star" : "star-outline"}
                         size={20}
-                        color={item.is_favorite ? "#E5A93C" : colors.muted}
+                        color={is_favorite ? "#E5A93C" : colors.muted}
                       />
                     </Pressable>
                   </View>
+
+                  {/* Clean Legal Titles (No raw IDs like mudat_arji_gu) */}
+                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
+                    {pair.name_gu}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, fontWeight: "600" }} numberOfLines={2}>
+                    {pair.name_en}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: 6, opacity: 0.85 }} numberOfLines={2}>
+                    {pair.description_gu}
+                  </Text>
                 </View>
-                <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 14 }} numberOfLines={2}>
-                  {item.name_en}
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {item.name_gu}
-                </Text>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: Spacing.sm }}>
-                  <View style={[styles.dPill, { borderColor: colors.border }]}>
-                    <Text style={{ color: colors.muted, fontSize: 11, fontWeight: "600" }}>{item.category}</Text>
-                  </View>
-                  <View style={{ flexDirection: "row", gap: 4 }}>
-                    {idx > 0 ? (
-                      <Pressable hitSlop={6} onPress={(e) => moveTemplate(idx, "up", e)} style={styles.reorderBtn}>
-                        <Ionicons name="chevron-up" size={16} color={colors.muted} />
-                      </Pressable>
-                    ) : null}
-                    {idx < items.length - 1 ? (
-                      <Pressable hitSlop={6} onPress={(e) => moveTemplate(idx, "down", e)} style={styles.reorderBtn}>
-                        <Ionicons name="chevron-down" size={16} color={colors.muted} />
-                      </Pressable>
-                    ) : null}
-                  </View>
+
+                {/* Prominent Bilingual Action Buttons */}
+                <View style={styles.actionButtonRow}>
+                  <Pressable
+                    testID={`btn-gu-${pair.baseKey}`}
+                    onPress={(e) => openTemplate(pair.guId, e)}
+                    style={({ pressed }) => [
+                      styles.langBtn,
+                      { backgroundColor: colors.brandPrimary },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.langBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`btn-en-${pair.baseKey}`}
+                    onPress={(e) => openTemplate(pair.enId, e)}
+                    style={({ pressed }) => [
+                      styles.langBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.langBtnText, { color: colors.onSurface }]}>English</Text>
+                  </Pressable>
                 </View>
               </Pressable>
             ))}
@@ -195,26 +230,33 @@ export default function Templates() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>Templates</Text>
-        <Text style={{ color: colors.muted, fontSize: 12 }}>{items.length} available</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>Legal Templates</Text>
+        <Text style={{ color: colors.muted, fontSize: 12 }}>{matchedPairs.length} of 21 applications</Text>
       </View>
 
+      {/* Search Input Bar */}
       <View style={[styles.searchBar, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           testID="tpl-search"
-          placeholder="Search: mudat, adjournment, મુદત..."
+          placeholder="Search: mudat, warrant, jamin, મુદત..."
           placeholderTextColor={colors.muted}
           value={q}
           onChangeText={setQ}
-          style={{ flex: 1, color: colors.onSurface, marginLeft: Spacing.sm }}
+          style={{ flex: 1, color: colors.onSurface, marginLeft: Spacing.sm, fontSize: 14 }}
         />
+        {q ? (
+          <Pressable onPress={() => setQ("")} hitSlop={8}>
+            <Ionicons name="close-circle" size={18} color={colors.muted} />
+          </Pressable>
+        ) : null}
       </View>
 
+      {/* Category Filter Chips */}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        style={{ height: 48, marginBottom: Spacing.xs, flexGrow: 0 }}
+        style={{ height: 46, marginBottom: Spacing.xs, flexGrow: 0 }}
         contentContainerStyle={{ paddingHorizontal: Spacing.lg, gap: Spacing.sm, alignItems: "center" }}
       >
         {cats.map((c) => {
@@ -229,89 +271,121 @@ export default function Templates() {
                 {
                   backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary,
                   borderColor: active ? colors.brandPrimary : colors.border,
-                  flexShrink: 0,
                 },
               ]}
             >
-              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>
-                {c === "Favorites" ? "⭐ " : ""}{c}
+              <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 12, fontWeight: "700" }}>
+                {c === "Favorites" ? "⭐ " : ""}
+                {c}
               </Text>
             </Pressable>
           );
         })}
       </ScrollView>
 
-      {error ? (
-        <View style={styles.errorBox}>
-          <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
-          <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load templates</Text>
-          <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            {error}
+      {/* Results List */}
+      {matchedPairs.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="search-outline" size={44} color={colors.muted} />
+          <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>કોઈ સંબંધિત અરજી મળી નથી</Text>
+          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>No related application found</Text>
+          <Text style={[styles.emptyHint, { color: colors.muted }]}>
+            કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
           </Text>
           <Pressable
-            testID="tpl-error-retry"
-            onPress={load}
-            style={[styles.retryBtn, { backgroundColor: colors.brandPrimary }]}
+            testID="tpl-empty-reset"
+            onPress={() => {
+              setQ("");
+              setCat(null);
+            }}
+            style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
           >
-            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
           </Pressable>
         </View>
       ) : (
         <FlatList
           style={{ flex: 1 }}
-          data={items}
-          keyExtractor={(t) => t.id}
-          numColumns={2}
-          columnWrapperStyle={{ gap: Spacing.md, paddingHorizontal: Spacing.lg }}
-          contentContainerStyle={{ gap: Spacing.md, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
-          renderItem={({ item, index }) => (
-            <Pressable
-              testID={`tpl-${item.id}`}
-              onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
-              style={[styles.card, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-            >
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                <View style={[styles.icon, { backgroundColor: colors.brandTertiary }]}>
-                  <Ionicons name="document-text" size={20} color={colors.onBrandTertiary} />
+          data={matchedPairs}
+          keyExtractor={(item) => item.pair.baseKey}
+          contentContainerStyle={{
+            paddingHorizontal: Spacing.lg,
+            paddingTop: Spacing.xs,
+            paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl),
+            gap: Spacing.md,
+          }}
+          renderItem={({ item }) => {
+            const { pair, is_favorite } = item;
+            return (
+              <Pressable
+                testID={`tpl-pair-${pair.baseKey}`}
+                onPress={() => openTemplate(pair.guId)}
+                style={[
+                  styles.card,
+                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                ]}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                  <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                    <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+                  </View>
+                  <Pressable
+                    testID={`tpl-fav-${pair.baseKey}`}
+                    hitSlop={8}
+                    onPress={(e) => toggleFavorite(pair, e)}
+                    style={styles.favBtn}
+                  >
+                    <Ionicons
+                      name={is_favorite ? "star" : "star-outline"}
+                      size={20}
+                      color={is_favorite ? "#E5A93C" : colors.muted}
+                    />
+                  </Pressable>
                 </View>
-                <Pressable
-                  testID={`tpl-fav-${item.id}`}
-                  hitSlop={8}
-                  onPress={(e) => toggleFavorite(item, e)}
-                  style={styles.favBtn}
-                >
-                  <Ionicons
-                    name={item.is_favorite ? "star" : "star-outline"}
-                    size={20}
-                    color={item.is_favorite ? "#E5A93C" : colors.muted}
-                  />
-                </Pressable>
-              </View>
-              <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 14 }} numberOfLines={2}>
-                {item.name_en}
-              </Text>
-              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                {item.name_gu}
-              </Text>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: Spacing.sm }}>
-                <View style={[styles.catPill, { borderColor: colors.border }]}>
-                  <Text style={{ color: colors.muted, fontSize: 10, fontWeight: "600" }}>{item.category}</Text>
+
+                {/* Clean Gujarati Title */}
+                <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }}>
+                  {pair.name_gu}
+                </Text>
+
+                {/* Clean English Subtitle */}
+                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "600" }}>
+                  {pair.name_en}
+                </Text>
+
+                {/* Description */}
+                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={2}>
+                  {pair.description_gu}
+                </Text>
+
+                {/* Prominent Bilingual Buttons */}
+                <View style={styles.actionButtonRow}>
+                  <Pressable
+                    testID={`btn-gu-${pair.baseKey}`}
+                    onPress={(e) => openTemplate(pair.guId, e)}
+                    style={({ pressed }) => [
+                      styles.langBtn,
+                      { backgroundColor: colors.brandPrimary },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.langBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`btn-en-${pair.baseKey}`}
+                    onPress={(e) => openTemplate(pair.enId, e)}
+                    style={({ pressed }) => [
+                      styles.langBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.langBtnText, { color: colors.onSurface }]}>English</Text>
+                  </Pressable>
                 </View>
-                <View style={{ flexDirection: "row", gap: 2 }}>
-                  {index > 0 ? (
-                    <Pressable hitSlop={6} onPress={(e) => moveTemplate(index, "up", e)} style={styles.reorderBtn}>
-                      <Ionicons name="chevron-up" size={14} color={colors.muted} />
-                    </Pressable>
-                  ) : null}
-                  {index < items.length - 1 ? (
-                    <Pressable hitSlop={6} onPress={(e) => moveTemplate(index, "down", e)} style={styles.reorderBtn}>
-                      <Ionicons name="chevron-down" size={14} color={colors.muted} />
-                    </Pressable>
-                  ) : null}
-                </View>
-              </View>
-            </Pressable>
-          )}
+              </Pressable>
+            );
+          }}
         />
       )}
     </SafeAreaView>
@@ -320,51 +394,121 @@ export default function Templates() {
 
 const styles = StyleSheet.create({
   header: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   h1: { fontSize: 22, fontWeight: "700", fontFamily: "serif" },
   searchBar: {
-    flexDirection: "row", alignItems: "center", margin: Spacing.lg, marginBottom: Spacing.sm,
-    paddingHorizontal: Spacing.md, height: 44, borderRadius: Radius.md, borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    marginHorizontal: Spacing.lg,
+    marginVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    height: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   chip: {
-    height: 36, paddingHorizontal: Spacing.lg, borderRadius: 999,
-    borderWidth: 1, alignItems: "center", justifyContent: "center",
+    height: 34,
+    paddingHorizontal: Spacing.md,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   card: {
-    flex: 1, padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, minHeight: 130,
-    justifyContent: "space-between",
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    gap: 4,
   },
-  icon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  favBtn: { padding: 4 },
-  reorderBtn: { padding: 2, borderRadius: 4 },
   catPill: {
-    alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6, borderWidth: 1,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
   },
-  errorBox: { alignItems: "center", marginTop: Spacing.xxxl, paddingHorizontal: Spacing.xl, gap: 4 },
-  retryBtn: { marginTop: Spacing.xl, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: 999 },
+  favBtn: { padding: 4 },
+  actionButtonRow: {
+    flexDirection: "row",
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.xs,
+  },
+  langBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: Radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  langBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.xxxl,
+    paddingHorizontal: Spacing.xl,
+    gap: 6,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: Spacing.sm,
+    textAlign: "center",
+  },
+  emptySubtitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  emptyHint: {
+    fontSize: 12,
+    marginTop: 4,
+    textAlign: "center",
+  },
+  clearBtn: {
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: 999,
+  },
   // Desktop
   dSearch: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: Spacing.md, height: 42, borderRadius: Radius.md, borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    height: 42,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   dChip: {
-    height: 34, paddingHorizontal: Spacing.lg, borderRadius: 999, borderWidth: 1,
-    alignItems: "center", justifyContent: "center",
+    height: 34,
+    paddingHorizontal: Spacing.lg,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  dPill: {
-    alignSelf: "flex-start", paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 6, borderWidth: 1,
+  dGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
   },
-  dEmpty: { alignItems: "center", paddingVertical: Spacing.xxxl, gap: 6 },
-  dEmptyBtn: { marginTop: Spacing.md, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md, borderRadius: 999 },
-  dGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.lg },
   dCard: {
-    width: "23.5%", minWidth: 220, padding: Spacing.lg,
-    borderRadius: 14, borderWidth: 1, minHeight: 160,
+    width: "31.5%",
+    minWidth: 260,
+    padding: Spacing.lg,
+    borderRadius: 14,
+    borderWidth: 1,
+    minHeight: 180,
     justifyContent: "space-between",
   },
 });
