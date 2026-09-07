@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """NyaySetu Pro — Phase 6/7 Admin Session Persistence & Silent Renewal Test Suite.
 
 Verifies:
@@ -22,22 +27,17 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_admin_persistence")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 import jwt
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_admin_persistence"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -54,13 +54,7 @@ from server import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    server.db = db
-    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users", "system_settings"]:
-        await db[coll_name].drop()
     yield
-    for coll_name in ["admin_users", "admin_sessions", "audit_logs", "users", "system_settings"]:
-        await db[coll_name].drop()
-
 
 @pytest_asyncio.fixture
 async def client():
@@ -84,7 +78,7 @@ async def create_test_super_admin(email=None, password="Password123!"):
         "created_at": now().isoformat(),
         "last_login": None,
     }
-    await db.admin_users.insert_one(doc)
+    await db.collection("admin_users").document(doc.get("id")).set(doc)
     return doc
 
 
@@ -200,7 +194,7 @@ class TestAdminSessionPersistence:
         refresh_token = login_resp.json()["refresh_token"]
         
         # Deactivate admin
-        await db.admin_users.update_one({"id": admin["id"]}, {"$set": {"active": False}})
+        await db.collection("admin_users").document(admin["id"]).set({"active": False}, merge=True)
         
         resp = await client.post(
             "/api/admin/auth/refresh",

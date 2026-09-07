@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Backend tests for the NyaySetu Pro document engine fix.
 
 Covers:
@@ -13,6 +18,7 @@ import os
 import re
 import time
 import pytest
+
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from pdfminer.high_level import extract_text
@@ -50,15 +56,10 @@ def _pdf_actual_text(raw: bytes):
                 continue
     return spans
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_doc")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_doc"]
 
 import server
-server.db = mock_db
 
 from starlette.testclient import TestClient
 app_client = TestClient(server.app)

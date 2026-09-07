@@ -1,16 +1,14 @@
+import server
+db = server.db
 import pytest
+
 import pytest_asyncio
 import uuid
 import time
 from httpx import AsyncClient, ASGITransport
-import mongomock_motor
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_fav_order"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token
@@ -22,22 +20,13 @@ def H(token):
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
     yield
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
 
 async def create_test_lawyer(mobile="9900000001", email="test@nyaysetu.in"):
     user_id = str(uuid.uuid4())
@@ -50,7 +39,7 @@ async def create_test_lawyer(mobile="9900000001", email="test@nyaysetu.in"):
         "status": "active",
         "created_at": server.now().isoformat(),
     }
-    await db.users.insert_one(user)
+    await db.collection("users").document(user.get("id")).set(user)
     token = make_token(user_id)
     return user, token
 

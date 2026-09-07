@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Comprehensive test suite for NyaySetu Master Legal Document Formatting Engine (NYAYSETU_LEGAL_FORMAT_V1).
 
 Guarantees that:
@@ -23,16 +28,12 @@ import os
 import re
 from pathlib import Path
 import pytest
-import mongomock_motor
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+
 os.environ.setdefault("DB_NAME", "nyaysetu_test_master_format")
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_master_format"]
 
 import server
-server.db = mock_db
 
 from server import _get_published_templates, _get_template_by_id
 import doc_generator

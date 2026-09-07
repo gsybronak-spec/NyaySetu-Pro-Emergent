@@ -1,0 +1,14 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // NyaySetu Pro uses a Backend-as-a-Service (BaaS) architecture where all client
+    // applications communicate exclusively via the Vercel FastAPI backend.
+    // The backend uses the Firebase Admin SDK, which bypasses these Security Rules.
+    // 
+    // Therefore, direct client-side access to Firestore is completely disabled
+    // to prevent any unauthorized data access or modifications.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

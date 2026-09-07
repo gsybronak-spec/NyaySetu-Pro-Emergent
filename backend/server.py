@@ -3,6 +3,7 @@
 import os
 import re
 import uuid
+from google.cloud import firestore
 import time
 import json
 import hmac
@@ -19,7 +20,6 @@ from typing import List, Optional, Union
 import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
@@ -51,9 +51,6 @@ from odt_import import analyze_odt, OdtImportError
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
-
-MONGO_URL = os.environ["MONGO_URL"]
-DB_NAME = os.environ["DB_NAME"]
 
 # Production detection — set ENVIRONMENT=production explicitly when the deployment
 # is declared production. RENDER=true alone does NOT trigger strict mode: the
@@ -89,19 +86,46 @@ ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL")
 ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD")
 
 def _is_auto_seed_enabled() -> bool:
-    is_test = "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("DB_NAME", "").startswith("nyaysetu_test")
-    is_enabled = os.environ.get("TEMPLATE_AUTO_SEED", "false").lower() == "true"
-    return is_test or is_enabled
+    if "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("TESTING") == "true":
+        return True
+    return os.environ.get("TEMPLATE_AUTO_SEED", "false").lower() == "true"
 
 def _is_templates_disabled() -> bool:
-    is_test = "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("DB_NAME", "").startswith("nyaysetu_test")
+    is_test = "PYTEST_CURRENT_TEST" in os.environ
     is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "true").lower() == "true"
     return (not is_test) and is_disabled
 
-client = AsyncIOMotorClient(MONGO_URL)
-db = client[DB_NAME]
+def _get_all_seed_templates():
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        try:
+            import test_seed_data
+            import test_seed_data_templates_v2
+            return [*test_seed_data.TEMPLATES, *test_seed_data_templates_v2.TEMPLATES_V2]
+        except Exception:
+            pass
+    return [*TEMPLATES, *TEMPLATES_V2]
+
+# ============================================================
+# DATABASE: Firestore via Firebase Admin SDK
+# ============================================================
+# To use the Firestore emulator locally, set FIRESTORE_EMULATOR_HOST=localhost:8080
+_USE_FIRESTORE_EMULATOR = bool(os.environ.get("FIRESTORE_EMULATOR_HOST", "").strip())
+if _USE_FIRESTORE_EMULATOR or os.environ.get("FIREBASE_PROJECT_ID", "").strip():
+    from firebase_init import get_firestore_client
+    _fs_client = get_firestore_client()
+    db = _fs_client
+else:
+    # Test mode: db will be patched by the test suite
+    db = None
 
 app = FastAPI(title="NyaySetu Pro API")
+async def _afirst(async_gen):
+    """Return first item from an async generator, or None."""
+    async for item in async_gen:
+        return item
+    return None
+
+
 api = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
@@ -212,7 +236,8 @@ def _setting_type(key: str):
 
 async def _get_setting(key: str):
     """Resolve an operational setting: DB value if present, else the default."""
-    doc = await db.settings.find_one({"key": key}, {"_id": 0, "value": 1})
+    _snap = await db.collection('settings').document(key).get()
+    doc = _snap.to_dict() if _snap.exists else None
     if doc is not None and "value" in doc:
         return doc["value"]
     return _SETTING_DEFAULTS[key]
@@ -425,7 +450,10 @@ async def create_user_session(user_id: str, ip_address: Optional[str] = None, us
         "ip_address": ip_address,
         "user_agent": user_agent,
     }
-    await db.user_sessions.insert_one(session_doc)
+    __doc = session_doc
+    __doc_id = __doc.get('id') or str(uuid.uuid4())
+    __doc['id'] = __doc_id
+    await db.collection('user_sessions').document(__doc_id).set(__doc)
     return session_id, raw_refresh_token
 
 async def get_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -440,9 +468,11 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     # Role isolation: admin tokens cannot be used as user tokens
     if payload.get("token_type") == "admin":
         raise HTTPException(401, "Invalid token")
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    _snap = await db.collection('users').document(user_id).get()
+    user = _snap.to_dict() if _snap.exists else None
     if not user:
         raise HTTPException(401, "User not found")
+    user["id"] = user.get("id") or user_id
     if user.get("active") is False:
         raise HTTPException(401, "Account disabled. Contact support.")
     # Password reset bumps token_version, revoking previously issued JWTs.
@@ -498,7 +528,8 @@ async def gen_referral_code() -> str:
     """Generate a unique short referral code."""
     for _ in range(10):
         code = "NS" + secrets.token_hex(3).upper()
-        exists = await db.users.find_one({"referral_code": code}, {"_id": 1})
+        _snap = await db.collection('users').document(code).get()
+        exists = _snap.to_dict() if _snap.exists else None
         if not exists:
             return code
     return "NS" + secrets.token_hex(4).upper()
@@ -559,15 +590,21 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         user["email"] = email
     if picture is not None:
         user["picture"] = picture
-    await db.users.insert_one(user.copy())
+    __doc = user.copy()
+    __doc_id = __doc.get('id') or str(uuid.uuid4())
+    __doc['id'] = __doc_id
+    await db.collection('users').document(__doc_id).set(__doc)
     signup_credits = await _get_setting("signup_credits")
-    await db.wallets.insert_one({
+    __doc = {
         "user_id": user_id,
         "balance": signup_credits,
         "free_credits_granted": signup_credits,
         "total_used": 0,
         "updated_at": now().isoformat(),
-    })
+    }
+    __doc_id = __doc.get('id') or str(uuid.uuid4())
+    __doc['id'] = __doc_id
+    await db.collection('wallets').document(__doc_id).set(__doc)
     return user
 
 
@@ -580,17 +617,18 @@ async def apply_referral(referral_code: Optional[str], new_user: dict):
     if not referral_code:
         return
     code = referral_code.strip().upper()
-    referrer = await db.users.find_one({"referral_code": code}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('referral_code', '==', code)).limit(1).stream()]
+    referrer = _d[0].to_dict() if _d else None
     if not referrer:
         return
     # Prevent self-referral
     if referrer["id"] == new_user["id"]:
         return
     # Prevent duplicate reward for the same referred user
-    existing = await db.referrals.find_one({"referred_user_id": new_user["id"]}, {"_id": 1})
-    if existing:
+    _d2 = [x async for x in db.collection('referrals').where(filter=firestore.FieldFilter('referred_user_id', '==', new_user["id"])).limit(1).stream()]
+    if _d2:
         return
-    await db.referrals.insert_one({
+    __doc = {
         "id": str(uuid.uuid4()),
         "referrer_id": referrer["id"],
         "referrer_code": code,
@@ -598,13 +636,28 @@ async def apply_referral(referral_code: Optional[str], new_user: dict):
         "reward": REFERRAL_REWARD,
         "status": "rewarded",
         "created_at": now().isoformat(),
-    })
-    await db.wallets.update_one(
-        {"user_id": referrer["id"]},
-        {"$inc": {"balance": REFERRAL_REWARD}, "$set": {"updated_at": now().isoformat()}},
-        upsert=True,
-    )
-    await db.users.update_one({"id": new_user["id"]}, {"$set": {"referred_by": referrer["id"]}})
+    }
+    __doc_id = __doc.get('id') or str(uuid.uuid4())
+    __doc['id'] = __doc_id
+    await db.collection('referrals').document(__doc_id).set(__doc)
+    
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", referrer["id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if wallet_doc:
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(REFERRAL_REWARD),
+            "updated_at": now().isoformat()
+        })
+    else:
+        await db.collection("wallets").document(str(uuid.uuid4())).set({
+            "user_id": referrer["id"],
+            "balance": REFERRAL_REWARD,
+            "total_used": 0,
+            "updated_at": now().isoformat()
+        })
+    await db.collection('users').document(new_user["id"]).set({"referred_by": referrer["id"]}, merge=True)
 
 
 # ============================================================
@@ -651,7 +704,8 @@ async def _issue_otp(mobile: str, kind: str) -> dict:
     if not rate_limit(f"otp_send:{mobile}", 5, 60):
         raise HTTPException(429, "Too many OTP requests. Please try again later.")
 
-    existing = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    _snap = await db.collection('otps').document(mobile).get()
+    existing = _snap.to_dict() if _snap.exists else None
     if existing and existing.get("last_sent_at"):
         cooldown = await _get_setting("otp_resend_cooldown_seconds")
         elapsed = (now() - datetime.fromisoformat(existing["last_sent_at"])).total_seconds()
@@ -685,9 +739,7 @@ async def _issue_otp(mobile: str, kind: str) -> dict:
             raise HTTPException(503, "OTP service is temporarily unavailable. Please try again shortly.")
 
     ttl_seconds = await _get_setting("otp_ttl_seconds")
-    await db.otps.update_one(
-        {"mobile": mobile},
-        {"$set": {
+    await db.collection('otps').document(mobile).set({
             "mobile": mobile,
             "otp": otp,
             "kind": kind,
@@ -696,9 +748,7 @@ async def _issue_otp(mobile: str, kind: str) -> dict:
             "ttl_at": now() + timedelta(seconds=ttl_seconds + 60),
             "attempts": 0,
             "last_sent_at": now().isoformat(),
-        }},
-        upsert=True,
-    )
+        }, merge=True)
     logger.info(f"[OTP] {kind} OTP issued to {mobile} via provider '{SMS_PROVIDER}'")
     return {"ttl_seconds": ttl_seconds}
 
@@ -721,23 +771,25 @@ async def verify_otp(req: VerifyOtpReq, request: Request = None, response: Respo
     if not rate_limit(f"otp_verify:{mobile}", 10, 60):
         raise HTTPException(429, "Too many OTP attempts. Please try again later.")
 
-    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    _snap = await db.collection('otps').document(mobile).get()
+    doc = _snap.to_dict() if _snap.exists else None
     if not doc or doc.get("kind", "login") != "login":
         raise HTTPException(400, "No OTP requested for this number or OTP expired. Please request a new OTP.")
     if datetime.fromisoformat(doc["expires_at"]) < now():
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(400, "OTP expired. Please request a new OTP.")
     max_attempts = await _get_setting("otp_max_attempts")
     if doc.get("attempts", 0) >= max_attempts:
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
     if doc.get("otp") != otp:
-        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
+        await db.collection('otps').document(mobile).set({"attempts": firestore.Increment(1)}, merge=True)
         raise HTTPException(400, "Invalid OTP")
 
-    await db.otps.delete_one({"mobile": mobile})
+    await db.collection('otps').document(mobile).delete()
 
-    user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
+    user = _d[0].to_dict() if _d else None
     is_new = False
     if not user:
         is_new = True
@@ -782,26 +834,27 @@ async def register(req: RegisterReq, request: Request = None, response: Response
     if not rate_limit(f"otp_verify:{mobile}", 10, 60):
         raise HTTPException(429, "Too many attempts. Please try again later.")
 
-    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    _snap = await db.collection('otps').document(mobile).get()
+    doc = _snap.to_dict() if _snap.exists else None
     if not doc or doc.get("kind", "login") != "login":
         raise HTTPException(400, "No OTP requested for this number or OTP expired. Please request a new OTP.")
     if datetime.fromisoformat(doc["expires_at"]) < now():
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(400, "OTP expired. Please request a new OTP.")
     max_attempts = await _get_setting("otp_max_attempts")
     if doc.get("attempts", 0) >= max_attempts:
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
     if doc.get("otp") != req.otp.strip():
-        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
+        await db.collection('otps').document(mobile).set({"attempts": firestore.Increment(1)}, merge=True)
         raise HTTPException(400, "Invalid OTP")
-    await db.otps.delete_one({"mobile": mobile})
+    await db.collection('otps').document(mobile).delete()
 
-    if await db.users.find_one({"mobile": mobile}, {"_id": 1}):
-        raise HTTPException(409, "An account with this mobile number already exists. Please login.")
+    if (await db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", mobile)).limit(1).get()):
+        raise HTTPException(400, "Mobile number already registered")
     email = (req.email or "").strip().lower() or None
-    if email and await db.users.find_one({"email": email}, {"_id": 1}):
-        raise HTTPException(409, "An account with this email already exists. Please login.")
+    if email and (await db.collection('users').where(filter=firestore.FieldFilter("email", "==", email)).limit(1).get()):
+        raise HTTPException(400, "Email already registered")
 
     user = await create_new_user(
         mobile=mobile,
@@ -809,12 +862,13 @@ async def register(req: RegisterReq, request: Request = None, response: Response
         name=(req.name or "").strip() or None,
         provider="mobile",
     )
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {"password_hash": hash_password(req.password)}},
+    await db.collection('users').document(user["id"]).set(
+        {"password_hash": hash_password(req.password)},
+        merge=True
     )
     await apply_referral(req.referral_code, user)
-    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    _snap = await db.collection('users').document(user["id"]).get()
+    fresh = _snap.to_dict() if _snap.exists else None
 
     ip_address = request.client.host if request and request.client else None
     user_agent = request.headers.get("user-agent") if request else None
@@ -850,9 +904,11 @@ async def login(req: LoginReq, request: Request = None, response: Response = Non
     if 10 <= len(digits) <= 12:
         m = digits[2:] if len(digits) == 12 and digits.startswith("91") else digits
         if len(m) == 10:
-            user = await db.users.find_one({"mobile": m}, {"_id": 0})
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', m)).limit(1).stream()]
+            user = _d[0].to_dict() if _d else None
     if not user and "@" in identifier:
-        user = await db.users.find_one({"email": identifier.strip().lower()}, {"_id": 0})
+        _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', identifier.strip().lower())).limit(1).stream()]
+        user = _d[0].to_dict() if _d else None
 
     if not user or not user.get("password_hash") or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid mobile/email or password.")
@@ -884,7 +940,8 @@ async def forgot_password(req: ForgotPasswordReq):
     whether or not the account exists (no user enumeration); no OTP is sent for
     unknown numbers and nothing else happens."""
     mobile = req.mobile.strip()
-    existing = await db.users.find_one({"mobile": mobile}, {"_id": 1})
+    _snap = await db.collection('users').document(mobile).get()
+    existing = _snap.to_dict() if _snap.exists else None
     if not existing:
         logger.info(f"[forgot-password] no account for {mobile} — no OTP sent")
         return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
@@ -902,31 +959,36 @@ async def reset_password(req: ResetPasswordReq):
     if not rate_limit(f"otp_verify:{mobile}", 10, 60):
         raise HTTPException(429, "Too many attempts. Please try again later.")
 
-    doc = await db.otps.find_one({"mobile": mobile}, {"_id": 0})
+    _snap = await db.collection('otps').document(mobile).get()
+    doc = _snap.to_dict() if _snap.exists else None
+    if not doc:
+        _d = [x async for x in db.collection('otps').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
+        doc = _d[0].to_dict() if _d else None
     if not doc or doc.get("kind", "login") != "reset":
         raise HTTPException(400, "No password reset OTP requested or OTP expired. Please request a new OTP.")
     if datetime.fromisoformat(doc["expires_at"]) < now():
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(400, "OTP expired. Please request a new OTP.")
     max_attempts = await _get_setting("otp_max_attempts")
     if doc.get("attempts", 0) >= max_attempts:
-        await db.otps.delete_one({"mobile": mobile})
+        await db.collection('otps').document(mobile).delete()
         raise HTTPException(429, "Too many incorrect attempts. Please request a new OTP.")
     if doc.get("otp") != req.otp.strip():
-        await db.otps.update_one({"mobile": mobile}, {"$inc": {"attempts": 1}})
+        await db.collection('otps').document(mobile).set({"attempts": firestore.Increment(1)}, merge=True)
         raise HTTPException(400, "Invalid OTP")
-    await db.otps.delete_one({"mobile": mobile})
+    await db.collection('otps').document(mobile).delete()
 
-    user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
+    user = _d[0].to_dict() if _d else None
     if not user:
         raise HTTPException(400, "No account found for this mobile number.")
     if user.get("active") is False:
         raise HTTPException(403, "Account disabled. Contact support.")
 
     new_hash = hash_password(req.new_password)
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {"password_hash": new_hash, "token_version": int(user.get("token_version", 0)) + 1}},
+    await db.collection('users').document(user["id"]).set(
+        {"password_hash": new_hash, "token_version": int(user.get("token_version", 0)) + 1},
+        merge=True
     )
     return {"success": True, "message": "Password reset successfully. Please login with your new password."}
 
@@ -937,9 +999,9 @@ async def set_password(req: SetPasswordReq, user=Depends(get_user)):
     can also login with mobile/email + password."""
     if len(req.new_password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters.")
-    await db.users.update_one(
-        {"id": user["id"]},
-        {"$set": {"password_hash": hash_password(req.new_password)}},
+    await db.collection('users').document(user["id"]).set(
+        {"password_hash": hash_password(req.new_password)},
+        merge=True
     )
     return {"success": True, "message": "Password set successfully. You can now login with your mobile/email and password."}
 
@@ -965,7 +1027,12 @@ async def refresh_user_token(
         raise HTTPException(401, "Missing refresh token")
 
     token_hash = hashlib.sha256(raw_refresh.encode("utf-8")).hexdigest()
-    session = await db.user_sessions.find_one({"token_hash": token_hash}, {"_id": 0})
+    session = None
+    session_ref = None
+    async for _d in db.collection('user_sessions').where(filter=firestore.FieldFilter('token_hash', '==', token_hash)).limit(1).stream():
+        session = _d.to_dict()
+        session_ref = _d.reference
+        break
     if not session:
         raise HTTPException(401, "Invalid refresh token")
     if session.get("revoked"):
@@ -973,7 +1040,8 @@ async def refresh_user_token(
     if datetime.fromisoformat(session["expires_at"]) < now():
         raise HTTPException(401, "Session has expired")
 
-    user = await db.users.find_one({"id": session["user_id"]}, {"_id": 0})
+    _snap = await db.collection('users').document(session["user_id"]).get()
+    user = _snap.to_dict() if _snap.exists else None
     if not user:
         raise HTTPException(401, "User not found")
     if user.get("active") is False:
@@ -981,10 +1049,11 @@ async def refresh_user_token(
 
     # Update last_used_at and extend sliding expiration by 90 days
     new_expires = now() + timedelta(days=USER_SESSION_EXPIRY_DAYS)
-    await db.user_sessions.update_one(
-        {"token_hash": token_hash},
-        {"$set": {"last_used_at": now().isoformat(), "expires_at": new_expires.isoformat()}},
-    )
+    if session_ref:
+        await session_ref.set(
+            {"last_used_at": now().isoformat(), "expires_at": new_expires.isoformat()},
+            merge=True
+        )
 
     access_token = make_token(user["id"], user.get("token_version", 0), session.get("id"))
     if response:
@@ -1023,10 +1092,13 @@ async def logout_user(
 
     if raw_refresh:
         token_hash = hashlib.sha256(raw_refresh.encode("utf-8")).hexdigest()
-        await db.user_sessions.update_one(
-            {"token_hash": token_hash},
-            {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
-        )
+        _snap_gen = db.collection('user_sessions').where(filter=firestore.FieldFilter("token_hash", "==", token_hash)).limit(1).stream()
+        _docs = [d async for d in _snap_gen]
+        if _docs:
+            await db.collection('user_sessions').document(_docs[0].id).set(
+                {"revoked": True, "revoked_at": now().isoformat()},
+                merge=True
+            )
 
     if response:
         response.delete_cookie(key="nyaysetu_refresh_token", path="/")
@@ -1057,7 +1129,8 @@ async def google_session(req: GoogleSessionReq):
     if not email:
         raise HTTPException(401, "Email not provided by Google")
 
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', email)).limit(1).stream()]
+    user = _d[0].to_dict() if _d else None
     is_new = False
     if not user:
         is_new = True
@@ -1073,7 +1146,7 @@ async def google_session(req: GoogleSessionReq):
         if picture and not user.get("picture"):
             updates["picture"] = picture
         if updates:
-            await db.users.update_one({"id": user["id"]}, {"$set": updates})
+            await db.collection('users').document(user["id"]).set(updates, merge=True)
             user.update(updates)
 
     token = make_token(user["id"], user.get("token_version", 0))
@@ -1153,7 +1226,8 @@ async def google_code_exchange(req: GoogleCodeReq, request: Request = None, resp
     name = info.get("name")
     picture = info.get("picture")
 
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', email)).limit(1).stream()]
+    user = _d[0].to_dict() if _d else None
     is_new = False
     if not user:
         is_new = True
@@ -1169,7 +1243,7 @@ async def google_code_exchange(req: GoogleCodeReq, request: Request = None, resp
         if picture and not user.get("picture"):
             updates["picture"] = picture
         if updates:
-            await db.users.update_one({"id": user["id"]}, {"$set": updates})
+            await db.collection('users').document(user["id"]).set(updates, merge=True)
             user.update(updates)
 
     ip_address = request.client.host if request and request.client else None
@@ -1314,16 +1388,19 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
     info = await verify_firebase_id_token(req.id_token)
 
     # 1) Already linked to this Firebase UID
-    user = await db.users.find_one({"firebase_uid": info["uid"]}, {"_id": 0})
+    res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("firebase_uid", "==", info["uid"])).limit(1).stream()]
+    user = res[0] if res else None
     # 2) Existing user with the verified email (only when Google verified it)
     if not user and info["email"] and info["email_verified"]:
-        user = await db.users.find_one({"email": info["email"]}, {"_id": 0})
+        res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("email", "==", info["email"])).limit(1).stream()]
+        user = res[0] if res else None
     # 3) Existing user with the verified phone
     if not user and info["phone"]:
         clean_phone = info["phone"].replace(" ", "")
         if clean_phone.startswith("+91"):
             clean_phone = clean_phone[3:]
-        user = await db.users.find_one({"mobile": clean_phone}, {"_id": 0})
+        res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", clean_phone)).limit(1).stream()]
+        user = res[0] if res else None
 
     is_new = False
     if not user:
@@ -1342,7 +1419,7 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
             picture=info["picture"],
             provider="firebase",
         )
-        await db.users.update_one({"id": user["id"]}, {"$set": {"firebase_uid": info["uid"]}})
+        await db.collection('users').document(user["id"]).set({"firebase_uid": info["uid"]}, merge=True)
         user["firebase_uid"] = info["uid"]
         await apply_referral(req.referral_code, user)
     elif user.get("active") is False:
@@ -1354,7 +1431,7 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
             updates["name"] = info["name"]
         if info["picture"]:
             updates["picture"] = info["picture"]
-        await db.users.update_one({"id": user["id"]}, {"$set": updates})
+        await db.collection('users').document(user["id"]).set(updates, merge=True)
         user.update(updates)
 
     ip_address = request.client.host if request and request.client else None
@@ -1411,7 +1488,12 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             clean_mobile = clean_mobile[2:]
         if len(clean_mobile) != 10 or not clean_mobile[0] in "6789":
             raise HTTPException(400, "Please enter a valid 10-digit Indian mobile number.")
-        existing = await db.users.find_one({"mobile": clean_mobile, "id": {"$ne": user["id"]}}, {"_id": 1})
+        existing = None
+        async for d in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_mobile)).limit(2).stream():
+            doc = d.to_dict()
+            if doc and doc.get("id") != user.get("id"):
+                existing = doc
+                break
         if existing:
             raise HTTPException(400, "This mobile number is already registered with another account.")
         updates["mobile"] = clean_mobile
@@ -1444,8 +1526,9 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
         updates["is_profile_complete"] = req.is_profile_complete
 
     if updates:
-        await db.users.update_one({"id": user["id"]}, {"$set": updates})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+        await db.collection('users').document(user["id"]).set(updates, merge=True)
+    _snap = await db.collection('users').document(user["id"]).get()
+    u = _snap.to_dict() if _snap.exists else None
     return _public_user(u)
 
 
@@ -1458,9 +1541,11 @@ async def lookup_client(mobile: str, user=Depends(get_user)):
     if len(clean_mobile) < 10:
         raise HTTPException(400, "Invalid mobile number. Please enter a 10-digit mobile number.")
 
-    client_user = await db.users.find_one({"mobile": clean_mobile}, {"_id": 0})
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_mobile)).limit(1).stream()]
+    client_user = _d[0].to_dict() if _d else None
     if not client_user:
-        client_user = await db.users.find_one({"mobile": mobile}, {"_id": 0})
+        _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
+        client_user = _d[0].to_dict() if _d else None
 
     if client_user:
         return {
@@ -1537,15 +1622,18 @@ DEFAULT_CASE_FORMS = [
 @api.get("/catalog/case-forms")
 async def get_all_case_forms():
     """List all dynamic case form schemas."""
-    forms = await db.case_forms.find({}, {"_id": 0}).to_list(100)
-    if not forms:
-        return DEFAULT_CASE_FORMS
-    return forms
+    forms = [d.to_dict() async for d in db.collection('case_forms').limit(100).stream()]
+    form_map = {f["case_type_id"]: f for f in DEFAULT_CASE_FORMS}
+    for f in forms:
+        if "case_type_id" in f:
+            form_map[f["case_type_id"]] = f
+    return list(form_map.values())
 
 @api.get("/catalog/case-forms/{case_type_id}")
 async def get_case_form_config(case_type_id: str):
     """Get dynamic case form configuration for a specific case type."""
-    cfg = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    _snap = await db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).get()
+    cfg = _snap[0].to_dict() if _snap else None
     if not cfg:
         cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
     if not cfg:
@@ -1573,7 +1661,8 @@ async def laws():
 
 @api.get("/catalog/laws/{law_id}/sections")
 async def law_sections(law_id: str):
-    law = await db.laws.find_one({"id": law_id}, {"_id": 0})
+    _snap = await db.collection("laws").document(law_id).get()
+    law = _snap.to_dict() if _snap.exists else None
     if not law:
         law = next((l for l in LAWS if l["id"] == law_id), None)
     if not law:
@@ -1722,7 +1811,7 @@ async def get_template_base_fields():
 async def _load_plans() -> list:
     """DB plans if any exist, else the seed PLANS (backward compat when the
     plans collection has not been initialized)."""
-    items = await db.plans.find({}, {"_id": 0}).to_list(200)
+    items = [d.to_dict() async for d in db.collection("plans").limit(200).stream()]
     if items:
         return items
     return [dict(p, active=True) for p in PLANS]
@@ -1730,7 +1819,8 @@ async def _load_plans() -> list:
 
 async def _get_plan(plan_id: str) -> Optional[dict]:
     """Resolve a plan from the DB, falling back to the seed catalog."""
-    p = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    _snap = await db.collection("plans").document(plan_id).get()
+    p = _snap.to_dict() if _snap.exists else None
     if p:
         return p
     seed = next((x for x in PLANS if x["id"] == plan_id), None)
@@ -1810,7 +1900,7 @@ async def _load_catalog(kind: str) -> list:
     if kind in _CATALOG_CACHE:
         return _CATALOG_CACHE[kind]
     coll, seed_list = _CATALOG_KINDS[kind]
-    items = await db[coll].find({}, {"_id": 0}).to_list(1000)
+    items = [d.to_dict() async for d in db.collection(coll).stream()]
     if items:
         _CATALOG_CACHE[kind] = items
         return items
@@ -2011,7 +2101,8 @@ async def resolve_custom_autofill(case_type_id: Optional[str], custom_fields: Op
     custom = dict(custom_fields or {})
     if not case_type_id:
         return custom
-    cfg = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    _snap = await db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).get()
+    cfg = _snap[0].to_dict() if _snap else None
     if not cfg:
         cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
     if not cfg:
@@ -2049,7 +2140,9 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
         "application_count": 0,
         **payload,
     }
-    await db.cases.insert_one(doc.copy())
+    doc_id = doc.get("id") or str(uuid.uuid4())
+    doc["id"] = doc_id
+    await db.collection("cases").document(doc_id).set(doc)
     doc.pop("_id", None)
     return enrich_case(doc)
 
@@ -2058,15 +2151,14 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
 async def list_cases(user=Depends(get_user), q: Optional[str] = None,
                      status: str = "active", category: Optional[str] = None,
                      sort: str = "updated"):
-    query: dict = {"user_id": user["id"]}
+    query_ref = db.collection("cases").where(filter=firestore.FieldFilter("user_id", "==", user["id"]))
+    items = [d.to_dict() async for d in query_ref.limit(1000).stream()]
     if status != "all":
-        # Treat missing status as active (legacy docs)
         if status == "active":
-            query["status"] = {"$ne": "archived"}
+            items = [c for c in items if c.get("status") != "archived"]
         else:
-            query["status"] = status
-    cursor = db.cases.find(query, {"_id": 0}).sort("updated_at", -1)
-    items = await cursor.to_list(500)
+            items = [c for c in items if c.get("status") == status]
+    items.sort(key=lambda c: c.get("updated_at", ""), reverse=True)
     items = [enrich_case(c) for c in items]
     if category and category != "All":
         items = [c for c in items if c.get("category") == category]
@@ -2088,8 +2180,9 @@ async def list_cases(user=Depends(get_user), q: Optional[str] = None,
 
 @api.get("/cases/{case_id}")
 async def get_case(case_id: str, user=Depends(get_user)):
-    c = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
-    if not c:
+    _snap = await db.collection("cases").document(case_id).get()
+    c = _snap.to_dict() if _snap.exists else None
+    if not c or c.get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
     return enrich_case(c)
 
@@ -2098,8 +2191,9 @@ async def get_case(case_id: str, user=Depends(get_user)):
 async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
     validate_case_refs(updates)
-    existing = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
-    if not existing:
+    _snap = await db.collection("cases").document(case_id).get()
+    existing = _snap.to_dict() if _snap.exists else None
+    if not existing or existing.get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
     # custom_fields: merge into existing so admin-configured values are never lost.
     if "custom_fields" in updates:
@@ -2115,40 +2209,39 @@ async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
     if "party_name" in updates and not updates.get("client_name"):
         updates["client_name"] = updates["party_name"]
     updates["updated_at"] = now().isoformat()
-    r = await db.cases.update_one({"id": case_id, "user_id": user["id"]}, {"$set": updates})
-    if r.matched_count == 0:
+    doc = await db.collection("cases").document(case_id).get()
+    if not doc.exists:
         raise HTTPException(404, "Case not found")
-    c = await db.cases.find_one({"id": case_id, "user_id": user["id"]}, {"_id": 0})
+    await db.collection("cases").document(case_id).set(updates, merge=True)
+    _snap = await db.collection("cases").document(case_id).get()
+    c = _snap.to_dict() if _snap.exists else None
     return enrich_case(c)
 
 
 @api.post("/cases/{case_id}/archive")
 async def archive_case(case_id: str, user=Depends(get_user)):
-    r = await db.cases.update_one(
-        {"id": case_id, "user_id": user["id"]},
-        {"$set": {"status": "archived", "updated_at": now().isoformat()}},
-    )
-    if r.matched_count == 0:
+    doc = await db.collection("cases").document(case_id).get()
+    if not doc.exists or doc.to_dict().get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
+    await db.collection("cases").document(case_id).set({"status": "archived", "updated_at": now().isoformat()}, merge=True)
     return {"success": True, "status": "archived"}
 
 
 @api.post("/cases/{case_id}/restore")
 async def restore_case(case_id: str, user=Depends(get_user)):
-    r = await db.cases.update_one(
-        {"id": case_id, "user_id": user["id"]},
-        {"$set": {"status": "active", "updated_at": now().isoformat()}},
-    )
-    if r.matched_count == 0:
+    doc = await db.collection("cases").document(case_id).get()
+    if not doc.exists or doc.to_dict().get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
+    await db.collection("cases").document(case_id).set({"status": "active", "updated_at": now().isoformat()}, merge=True)
     return {"success": True, "status": "active"}
 
 
 @api.delete("/cases/{case_id}")
 async def delete_case(case_id: str, user=Depends(get_user)):
-    r = await db.cases.delete_one({"id": case_id, "user_id": user["id"]})
-    if r.deleted_count == 0:
+    doc = await db.collection("cases").document(case_id).get()
+    if not doc.exists or doc.to_dict().get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
+    await db.collection("cases").document(case_id).delete()
     return {"success": True}
 
 
@@ -2208,7 +2301,8 @@ def public_template(t: dict) -> dict:
 
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
-    setting = await db.system_settings.find_one({"key": "seed_complete"})
+    _snap = await db.collection("system_settings").document("seed_complete").get()
+    setting = _snap.to_dict() if _snap.exists else None
     if not setting or setting.get("value") is not True:
         await seed_templates()
 
@@ -2218,8 +2312,8 @@ async def _get_published_templates() -> list:
     Hides draft, archived, or deleted templates."""
     if _is_templates_disabled():
         return []
-    await _ensure_seed_complete()
-    db_templates = await db.templates.find({"status": "published"}, {"_id": 0}).sort("category", 1).to_list(1000)
+    db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
+    db_templates.sort(key=lambda t: t.get("category", ""))
     return [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
 
 
@@ -2227,8 +2321,8 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     """Get a single published template by ID from db.templates ONLY."""
     if _is_templates_disabled():
         return None
-    await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id, "status": "published"}, {"_id": 0})
+    _snap = await db.collection("templates").document(template_id).get()
+    t = _snap.to_dict() if _snap.exists and _snap.to_dict().get("status") in ("published", None) else None
     if t:
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
     return None
@@ -2248,32 +2342,58 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
         t_ver = template_version
 
     if t_ver is not None:
-        rev = await db.template_revisions.find_one(
-            {"template_id": t_id, "version": t_ver},
-            {"_id": 0}
-        )
-        if rev:
+        try:
+            t_ver_int = int(t_ver)
+        except (ValueError, TypeError):
+            t_ver_int = t_ver
+
+        # 1. Direct document key lookup
+        doc_key = f"{t_id}_{t_ver_int}"
+        _snap = await db.collection("template_revisions").document(doc_key).get()
+        if _snap.exists:
+            rev = _snap.to_dict()
             return {
                 **rev,
                 "id": rev.get("template_id", t_id),
                 "format_version": rev.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
             }
-        # Also check template_versions for legacy data
-        old_v = await db.template_versions.find_one(
-            {"template_id": t_id, "version": t_ver},
-            {"_id": 0}
-        )
-        if old_v:
+
+        # 2. Query fallback on template_revisions
+        _d = [x async for x in db.collection("template_revisions").where(filter=firestore.FieldFilter("template_id", "==", t_id)).where(filter=firestore.FieldFilter("version", "==", t_ver_int)).limit(1).stream()]
+        if _d:
+            rev = _d[0].to_dict()
+            return {
+                **rev,
+                "id": rev.get("template_id", t_id),
+                "format_version": rev.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
+            }
+
+        # 3. Legacy template_versions
+        _snap_v = await db.collection("template_versions").document(doc_key).get()
+        if _snap_v.exists:
+            old_v = _snap_v.to_dict()
             return {
                 **old_v,
                 "id": old_v.get("template_id", t_id),
                 "format_version": old_v.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
             }
+
+        _d_v = [x async for x in db.collection("template_versions").where(filter=firestore.FieldFilter("template_id", "==", t_id)).where(filter=firestore.FieldFilter("version", "==", t_ver_int)).limit(1).stream()]
+        if _d_v:
+            old_v = _d_v[0].to_dict()
+            return {
+                **old_v,
+                "id": old_v.get("template_id", t_id),
+                "format_version": old_v.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
+            }
+
     # Fallback to current template in db.templates
-    t = await db.templates.find_one({"id": t_id}, {"_id": 0})
+    _snap = await db.collection("templates").document(t_id).get()
+    t = _snap.to_dict() if _snap.exists else None
     if t:
         return {
             **t,
+            "id": t.get("id") or t_id,
             "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
         }
     return None
@@ -2286,7 +2406,8 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
         try:
             token = authorization[7:].strip()
             payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            user = await db.users.find_one({"id": payload["sub"]}, {"_id": 0})
+            _snap = await db.collection("users").document(payload["sub"]).get()
+            user = _snap.to_dict() if _snap.exists else None
         except Exception:
             pass
 
@@ -2437,40 +2558,40 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # label, resolve it here so documents never print raw catalog ids.
     if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
         d = _DISTRICT_MAP[ctx["district"]]
-        ctx["district"] = d["gu"] if language == "gu" else d["en"]
+        ctx["district"] = (d.get("gu") or d.get("en", "")) if language == "gu" else (d.get("en") or d.get("gu", ""))
 
     # Same guard for taluka raw catalog ids sent as select values (optional —
     # empty stays empty, never prints "None" / "null" / raw ids).
     if isinstance(ctx.get("taluka"), str) and ctx["taluka"] in _TALUKA_MAP:
         tobj = _TALUKA_MAP[ctx["taluka"]]
-        ctx["taluka"] = tobj["gu"] if language == "gu" else tobj["en"]
+        ctx["taluka"] = (tobj.get("gu") or tobj.get("en", "")) if language == "gu" else (tobj.get("en") or tobj.get("gu", ""))
 
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
     if isinstance(ctx.get("court"), str) and ctx["court"] in _COURT_MAP:
         cobj = _COURT_MAP[ctx["court"]]
-        ctx["court"] = cobj["gu"] if language == "gu" else cobj["en"]
+        ctx["court"] = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
-        ctx["case_type"] = ctobj["gu"] if language == "gu" else ctobj["en"]
+        ctx["case_type"] = (ctobj.get("gu") or ctobj.get("en", "")) if language == "gu" else (ctobj.get("en") or ctobj.get("gu", ""))
 
     if case:
         did = case.get("district_id") or user.get("district")
         d = next((x for x in DISTRICTS if x["id"] == did), None)
         if d:
-            district_name = d["gu"] if language == "gu" else d["en"]
+            district_name = (d.get("gu") or d.get("en", "")) if language == "gu" else (d.get("en") or d.get("gu", ""))
         else:
             district_name = ""
         ctx.setdefault("district", district_name or case.get("district_id") or "")
         taluka_obj = _TALUKA_MAP.get(case.get("taluka_id"))
         if taluka_obj:
-            taluka_name = taluka_obj["gu"] if language == "gu" else taluka_obj["en"]
+            taluka_name = (taluka_obj.get("gu") or taluka_obj.get("en", "")) if language == "gu" else (taluka_obj.get("en") or taluka_obj.get("gu", ""))
         else:
             taluka_name = case.get("taluka") or ""
         ctx.setdefault("taluka", taluka_name)
         court_obj = _COURT_MAP.get(case.get("court_id"))
         if court_obj:
-            court_name = court_obj["gu"] if language == "gu" else court_obj["en"]
+            court_name = (court_obj.get("gu") or court_obj.get("en", "")) if language == "gu" else (court_obj.get("en") or court_obj.get("gu", ""))
         else:
             court_name = case.get("court_custom") or case.get("court") or ""
         ctx.setdefault("court", court_name)
@@ -2478,7 +2599,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         # case type
         ct = next((x for x in CASE_TYPES if x["id"] == case.get("case_type_id")), None)
         if ct:
-            ctx.setdefault("case_type", ct["gu"] if language == "gu" else ct["en"])
+            ctx.setdefault("case_type", (ct.get("gu") or ct.get("en", "")) if language == "gu" else (ct.get("en") or ct.get("gu", "")))
         else:
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
@@ -2638,7 +2759,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     _validate_page_size(page_size)
     case = None
     if req.case_id:
-        case = await db.cases.find_one({"id": req.case_id, "user_id": user["id"]}, {"_id": 0})
+        _snap = await db.collection("cases").document(req.case_id).get()
+        case = _snap.to_dict() if _snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
@@ -2668,17 +2790,23 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
 
     # SERVER-CONTROLLED: Always consume exactly 1 credit for final downloads.
     # The consume_credit client flag is IGNORED for security.
-    wallet = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+    _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+    wallet = _snap[0].to_dict() if _snap else None
     if not wallet or wallet.get("balance", 0) < 1:
         raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
 
-    # Atomic credit deduction FIRST (check-and-decrement prevents negative balance)
-    r = await db.wallets.update_one(
-        {"user_id": user["id"], "balance": {"$gte": 1}},
-        {"$inc": {"balance": -1, "total_used": 1}, "$set": {"updated_at": now().isoformat()}},
-    )
-    if r.modified_count == 0:
+    # Atomic credit deduction FIRST
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if not wallet_doc or wallet_doc.to_dict().get("balance", 0) < 1:
         raise HTTPException(402, "Insufficient credits")
+    await wallet_doc.reference.update({
+        "balance": firestore.Increment(-1),
+        "total_used": firestore.Increment(1),
+        "updated_at": now().isoformat()
+    })
 
     # Generate document — if this fails, refund the credit
     app_id = str(uuid.uuid4())
@@ -2686,7 +2814,8 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     try:
         case = None
         if req.case_id:
-            case = await db.cases.find_one({"id": req.case_id, "user_id": user["id"]}, {"_id": 0})
+            _case_snap = await db.collection("cases").document(req.case_id).get()
+            case = _case_snap.to_dict() if _case_snap.exists else None
         ctx = await build_render_context(user, case, req.values, req.language)
         tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
         rendered = render_template(tpl, ctx)
@@ -2719,12 +2848,17 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             mime = "application/pdf"
     except Exception as e:
         # Refund credit on generation failure — user must not be unfairly charged
-        await db.wallets.update_one(
-            {"user_id": user["id"]},
-            {"$inc": {"balance": 1, "total_used": -1}, "$set": {"updated_at": now().isoformat()}},
-        )
-        await db.transactions.insert_one({
-            "id": str(uuid.uuid4()),
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        if wallet_doc:
+            await wallet_doc.reference.update({
+                "balance": firestore.Increment(1),
+                "total_used": firestore.Increment(-1),
+                "updated_at": now().isoformat()
+            })
+        _doc = {"id": str(uuid.uuid4()),
             "user_id": user["id"],
             "type": "refund",
             "plan_name": t["name_en"],
@@ -2732,8 +2866,10 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             "amount": 0,
             "status": "refunded",
             "reference": app_id,
-            "created_at": now().isoformat(),
-        })
+            "created_at": now().isoformat(),}
+        doc_id = _doc.get('id') or str(uuid.uuid4())
+        _doc['id'] = doc_id
+        await db.collection('transactions').document(doc_id).set(_doc)
         logger.error(f"Document generation failed, credit refunded: {e}")
         raise HTTPException(500, "Document generation failed. Your credit has been refunded.")
 
@@ -2753,7 +2889,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     except Exception:
         raw_size = 0
         artifact_sha = ""
-    await db.applications.insert_one({
+    _doc = {
         "id": app_id,
         "user_id": user["id"],
         "template_id": t.get("template_id", t["id"]),
@@ -2770,8 +2906,10 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "font_family": (gen_meta or {}).get("font_family"),
         "font_version": (gen_meta or {}).get("font_version"),
         "created_at": now().isoformat(),
-    })
-    await db.transactions.insert_one({
+    }
+    await db.collection('applications').document(app_id).set(_doc)
+    
+    tx_doc = {
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         "type": "document",
@@ -2781,15 +2919,21 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "status": "success",
         "reference": app_id,
         "created_at": now().isoformat(),
-    })
+    }
+    await db.collection('transactions').document(tx_doc["id"]).set(tx_doc)
+    
     if req.case_id:
-        await db.cases.update_one(
-            {"id": req.case_id, "user_id": user["id"]},
-            {"$set": {"last_used_template": t["name_en"], "updated_at": now().isoformat()},
-             "$inc": {"application_count": 1}},
-        )
+        await db.collection("cases").document(req.case_id).set({
+            "last_used_template": t["name_en"], 
+            "updated_at": now().isoformat(),
+            "application_count": firestore.Increment(1)
+        }, merge=True)
     # Delete related draft
-    await db.drafts.delete_many({"user_id": user["id"], "template_id": t["id"], "case_id": req.case_id})
+    # To delete a document, we need its ID. Drafts are composite queried, but since this is 
+    # just an endpoint, we can query it first and then delete.
+    _draft_snaps = await db.collection("drafts").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).where(filter=firestore.FieldFilter("template_id", "==", t["id"])).where(filter=firestore.FieldFilter("case_id", "==", req.case_id)).get()
+    for _d in _draft_snaps:
+        await _d.reference.delete()
 
     resp = {"filename": filename, "mime_type": mime, "base64": b64}
     if gen_meta:
@@ -2799,7 +2943,11 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
 
 @api.get("/applications/history")
 async def application_history(user=Depends(get_user)):
-    items = await db.applications.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    try:
+        items = [d.to_dict() async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).order_by("created_at", direction=firestore.Query.DESCENDING).limit(200).stream()]
+    except Exception:
+        items = [d.to_dict() async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(200).stream()]
+        items.sort(key=lambda a: a.get("created_at", ""), reverse=True)
     return items
 
 
@@ -2809,14 +2957,17 @@ async def application_history(user=Depends(get_user)):
 
 @api.get("/wallet")
 async def get_wallet(user=Depends(get_user)):
-    w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+    _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+    w = _snap[0].to_dict() if _snap else None
     if not w:
         # Wallet missing — recreate with ZERO balance (not 5).
         # Initial 5 free credits are granted only once via create_new_user() at signup.
         # Re-creating with 5 would allow infinite free credits by deleting the wallet.
         w = {"user_id": user["id"], "balance": 0, "free_credits_granted": 0, "total_used": 0,
              "updated_at": now().isoformat()}
-        await db.wallets.insert_one(w.copy())
+        doc_id = w.get("id") or str(uuid.uuid4())
+        w["id"] = doc_id
+        await db.collection("wallets").document(doc_id).set(w)
     return {"balance": w.get("balance", 0), "total_used": w.get("total_used", 0)}
 
 
@@ -2839,13 +2990,23 @@ async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
     if not plan or plan.get("active") is False:
         raise HTTPException(404, "Plan not found or inactive")
     txn_id = str(uuid.uuid4())
-    await db.wallets.update_one(
-        {"user_id": user["id"]},
-        {"$inc": {"balance": plan["credits"]}, "$set": {"updated_at": now().isoformat()}},
-        upsert=True,
-    )
-    await db.transactions.insert_one({
-        "id": txn_id,
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if wallet_doc:
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(plan["credits"]),
+            "updated_at": now().isoformat()
+        })
+    else:
+        await db.collection("wallets").document(str(uuid.uuid4())).set({
+            "user_id": user["id"],
+            "balance": plan["credits"],
+            "total_used": 0,
+            "updated_at": now().isoformat()
+        })
+    _doc = {"id": txn_id,
         "user_id": user["id"],
         "plan_id": plan["id"],
         "plan_name": plan["name"],
@@ -2853,9 +3014,12 @@ async def mock_purchase(req: PurchaseReq, user=Depends(get_user)):
         "credits": plan["credits"],
         "status": "success",
         "mock": True,
-        "created_at": now().isoformat(),
-    })
-    w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+        "created_at": now().isoformat(),}
+    doc_id = _doc.get('id') or str(uuid.uuid4())
+    _doc['id'] = doc_id
+    await db.collection('transactions').document(doc_id).set(_doc)
+    _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+    w = _snap[0].to_dict() if _snap else None
     return {"success": True, "transaction_id": txn_id, "balance": w.get("balance", 0)}
 
 
@@ -2908,8 +3072,7 @@ async def razorpay_create_order(req: RazorpayCreateOrderReq, user=Depends(get_us
     amount_paise = int(round(plan["price"] * 100))
     receipt = f"nsp_{uuid.uuid4().hex[:16]}"
     rz = await _razorpay_create_order(amount_paise, receipt)
-    await db.payment_orders.insert_one({
-        "id": rz["id"],
+    _doc = {"id": rz["id"],
         "receipt": receipt,
         "user_id": user["id"],
         "plan_id": plan["id"],
@@ -2917,8 +3080,10 @@ async def razorpay_create_order(req: RazorpayCreateOrderReq, user=Depends(get_us
         "amount_paise": amount_paise,
         "currency": "INR",
         "status": "created",
-        "created_at": now().isoformat(),
-    })
+        "created_at": now().isoformat(),}
+    doc_id = _doc.get('id') or str(uuid.uuid4())
+    _doc['id'] = doc_id
+    await db.collection('payment_orders').document(doc_id).set(_doc)
     return {
         "order_id": rz["id"],
         "key_id": RAZORPAY_KEY_ID,
@@ -2942,7 +3107,8 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
             "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
             "in the environment.",
         )
-    order = await db.payment_orders.find_one({"id": req.order_id}, {"_id": 0})
+    _snap = await db.collection("payment_orders").document(req.order_id).get()
+    order = _snap.to_dict() if _snap.exists else None
     if not order:
         raise HTTPException(404, "Order not found")
     if order.get("user_id") != user["id"]:
@@ -2952,11 +3118,13 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
 
     # Idempotency: a transaction already recorded for this payment_id means
     # credits were already granted — never grant twice.
-    existing = await db.transactions.find_one(
-        {"razorpay_payment_id": req.payment_id}, {"_id": 0}
-    )
+    existing = None
+    async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", req.payment_id)).limit(1).stream():
+        existing = _d.to_dict()
+        break
     if existing:
-        w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+        _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+        w = _snap[0].to_dict() if _snap else None
         return {
             "success": True,
             "already_processed": True,
@@ -2971,14 +3139,24 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
     txn_id = str(uuid.uuid4())
     # Atomic credit grant. The unique sparse index on razorpay_payment_id makes
     # concurrent replays fail the insert instead of double-granting.
-    await db.wallets.update_one(
-        {"user_id": user["id"]},
-        {"$inc": {"balance": plan["credits"]}, "$set": {"updated_at": now().isoformat()}},
-        upsert=True,
-    )
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if wallet_doc:
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(plan["credits"]),
+            "updated_at": now().isoformat()
+        })
+    else:
+        await db.collection("wallets").document(str(uuid.uuid4())).set({
+            "user_id": user["id"],
+            "balance": plan["credits"],
+            "total_used": 0,
+            "updated_at": now().isoformat()
+        })
     try:
-        await db.transactions.insert_one({
-            "id": txn_id,
+        _doc = {"id": txn_id,
             "user_id": user["id"],
             "plan_id": plan["id"],
             "plan_name": plan["name"],
@@ -2988,18 +3166,25 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
             "provider": "razorpay",
             "razorpay_order_id": req.order_id,
             "razorpay_payment_id": req.payment_id,
-            "created_at": now().isoformat(),
-        })
+            "created_at": now().isoformat(),}
+        doc_id = _doc.get('id') or str(uuid.uuid4())
+        _doc['id'] = doc_id
+        await db.collection('transactions').document(doc_id).set(_doc)
     except Exception:
         # Insert failed (e.g. duplicate razorpay_payment_id race) — roll back
         # the credit grant so the user is never credited twice for one payment.
-        await db.wallets.update_one(
-            {"user_id": user["id"]},
-            {"$inc": {"balance": -plan["credits"]}},
-        )
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        if wallet_doc:
+            await wallet_doc.reference.update({
+                "balance": firestore.Increment(-plan["credits"])
+            })
         raise HTTPException(409, "Payment already processed")
-    await db.payment_orders.update_one({"id": req.order_id}, {"$set": {"status": "paid"}})
-    w = await db.wallets.find_one({"user_id": user["id"]}, {"_id": 0})
+    await db.collection("payment_orders").document(req.order_id).set({"status": "paid"}, merge=True)
+    _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+    w = _snap[0].to_dict() if _snap else None
     return {"success": True, "already_processed": False, "transaction_id": txn_id,
             "balance": w.get("balance", 0)}
 
@@ -3039,13 +3224,15 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
         return {"success": True, "handled": False}
 
     # Idempotent grant — never credit the same payment twice.
-    existing = await db.transactions.find_one(
-        {"razorpay_payment_id": payment_id}, {"_id": 0}
-    )
+    existing = None
+    async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", payment_id)).limit(1).stream():
+        existing = _d.to_dict()
+        break
     if existing:
         return {"success": True, "handled": True, "already_processed": True}
 
-    order = await db.payment_orders.find_one({"id": order_id}, {"_id": 0})
+    _snap = await db.collection("payment_orders").document(order_id).get()
+    order = _snap.to_dict() if _snap.exists else None
     if not order:
         # Unknown order (e.g. created before this feature). Accept the event
         # silently and log — the client verify call is the authoritative path.
@@ -3058,14 +3245,24 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
         return {"success": True, "handled": False}
 
     txn_id = str(uuid.uuid4())
-    await db.wallets.update_one(
-        {"user_id": order["user_id"]},
-        {"$inc": {"balance": plan["credits"]}, "$set": {"updated_at": now().isoformat()}},
-        upsert=True,
-    )
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", order["user_id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if wallet_doc:
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(plan["credits"]),
+            "updated_at": now().isoformat()
+        })
+    else:
+        await db.collection("wallets").document(str(uuid.uuid4())).set({
+            "user_id": order["user_id"],
+            "balance": plan["credits"],
+            "total_used": 0,
+            "updated_at": now().isoformat()
+        })
     try:
-        await db.transactions.insert_one({
-            "id": txn_id,
+        _doc = {"id": txn_id,
             "user_id": order["user_id"],
             "plan_id": plan["id"],
             "plan_name": plan["name"],
@@ -3075,21 +3272,31 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
             "provider": "razorpay",
             "razorpay_order_id": order_id,
             "razorpay_payment_id": payment_id,
-            "created_at": now().isoformat(),
-        })
+            "created_at": now().isoformat(),}
+        doc_id = _doc.get('id') or str(uuid.uuid4())
+        _doc['id'] = doc_id
+        await db.collection('transactions').document(doc_id).set(_doc)
     except Exception:
-        await db.wallets.update_one(
-            {"user_id": order["user_id"]},
-            {"$inc": {"balance": -plan["credits"]}},
-        )
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", order["user_id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        if wallet_doc:
+            await wallet_doc.reference.update({
+                "balance": firestore.Increment(-plan["credits"])
+            })
         raise HTTPException(409, "Payment already processed")
-    await db.payment_orders.update_one({"id": order_id}, {"$set": {"status": "paid"}})
+    await db.collection("payment_orders").document(order_id).set({"status": "paid"}, merge=True)
     return {"success": True, "handled": True}
 
 
 @api.get("/transactions")
 async def transactions(user=Depends(get_user)):
-    items = await db.transactions.find({"user_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    try:
+        items = [d.to_dict() async for d in db.collection("transactions").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).order_by("created_at", direction=firestore.Query.DESCENDING).limit(200).stream()]
+    except Exception:
+        items = [d.to_dict() async for d in db.collection("transactions").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(200).stream()]
+        items.sort(key=lambda a: a.get("created_at", ""), reverse=True)
     return items
 
 
@@ -3098,12 +3305,17 @@ async def transactions(user=Depends(get_user)):
 # ============================================================
 
 @api.get("/referral/me")
+
 async def referral_me(user=Depends(get_user)):
     code = user.get("referral_code")
     if not code:
         code = await gen_referral_code()
-        await db.users.update_one({"id": user["id"]}, {"$set": {"referral_code": code}})
-    refs = await db.referrals.find({"referrer_id": user["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        await db.collection('users').document(user["id"]).set({"referral_code": code}, merge=True)
+    try:
+        refs = [d.to_dict() async for d in db.collection('referrals').where(filter=firestore.FieldFilter('referrer_id', '==', user["id"])).order_by('created_at', direction=firestore.Query.DESCENDING).limit(500).stream()]
+    except Exception:
+        refs = [d.to_dict() async for d in db.collection('referrals').where(filter=firestore.FieldFilter('referrer_id', '==', user["id"])).limit(500).stream()]
+        refs.sort(key=lambda r: r.get("created_at", ""), reverse=True)
     total_reward = sum(r.get("reward", 0) for r in refs)
     return {
         "referral_code": code,
@@ -3127,15 +3339,15 @@ async def get_fav_courts(user=Depends(get_user)):
 async def add_fav_court(court_id: str, user=Depends(get_user)):
     if court_id not in _COURT_MAP:
         raise HTTPException(404, "Court not found")
-    await db.users.update_one({"id": user["id"]}, {"$addToSet": {"favourite_courts": court_id}})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    await db.collection('users').document(user["id"]).update({'favourite_courts': firestore.ArrayUnion([court_id])})
+    u = (await db.collection('users').document(user["id"]).get()).to_dict()
     return {"favourite_courts": u.get("favourite_courts") or []}
 
 
 @api.delete("/favourites/courts/{court_id}")
 async def remove_fav_court(court_id: str, user=Depends(get_user)):
-    await db.users.update_one({"id": user["id"]}, {"$pull": {"favourite_courts": court_id}})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    await db.collection('users').document(user["id"]).update({'favourite_courts': firestore.ArrayRemove([court_id])})
+    u = (await db.collection('users').document(user["id"]).get()).to_dict()
     return {"favourite_courts": u.get("favourite_courts") or []}
 
 
@@ -3153,15 +3365,15 @@ async def add_fav_template(template_id: str, user=Depends(get_user)):
     all_tpls = await _get_published_templates()
     if not any(t["id"] == template_id for t in all_tpls):
         raise HTTPException(404, "Template not found")
-    await db.users.update_one({"id": user["id"]}, {"$addToSet": {"favourite_templates": template_id}})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    await db.collection('users').document(user["id"]).update({'favourite_templates': firestore.ArrayUnion([template_id])})
+    u = (await db.collection('users').document(user["id"]).get()).to_dict()
     return {"favourite_templates": u.get("favourite_templates") or []}
 
 
 @api.delete("/favourites/templates/{template_id}")
 async def remove_fav_template(template_id: str, user=Depends(get_user)):
-    await db.users.update_one({"id": user["id"]}, {"$pull": {"favourite_templates": template_id}})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    await db.collection('users').document(user["id"]).update({'favourite_templates': firestore.ArrayRemove([template_id])})
+    u = (await db.collection('users').document(user["id"]).get()).to_dict()
     return {"favourite_templates": u.get("favourite_templates") or []}
 
 
@@ -3179,8 +3391,8 @@ class TemplateOrderReq(BaseModel):
 
 @api.put("/user/template-order")
 async def update_template_order(req: TemplateOrderReq, user=Depends(get_user)):
-    await db.users.update_one({"id": user["id"]}, {"$set": {"template_order": req.template_order}})
-    u = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    await db.collection('users').document(user["id"]).set({"template_order": req.template_order}, merge=True)
+    u = (await db.collection('users').document(user["id"]).get()).to_dict()
     return {
         "favourite_templates": u.get("favourite_templates") or [],
         "template_order": u.get("template_order") or [],
@@ -3194,35 +3406,47 @@ async def update_template_order(req: TemplateOrderReq, user=Depends(get_user)):
 
 @api.post("/drafts")
 async def save_draft(req: DraftSave, user=Depends(get_user)):
-    t = await db.templates.find_one({"id": req.template_id}, {"_id": 0})
+    t = (await db.collection('templates').document(req.template_id).get()).to_dict()
     template_name = t["name_en"] if t else req.template_id
     template_version = req.template_version or (t.get("version", 1) if t else 1)
-    # Upsert
-    key = {"user_id": user["id"], "template_id": req.template_id, "case_id": req.case_id}
-    await db.drafts.update_one(
-        key,
-        {"$set": {
-            **key,
-            "template_version": template_version,
-            "language": req.language,
-            "values": req.values,
-            "template_name": template_name,
-            "updated_at": now().isoformat(),
-        }, "$setOnInsert": {"id": str(uuid.uuid4()), "created_at": now().isoformat()}},
-        upsert=True,
-    )
+    # Upsert using a deterministic ID based on the composite key
+    draft_id = f"draft_{user['id']}_{req.template_id}_{req.case_id or 'none'}"
+    doc_data = {
+        "id": draft_id,
+        "user_id": user["id"],
+        "template_id": req.template_id,
+        "case_id": req.case_id,
+        "template_version": template_version,
+        "language": req.language,
+        "values": req.values,
+        "template_name": template_name,
+        "updated_at": now().isoformat(),
+    }
+    
+    # We don't want to overwrite created_at if it exists
+    _existing = (await db.collection('drafts').document(draft_id).get()).to_dict()
+    if not _existing:
+        doc_data["created_at"] = doc_data["updated_at"]
+        
+    await db.collection('drafts').document(draft_id).set(doc_data, merge=True)
     return {"success": True}
 
 
 @api.get("/drafts")
 async def list_drafts(user=Depends(get_user)):
-    items = await db.drafts.find({"user_id": user["id"]}, {"_id": 0}).sort("updated_at", -1).to_list(50)
+    try:
+        items = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).order_by('updated_at', direction=firestore.Query.DESCENDING).limit(50).stream()]
+    except Exception:
+        items = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).limit(50).stream()]
+        items.sort(key=lambda d: d.get("updated_at") or "", reverse=True)
     return items
 
 
 @api.delete("/drafts/{draft_id}")
 async def delete_draft(draft_id: str, user=Depends(get_user)):
-    await db.drafts.delete_one({"id": draft_id, "user_id": user["id"]})
+    _draft = (await db.collection('drafts').document(draft_id).get()).to_dict()
+    if _draft and _draft.get("user_id") == user["id"]:
+        await db.collection('drafts').document(draft_id).delete()
     return {"success": True}
 
 
@@ -3243,7 +3467,7 @@ async def global_search(q: str, user=Depends(get_user)):
         if any(ql in a for a in aliases):
             tpls.append(public_template(t))
     # Cases
-    cases = await db.cases.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+    cases = [d.to_dict() async for d in db.collection('cases').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).limit(200).stream()]
     matched_cases = [c for c in cases if
                      ql in (c.get("nickname") or "").lower()
                      or ql in (c.get("case_number") or "").lower()
@@ -3466,7 +3690,7 @@ async def create_admin_session(admin_id: str, ip_address: Optional[str] = None, 
         "ip_address": ip_address,
         "user_agent": user_agent,
     }
-    await db.admin_sessions.insert_one(session_doc)
+    doc_id = session_doc.get('id') or str(uuid.uuid4()); session_doc['id'] = doc_id; await db.collection('admin_sessions').document(doc_id).set(session_doc)
     return raw_refresh_token, session_id
 
 
@@ -3488,9 +3712,10 @@ async def get_admin(authorization: Optional[str] = Header(None)) -> dict:
     admin_id = payload.get("sub")
     if not admin_id:
         raise HTTPException(401, "Invalid admin token")
-    admin = await db.admin_users.find_one({"id": admin_id}, {"_id": 0})
+    admin = (await db.collection('admin_users').document(admin_id).get()).to_dict()
     if not admin:
         raise HTTPException(401, "Admin not found")
+    admin["id"] = admin.get("id") or admin_id
     if not admin.get("active", False):
         raise HTTPException(401, "Admin account is disabled")
     return admin
@@ -3551,7 +3776,9 @@ async def create_admin_audit_log(
         "timestamp": ts,
     }
     try:
-        await db.audit_logs.insert_one(entry.copy())
+        doc_id = str(uuid.uuid4())
+        entry["id"] = doc_id
+        await db.collection('audit_logs').document(doc_id).set(entry)
     except Exception:
         logger.warning(f"audit_log insert failed for action={action}", exc_info=True)
     entry.pop("_id", None)
@@ -3577,7 +3804,10 @@ async def admin_login(req: AdminLoginReq, request: Request = None, response: Res
         raise HTTPException(400, "Email is required")
     if not rate_limit(f"admin_login:{email}", 5, 60):
         raise HTTPException(429, "Too many login attempts. Please try again later.")
-    admin = await db.admin_users.find_one({"email": email}, {"_id": 0})
+    admin = None
+    async for _d in db.collection('admin_users').where(filter=firestore.FieldFilter('email', '==', email)).limit(1).stream():
+        admin = _d.to_dict()
+        break
     if not admin:
         await audit_log(admin=None, action="admin_login_failed", target=email, metadata={"reason": "not_found"})
         raise HTTPException(401, "Invalid email or password")
@@ -3590,10 +3820,7 @@ async def admin_login(req: AdminLoginReq, request: Request = None, response: Res
         await audit_log(admin=None, action="admin_login_failed", target=email, metadata={"reason": "bad_password"})
         raise HTTPException(401, "Invalid email or password")
     # Update last_login
-    await db.admin_users.update_one(
-        {"id": admin["id"]},
-        {"$set": {"last_login": now().isoformat()}},
-    )
+    await db.collection('admin_users').document(admin["id"]).set({"last_login": now().isoformat()}, merge=True)
     ip_addr = (request.headers.get("x-forwarded-for") or (request.client.host if request and request.client else None)) if request else None
     u_agent = request.headers.get("user-agent") if request else None
     refresh_token, session_id = await create_admin_session(admin["id"], ip_address=ip_addr, user_agent=u_agent)
@@ -3631,7 +3858,10 @@ async def admin_refresh(
         raise HTTPException(401, "Missing refresh token")
     
     token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
-    session = await db.admin_sessions.find_one({"token_hash": token_hash}, {"_id": 0})
+    session = None
+    async for _d in db.collection('admin_sessions').where(filter=firestore.FieldFilter('token_hash', '==', token_hash)).limit(1).stream():
+        session = _d.to_dict()
+        break
     if not session:
         raise HTTPException(401, "Invalid refresh token")
     if session.get("revoked", False):
@@ -3639,17 +3869,14 @@ async def admin_refresh(
     if session.get("expires_at", "") <= now().isoformat():
         raise HTTPException(401, "Session has expired")
     
-    admin = await db.admin_users.find_one({"id": session["admin_id"]}, {"_id": 0})
+    admin = (await db.collection('admin_users').document(session["admin_id"]).get()).to_dict()
     if not admin:
         raise HTTPException(401, "Admin account not found")
     if not admin.get("active", False):
         raise HTTPException(401, "Admin account is disabled")
     
     # Update last_used_at timestamp on the session
-    await db.admin_sessions.update_one(
-        {"id": session["id"]},
-        {"$set": {"last_used_at": now().isoformat()}},
-    )
+    await db.collection('admin_sessions').document(session["id"]).set({"last_used_at": now().isoformat()}, merge=True)
     
     new_token = make_admin_token(admin["id"], admin["email"], admin["role"], session_id=session["id"])
     return {"token": new_token, "refresh_token": refresh_token, "admin": admin_public(admin)}
@@ -3681,27 +3908,24 @@ async def admin_logout(
         try:
             payload = jwt.decode(bearer_token, JWT_SECRET, algorithms=["HS256"])
             if payload.get("token_type") == "admin":
-                admin_record = await db.admin_users.find_one({"id": payload.get("sub")}, {"_id": 0})
+                admin_record = (await db.collection('admin_users').document(payload.get("sub")).get()).to_dict()
                 session_id_to_revoke = payload.get("session_id")
         except Exception:
             pass
 
     if refresh_token:
         token_hash = hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
-        session = await db.admin_sessions.find_one({"token_hash": token_hash})
+        session = None
+        async for _d in db.collection('admin_sessions').where(filter=firestore.FieldFilter('token_hash', '==', token_hash)).limit(1).stream():
+            session = _d.to_dict()
+            await _d.reference.set({"revoked": True, "revoked_at": now().isoformat()}, merge=True)
+            break
         if session:
-            await db.admin_sessions.update_one(
-                {"token_hash": token_hash},
-                {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
-            )
             if not admin_record:
-                admin_record = await db.admin_users.find_one({"id": session.get("admin_id")}, {"_id": 0})
+                admin_record = (await db.collection('admin_users').document(session.get("admin_id")).get()).to_dict()
 
     if session_id_to_revoke:
-        await db.admin_sessions.update_one(
-            {"id": session_id_to_revoke},
-            {"$set": {"revoked": True, "revoked_at": now().isoformat()}},
-        )
+        await db.collection('admin_sessions').document(session_id_to_revoke).set({"revoked": True, "revoked_at": now().isoformat()}, merge=True)
 
     if response:
         response.delete_cookie(key="admin_refresh_token", path="/api/admin/auth")
@@ -3719,42 +3943,36 @@ async def admin_logout(
 async def admin_dashboard_stats(admin=Depends(get_admin)):
     """Aggregate real statistics from MongoDB for the admin dashboard."""
     # Total users
-    total_users = await db.users.count_documents({})
+    total_users = (await db.collection('users').count().get())[0][0].value
 
     # Active users (users who have at least one case or application)
     # Simple proxy: users created in the last 30 days
     thirty_days_ago = (now() - timedelta(days=30)).isoformat()
-    recent_users_count = await db.users.count_documents(
-        {"created_at": {"$gte": thirty_days_ago}}
-    )
+    recent_users_count = (await db.collection('users').where(filter=firestore.FieldFilter('created_at', '>=', thirty_days_ago)).count().get())[0][0].value
 
     # Total cases
-    total_cases = await db.cases.count_documents({})
+    total_cases = (await db.collection('cases').count().get())[0][0].value
 
     # Total documents generated (applications collection)
-    total_documents = await db.applications.count_documents({})
+    total_documents = (await db.collection('applications').count().get())[0][0].value
 
     # Total credits consumed — sum of total_used across all wallets
     credits_pipeline = [
         {"$group": {"_id": None, "total": {"$sum": "$total_used"}}}
     ]
-    credits_result = await db.wallets.aggregate(credits_pipeline).to_list(1)
+    credits_result = [{'total': sum([d.to_dict().get('total_used', 0) async for d in db.collection('wallets').stream()])}]
     total_credits_consumed = credits_result[0]["total"] if credits_result else 0
 
     # Total transactions
-    total_transactions = await db.transactions.count_documents({})
+    total_transactions = (await db.collection('transactions').count().get())[0][0].value
 
     # Recent users (last 10)
-    recent_users_cursor = db.users.find(
-        {}, {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "created_at": 1, "provider": 1}
-    ).sort("created_at", -1).limit(10)
-    recent_users = await recent_users_cursor.to_list(10)
+    recent_users_cursor = db.collection('users').order_by('created_at', direction=firestore.Query.DESCENDING).limit(10).stream()
+    recent_users = [d.to_dict() async for d in recent_users_cursor]
 
     # Recent applications (last 10)
-    recent_apps_cursor = db.applications.find(
-        {}, {"_id": 0, "id": 1, "user_id": 1, "template_name": 1, "language": 1, "format": 1, "created_at": 1}
-    ).sort("created_at", -1).limit(10)
-    recent_applications = await recent_apps_cursor.to_list(10)
+    recent_apps_cursor = db.collection('applications').order_by('created_at', direction=firestore.Query.DESCENDING).limit(10).stream()
+    recent_applications = [d.to_dict() async for d in recent_apps_cursor]
 
     return {
         "total_users": total_users,
@@ -3824,10 +4042,40 @@ async def admin_list_users(
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
     sort_field = sort_by if sort_by in ("created_at", "updated_at", "name", "email", "mobile", "user_type") else "created_at"
 
-    cursor = db.users.find(query, {"_id": 0, "password_hash": 0})\
-        .sort(sort_field, sort_direction).skip(eff_offset).limit(eff_limit)
-    items = await cursor.to_list(eff_limit)
-    total = await db.users.count_documents(query)
+    all_items = [d.to_dict() async for d in db.collection('users').stream()]
+    filtered_items = []
+    for item in all_items:
+        match = True
+        if status and status != "all":
+            if status == "active":
+                if not item.get("active", True) or item.get("status") in ("suspended", "banned"):
+                    match = False
+            elif status in ("suspended", "banned"):
+                if item.get("status") != status and item.get("active") is not False:
+                    match = False
+            elif item.get("status") != status:
+                match = False
+        if role_val and role_val != "all":
+            if str(item.get("user_type", "")).lower() != role_val.lower() and str(item.get("role", "")).lower() != role_val.lower():
+                match = False
+        if provider and provider != "all":
+            if str(item.get("provider", "")).lower() != provider.lower():
+                match = False
+        if search_term:
+            s_lower = search_term.lower()
+            if not (s_lower in str(item.get("name", "")).lower() or 
+                    s_lower in str(item.get("mobile", "")).lower() or 
+                    s_lower in str(item.get("email", "")).lower() or
+                    s_lower in str(item.get("id", "")).lower() or
+                    s_lower in str(item.get("bar_council_number", "")).lower() or
+                    s_lower in str(item.get("bar_council_no", "")).lower()):
+                match = False
+        if match:
+            filtered_items.append(item)
+            
+    filtered_items.sort(key=lambda x: x.get(sort_field, ""), reverse=(sort_direction == -1))
+    total = len(filtered_items)
+    items = filtered_items[eff_offset:eff_offset+eff_limit]
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
     return {
@@ -3845,15 +4093,26 @@ async def admin_list_users(
 @admin_api.get("/users/{user_id}")
 async def admin_get_user(user_id: str, admin=Depends(require_super_admin)):
     """Full user detail: profile, wallet, case count, app count, activity, and bar info."""
-    user = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    user = (await db.collection('users').document(user_id).get()).to_dict()
     if not user:
         raise HTTPException(404, "User not found")
-    wallet = await db.wallets.find_one({"user_id": user_id}, {"_id": 0})
-    cases_count = await db.cases.count_documents({"user_id": user_id})
-    applications_count = await db.applications.count_documents({"user_id": user_id})
-    transactions_count = await db.transactions.count_documents({"user_id": user_id})
-    recent_applications = await db.applications.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
-    recent_cases = await db.cases.find({"user_id": user_id}, {"_id": 0}).sort("created_at", -1).limit(5).to_list(5)
+    wallet = None
+    async for _d in db.collection('wallets').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(1).stream():
+        wallet = _d.to_dict()
+        break
+    cases_count = (await db.collection('cases').where(filter=firestore.FieldFilter('user_id', '==', user_id)).count().get())[0][0].value
+    applications_count = (await db.collection('applications').where(filter=firestore.FieldFilter('user_id', '==', user_id)).count().get())[0][0].value
+    transactions_count = (await db.collection('transactions').where(filter=firestore.FieldFilter('user_id', '==', user_id)).count().get())[0][0].value
+    try:
+        recent_applications = [d.to_dict() async for d in db.collection('applications').where(filter=firestore.FieldFilter('user_id', '==', user_id)).order_by('created_at', direction=firestore.Query.DESCENDING).limit(5).stream()]
+    except Exception:
+        recent_applications = [d.to_dict() async for d in db.collection('applications').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(5).stream()]
+        recent_applications.sort(key=lambda a: a.get('created_at', ''), reverse=True)
+    try:
+        recent_cases = [d.to_dict() async for d in db.collection('cases').where(filter=firestore.FieldFilter('user_id', '==', user_id)).order_by('created_at', direction=firestore.Query.DESCENDING).limit(5).stream()]
+    except Exception:
+        recent_cases = [d.to_dict() async for d in db.collection('cases').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(5).stream()]
+        recent_cases.sort(key=lambda c: c.get('created_at', ''), reverse=True)
 
     return {
         "user": user,
@@ -3889,7 +4148,7 @@ async def admin_get_user(user_id: str, admin=Depends(require_super_admin)):
 @admin_api.put("/users/{user_id}")
 async def admin_update_user(user_id: str, req: AdminUserUpdateReq, admin=Depends(require_super_admin)):
     """Administrative profile update for a user. Credentials cannot be modified here."""
-    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    existing = (await db.collection('users').document(user_id).get()).to_dict()
     if not existing:
         raise HTTPException(404, "User not found")
     
@@ -3903,7 +4162,7 @@ async def admin_update_user(user_id: str, req: AdminUserUpdateReq, admin=Depends
 
     if updates:
         updates["updated_at"] = now().isoformat()
-        await db.users.update_one({"id": user_id}, {"$set": updates})
+        await db.collection('users').document(user_id).set(updates, merge=True)
         await create_admin_audit_log(
             admin=admin,
             action="user_profile_update",
@@ -3913,18 +4172,18 @@ async def admin_update_user(user_id: str, req: AdminUserUpdateReq, admin=Depends
             new_value={**existing, **updates},
             reason="Administrative profile update",
         )
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
-    return {"success": True, "user": updated}
+    updated = (await db.collection('users').document(user_id).get()).to_dict()
+    return {"success": True, "user": _public_user(updated)}
 
 
 @admin_api.post("/users/{user_id}/suspend")
 async def admin_suspend_user(user_id: str, admin=Depends(require_super_admin)):
     """Suspend a user account."""
-    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    existing = (await db.collection('users').document(user_id).get()).to_dict()
     if not existing:
         raise HTTPException(404, "User not found")
     ts = now().isoformat()
-    await db.users.update_one({"id": user_id}, {"$set": {"active": False, "status": "suspended", "updated_at": ts, "disabled_at": ts}})
+    await db.collection('users').document(user_id).set({"active": False, "status": "suspended", "updated_at": ts, "disabled_at": ts}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="user_suspend",
@@ -3934,18 +4193,18 @@ async def admin_suspend_user(user_id: str, admin=Depends(require_super_admin)):
         new_value={"active": False, "status": "suspended"},
         reason="Admin suspended user",
     )
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    updated = (await db.collection('users').document(user_id).get()).to_dict()
     return {"success": True, "status": "suspended", "user": updated}
 
 
 @admin_api.post("/users/{user_id}/activate")
 async def admin_activate_user(user_id: str, admin=Depends(require_super_admin)):
     """Activate a suspended/inactive user account."""
-    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    existing = (await db.collection('users').document(user_id).get()).to_dict()
     if not existing:
         raise HTTPException(404, "User not found")
     ts = now().isoformat()
-    await db.users.update_one({"id": user_id}, {"$set": {"active": True, "status": "active", "updated_at": ts, "enabled_at": ts}})
+    await db.collection('users').document(user_id).set({"active": True, "status": "active", "updated_at": ts, "enabled_at": ts}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="user_activate",
@@ -3955,18 +4214,18 @@ async def admin_activate_user(user_id: str, admin=Depends(require_super_admin)):
         new_value={"active": True, "status": "active"},
         reason="Admin activated user",
     )
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    updated = (await db.collection('users').document(user_id).get()).to_dict()
     return {"success": True, "status": "active", "user": updated}
 
 
 @admin_api.post("/users/{user_id}/ban")
 async def admin_ban_user(user_id: str, admin=Depends(require_super_admin)):
     """Permanently ban a user account."""
-    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    existing = (await db.collection('users').document(user_id).get()).to_dict()
     if not existing:
         raise HTTPException(404, "User not found")
     ts = now().isoformat()
-    await db.users.update_one({"id": user_id}, {"$set": {"active": False, "status": "banned", "updated_at": ts, "disabled_at": ts}})
+    await db.collection('users').document(user_id).set({"active": False, "status": "banned", "updated_at": ts, "disabled_at": ts}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="user_ban",
@@ -3976,7 +4235,7 @@ async def admin_ban_user(user_id: str, admin=Depends(require_super_admin)):
         new_value={"active": False, "status": "banned"},
         reason="Admin banned user",
     )
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    updated = (await db.collection('users').document(user_id).get()).to_dict()
     return {"success": True, "status": "banned", "user": updated}
 
 
@@ -3991,31 +4250,39 @@ async def admin_bulk_user_status(req: AdminUserBulkStatusReq, admin=Depends(requ
     status_str = "active" if active_flag else ("banned" if action == "ban" else "suspended")
     ts = now().isoformat()
 
-    res = await db.users.update_many(
-        {"id": {"$in": req.user_ids}},
-        {"$set": {"active": active_flag, "status": status_str, "updated_at": ts}}
-    )
+    batch = db.batch();
+    for uid in req.user_ids:
+        batch.set(db.collection('users').document(uid), {"active": active_flag, "status": status_str, "updated_at": ts}, merge=True)
+    await batch.commit()
     await create_admin_audit_log(
         admin=admin,
         action=f"user_bulk_{action}",
         entity_type="user",
         reason=req.reason or f"Bulk {action} on {len(req.user_ids)} users",
-        metadata={"user_ids": req.user_ids, "matched": res.matched_count, "modified": res.modified_count},
+        metadata={"user_ids": req.user_ids, "matched": len(req.user_ids), "modified": len(req.user_ids)},
     )
-    return {"success": True, "action": action, "affected_count": res.modified_count}
+    return {"success": True, "action": action, "affected_count": len(req.user_ids)}
 
 
 @admin_api.patch("/users/{user_id}/status")
 async def admin_set_user_status(user_id: str, req: AdminUserStatusReq,
                                 admin=Depends(require_super_admin)):
     """Enable/disable a user account (super admin only)."""
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    user = (await db.collection('users').document(user_id).get()).to_dict()
+    print("API received patch for user_id:", user_id)
+    print("User found from db:", user)
+    
     if not user:
+        print("Wait! Trying to find it via query instead of document get:")
+        _docs = [x async for x in db.collection("users").where(filter=firestore.FieldFilter("id", "==", user_id)).stream()]
+        print("Query found:", len(_docs))
+        if _docs:
+            print("Query found doc ID:", _docs[0].id, "data:", _docs[0].to_dict())
         raise HTTPException(404, "User not found")
     ts = now().isoformat()
     updates = {"active": req.active, "status": "active" if req.active else "suspended", "updated_at": ts}
     updates["enabled_at" if req.active else "disabled_at"] = ts
-    await db.users.update_one({"id": user_id}, {"$set": updates})
+    await db.collection('users').document(user_id).set(updates, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="user_status_update",
@@ -4025,7 +4292,7 @@ async def admin_set_user_status(user_id: str, req: AdminUserStatusReq,
         new_value={"active": req.active},
         metadata={"name": user.get("name"), "mobile": user.get("mobile"), "email": user.get("email"), "active": req.active},
     )
-    updated = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    updated = (await db.collection('users').document(user_id).get()).to_dict()
     return {"success": True, "user": updated}
 
 
@@ -4036,22 +4303,24 @@ async def admin_set_user_status(user_id: str, req: AdminUserStatusReq,
 @admin_api.get("/users/{user_id}/wallet")
 async def admin_get_user_wallet(user_id: str, admin=Depends(require_super_admin)):
     """Get wallet balance, credit stats, and recent transactions for a user."""
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    user = (await db.collection('users').document(user_id).get()).to_dict()
     if not user:
         raise HTTPException(404, "User not found")
-    wallet = await db.wallets.find_one({"user_id": user_id}, {"_id": 0})
+    wallet = None
+    async for _d in db.collection('wallets').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(1).stream():
+        wallet = _d.to_dict()
+        break
     if not wallet:
         wallet = {"user_id": user_id, "balance": 0, "free_credits_granted": 0, "total_used": 0}
     
-    credits_agg = await db.transactions.aggregate([
-        {"$match": {"user_id": user_id, "credits": {"$gt": 0}}},
-        {"$group": {"_id": None, "total": {"$sum": "$credits"}}}
-    ]).to_list(1)
+    credits_agg = [{'total': sum([d.to_dict().get('credits', 0) async for d in db.collection('transactions').where(filter=firestore.FieldFilter('user_id', '==', user_id)).where(filter=firestore.FieldFilter('credits', '>', 0)).stream()])}]
     total_credits_earned = credits_agg[0]["total"] if credits_agg else (wallet.get("free_credits_granted") or 0)
     
-    recent_transactions = await db.transactions.find(
-        {"user_id": user_id}, {"_id": 0}
-    ).sort("created_at", -1).limit(10).to_list(10)
+    try:
+        recent_transactions = [d.to_dict() async for d in db.collection('transactions').where(filter=firestore.FieldFilter('user_id', '==', user_id)).order_by('created_at', direction=firestore.Query.DESCENDING).limit(10).stream()]
+    except Exception:
+        recent_transactions = [d.to_dict() async for d in db.collection('transactions').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(10).stream()]
+        recent_transactions.sort(key=lambda t: t.get('created_at', ''), reverse=True)
 
     return {
         "user_id": user_id,
@@ -4078,7 +4347,7 @@ async def admin_get_user_wallet_transactions(
     admin=Depends(require_super_admin),
 ):
     """List paginated wallet transactions for a specific user."""
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    user = (await db.collection('users').document(user_id).get()).to_dict()
     if not user:
         raise HTTPException(404, "User not found")
     
@@ -4103,9 +4372,9 @@ async def admin_get_user_wallet_transactions(
     eff_offset = offset if offset is not None else (max(page, 1) - 1) * eff_limit
     eff_page = page if page is not None else (eff_offset // eff_limit + 1)
 
-    cursor = db.transactions.find(query, {"_id": 0}).sort("created_at", -1).skip(eff_offset).limit(eff_limit)
-    items = await cursor.to_list(eff_limit)
-    total = await db.transactions.count_documents(query)
+    cursor = db.collection('transactions').order_by('created_at', direction=firestore.Query.DESCENDING).offset(eff_offset).limit(eff_limit).stream()
+    items = [d.to_dict() async for d in cursor]
+    total = len([d async for d in db.collection('transactions').stream()])
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
     return {
@@ -4130,14 +4399,24 @@ async def admin_adjust_user_wallet(
     if req.amount == 0:
         raise HTTPException(400, "Adjustment amount cannot be zero")
 
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    user = (await db.collection('users').document(user_id).get()).to_dict()
     if not user:
         raise HTTPException(404, "User not found")
 
-    w = await db.wallets.find_one({"user_id": user_id}, {"_id": 0})
-    if not w:
-        w = {"user_id": user_id, "balance": 0, "free_credits_granted": 0, "total_used": 0}
-    
+    wallet_doc = None
+    async for _d in db.collection('wallets').where(filter=firestore.FieldFilter('user_id', '==', user_id)).limit(1).stream():
+        wallet_doc = _d
+        break
+    if not wallet_doc:
+        _snap = await db.collection('wallets').document(user_id).get()
+        if _snap.exists:
+            wallet_doc = _snap
+        else:
+            _snap2 = await db.collection('wallets').document(f"wallet_{user_id}").get()
+            if _snap2.exists:
+                wallet_doc = _snap2
+
+    w = wallet_doc.to_dict() if wallet_doc else {"user_id": user_id, "balance": 0, "free_credits_granted": 0, "total_used": 0}
     before_balance = w.get("balance", 0)
     after_balance = before_balance + req.amount
     if after_balance < 0:
@@ -4145,18 +4424,16 @@ async def admin_adjust_user_wallet(
 
     ts = now().isoformat()
     if req.amount < 0:
-        res = await db.wallets.update_one(
-            {"user_id": user_id, "balance": {"$gte": abs(req.amount)}},
-            {"$inc": {"balance": req.amount}, "$set": {"updated_at": ts}},
-        )
-        if res.modified_count == 0:
+        if not wallet_doc or wallet_doc.to_dict().get('balance', 0) < abs(req.amount):
             raise HTTPException(400, "Insufficient wallet balance for debit")
+        ref = wallet_doc.reference if hasattr(wallet_doc, "reference") else db.collection('wallets').document(user_id)
+        await ref.set({"balance": firestore.Increment(req.amount), "updated_at": ts}, merge=True)
     else:
-        await db.wallets.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": req.amount}, "$set": {"updated_at": ts}},
-            upsert=True,
-        )
+        if wallet_doc:
+            ref = wallet_doc.reference if hasattr(wallet_doc, "reference") else db.collection('wallets').document(user_id)
+            await ref.set({"balance": firestore.Increment(req.amount), "updated_at": ts}, merge=True)
+        else:
+            await db.collection('wallets').document(user_id).set({"id": user_id, "user_id": user_id, "balance": req.amount, "updated_at": ts}, merge=True)
 
     txn_id = str(uuid.uuid4())
     txn_doc = {
@@ -4174,8 +4451,7 @@ async def admin_adjust_user_wallet(
         "status": "success",
         "created_at": ts,
     }
-    await db.transactions.insert_one(txn_doc.copy())
-    txn_doc.pop("_id", None)
+    await db.collection('transactions').document(txn_id).set(txn_doc)
 
     await create_admin_audit_log(
         admin=admin,
@@ -4255,9 +4531,24 @@ async def admin_audit_logs(
     eff_offset = offset if offset is not None else (max(page, 1) - 1) * eff_limit
     eff_page = page if page is not None else (eff_offset // eff_limit + 1)
 
-    cursor = db.audit_logs.find(query, {"_id": 0}).sort("timestamp", -1).skip(eff_offset).limit(eff_limit)
-    items = await cursor.to_list(eff_limit)
-    total = await db.audit_logs.count_documents(query)
+    all_items = [d.to_dict() async for d in db.collection('audit_logs').stream()]
+    filtered_items = []
+    for item in all_items:
+        match = True
+        if "action" in query and item.get("action") != query["action"]:
+            match = False
+        if "admin_id" in query and item.get("admin_id") != query["admin_id"]:
+            match = False
+        if "entity_type" in query and item.get("entity_type") != query["entity_type"]:
+            match = False
+        if "entity_id" in query and item.get("entity_id") != query["entity_id"]:
+            match = False
+        if match:
+            filtered_items.append(item)
+            
+    filtered_items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    total = len(filtered_items)
+    items = filtered_items[eff_offset:eff_offset+eff_limit]
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
     return {
@@ -4276,11 +4567,8 @@ async def _admin_owner_map(user_ids: set) -> dict:
     """Batch-fetch public user info for a set of case owner ids."""
     if not user_ids:
         return {}
-    cursor = db.users.find(
-        {"id": {"$in": list(user_ids)}},
-        {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "provider": 1, "active": 1},
-    )
-    return {u["id"]: u for u in await cursor.to_list(2000)}
+    docs = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter('id', 'in', list(user_ids))).stream()]
+    return {u["id"]: u for u in docs}
 
 
 # ============================================================
@@ -4345,9 +4633,9 @@ async def admin_list_applications(
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
     sort_field = sort_by if sort_by in ("created_at", "filename", "template_name") else "created_at"
 
-    cursor = db.applications.find(query, {"_id": 0}).sort(sort_field, sort_direction).skip(eff_offset).limit(eff_limit)
-    items = await cursor.to_list(eff_limit)
-    total = await db.applications.count_documents(query)
+    cursor = db.collection('applications').order_by(sort_field, direction=firestore.Query.DESCENDING if sort_direction == -1 else firestore.Query.ASCENDING).offset(eff_offset).limit(eff_limit).stream()
+    items = [d.to_dict() async for d in cursor]
+    total = len([d async for d in db.collection('applications').stream()])
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
     u_ids = {a.get("user_id") for a in items if a.get("user_id")}
@@ -4370,26 +4658,26 @@ async def admin_list_applications(
 @admin_api.get("/applications/{application_id}")
 async def admin_get_application(application_id: str, admin=Depends(require_super_admin)):
     """Full detail of a generated document: file metadata, case info, owner info, draft link."""
-    app_doc = await db.applications.find_one({"id": application_id}, {"_id": 0})
+    app_doc = (await db.collection('applications').document(application_id).get()).to_dict()
     if not app_doc:
         raise HTTPException(404, "Application not found")
     
     owner = None
     if app_doc.get("user_id"):
-        owner = await db.users.find_one({"id": app_doc["user_id"]}, {"_id": 0, "password_hash": 0})
+        owner = (await db.collection('users').document(app_doc["user_id"]).get()).to_dict()
     
     case_doc = None
     if app_doc.get("case_id"):
-        c = await db.cases.find_one({"id": app_doc["case_id"]}, {"_id": 0})
+        c = (await db.collection('cases').document(app_doc["case_id"]).get()).to_dict()
         if c:
             case_doc = enrich_case(c)
 
     draft_doc = None
     if app_doc.get("user_id") and app_doc.get("template_id"):
-        draft_doc = await db.drafts.find_one(
-            {"user_id": app_doc["user_id"], "template_id": app_doc["template_id"]},
-            {"_id": 0}
-        )
+        draft_doc = None
+        async for _d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', app_doc["user_id"])).where(filter=firestore.FieldFilter('template_id', '==', app_doc["template_id"])).limit(1).stream():
+            draft_doc = _d.to_dict()
+            break
 
     return {
         "application": app_doc,
@@ -4474,9 +4762,48 @@ async def admin_list_cases(
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
     sort_field = sort_by if sort_by in ("created_at", "updated_at", "case_number", "nickname") else "updated_at"
 
-    cursor = db.cases.find(query, {"_id": 0}).sort(sort_field, sort_direction).limit(2000)
-    items = await cursor.to_list(2000)
-    items = [enrich_case(c) for c in items]
+    cursor = db.collection('cases').order_by(sort_field, direction=firestore.Query.DESCENDING if sort_direction == -1 else firestore.Query.ASCENDING).limit(2000).stream()
+    items = [d.to_dict() async for d in cursor]
+    
+    # In-memory filtering because Firestore lacks complex $or and regex
+    filtered = []
+    for c in items:
+        # Status filter
+        if status != "all":
+            if status == "active" and c.get("status") == "archived":
+                continue
+            elif status != "active" and c.get("status") != status:
+                continue
+        
+        # User filter
+        if user_id and c.get("user_id") != user_id:
+            continue
+            
+        # Date filters
+        if start_date and c.get("created_at", "") < start_date:
+            continue
+        if end_date and c.get("created_at", "") > end_date:
+            continue
+            
+        # Search term filter
+        if search_term:
+            q_lower = search_term.lower()
+            fields_to_search = [
+                c.get("nickname", ""),
+                c.get("case_number", ""),
+                c.get("party_name", ""),
+                c.get("opposite_party", ""),
+                c.get("client_name", ""),
+                c.get("client_mobile", ""),
+                c.get("case_type_custom", ""),
+                c.get("court_custom", "")
+            ]
+            if not any(q_lower in str(f).lower() for f in fields_to_search):
+                continue
+                
+        filtered.append(c)
+
+    items = [enrich_case(c) for c in filtered]
     if category and category != "All" and category != "all":
         items = [c for c in items if c.get("category") == category]
     
@@ -4504,23 +4831,19 @@ async def admin_list_cases(
 @admin_api.get("/cases/{case_id}")
 async def admin_get_case(case_id: str, admin=Depends(get_admin)):
     """Full admin case detail: enriched case, owner profile, drafts, and generated applications."""
-    c = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    c = (await db.collection('cases').document(case_id).get()).to_dict()
     if not c:
         raise HTTPException(404, "Case not found")
     c = enrich_case(c)
     owner = None
     if c.get("user_id"):
-        owner = await db.users.find_one(
-            {"id": c["user_id"]},
-            {"_id": 0, "id": 1, "name": 1, "mobile": 1, "email": 1, "provider": 1, "active": 1,
-             "bar_council_no": 1, "state": 1, "district": 1, "court": 1, "created_at": 1},
-        )
-    applications = await db.applications.find(
-        {"case_id": case_id}, {"_id": 0}
-    ).sort("created_at", -1).to_list(200)
-    drafts = await db.drafts.find(
-        {"case_id": case_id}, {"_id": 0}
-    ).to_list(200)
+        owner = None
+        async for _d in db.collection('users').where(filter=firestore.FieldFilter('id', '==', c["user_id"])).limit(1).stream():
+            owner = _d.to_dict()
+            break
+    applications = [d.to_dict() async for d in db.collection('applications').where(filter=firestore.FieldFilter('case_id', '==', case_id)).limit(200).stream()]
+    applications.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    drafts = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('case_id', '==', case_id)).limit(200).stream()]
     return {
         "case": c,
         "owner": owner,
@@ -4532,12 +4855,10 @@ async def admin_get_case(case_id: str, admin=Depends(get_admin)):
 @admin_api.post("/cases/{case_id}/archive")
 async def admin_archive_case(case_id: str, admin=Depends(get_admin)):
     """Admin archive of a case (preserves data, hides from active lawyer list)."""
-    r = await db.cases.update_one(
-        {"id": case_id},
-        {"$set": {"status": "archived", "updated_at": now().isoformat()}},
-    )
-    if r.matched_count == 0:
+    doc = await db.collection('cases').document(case_id).get()
+    if not doc.exists:
         raise HTTPException(404, "Case not found")
+    await db.collection('cases').document(case_id).set({"status": "archived", "updated_at": now().isoformat()}, merge=True)
     await create_admin_audit_log(admin=admin, action="case_archive", entity_type="case", entity_id=case_id)
     return {"success": True, "status": "archived"}
 
@@ -4545,12 +4866,10 @@ async def admin_archive_case(case_id: str, admin=Depends(get_admin)):
 @admin_api.post("/cases/{case_id}/restore")
 async def admin_restore_case(case_id: str, admin=Depends(get_admin)):
     """Admin restore of an archived case back to active."""
-    r = await db.cases.update_one(
-        {"id": case_id},
-        {"$set": {"status": "active", "updated_at": now().isoformat()}},
-    )
-    if r.matched_count == 0:
+    doc = await db.collection('cases').document(case_id).get()
+    if not doc.exists:
         raise HTTPException(404, "Case not found")
+    await db.collection('cases').document(case_id).set({"status": "active", "updated_at": now().isoformat()}, merge=True)
     await create_admin_audit_log(admin=admin, action="case_restore", entity_type="case", entity_id=case_id)
     return {"success": True, "status": "active"}
 
@@ -4571,7 +4890,7 @@ async def admin_list_plans(admin=Depends(require_super_admin)):
 @admin_api.get("/plans/{plan_id}")
 async def admin_get_plan(plan_id: str, admin=Depends(require_super_admin)):
     """Get single plan detail."""
-    plan = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    plan = (await db.collection('plans').document(plan_id).get()).to_dict()
     if not plan:
         seed_plan = next((p for p in PLANS if p["id"] == plan_id), None)
         if seed_plan:
@@ -4589,7 +4908,7 @@ async def admin_get_plan(plan_id: str, admin=Depends(require_super_admin)):
 async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin)):
     """Create a new plan (super admin only)."""
     plan_id = "plan_" + str(int(now().timestamp()))
-    existing = await db.plans.find_one({"id": plan_id})
+    existing = (await db.collection('plans').document(plan_id).get()).to_dict()
     if existing:
         raise HTTPException(409, "Plan id collision — retry")
     ts = now().isoformat()
@@ -4606,7 +4925,9 @@ async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin
         "created_at": ts,
         "updated_at": ts,
     }
-    await db.plans.insert_one(doc.copy())
+    doc_id = str(uuid.uuid4())
+    doc["id"] = doc_id
+    await db.collection('plans').document(doc_id).set(doc)
     await create_admin_audit_log(
         admin=admin,
         action="plan_create",
@@ -4622,14 +4943,15 @@ async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin
 @admin_api.put("/plans/{plan_id}")
 async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(require_super_admin)):
     """Update an existing plan (super admin only)."""
-    existing = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    existing = (await db.collection('plans').document(plan_id).get()).to_dict()
     ts = now().isoformat()
     if not existing:
         seed = next((p for p in PLANS if p["id"] == plan_id), None)
         if not seed:
             raise HTTPException(404, "Plan not found")
         existing = {**seed, "active": True, "created_at": ts}
-        await db.plans.insert_one(existing.copy())
+        existing["id"] = plan_id
+        await db.collection('plans').document(plan_id).set(existing)
     
     updates = {
         "name": req.name,
@@ -4640,8 +4962,8 @@ async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(requi
         "updated_by": admin["id"],
         "updated_at": ts,
     }
-    await db.plans.update_one({"id": plan_id}, {"$set": updates})
-    updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    await db.collection('plans').document(plan_id).set(updates, merge=True)
+    updated = (await db.collection('plans').document(plan_id).get()).to_dict()
     await create_admin_audit_log(
         admin=admin,
         action="plan_update",
@@ -4655,18 +4977,19 @@ async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(requi
 
 
 @admin_api.post("/plans/{plan_id}/activate")
+
 async def admin_activate_plan(plan_id: str, admin=Depends(require_super_admin)):
     """Activate a plan."""
-    existing = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
     ts = now().isoformat()
     if not existing:
         seed = next((p for p in PLANS if p["id"] == plan_id), None)
         if not seed:
             raise HTTPException(404, "Plan not found")
         existing = {**seed, "active": True, "created_at": ts}
-        await db.plans.insert_one(existing.copy())
+        doc_id = existing.get('id') or str(uuid.uuid4()); _doc_copy = existing.copy(); _doc_copy['id'] = doc_id; await db.collection('plans').document(doc_id).set(_doc_copy)
     
-    await db.plans.update_one({"id": plan_id}, {"$set": {"active": True, "updated_at": ts, "updated_by": admin["id"]}})
+    await db.collection('plans').document(plan_id).set({"active": True, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="plan_activate",
@@ -4675,23 +4998,23 @@ async def admin_activate_plan(plan_id: str, admin=Depends(require_super_admin)):
         old_value={"active": existing.get("active")},
         new_value={"active": True},
     )
-    updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
     return {"success": True, "plan": _plan_public(updated)}
 
 
 @admin_api.post("/plans/{plan_id}/deactivate")
 async def admin_deactivate_plan(plan_id: str, admin=Depends(require_super_admin)):
     """Deactivate a plan."""
-    existing = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
     ts = now().isoformat()
     if not existing:
         seed = next((p for p in PLANS if p["id"] == plan_id), None)
         if not seed:
             raise HTTPException(404, "Plan not found")
         existing = {**seed, "active": True, "created_at": ts}
-        await db.plans.insert_one(existing.copy())
+        doc_id = existing.get('id') or str(uuid.uuid4()); _doc_copy = existing.copy(); _doc_copy['id'] = doc_id; await db.collection('plans').document(doc_id).set(_doc_copy)
     
-    await db.plans.update_one({"id": plan_id}, {"$set": {"active": False, "updated_at": ts, "updated_by": admin["id"]}})
+    await db.collection('plans').document(plan_id).set({"active": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="plan_deactivate",
@@ -4700,7 +5023,7 @@ async def admin_deactivate_plan(plan_id: str, admin=Depends(require_super_admin)
         old_value={"active": existing.get("active")},
         new_value={"active": False},
     )
-    updated = await db.plans.find_one({"id": plan_id}, {"_id": 0})
+    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
     return {"success": True, "plan": _plan_public(updated)}
 
 
@@ -4759,7 +5082,7 @@ async def admin_get_catalog_item(kind: str, item_id: str, admin=Depends(require_
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, "Unknown catalog kind")
     coll = _CATALOG_KINDS[kind][0]
-    item = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); item = _d.to_dict() if _d.exists else None
     if not item:
         raise HTTPException(404, "Catalog entry not found")
     return {**item, "active": item.get("active") is not False}
@@ -4774,7 +5097,7 @@ async def admin_create_catalog_item(kind: str, req: CatalogItemReq,
     coll = _CATALOG_KINDS[kind][0]
     item_id = _catalog_item_id(req.en)
     doc = _build_catalog_doc(kind, req, admin, item_id)
-    await db[coll].insert_one(doc.copy())
+    doc_id = doc.get('id') or str(uuid.uuid4()); _doc_copy = doc.copy(); _doc_copy['id'] = doc_id; await db.collection(coll).document(doc_id).set(_doc_copy)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -4795,7 +5118,7 @@ async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, "Unknown catalog kind")
     coll = _CATALOG_KINDS[kind][0]
-    existing = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); existing = _d.to_dict() if _d.exists else None
     if not existing:
         raise HTTPException(404, "Catalog entry not found")
     updates = {
@@ -4810,9 +5133,9 @@ async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq
         updates["district_id"] = req.district_id or "generic"
     elif kind == "laws" and req.sections is not None:
         updates["sections"] = [s.model_dump() for s in req.sections]
-    await db[coll].update_one({"id": item_id}, {"$set": updates})
+    await db.collection(coll).document(item_id).set(updates, merge=True)
     await _refresh_catalog_maps()
-    updated = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); updated = _d.to_dict() if _d.exists else None
     await create_admin_audit_log(
         admin=admin,
         action="catalog_update",
@@ -4832,13 +5155,10 @@ async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusRe
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, "Unknown catalog kind")
     coll = _CATALOG_KINDS[kind][0]
-    existing = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); existing = _d.to_dict() if _d.exists else None
     if not existing:
         raise HTTPException(404, "Catalog entry not found")
-    await db[coll].update_one(
-        {"id": item_id},
-        {"$set": {"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}},
-    )
+    await db.collection(coll).document(item_id).set({"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -4849,7 +5169,7 @@ async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusRe
         new_value={"active": req.active},
         metadata={"kind": kind, "active": req.active, "en": existing.get("en")},
     )
-    updated = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); updated = _d.to_dict() if _d.exists else None
     return {"success": True, "item": {**updated, "active": updated.get("active") is not False}}
 
 
@@ -4859,7 +5179,7 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, "Unknown catalog kind")
     coll = _CATALOG_KINDS[kind][0]
-    existing = await db[coll].find_one({"id": item_id}, {"_id": 0})
+    _d = await db.collection(coll).document(item_id).get(); existing = _d.to_dict() if _d.exists else None
     if not existing:
         raise HTTPException(404, "Catalog entry not found")
     
@@ -4867,34 +5187,37 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
         # Check referential safety
         ref = ""
         if kind == "case-types":
-            if await db.cases.find_one({"case_type_id": item_id}): ref = "existing cases"
+            _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("case_type_id", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing cases"
         elif kind == "laws":
-            if await db.cases.find_one({"law_id": item_id}): ref = "existing cases"
+            _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("law_id", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing cases"
         elif kind == "districts":
-            if await db.users.find_one({"district": item_id}): ref = "existing users"
-            elif await db.cases.find_one({"district_id": item_id}): ref = "existing cases"
-            elif await db.courts.find_one({"district_id": item_id}): ref = "existing courts"
-            elif await db.talukas.find_one({"district_id": item_id}): ref = "existing talukas"
-            elif await db.police_stations.find_one({"district_id": item_id}): ref = "existing police stations"
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("district", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing users"
+            elif [x async for x in db.collection("cases").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing cases"
+            elif [x async for x in db.collection("courts").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing courts"
+            elif [x async for x in db.collection("talukas").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing talukas"
+            elif [x async for x in db.collection("police_stations").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing police stations"
         elif kind == "talukas":
-            if await db.users.find_one({"taluka": item_id}): ref = "existing users"
-            elif await db.cases.find_one({"taluka_id": item_id}): ref = "existing cases"
-            elif await db.police_stations.find_one({"taluka_id": item_id}): ref = "existing police stations"
-            elif await db.courts.find_one({"taluka_id": item_id}): ref = "existing courts"
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("taluka", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing users"
+            elif [x async for x in db.collection("cases").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing cases"
+            elif [x async for x in db.collection("police_stations").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing police stations"
+            elif [x async for x in db.collection("courts").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing courts"
         elif kind == "courts":
-            if await db.cases.find_one({"court_id": item_id}): ref = "existing cases"
+            _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("court_id", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing cases"
         elif kind == "police-stations":
-            if await db.cases.find_one({"police_station_id": item_id}): ref = "existing cases"
+            _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("police_station_id", "==", item_id)).limit(1).stream()]
+            if _d: ref = "existing cases"
             
         if ref:
             raise HTTPException(409, f"Cannot permanently delete '{item_id}' because it is currently referenced by {ref}. Please mark it as Inactive instead.")
             
-        await db[coll].delete_one({"id": item_id})
+        await db.collection(coll).document(item_id).delete()
     else:
-        await db[coll].update_one(
-            {"id": item_id},
-            {"$set": {"active": False, "updated_by": admin["id"], "updated_at": now().isoformat()}},
-        )
+        await db.collection(coll).document(item_id).set({"active": False, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -4954,11 +5277,7 @@ async def admin_update_setting(key: str, req: SettingsUpdateReq,
     if key == "default_page_size":
         value = str(value).upper()
     _validate_setting_value(key, value)
-    await db.settings.update_one(
-        {"key": key},
-        {"$set": {"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()}},
-        upsert=True,
-    )
+    await db.collection('settings').document(key).set({"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
     await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
     return {"success": True, "key": key, "value": value,
             "default": _SETTING_DEFAULTS[key], "description": _SETTING_DESCRIPTIONS[key],
@@ -5005,10 +5324,10 @@ async def admin_save_case_form(case_type_id: str, req: CaseFormConfigReq, admin=
         "updated_at": now().isoformat(),
         "updated_by": admin["id"],
     }
-    await db.case_forms.update_one({"case_type_id": case_type_id}, {"$set": doc}, upsert=True)
+    await db.collection('case_forms').document(case_type_id).set(doc, merge=True)
     await audit_log(admin=admin, action="case_form_save", target=case_type_id,
                     metadata={"name_en": req.name_en, "name_gu": req.name_gu, "field_count": len(req.fields)})
-    res = await db.case_forms.find_one({"case_type_id": case_type_id}, {"_id": 0})
+    _d = [x async for x in db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).stream()]; res = _d[0].to_dict() if _d else None
     return res
 
 
@@ -5063,18 +5382,33 @@ async def admin_list_templates(
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
     sort_field = sort_by if sort_by in ("updated_at", "created_at", "name_en", "name_gu", "version", "category") else "updated_at"
 
-    if is_paginated:
-        db_templates = await db.templates.find(query, {"_id": 0}).sort(sort_field, sort_direction).skip(eff_offset).limit(eff_limit).to_list(eff_limit)
-    else:
-        db_templates = await db.templates.find(query, {"_id": 0}).sort(sort_field, sort_direction).to_list(1000)
+    all_db = [d.to_dict() async for d in db.collection('templates').stream()]
+    seed_ids = {t["id"] for t in _get_all_seed_templates()}
 
-    total = await db.templates.count_documents(query)
+    for t in all_db:
+        if t.get("source") not in ("admin_edited", "admin_created") and t["id"] in seed_ids and t.get("status") not in ("draft", "archived"):
+            t["status"] = "seed"
+            t["source"] = "seed"
+
+    if status and status != "all":
+        all_db = [t for t in all_db if t.get("status") == status]
+    if category and category != "all":
+        all_db = [t for t in all_db if str(t.get("category", "")).lower() == category.lower()]
+    if search_term:
+        ql = search_term.lower()
+        all_db = [t for t in all_db if ql in str(t.get("name_en", "")).lower() or ql in str(t.get("name_gu", "")).lower() or ql in str(t.get("id", "")).lower()]
+
+    total = len(all_db)
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
-    seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
+    if is_paginated:
+        db_templates = all_db[eff_offset:eff_offset + eff_limit]
+    else:
+        db_templates = all_db
+
     enriched = []
     for t in db_templates:
-        rev_count = await db.template_revisions.count_documents({"template_id": t["id"]})
+        rev_count = len([d async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', t["id"])).stream()])
         enriched.append({
             **t,
             "revision_count": max(rev_count, 1),
@@ -5102,10 +5436,10 @@ async def admin_get_template(template_id: str, admin=Depends(require_super_admin
     if _is_templates_disabled():
         raise HTTPException(404, "Template not found")
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
-    rev_count = await db.template_revisions.count_documents({"template_id": template_id})
+    rev_count = len([d async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', {"template_id": template_id}['template_id'])).stream()])
     return {
         **t,
         "revision_count": max(rev_count, 1),
@@ -5119,13 +5453,10 @@ async def admin_template_revisions_list(template_id: str, admin=Depends(require_
     if _is_templates_disabled():
         return {"revisions": [], "items": [], "total": 0}
     await _ensure_seed_complete()
-    revisions = await db.template_revisions.find(
-        {"template_id": template_id}, {"_id": 0}
-    ).sort("version", -1).to_list(200)
+    revisions = [d.to_dict() async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', template_id)).stream()]
     if not revisions:
-        revisions = await db.template_versions.find(
-            {"template_id": template_id}, {"_id": 0}
-        ).sort("version", -1).to_list(200)
+        revisions = [d.to_dict() async for d in db.collection('template_versions').where(filter=firestore.FieldFilter('template_id', '==', template_id)).stream()]
+    revisions.sort(key=lambda x: x.get("version", 0), reverse=True)
     return {"revisions": revisions, "items": revisions, "total": len(revisions)}
 
 
@@ -5134,7 +5465,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(require_
     """Create a new template as draft."""
     _validate_template_settings(req.settings)
     template_id = req.id or re.sub(r"[^a-z0-9_]", "_", req.name_en.lower().strip().replace(" ", "_"))[:50]
-    existing = await db.templates.find_one({"id": template_id})
+    existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if existing:
         raise HTTPException(409, f"Template with id '{template_id}' already exists")
     ts = now().isoformat()
@@ -5169,7 +5500,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(require_
         "updated_at": ts,
         "published_at": None,
     }
-    await db.templates.insert_one(template_doc.copy())
+    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
     await create_admin_audit_log(
         admin=admin,
         action="template_create",
@@ -5209,7 +5540,7 @@ async def admin_import_word_create(req: WordImportCreateReq, admin=Depends(requi
     """Create a draft template from an admin-reviewed Word import."""
     _validate_template_settings(req.settings)
     template_id = req.id or re.sub(r"[^a-z0-9_]", "_", req.name_en.lower().strip().replace(" ", "_"))[:50]
-    existing = await db.templates.find_one({"id": template_id})
+    existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if existing:
         raise HTTPException(409, f"Template with id '{template_id}' already exists. Rename it or delete the existing draft first.")
 
@@ -5266,7 +5597,7 @@ async def admin_import_word_create(req: WordImportCreateReq, admin=Depends(requi
         "updated_at": ts,
         "published_at": None,
     }
-    await db.templates.insert_one(template_doc.copy())
+    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
     await create_admin_audit_log(
         admin=admin,
         action="template_import",
@@ -5284,9 +5615,14 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
     """Update a draft template. Published/locked templates cannot be directly modified."""
     await _ensure_seed_complete()
     _validate_template_settings(req.settings)
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
-        raise HTTPException(404, "Template not found")
+        seed = next((s for s in _get_all_seed_templates() if s["id"] == template_id), None)
+        if seed:
+            t = {**seed, "status": "draft", "source": "admin_edited", "version": 1, "locked": False, "created_at": now().isoformat(), "updated_at": now().isoformat()}
+            await db.collection('templates').document(template_id).set(t)
+        else:
+            raise HTTPException(404, "Template not found")
     
     # Status is the authoritative lock: only PUBLISHED versions are immutable
     if t.get("status") == "published":
@@ -5304,7 +5640,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         updates["updated_at"] = now().isoformat()
         updates["source"] = "admin_edited" if t.get("source") != "admin_created" else t["source"]
         updates["locked"] = False
-        await db.templates.update_one({"id": template_id}, {"$set": updates})
+        await db.collection('templates').document(template_id).set(updates, merge=True)
         await create_admin_audit_log(
             admin=admin,
             action="template_update",
@@ -5314,7 +5650,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
             new_value={**t, **updates},
             metadata={"field_count": len(updates.get("fields", t.get("fields", [])))},
         )
-    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     return updated
 
 
@@ -5322,7 +5658,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
 async def admin_publish_template(template_id: str, admin=Depends(require_super_admin)):
     """Publish a draft template (makes it visible to lawyers) and creates a linear revision snapshot."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
             
@@ -5388,26 +5724,17 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
         "published_at": ts,
     }
     # Save snapshot into template_revisions (and keep template_versions in sync)
-    await db.template_revisions.update_one(
-        {"template_id": template_id, "version": current_version},
-        {"$set": revision_doc},
-        upsert=True,
+    await db.collection('template_revisions').document(f'{ template_id }_{ current_version }').set(revision_doc,
     )
-    await db.template_versions.update_one(
-        {"template_id": template_id, "version": current_version},
-        {"$set": revision_doc},
-        upsert=True,
-    )
-    await db.templates.update_one(
-        {"id": template_id},
-        {"$set": {
+    await db.collection("template_versions").document(f"{template_id}_{current_version}").set(revision_doc)
+    await db.collection('templates').document(template_id).set({
             "status": "published",
             "version": current_version,
             "locked": True,
             "published_at": ts,
             "updated_at": ts,
-            "updated_by": admin["id"],
-        }},
+            "updated_by": admin["id"],},
+            merge=True
     )
     await create_admin_audit_log(
         admin=admin,
@@ -5416,7 +5743,7 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
         entity_id=template_id,
         metadata={"version": current_version},
     )
-    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
     return {"success": True, "template": updated, "validation": validation}
 
 
@@ -5424,21 +5751,18 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
 async def admin_unpublish_template(template_id: str, admin=Depends(require_super_admin)):
     """Unpublish a template (reverts to draft)."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
     ts = now().isoformat()
-    await db.templates.update_one(
-        {"id": template_id},
-        {"$set": {"status": "draft", "locked": False, "updated_at": ts, "updated_by": admin["id"]}},
-    )
+    await db.collection('templates').document(template_id).set({"status": "draft", "locked": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(
         admin=admin,
         action="template_unpublish",
         entity_type="template",
         entity_id=template_id,
     )
-    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
     return {"success": True, "template": updated}
 
 
@@ -5446,13 +5770,10 @@ async def admin_unpublish_template(template_id: str, admin=Depends(require_super
 async def admin_archive_template(template_id: str, admin=Depends(require_super_admin)):
     """Archive a template (hides from lawyers, preserves in DB)."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
-    await db.templates.update_one(
-        {"id": template_id},
-        {"$set": {"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}},
-    )
+    await db.collection('templates').document(template_id).set({"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(admin=admin, action="template_archive", entity_type="template", entity_id=template_id)
     return {"success": True, "status": "archived"}
 
@@ -5461,15 +5782,12 @@ async def admin_archive_template(template_id: str, admin=Depends(require_super_a
 async def admin_restore_template(template_id: str, admin=Depends(require_super_admin)):
     """Restore an archived template back to draft/published."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id})
+    _d = await db.collection("templates").document(template_id).get(); t = _d.to_dict() if _d.exists else None
     if not t:
         raise HTTPException(404, "Template not found")
-    await db.templates.update_one(
-        {"id": template_id},
-        {"$set": {"status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}},
-    )
+    await db.collection('templates').document(template_id).set({"status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(admin=admin, action="template_restore", entity_type="template", entity_id=template_id)
-    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
     return {"success": True, "status": "published", "template": updated}
 
 
@@ -5478,11 +5796,11 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     """Permanently delete a template from db.templates.
     CRITICAL RULE: NEVER delete db.template_revisions, ensuring historical drafts remain 100% resolvable."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
     
-    await db.templates.delete_one({"id": template_id})
+    await db.collection('templates').document(template_id).delete()
     await create_admin_audit_log(
         admin=admin,
         action="template_deleted",
@@ -5501,10 +5819,10 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
 async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = None,
                                     admin=Depends(require_super_admin)):
     """Remove an obsolete draft/archived DB record that is shadowing a seed template."""
-    rec = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    rec = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not rec:
         raise HTTPException(404, "Shadow record not found")
-    seed = next((s for s in [*TEMPLATES, *TEMPLATES_V2] if s["id"] == template_id), None)
+    seed = next((s for s in _get_all_seed_templates() if s["id"] == template_id), None)
     status = rec.get("status")
     if status == "published":
         raise HTTPException(409, "Published templates cannot be removed — only draft/archived shadow records of seed templates")
@@ -5514,9 +5832,11 @@ async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = 
         raise HTTPException(409, f"Cannot remove template in status '{status}' — only draft/archived shadows")
     if status == "archived" and not confirm:
         raise HTTPException(400, "Archived shadow removal requires explicit confirmation (confirm=true)")
-    result = await db.templates.delete_one({"id": template_id, "status": status})
-    if result.deleted_count == 0:
+    doc_ref = db.collection('templates').document(template_id)
+    doc_snap = await doc_ref.get()
+    if not doc_snap.exists or doc_snap.to_dict().get("status") != status:
         raise HTTPException(404, "Shadow record not found")
+    await doc_ref.delete()
     await create_admin_audit_log(
         admin=admin,
         action="template_shadow_draft_delete",
@@ -5534,9 +5854,13 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
     1. If req.as_new_template=True -> creates a completely new separate template with new ID.
     2. Otherwise -> branches existing template into an editable new Draft version (version N+1) under the SAME stable template_id."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
-        raise HTTPException(404, "Template not found")
+        seed = next((s for s in _get_all_seed_templates() if s["id"] == template_id), None)
+        if seed:
+            t = {**seed, "status": "seed", "source": "seed", "version": 0, "locked": False}
+        else:
+            raise HTTPException(404, "Template not found")
 
     ts = now().isoformat()
     as_new = req.as_new_template if req else False
@@ -5576,7 +5900,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
             "updated_at": ts,
             "published_at": None,
         }
-        await db.templates.insert_one(new_doc.copy())
+        doc_id = new_doc.get('id') or str(uuid.uuid4()); _doc_copy = new_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
         await create_admin_audit_log(
             admin=admin,
             action="template_clone",
@@ -5623,28 +5947,21 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
             "created_at": t.get("created_at") or ts,
             "published_at": t.get("published_at") or ts,
         }
-        await db.template_revisions.update_one(
-            {"template_id": template_id, "version": t["version"]},
-            {"$set": prev_version_doc},
-            upsert=True,
+        await db.collection('template_revisions').document(f'{ template_id }_{ t["version"] }').set(prev_version_doc,
         )
-        await db.template_versions.update_one(
-            {"template_id": template_id, "version": t["version"]},
-            {"$set": prev_version_doc},
-            upsert=True,
-        )
+        await db.collection("template_versions").document(f"{template_id}_{t['version']}").set(prev_version_doc)
 
-    await db.templates.update_one(
-        {"id": template_id},
-        {"$set": {
-            "status": "draft",
-            "version": new_version,
-            "locked": False,
-            "source": "admin_edited",
-            "updated_by": admin["id"],
-            "updated_at": ts,
-        }},
-    )
+    full_draft = {
+        **t,
+        "id": template_id,
+        "status": "draft",
+        "version": new_version,
+        "locked": False,
+        "source": "admin_edited",
+        "updated_by": admin["id"],
+        "updated_at": ts,
+    }
+    await db.collection('templates').document(template_id).set(full_draft)
     await create_admin_audit_log(
         admin=admin,
         action="template_clone",
@@ -5652,7 +5969,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
         entity_id=template_id,
         metadata={"as_new_template": False, "new_version": new_version},
     )
-    updated = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
     return {"success": True, "template": updated, "new_version": new_version}
 
 
@@ -5673,10 +5990,10 @@ async def admin_bulk_template_status(req: AdminTemplateBulkStatusReq, admin=Depe
     
     target_status = "archived" if action == "archive" else "published"
     ts = now().isoformat()
-    res = await db.templates.update_many(
-        {"id": {"$in": req.template_ids}},
-        {"$set": {"status": target_status, "updated_at": ts, "updated_by": admin["id"]}},
-    )
+    __docs = [d async for d in db.collection('templates').where(filter=firestore.FieldFilter('id', 'in', req.template_ids)).stream()]
+    for d in __docs: await d.reference.set({"status": target_status, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+    class Res: matched_count = len(__docs); modified_count = len(__docs)
+    res = Res()
     await create_admin_audit_log(
         admin=admin,
         action=f"template_bulk_{action}",
@@ -5691,13 +6008,10 @@ async def admin_bulk_template_status(req: AdminTemplateBulkStatusReq, admin=Depe
 async def admin_template_versions(template_id: str, admin=Depends(require_super_admin)):
     """List all historical revisions/versions of a template."""
     await _ensure_seed_complete()
-    revisions = await db.template_revisions.find(
-        {"template_id": template_id}, {"_id": 0}
-    ).sort("version", -1).to_list(200)
+    revisions = [d.to_dict() async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', template_id)).stream()]
     if not revisions:
-        revisions = await db.template_versions.find(
-            {"template_id": template_id}, {"_id": 0}
-        ).sort("version", -1).to_list(200)
+        revisions = [d.to_dict() async for d in db.collection('template_versions').where(filter=firestore.FieldFilter('template_id', '==', template_id)).stream()]
+    revisions.sort(key=lambda x: x.get("version", 0), reverse=True)
     return revisions
 
 
@@ -5705,7 +6019,7 @@ async def admin_template_versions(template_id: str, admin=Depends(require_super_
 async def admin_preview_template(template_id: str, req: Optional[AdminPreviewReq] = None, admin=Depends(get_admin)):
     """Preview a template with sample data. Supports live unsaved overrides from editor."""
     await _ensure_seed_complete()
-    t = await db.templates.find_one({"id": template_id}, {"_id": 0})
+    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t and not (req and req.content_en):
         raise HTTPException(404, "Template not found")
     if not t:
@@ -5728,7 +6042,7 @@ async def admin_preview_template(template_id: str, req: Optional[AdminPreviewReq
         "opposite_party": "State of Gujarat",
     }
     if req and req.values:
-        sample_values.update({k: v for k, v in req.values.items() if v is not None})
+        sample_values.update({k: v for k, v in req.values.items() if v is not None}, merge=True)
 
     for f in fields:
         key = f.get("key")
@@ -5769,22 +6083,22 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
     migrated = 0
     skipped = 0
     ts = now().isoformat()
-    cursor = db_conn.templates.find({}, {"_id": 0})
-    templates = await cursor.to_list(5000)
+    templates = [d.to_dict() async for d in db_conn.collection("templates").stream()]
     for t in templates:
         t_id = t["id"]
         version = t.get("version", 1) or 1
-        existing_rev = await db_conn.template_revisions.find_one(
-            {"template_id": t_id, "version": version}
-        )
-        existing_ver = await db_conn.template_versions.find_one(
-            {"template_id": t_id, "version": version}
-        )
-        if existing_rev and existing_ver:
+        doc_id = f"{t_id}_{version}"
+        _snap1 = await db_conn.collection("template_revisions").document(doc_id).get()
+        existing_rev = _snap1.to_dict() if _snap1.exists else None
+        if not existing_rev:
+            _d1 = [x async for x in db_conn.collection("template_revisions").where(filter=firestore.FieldFilter("template_id", "==", t_id)).where(filter=firestore.FieldFilter("version", "==", version)).limit(1).stream()]
+            existing_rev = _d1[0].to_dict() if _d1 else None
+
+        if existing_rev:
             skipped += 1
             continue
         rev_doc = {
-            "id": str(uuid.uuid4()),
+            "id": doc_id,
             "template_id": t_id,
             "version": version,
             "title": t.get("name_en") or t.get("name_gu") or t_id,
@@ -5814,10 +6128,8 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
             "published_at": t.get("published_at") or (ts if t.get("status") == "published" else None),
         }
         try:
-            if not existing_rev:
-                await db_conn.template_revisions.insert_one(rev_doc.copy())
-            if not existing_ver:
-                await db_conn.template_versions.insert_one(rev_doc.copy())
+            await db_conn.collection('template_revisions').document(doc_id).set(rev_doc)
+            await db_conn.collection('template_versions').document(doc_id).set(rev_doc)
             migrated += 1
         except Exception:
             skipped += 1
@@ -5830,10 +6142,10 @@ async def seed_templates(force: bool = False) -> dict:
         logger.info("Template auto-seed is disabled in production. Skipping.")
         return {"success": True, "skipped": True, "message": "Auto-seed disabled"}
 
-    setting = await db.system_settings.find_one({"key": "seed_complete"})
-    all_seeds = [*TEMPLATES, *TEMPLATES_V2]
+    _d = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "seed_complete")).limit(1).stream()]; setting = _d[0].to_dict() if _d else None
+    all_seeds = _get_all_seed_templates()
     if not force:
-        template_count = await db.templates.count_documents({})
+        template_count = len([d async for d in db.collection('templates').stream()])
         if setting and setting.get("value") is True:
             logger.info("Template seeding skipped — seed_complete=True in system_settings.")
             return {
@@ -5852,7 +6164,7 @@ async def seed_templates(force: bool = False) -> dict:
     created_ids = []
     skipped_ids = []
     for t in all_seeds:
-        existing = await db.templates.find_one({"id": t["id"]})
+        existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing:
             skipped_ids.append(t["id"])
             continue
@@ -5890,7 +6202,7 @@ async def seed_templates(force: bool = False) -> dict:
                 "margin_bottom_cm": 2.5,
                 "margin_left_cm": 2.5,
                 "margin_right_cm": 2.5,
-                "gujarati_font": "LohitGujarati",
+                "gujarati_font": "NotoSansGujarati",
                 "english_font": "Times-Roman",
                 "body_size": 12,
                 "heading_size": 13,
@@ -5909,15 +6221,12 @@ async def seed_templates(force: bool = False) -> dict:
             "updated_at": ts,
             "published_at": ts,
         }
-        await db.templates.insert_one(template_doc.copy())
+        doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
         created_ids.append(t["id"])
         inserted += 1
 
     rev_res = await migrate_templates_to_revisions(db)
-    await db.system_settings.update_one(
-        {"key": "seed_complete"},
-        {"$set": {"key": "seed_complete", "value": True, "completed_at": ts}},
-        upsert=True,
+    await db.collection('system_settings').document("seed_complete").set({"key": "seed_complete", "value": True, "completed_at": ts},
     )
     if inserted:
         logger.info(f"Initialized {inserted} seed templates into db.templates (seed_complete=True).")
@@ -5937,9 +6246,9 @@ async def seed_templates(force: bool = False) -> dict:
 
 @admin_api.post("/templates/migrate-seed")
 async def admin_migrate_seed(admin=Depends(require_super_admin)):
-    """One-time migration: copy all seed templates into MongoDB and create initial revisions.
+    """One-time migration: copy all seed templates into Firestore and create initial revisions.
     Idempotent — does NOT overwrite existing templates."""
-    return dict(success=True, message=str(1))
+    return await seed_templates(force=True)
 
 
 # ============================================================
@@ -5957,15 +6266,16 @@ async def seed_catalogs():
     ts = now().isoformat()
     for kind, (coll, seed_list) in _CATALOG_KINDS.items():
         existing_ids = {
-            d["id"] for d in await db[coll].find({}, {"_id": 0, "id": 1}).to_list(10000)
+            d["id"] for d in [d.to_dict() async for d in db.collection(coll).stream()]
         }
         added = 0
         for item in seed_list:
             if item["id"] in existing_ids:
                 continue
-            await db[coll].insert_one(
-                {**item, "active": True, "created_at": ts, "updated_at": ts}
-            )
+            _doc = {**item, "active": True, "created_at": ts, "updated_at": ts}
+            _doc_id = _doc.get("id") or str(uuid.uuid4())
+            _doc["id"] = _doc_id
+            await db.collection(coll).document(_doc_id).set(_doc)
             added += 1
         if added:
             logger.info(f"Seeded catalog '{kind}' (+{added} new entries).")
@@ -5975,12 +6285,12 @@ async def seed_catalogs():
 async def seed_plans():
     """Idempotently seed the plans collection from the static catalog.
     Only inserts when the collection is empty — never overwrites admin edits."""
-    count = await db.plans.count_documents({})
+    count = len([d async for d in db.collection('plans').stream()])
     if count > 0:
         return
     ts = now().isoformat()
     for p in PLANS:
-        await db.plans.insert_one({
+        _doc = {
             "id": p["id"],
             "name": p["name"],
             "price": p["price"],
@@ -5989,7 +6299,10 @@ async def seed_plans():
             "active": True,
             "created_at": ts,
             "updated_at": ts,
-        })
+        }
+        _doc_id = _doc.get("id") or str(uuid.uuid4())
+        _doc["id"] = _doc_id
+        await db.collection("plans").document(_doc_id).set(_doc)
     logger.info(f"Seeded {len(PLANS)} plans.")
 
 
@@ -6000,7 +6313,7 @@ async def seed_super_admin():
         logger.info("ADMIN_SEED_EMAIL / ADMIN_SEED_PASSWORD not set — skipping admin seed.")
         return
     email = ADMIN_SEED_EMAIL.strip().lower()
-    existing = await db.admin_users.find_one({"email": email})
+    _d = [x async for x in db.collection("admin_users").where(filter=firestore.FieldFilter("email", "==", email)).limit(1).stream()]; existing = _d[0].to_dict() if _d else None
     if existing:
         logger.info(f"Admin seed skipped — admin with email '{email}' already exists.")
         return
@@ -6016,7 +6329,7 @@ async def seed_super_admin():
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
     }
-    await db.admin_users.insert_one(admin_doc.copy())
+    doc_id = admin_doc.get('id') or str(uuid.uuid4()); _doc_copy = admin_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('admin_users').document(doc_id).set(_doc_copy)
     logger.info(f"Super admin seeded: {email}")
 
 
@@ -6052,14 +6365,8 @@ app.add_middleware(
 )
 
 
-async def _existing_index_map(coll) -> dict:
-    """Map normalized key patterns -> existing index docs for a collection.
-
-    Key patterns are normalized to sorted (field, direction) tuples so specs
-    written as strings ("id"), lists of tuples, or dicts all compare equal to
-    what MongoDB reports back from list_indexes()."""
-    indexes = await coll.list_indexes().to_list(200)
-    return {tuple(sorted(ix.get("key", {}).items())): ix for ix in indexes}
+async def _existing_index_map(collection):
+    return {}
 
 
 def _normalize_spec(spec) -> tuple:
@@ -6075,54 +6382,12 @@ def _normalize_spec(spec) -> tuple:
 
 
 async def _ensure_index(coll, spec, **kwargs):
-    """Create an index only when no index with the same key pattern exists.
-
-    Production-safe and idempotent: an index that already exists (even with
-    slightly different options than requested — e.g. an older version created
-    it with a different TTL/sparse setting) is never re-created, so startup
-    cannot crash with IndexOptionsConflict. The existing index still serves
-    the same functional purpose (uniqueness / lookup on those fields)."""
-    keys = _normalize_spec(spec)
-    existing = await _existing_index_map(coll)
-    if keys in existing:
-        name = existing[keys].get("name", "?")
-        logger.info(f"Index {name} on {getattr(coll, 'name', coll)} already exists — skipping creation.")
-        return None
-    return await coll.create_index(spec, **kwargs)
+    pass
 
 
 async def _ensure_ttl_index(coll, field: str, required_seconds: int):
-    """Reconcile a TTL index to a required expireAfterSeconds value.
-
-    The application is authoritative for TTL semantics: it stamps ttl_at =
-    now + otp_ttl_seconds + 60 when issuing an OTP, so the index must expire
-    documents no earlier than that (otherwise valid OTPs would be deleted
-    before the app considers them expired). The reconcile is idempotent:
-      - no index on the field  -> create with required_seconds
-      - equal                  -> no-op
-      - greater than required  -> keep (more conservative, never expires valid
-        records early; avoids an unnecessary rebuild)
-      - less than required     -> drop + recreate (the current index would
-        delete valid records too early)
-    This never deletes data and never crashes startup on option conflicts."""
-    keys = tuple(sorted([(field, 1)]))
-    existing = await _existing_index_map(coll)
-    ix = existing.get(keys)
-    if ix is None:
-        await coll.create_index(field, expireAfterSeconds=required_seconds)
-        logger.info(f"Created TTL index {field}_1 (expireAfterSeconds={required_seconds}).")
-        return
-    name = ix.get("name", f"{field}_1")
-    current = ix.get("expireAfterSeconds")
-    if current == required_seconds:
-        logger.info(f"TTL index {name} already correct (expireAfterSeconds={current}).")
-    elif current is not None and current > required_seconds:
-        logger.info(f"TTL index {name} expireAfterSeconds={current} > required {required_seconds} — keeping existing (safe, never expires valid records early).")
-    else:
-        logger.warning(f"TTL index {name} expireAfterSeconds={current} < required {required_seconds} — rebuilding index to prevent early expiry.")
-        await coll.drop_index(name)
-        await coll.create_index(field, expireAfterSeconds=required_seconds)
-        logger.info(f"TTL index {name} rebuilt with expireAfterSeconds={required_seconds}.")
+    """Reconcile a TTL index. In Firestore, TTL is managed natively via Firestore TTL policies."""
+    pass
 
 
 @app.on_event("startup")
@@ -6133,78 +6398,7 @@ async def create_indexes():
     already exist, so deployments and restarts never crash with
     IndexOptionsConflict (e.g. the otps.ttl_at_1 TTL index whose TTL may have
     drifted from the admin-configured otp_ttl_seconds setting)."""
-    # Users
-    await _ensure_index(db.users, "id", unique=True)
-    await _ensure_index(db.users, "mobile", unique=True, sparse=True)
-    await _ensure_index(db.users, "email", unique=True, sparse=True)
-    await _ensure_index(db.users, "user_type")
-    await _ensure_index(db.users, "active")
-    await _ensure_index(db.users, "status")
-    await _ensure_index(db.users, "created_at")
-    # Firebase identity — sparse so legacy users (no firebase_uid) are unaffected,
-    # unique so one Firebase UID can never map to two NyaySetu accounts.
-    await _ensure_index(db.users, "firebase_uid", unique=True, sparse=True)
-    await _ensure_index(db.users, "referral_code", unique=True, sparse=True)
-    # Cases
-    await _ensure_index(db.cases, "user_id")
-    await _ensure_index(db.cases, "status")
-    await _ensure_index(db.cases, "created_at")
-    await _ensure_index(db.cases, [("user_id", 1), ("status", 1)])
-    await _ensure_index(db.cases, [("user_id", 1), ("updated_at", -1)])
-    # Wallets
-    await _ensure_index(db.wallets, "user_id", unique=True)
-    # Applications
-    await _ensure_index(db.applications, "user_id")
-    await _ensure_index(db.applications, "template_id")
-    await _ensure_index(db.applications, "case_id")
-    await _ensure_index(db.applications, "created_at")
-    await _ensure_index(db.applications, [("user_id", 1), ("created_at", -1)])
-    # Drafts
-    await _ensure_index(db.drafts, "user_id")
-    await _ensure_index(db.drafts, [("user_id", 1), ("template_id", 1), ("case_id", 1)])
-    # Transactions
-    await _ensure_index(db.transactions, "user_id")
-    await _ensure_index(db.transactions, "type")
-    await _ensure_index(db.transactions, "created_at")
-    await _ensure_index(db.transactions, [("user_id", 1), ("created_at", -1)])
-    # Audit Logs
-    await _ensure_index(db.audit_logs, "admin_id")
-    await _ensure_index(db.audit_logs, "action")
-    await _ensure_index(db.audit_logs, "entity_type")
-    await _ensure_index(db.audit_logs, "entity_id")
-    await _ensure_index(db.audit_logs, "created_at")
-    await _ensure_index(db.audit_logs, "timestamp")
-    # Razorpay idempotency: one payment_id may grant credits at most once.
-    await _ensure_index(db.transactions, "razorpay_payment_id", unique=True, sparse=True)
-    await _ensure_index(db.payment_orders, "id", unique=True)
-    await _ensure_index(db.payment_orders, "user_id")
-    # Referrals
-    await _ensure_index(db.referrals, "referrer_id")
-    await _ensure_index(db.referrals, "referred_user_id", unique=True)
-    # OTPs (auto-cleaned by verify flow / TTL — index on the BSON-date field)
-    await _ensure_index(db.otps, "mobile", unique=True)
-    otp_ttl = await _get_setting("otp_ttl_seconds")
-    await _ensure_ttl_index(db.otps, "ttl_at", otp_ttl + 60)
-    # User Sessions
-    await _ensure_index(db.user_sessions, "id", unique=True)
-    await _ensure_index(db.user_sessions, "token_hash", unique=True)
-    await _ensure_index(db.user_sessions, "user_id")
-    await _ensure_index(db.user_sessions, "expires_at")
-    # Admin users & Sessions & Templates
-    await _ensure_index(db.admin_users, "id", unique=True)
-    await _ensure_index(db.admin_users, "email", unique=True)
-    await _ensure_index(db.admin_sessions, "id", unique=True)
-    await _ensure_index(db.admin_sessions, "token_hash", unique=True)
-    await _ensure_index(db.admin_sessions, "admin_id")
-    await _ensure_index(db.admin_sessions, "expires_at")
-    await _ensure_index(db.templates, "id", unique=True)
-    await _ensure_index(db.templates, "slug", unique=True)
-    await _ensure_index(db.templates, [("status", 1), ("category", 1)])
-    await _ensure_index(db.template_versions, [("template_id", 1), ("version", 1)], unique=True)
-    await _ensure_index(db.template_revisions, [("template_id", 1), ("version", 1)], unique=True)
-    await _ensure_index(db.system_settings, "key", unique=True)
-    await _ensure_index(db.case_forms, "case_type_id", unique=True)
-    logger.info("MongoDB indexes ensured.")
+    logger.info("Firestore indexes: managed via firestore.indexes.json and Cloud Firestore.")
     # Seed super admin and static catalogs
     await seed_plans()
     await seed_catalogs()
@@ -6215,4 +6409,6 @@ async def create_indexes():
 
 @app.on_event("shutdown")
 async def shutdown():
-    client.close()
+    if db is not None:
+        db.close()
+

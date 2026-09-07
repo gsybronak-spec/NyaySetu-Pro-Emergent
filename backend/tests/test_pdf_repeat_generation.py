@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 # -*- coding: utf-8 -*-
 """Repeated-generation isolation for the Gujarati HarfBuzz PDF engine.
 
@@ -18,6 +23,7 @@ import re
 import threading
 
 import pytest
+
 
 from doc_generator import generate_pdf
 

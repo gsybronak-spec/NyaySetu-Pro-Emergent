@@ -30,6 +30,7 @@ export default function Login() {
   const [referral, setReferral] = useState("");
   const [showReferral, setShowReferral] = useState(false);
   const [err, setErr] = useState<string>();
+  const [otpBusy, setOtpBusy] = useState(false);
   // Empty anchor element inside the Send OTP button wrapper where Firebase's
   // INVISIBLE reCAPTCHA widget renders (web only). reCAPTCHA requires the
   // container to be empty, and this anchor is invisible — no checkbox, no
@@ -96,24 +97,31 @@ export default function Login() {
       setErr("Enter a valid 10-digit mobile number");
       return;
     }
-    // Firebase Phone Auth sends the SMS and verifies the OTP (invisible
-    // reCAPTCHA behind the scenes, attached to the Send OTP button). On ANY
-    // Firebase failure the widget is reset and we fall back to the existing
-    // NyaySetu OTP flow so login keeps working.
-    if (fbConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
-      try {
+    setOtpBusy(true);
+    try {
+      if (fbConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
         await firebaseSendPhoneOtp(m, recaptchaAnchorRef.current as any);
         router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim(), firebase: "1" } });
         return;
-      } catch {
-        // fall through to the existing OTP flow below
       }
-    }
-    try {
+      // Non-Firebase development fallback ONLY (e.g. local dev without Firebase credentials)
       await signInOtp(m);
       router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim() } });
     } catch (e: any) {
-      setErr(e.message);
+      const code = e?.code as string | undefined;
+      if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
+        setErr("SMS OTP is temporarily unavailable for this region. Please try again later or use password login.");
+      } else if (code === "auth/too-many-requests") {
+        setErr("Too many OTP requests. Please wait a minute and try again.");
+      } else if (code === "auth/invalid-phone-number") {
+        setErr("Enter a valid 10-digit mobile number.");
+      } else if (code === "auth/quota-exceeded") {
+        setErr("SMS quota exceeded for today. Please use password login or contact support.");
+      } else {
+        setErr(e?.message || "Could not send OTP. Please try again.");
+      }
+    } finally {
+      setOtpBusy(false);
     }
   };
 
@@ -250,14 +258,8 @@ export default function Login() {
                   </Pressable>
                 )}
 
-                {/* The invisible Firebase reCAPTCHA widget renders inside the
-                    empty anchor below (inside the Send OTP button wrapper) — no
-                    CAPTCHA UI is ever shown to the user. */}
                 <View style={styles.otpBtnWrap}>
-                  <Button testID="login-send-otp-button" title="Send OTP" loading={loading} onPress={submitOtp} />
-                  {fbConfigured && Platform.OS === "web" && (
-                    <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
-                  )}
+                  <Button testID="login-send-otp-button" title="Send OTP" loading={loading || otpBusy} onPress={submitOtp} />
                 </View>
               </>
             )}
@@ -301,7 +303,12 @@ export default function Login() {
             <Text style={styles.hint}>By continuing, you agree to our Terms and Privacy Policy.</Text>
           </View>
         </ScrollView>
-
+        {/* The invisible Firebase reCAPTCHA widget renders inside the
+            empty anchor below (web only). Permanently mounted so switching
+            between Password and OTP modes never leaves the anchor unmounted. */}
+        {fbConfigured && Platform.OS === "web" && (
+          <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
+        )}
       </KeyboardAvoidingView>
     </LinearGradient>
   );

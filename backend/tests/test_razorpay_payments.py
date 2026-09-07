@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro Razorpay payment architecture (Master Plan Phase A).
 
 Covers:
@@ -10,7 +15,6 @@ Covers:
 - webhook payment.captured grants credits idempotently (replay safe)
 - non-captured events and unknown orders are no-ops (200)
 
-Uses mongomock_motor (same pattern as existing test suite). Razorpay network
 calls are stubbed — no real provider is contacted.
 """
 
@@ -24,19 +28,14 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_razorpay")
 
 import pytest
+
 import pytest_asyncio
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_razorpay"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, now
@@ -54,7 +53,6 @@ WEBHOOK_SECRET = "rzp_test_webhook_secret"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -62,13 +60,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-    await server.seed_plans()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def no_keys(monkeypatch):
@@ -104,7 +96,7 @@ async def create_lawyer(mobile):
         "referral_code": "NS" + uuid.uuid4().hex[:6].upper(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 5, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
     return user
@@ -148,7 +140,7 @@ async def test_create_order_rejects_unknown_or_inactive_plan(client, clean_db, r
                           json={"plan_id": "nope"}, headers=headers)
     assert r.status_code == 404
 
-    await db.plans.update_one({"id": "single"}, {"$set": {"active": False}})
+    await db.collection("plans").document("single").set({"active": False}, merge=True)
     r = await client.post("/api/payments/razorpay/create-order",
                           json={"plan_id": "single"}, headers=headers)
     assert r.status_code == 404
@@ -170,7 +162,7 @@ async def test_create_order_happy_path_stores_order(client, clean_db, razorpay_c
     assert body["plan"]["id"] == "plan_499"
     assert body["plan"]["credits"] > 0
 
-    order = await db.payment_orders.find_one({"id": body["order_id"]}, {"_id": 0})
+    order = (await db.collection("payment_orders").document(body["order_id"]).get()).to_dict()
     assert order is not None
     assert order["user_id"] == lawyer["id"]
     assert order["plan_id"] == "plan_499"
@@ -247,7 +239,7 @@ async def test_verify_grants_credits_once_and_is_idempotent(client, clean_db, ra
     lawyer = await create_lawyer("9876500008")
     tok = make_token(lawyer["id"])
     headers = {"Authorization": f"Bearer {tok}"}
-    plan = await db.plans.find_one({"id": "plan_499"}, {"_id": 0})
+    plan = (await db.collection("plans").document("plan_499").get()).to_dict()
     await db.payment_orders.insert_one({
         "id": "order_ok", "user_id": lawyer["id"], "plan_id": "plan_499",
         "status": "created", "created_at": now().isoformat()})
@@ -275,7 +267,7 @@ async def test_verify_grants_credits_once_and_is_idempotent(client, clean_db, ra
     assert txns[0]["provider"] == "razorpay"
     assert txns[0]["status"] == "success"
     assert txns[0]["razorpay_order_id"] == "order_ok"
-    order = await db.payment_orders.find_one({"id": "order_ok"}, {"_id": 0})
+    order = (await db.collection("payment_orders").document("order_ok").get()).to_dict()
     assert order["status"] == "paid"
 
 
@@ -308,7 +300,7 @@ async def test_webhook_rejects_bad_signature(client, clean_db):
 
 async def test_webhook_captured_grants_credits_idempotently(client, clean_db, razorpay_configured):
     lawyer = await create_lawyer("9876500009")
-    plan = await db.plans.find_one({"id": "plan_499"}, {"_id": 0})
+    plan = (await db.collection("plans").document("plan_499").get()).to_dict()
     await db.payment_orders.insert_one({
         "id": "order_w", "user_id": lawyer["id"], "plan_id": "plan_499",
         "status": "created", "created_at": now().isoformat()})

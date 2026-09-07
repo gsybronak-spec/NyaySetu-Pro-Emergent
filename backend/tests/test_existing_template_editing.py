@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for Section 18: Existing Template Editing & Lifecycle Management.
 
 Covers:
@@ -19,21 +24,16 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_template_editing")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_template_editing"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, TEMPLATES
@@ -41,20 +41,19 @@ from server import make_token, make_admin_token, TEMPLATES
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals",
-                      "templates", "template_versions", "system_settings"]:
-        await db[coll_name].drop()
+    client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
+    async def _clean():
+        for t_id in ["test_bail_extended", "test_clone_new", "test_bail_independent", "test_bail_standalone"]:
+            await client.collection("templates").document(t_id).delete()
+            revs = [d async for d in client.collection("template_revisions").where(filter=server.firestore.FieldFilter("template_id", "==", t_id)).stream()]
+            for r in revs:
+                await r.reference.delete()
+    await _clean()
     yield
-    for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals",
-                      "templates", "template_versions", "system_settings"]:
-        await db[coll_name].drop()
-
+    await _clean()
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -74,7 +73,7 @@ async def admin_token():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     return make_admin_token(admin_id, admin["email"], admin["role"])
 
 
@@ -91,7 +90,7 @@ async def auth_headers():
         "court": "City Civil Court, Ahmedabad",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     wallet = {
         "user_id": user_id,
         "balance": 20,
@@ -99,7 +98,7 @@ async def auth_headers():
         "total_used": 0,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.wallets.insert_one(wallet.copy())
+    await db.collection("wallets").document(wallet.copy().get("id")).set(wallet.copy())
     token = make_token(user_id)
     return {"Authorization": f"Bearer {token}"}
 

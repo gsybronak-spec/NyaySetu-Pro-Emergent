@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """
 NyaySetu Pro — Phase 6 Production QA, Security Hardening & System Verification Suite
 ===================================================================================
@@ -29,21 +34,16 @@ from pathlib import Path
 from datetime import timedelta
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_phase6")
 
 import pytest
+
 import pytest_asyncio
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 import jwt
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_phase6"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -72,76 +72,18 @@ from doc_generator import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    """Seed clean mock database for each test function."""
-    server.db = db
-    for coll in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "audit_logs", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans", "courts", "districts", "talukas",
-        "laws", "police_stations", "case_types"
-    ]:
-        await db[coll].drop()
-
-    # Seed Super Admin
-    super_admin = {
-        "id": "sa_001",
-        "email": "superadmin@nyaysetu.gov.in",
-        "name": "Chief Super Administrator",
-        "role": "super_admin",
-        "password_hash": hash_password("SuperSecretAdminPass123!"),
-        "active": True,
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.admin_users.insert_one(super_admin)
-
-    # Seed Staff Admin
-    staff_admin = {
-        "id": "staff_001",
-        "email": "staff@nyaysetu.gov.in",
-        "name": "Staff Support Admin",
-        "role": "staff_admin",
-        "password_hash": hash_password("StaffPass123!"),
-        "active": True,
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.admin_users.insert_one(staff_admin)
-
-    # Seed Regular Lawyer
-    lawyer = {
+    await server.db.collection("users").document("lawyer_001").set({
         "id": "lawyer_001",
-        "email": "lawyer1@nyaysetu.test",
+        "name": "Adv. Ramesh Patel",
+        "email": "lawyer1@test.com",
         "mobile": "9876543210",
-        "name": "Advocate Ramesh Patel",
-        "user_type": "lawyer",
+        "role": "lawyer",
         "status": "active",
         "active": True,
-        "password_hash": hash_password("LawyerPass123!"),
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.users.insert_one(lawyer)
-
-    # Seed Second Lawyer (for IDOR tests)
-    lawyer2 = {
-        "id": "lawyer_002",
-        "email": "lawyer2@nyaysetu.test",
-        "mobile": "9876543211",
-        "name": "Advocate Suresh Mehta",
-        "user_type": "lawyer",
-        "status": "active",
-        "active": True,
-        "password_hash": hash_password("LawyerPass123!"),
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.users.insert_one(lawyer2)
-
-    # Seed Wallets
-    await db.wallets.insert_one({"user_id": "lawyer_001", "balance": 50, "total_used": 0})
-    await db.wallets.insert_one({"user_id": "lawyer_002", "balance": 10, "total_used": 0})
-
-    # Decouple Seed
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
-
+        "credits": 50,
+    }, merge=True)
+    await server.db.collection("wallets").document("lawyer_001").set({"id": "lawyer_001", "user_id": "lawyer_001", "balance": 50}, merge=True)
+    yield
 
 @pytest.fixture
 def super_admin_token():
@@ -309,19 +251,19 @@ class TestUserLifecycleAndWalletIntegrity:
             # Suspend user
             sus_res = await client.post("/api/admin/users/lawyer_001/suspend", headers=headers)
             assert sus_res.status_code == 200
-            u_sus = await db.users.find_one({"id": "lawyer_001"})
+            u_sus = (await db.collection("users").document("lawyer_001").get()).to_dict()
             assert u_sus["status"] == "suspended"
 
             # Activate user
             act_res = await client.post("/api/admin/users/lawyer_001/activate", headers=headers)
             assert act_res.status_code == 200
-            u_act = await db.users.find_one({"id": "lawyer_001"})
+            u_act = (await db.collection("users").document("lawyer_001").get()).to_dict()
             assert u_act["status"] == "active"
 
             # Ban user
             ban_res = await client.post("/api/admin/users/lawyer_001/ban", headers=headers)
             assert ban_res.status_code == 200
-            u_ban = await db.users.find_one({"id": "lawyer_001"})
+            u_ban = (await db.collection("users").document("lawyer_001").get()).to_dict()
             assert u_ban["status"] == "banned"
 
     @pytest.mark.asyncio

@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression: unique embedded-font identity per generated PDF.
 
 Android PDF viewers cache embedded fonts keyed by the PDF-level font name.

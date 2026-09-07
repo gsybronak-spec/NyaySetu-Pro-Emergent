@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression tests for the 'દસ્તાવેજ પરત મેળવવાની અરજી' (Application for Return of Document) template.
 
 Covers the locked spec (source document "Document parat levani arji.odt" is the only
@@ -24,20 +29,15 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_doc_return")
 
 import pytest
+
 import pytest_asyncio
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_doc_return"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token
@@ -50,7 +50,6 @@ TEMPLATE_ID = "document_return_application"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -58,16 +57,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps"]:
-        await db[coll].drop()
     yield
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps"]:
-        await db[coll].drop()
-
 
 async def create_test_lawyer(mobile=None):
     mobile = mobile or f"9{int(time.time() * 1000) % 1000000000:09d}"
@@ -89,7 +79,7 @@ async def create_test_lawyer(mobile=None):
         "favourite_courts": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id,
         "balance": 5,
@@ -309,7 +299,7 @@ class TestCaseStatusConditionals:
 class TestDocumentGeneration:
     @pytest.mark.asyncio
     async def test_pdf_and_docx_generate_with_conditional_text(self, client, clean_db):
-        _, token = await create_test_lawyer()
+        lawyer, token = await create_test_lawyer()
 
         r = await client.post(f"{API}/applications/download", json={
             "template_id": TEMPLATE_ID, "language": "gu",
@@ -332,7 +322,7 @@ class TestDocumentGeneration:
         assert docx[:2] == b"PK"
 
         # Exactly one credit per download (5 -> 3 after two downloads)
-        wallet = await db.wallets.find_one({"user_id": (await db.users.find_one({}, {"_id": 0}))["id"]}, {"_id": 0})
+        wallet = await db.wallets.find_one({"user_id": lawyer["id"]}, {"_id": 0})
         assert wallet["balance"] == 3
         assert wallet["total_used"] == 2
 

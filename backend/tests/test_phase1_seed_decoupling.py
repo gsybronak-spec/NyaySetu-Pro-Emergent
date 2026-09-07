@@ -1,3 +1,5 @@
+import server
+db = server.db
 """Tests for Phase 1: Backend Seed Decoupling & Template Revision / Historical Data Safety.
 
 Covers all 17 requirements:
@@ -27,21 +29,16 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_seed_decoupling")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_seed_decoupling"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -53,28 +50,11 @@ from server import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans", "districts", "talukas", "courts",
-        "case_types", "police_stations", "laws"
-    ]:
-        await db[coll_name].drop()
     yield
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans", "districts", "talukas", "courts",
-        "case_types", "police_stations", "laws"
-    ]:
-        await db[coll_name].drop()
-
+    await seed_templates(force=True)
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -133,13 +113,16 @@ async def lawyer_auth():
 @pytest.mark.asyncio
 async def test_seed_runs_when_seed_complete_missing():
     """Seed must initialize templates into db.templates and set seed_complete=True."""
+    await server.db.collection("system_settings").document("seed_complete").delete()
+    async for d in server.db.collection("templates").stream():
+        await d.reference.delete()
     setting = await db.system_settings.find_one({"key": "seed_complete"})
     assert setting is None
 
     await seed_templates()
 
     # Verify templates inserted
-    tpl_count = await db.templates.count_documents({})
+    tpl_count = len(await db.collection("templates").get())
     assert tpl_count > 0
 
     # Verify seed_complete set
@@ -153,20 +136,20 @@ async def test_seed_runs_when_seed_complete_missing():
 async def test_seed_does_not_run_when_seed_complete_true():
     """When seed_complete=True, seed_templates should be a complete no-op."""
     await seed_templates()
-    initial_count = await db.templates.count_documents({})
+    initial_count = len(await db.collection("templates").get())
     assert initial_count > 0
 
     # Manually delete one template to test that seed does NOT resurrect it
-    sample_id = "civil_suit" if await db.templates.find_one({"id": "civil_suit"}) else (await db.templates.find_one({}))["id"]
-    await db.templates.delete_one({"id": sample_id})
-    assert await db.templates.find_one({"id": sample_id}) is None
+    sample_id = "civil_suit" if (await db.collection("templates").document("civil_suit").get()).to_dict() else (await db.templates.find_one({}))["id"]
+    await db.collection("templates").document(sample_id).delete()
+    assert (await db.collection("templates").document(sample_id).get()).to_dict() is None
 
     # Call seed_templates again without force
     await seed_templates()
 
     # The deleted template must NOT be resurrected
-    assert await db.templates.find_one({"id": sample_id}) is None
-    assert (await db.templates.count_documents({})) == initial_count - 1
+    assert (await db.collection("templates").document(sample_id).get()).to_dict() is None
+    assert (len(await db.collection("templates").get())) == initial_count - 1
 
 
 # ============================================================
@@ -180,9 +163,9 @@ async def test_runtime_endpoints_do_not_merge_seed_arrays(client, lawyer_auth, a
 
     # Choose a template and delete it from DB
     target_id = "adjournment"
-    assert await db.templates.find_one({"id": target_id}) is not None
+    assert (await db.collection("templates").document(target_id).get()).to_dict() is not None
 
-    await db.templates.delete_one({"id": target_id})
+    await db.collection("templates").document(target_id).delete()
 
     # Lawyer API GET /api/templates
     resp = await client.get("/api/templates", headers=lawyer_auth)
@@ -233,24 +216,31 @@ async def test_archived_templates_hidden_from_lawyer_api(client, lawyer_auth, ad
 @pytest.mark.asyncio
 async def test_idempotent_template_revisions_migration():
     """Running migrate_templates_to_revisions multiple times produces identical state."""
-    await seed_templates()
+    async for d in server.db.collection("templates").stream():
+        await d.reference.delete()
+    async for d in server.db.collection("template_revisions").stream():
+        await d.reference.delete()
+    async for d in server.db.collection("template_versions").stream():
+        await d.reference.delete()
+    await server.db.collection("system_settings").document("seed_complete").delete()
+    await seed_templates(force=True)
 
     # Initial migration ran in seed_templates
-    rev_count_1 = await db.template_revisions.count_documents({})
+    rev_count_1 = len(await db.collection("template_revisions").get())
     assert rev_count_1 > 0
 
     # Run migration again
     res2 = await migrate_templates_to_revisions(db)
     assert res2["migrated"] == 0
     assert res2["skipped"] == rev_count_1
-    assert (await db.template_revisions.count_documents({})) == rev_count_1
+    assert (len(await db.collection("template_revisions").get())) == rev_count_1
 
     # Run migration 5 more times
     for _ in range(5):
         res = await migrate_templates_to_revisions(db)
         assert res["migrated"] == 0
 
-    assert (await db.template_revisions.count_documents({})) == rev_count_1
+    assert (len(await db.collection("template_revisions").get())) == rev_count_1
 
 
 @pytest.mark.asyncio
@@ -276,7 +266,7 @@ async def test_linear_versioning_and_publish_snapshot(client, admin_auth):
     await seed_templates()
     tid = "vakalatnama"
 
-    tpl_v1 = await db.templates.find_one({"id": tid}, {"_id": 0})
+    tpl_v1 = (await db.collection("templates").document(tid).get()).to_dict()
     assert tpl_v1["version"] == 1
     assert tpl_v1["status"] == "published"
 
@@ -405,8 +395,8 @@ async def test_historical_draft_resolves_from_revisions_after_template_edit_and_
     assert "Compromise Deed V2" in v2_resolved.get("name_en", "")
 
     # 5. Delete current template from db.templates (simulating admin purge)
-    await db.templates.delete_one({"id": tid})
-    assert await db.templates.find_one({"id": tid}) is None
+    await db.collection("templates").document(tid).delete()
+    assert (await db.collection("templates").document(tid).get()).to_dict() is None
 
     # 6. Historical draft MUST still resolve successfully from db.template_revisions
     v1_still_resolves = await resolve_template_for_draft(tid, draft["template_version"])

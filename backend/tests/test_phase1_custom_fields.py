@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Phase 1 — Core Data Integrity regression tests.
 
 Covers the locked Phase-1 pipeline:
@@ -21,21 +26,16 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_phase1")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_phase1"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token
@@ -46,7 +46,6 @@ API = "/api"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -54,16 +53,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
     yield
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
-
 
 async def create_test_admin(email="admin@test.com", password="TestPass123!"):
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -78,7 +68,7 @@ async def create_test_admin(email="admin@test.com", password="TestPass123!"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin_doc.copy())
+    await db.collection("admin_users").document(admin_doc.copy().get("id")).set(admin_doc.copy())
     return admin_doc
 
 
@@ -102,7 +92,7 @@ async def create_test_lawyer(mobile=None):
         "favourite_courts": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id,
         "balance": 5,
@@ -366,7 +356,7 @@ class TestDocumentAutofill:
 
         # Direct render-context check for police_station label
         import server as srv
-        case = await db.cases.find_one({"id": case_id}, {"_id": 0})
+        case = (await db.collection("cases").document(case_id).get()).to_dict()
         ctx = await srv.build_render_context({"name": "Adv", "district": None}, case, {}, "en")
         assert ctx["police_station"] == "Naranpura P.S."
         assert ctx["client_name"] == "Meena"

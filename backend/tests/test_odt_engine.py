@@ -1,6 +1,10 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression tests for the ODT (OpenDocument Text) document engine.
 
-Self-contained (sync TestClient + mongomock_motor), so the module never
 depends on fixtures defined in other test files. Covers:
 
   * generate_odt produces a valid ODT ZIP with the correct mimetype, page
@@ -23,15 +27,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_odt")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_odt"]
 
 import server
-server.db = mock_db
 
 from starlette.testclient import TestClient
 app_client = TestClient(server.app)

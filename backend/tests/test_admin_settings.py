@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro Admin Settings module (Master Plan Phase 40).
 
 Covers:
@@ -11,7 +16,6 @@ Covers:
 - Unknown setting -> 404
 - Audit trail records settings updates
 
-Uses mongomock_motor (same pattern as existing test suite).
 """
 
 import os
@@ -22,21 +26,16 @@ import base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_admin_settings")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone, timedelta
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_admin_settings"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, now
@@ -50,7 +49,6 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -58,12 +56,10 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    async for d in db.collection("audit_logs").stream():
+        await d.reference.delete()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
+    await db.collection("templates").document("no_ps_tpl").delete()
 
 async def create_admin(role="super_admin"):
     admin_id = str(uuid.uuid4())
@@ -79,7 +75,7 @@ async def create_admin(role="super_admin"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -94,7 +90,7 @@ async def create_lawyer(mobile):
         "referral_code": "NS" + uuid.uuid4().hex[:6].upper(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 5, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
     return user
@@ -178,14 +174,17 @@ async def test_signup_credits_setting_applies(client, clean_db):
     assert r.json()["value"] == 12
 
     # New user via OTP signup gets 12 credits
-    r = await client.post("/api/auth/send-otp", json={"mobile": "9876543210"})
+    fresh_m = "9876599988"
+    r = await client.post("/api/auth/send-otp", json={"mobile": fresh_m})
     assert r.status_code == 200
-    r = await client.post("/api/auth/verify-otp", json={"mobile": "9876543210", "otp": "123456"})
+    r = await client.post("/api/auth/verify-otp", json={"mobile": fresh_m, "otp": "123456"})
     assert r.status_code == 200
     user_id = r.json()["user"]["id"]
     wallet = await db.wallets.find_one({"user_id": user_id})
     assert wallet["balance"] == 12
     assert wallet["free_credits_granted"] == 12
+    # Revert setting to baseline
+    await client.put("/api/admin/settings/signup_credits", json={"value": 5}, headers=H(token))
 
 
 async def test_otp_max_attempts_setting_enforced(client, clean_db):
@@ -193,13 +192,16 @@ async def test_otp_max_attempts_setting_enforced(client, clean_db):
     r = await client.put("/api/admin/settings/otp_max_attempts", json={"value": 1}, headers=H(token))
     assert r.status_code == 200
 
-    await client.post("/api/auth/send-otp", json={"mobile": "9876543211"})
+    otp_m = "9876599989"
+    await client.post("/api/auth/send-otp", json={"mobile": otp_m})
     # First wrong attempt is allowed (attempts 0 -> 1)
-    r = await client.post("/api/auth/verify-otp", json={"mobile": "9876543211", "otp": "999999"})
+    r = await client.post("/api/auth/verify-otp", json={"mobile": otp_m, "otp": "999999"})
     assert r.status_code == 400
     # Second attempt hits the cap -> OTP deleted, blocked
-    r = await client.post("/api/auth/verify-otp", json={"mobile": "9876543211", "otp": "999999"})
+    r = await client.post("/api/auth/verify-otp", json={"mobile": otp_m, "otp": "999999"})
     assert r.status_code == 429
+    # Revert setting to baseline
+    await client.put("/api/admin/settings/otp_max_attempts", json={"value": 5}, headers=H(token))
 
 
 async def test_default_page_size_setting_flows_into_pdf(client, clean_db):
@@ -252,3 +254,5 @@ async def test_settings_update_is_audited(client, clean_db):
     assert len(entries) == 1
     assert entries[0]["target"] == "signup_credits"
     assert entries[0]["metadata"]["value"] == 8
+    # Revert setting to baseline
+    await client.put("/api/admin/settings/signup_credits", json={"value": 5}, headers=H(token))

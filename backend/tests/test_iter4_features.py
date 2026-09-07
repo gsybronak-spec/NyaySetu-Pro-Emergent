@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Iteration 4 tests — 24 templates (bilingual aliases), catalog/courts, catalog/police-stations, case with court_id/police_station_id + resolved labels, sort=name/type/updated."""
 import os
 import time
@@ -6,19 +11,15 @@ import os
 import time
 import base64
 import pytest
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_iter4")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_iter4"]
 
 import server
-server.db = mock_db
 
 from starlette.testclient import TestClient
 app_client = TestClient(server.app)

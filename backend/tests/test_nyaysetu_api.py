@@ -1,22 +1,23 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """NyaySetu Pro API tests — covers auth, catalog, cases, templates, apps, wallet, drafts, search."""
 import os
 import time
 import base64
 import pytest
+
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_api")
 os.environ.setdefault("OTP_RESEND_COOLDOWN_SECONDS", "0")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_api"]
 
 import server
-server.db = mock_db
 
 from starlette.testclient import TestClient
 app_client = TestClient(server.app)

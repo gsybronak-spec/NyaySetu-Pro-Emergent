@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro Admin Catalog module (Master Plan Phase 39).
 
 Covers:
@@ -13,7 +18,6 @@ Covers:
 - Audit trail records catalog mutations
 - Unknown catalog kind -> 404
 
-Uses mongomock_motor (same pattern as existing test suite).
 """
 
 import os
@@ -22,21 +26,16 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_admin_catalog")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_admin_catalog"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, now
@@ -50,7 +49,6 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -58,14 +56,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-    # Seed catalogs like startup does
-    await server.seed_catalogs()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
 
 async def create_admin(role="super_admin"):
     admin_id = str(uuid.uuid4())
@@ -81,7 +72,7 @@ async def create_admin(role="super_admin"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -96,7 +87,7 @@ async def create_lawyer(mobile):
         "referral_code": "NS" + uuid.uuid4().hex[:6].upper(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 5, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
     return user
@@ -164,6 +155,8 @@ async def test_super_admin_creates_case_type(client, clean_db):
     # Audit recorded
     r = await client.get("/api/admin/audit-logs", headers=headers)
     assert "catalog_create" in {e["action"] for e in r.json()["items"]}
+    await server.db.collection("case_types").document(new_id).delete()
+    server._invalidate_catalog_cache()
 
 
 async def test_created_case_type_usable_in_case(client, clean_db):
@@ -185,6 +178,8 @@ async def test_created_case_type_usable_in_case(client, clean_db):
     case = r.json()
     assert case["case_type_label"] == "Motor Accident Claim"
     assert case["category"] == "Civil"
+    await server.db.collection("case_types").document(new_id).delete()
+    server._invalidate_catalog_cache()
 
 
 async def test_regular_admin_cannot_create_or_update(client, clean_db):
@@ -216,6 +211,12 @@ async def test_update_labels_flow_through(client, clean_db):
     r = await client.get("/api/catalog/districts")
     found = next(p for p in r.json() if p["id"] == "ahmedabad")
     assert found["en"] == "Ahmedabad Metro"
+
+    # Revert to baseline
+    await client.put("/api/admin/catalog/districts/ahmedabad", json={
+        "en": "Ahmedabad", "gu": "અમદાવાદ",
+    }, headers=headers)
+    server._invalidate_catalog_cache()
 
     r = await client.put("/api/admin/catalog/districts/missing", json={
         "en": "X", "gu": "X",
@@ -272,6 +273,8 @@ async def test_deactivate_hides_but_preserves_references(client, clean_db):
     assert r.json()["item"]["active"] is True
     r = await client.get("/api/catalog/case-types")
     assert new_id in {p["id"] for p in r.json()}
+    await server.db.collection("case_types").document(new_id).delete()
+    server._invalidate_catalog_cache()
 
 
 # ============================================================
@@ -329,6 +332,9 @@ async def test_court_and_ps_creation(client, clean_db):
 
     r = await client.get("/api/catalog/police-stations?district_id=gandhinagar")
     assert any(p["id"] == ps_id for p in r.json())
+    await server.db.collection("courts").document(court_id).delete()
+    await server.db.collection("police_stations").document(ps_id).delete()
+    server._invalidate_catalog_cache()
 
 
 async def test_seed_catalogs_merges_missing_seed_ids_without_overwriting(client, clean_db):
@@ -338,8 +344,6 @@ async def test_seed_catalogs_merges_missing_seed_ids_without_overwriting(client,
     # into other test files. Use a fictional id that cannot collide with seed
     # ids or label assertions, and drop the collections afterwards to restore
     # the pre-test (empty) state.
-    await db.districts.drop()
-    await db.talukas.drop()
     # Simulate a DB seeded by an older version: 1 pre-existing record, with an
     # admin-edited English name + extra field.
     await db.districts.insert_one({
@@ -355,15 +359,15 @@ async def test_seed_catalogs_merges_missing_seed_ids_without_overwriting(client,
     assert len(ids) >= 34
 
     # The pre-existing record was NOT overwritten
-    edited = await db.districts.find_one({"id": "test_old_district"}, {"_id": 0})
+    edited = (await db.collection("districts").document("test_old_district").get()).to_dict()
     assert edited["en"] == "Old District (Edited)"
     assert edited.get("custom_note") == "admin kept this"
 
     # No duplicates after re-running (idempotent)
     await server.seed_catalogs()
-    assert await db.districts.count_documents({}) == len(ids)
+    assert len(await db.collection("districts").get()) == len(ids)
 
     # Restore the pre-test state so the global server.db is not polluted for
     # other test modules that run later in the same process.
-    await db.districts.drop()
-    await db.talukas.drop()
+    await server.db.collection("districts").document("test_old_district").delete()
+    server._invalidate_catalog_cache()

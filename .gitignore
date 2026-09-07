@@ -81,6 +81,10 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+android/
+ios/
+frontend/android/
+*google-services.json*
 .env
 .env.*
 !.env.example
@@ -90,3 +94,17 @@ credentials.json
 *.key
 .credentials
 .env*
+
+# JRE & Emulators
+jre/
+jre21/
+
+# Generated logs & test artifacts
+*.log
+backend/*.log
+backend/scratch/
+backend/generated_docs/
+backend/gate_*.json
+backend/fix_targets*.txt
+backend/server_diff.txt
+

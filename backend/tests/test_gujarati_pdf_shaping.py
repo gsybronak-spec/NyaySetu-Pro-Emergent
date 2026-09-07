@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression tests for HarfBuzz-shaped Gujarati PDF generation.
 
 Production bug: conjuncts like ક્ષ rendered as ક + ્ષ because Render has no
@@ -24,6 +29,7 @@ import zlib
 import unicodedata
 
 import pytest
+
 
 from doc_generator import generate_pdf_hb, generate_pdf
 

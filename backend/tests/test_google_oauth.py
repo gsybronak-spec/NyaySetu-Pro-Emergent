@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro native Google OAuth (replaces the Emergent dependency).
 
 Covers:
@@ -10,7 +15,6 @@ Covers:
 - Disabled Google user -> 403
 - Legacy /auth/google-session fails safe (503) in production without GOOGLE_SESSION_URL
 
-Uses mongomock_motor (same pattern as the existing suite). Google network calls
 are stubbed — no real provider is contacted, no credentials invented.
 """
 
@@ -21,19 +25,14 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_google_oauth")
 
 import pytest
+
 import pytest_asyncio
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_google_oauth"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, now
@@ -51,20 +50,25 @@ REDIRECT_URI = "https://nyay-setu-pro-emergent-bo83.vercel.app/"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
+    async def _clean():
+        for email in ["lawyer@gmail.com", "referrer@gmail.com"]:
+            docs = [d async for d in client.collection("users").where(filter=server.firestore.FieldFilter("email", "==", email)).stream()]
+            for d in docs:
+                await d.reference.delete()
+        refs = [d async for d in client.collection("referrals").stream()]
+        for r in refs:
+            await r.reference.delete()
+    await _clean()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
+    await _clean()
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def no_credentials(monkeypatch):
@@ -118,7 +122,7 @@ async def create_google_user(email="lawyer@gmail.com", active=True, name=None):
     }
     if name:
         user["name"] = name
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 5, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
     return user

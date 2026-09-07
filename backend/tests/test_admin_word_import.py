@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for the Admin Word Template Import feature + publish-guard fix.
 
 Covers:
@@ -14,7 +19,6 @@ Covers:
 - Publish guard: malformed partial record -> readable 400, never a 500
 - Generated PDF uses the configured page size (A4)
 
-Uses mongomock_motor (same pattern as the existing suite).
 """
 
 import base64
@@ -26,25 +30,20 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_word_import")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_word_import"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_admin_token, make_token, now
-from seed_data import TEMPLATES
+from test_seed_data import TEMPLATES
 from httpx import AsyncClient, ASGITransport
 
 from docx import Document
@@ -113,7 +112,6 @@ def b64(data: bytes) -> str:
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -121,12 +119,15 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    for coll in ["templates", "template_revisions", "template_versions", "admin_users"]:
+        async for d in db.collection(coll).stream():
+            await d.reference.delete()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
+    for coll in ["templates", "template_revisions", "template_versions", "admin_users"]:
+        async for d in db.collection(coll).stream():
+            await d.reference.delete()
+    await server.seed_templates(force=True)
+    await server.seed_catalogs()
 
 async def create_admin(role="super_admin"):
     admin_id = str(uuid.uuid4())
@@ -142,7 +143,7 @@ async def create_admin(role="super_admin"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -158,7 +159,7 @@ async def create_lawyer():
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 10, "total_used": 0,
                                 "created_at": now().isoformat(), "updated_at": now().isoformat()})
     token = make_token(user_id)
@@ -337,7 +338,7 @@ async def test_import_create_and_publish_flow(client, clean_db):
     assert created["id"] == "test_return_documents_import"
 
     # Exactly one DB record for this id
-    n = await db.templates.count_documents({"id": "test_return_documents_import"})
+    n = len(await db.collection("templates").get())
     assert n == 1
 
     # Not visible to lawyers while draft
@@ -364,11 +365,11 @@ async def test_import_create_and_publish_flow(client, clean_db):
     assert "દસ્તાવેજ પરત મેળવવાની અરજી" in t["content_gu"]
 
     # Still exactly one record
-    n = await db.templates.count_documents({"id": "test_return_documents_import"})
+    n = len(await db.collection("templates").get())
     assert n == 1
     # Seed templates untouched (no duplicates of any seed id)
     for sid in SEED_IDS:
-        assert await db.templates.count_documents({"id": sid}) <= 1
+        assert len(await db.collection("templates").get()) <= 1
     # Audit trail
     logs = await db.audit_logs.find({"action": "template_import"}).to_list(10)
     assert len(logs) == 1
@@ -476,15 +477,15 @@ async def test_publish_malformed_record_returns_readable_error(client, clean_db)
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
     }
-    await db.templates.insert_one(malformed)
+    await db.collection("templates").document(malformed.get("id")).set(malformed)
     r = await client.post(f"{ADMIN}/templates/malformed_partial_record/publish", headers=H(token))
     assert r.status_code == 400, r.text
     detail = r.json()["detail"]
     assert "incomplete" in detail
     assert "name_en" in detail
     # Nothing was published / versioned
-    assert await db.template_versions.count_documents({}) == 0
-    doc = await db.templates.find_one({"id": "malformed_partial_record"})
+    assert len(await db.collection("template_versions").get()) == 0
+    doc = (await db.collection("templates").document("malformed_partial_record").get()).to_dict()
     assert doc["status"] == "draft"
 
 
@@ -503,7 +504,7 @@ async def test_publish_malformed_fields_returns_readable_error(client, clean_db)
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
     }
-    await db.templates.insert_one(bad)  # no 'fields' key at all
+    await db.collection("templates").document(bad.get("id")).set(bad)  # no 'fields' key at all
     r = await client.post(f"{ADMIN}/templates/bad_fields_record/publish", headers=H(token))
     assert r.status_code == 400, r.text
     assert "field list" in r.json()["detail"]

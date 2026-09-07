@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Master-plan hardening regression tests.
 
 Covers:
@@ -23,19 +28,14 @@ from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_hardening")
 
 import pytest
+
 import pytest_asyncio
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_hardening"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token
@@ -46,7 +46,6 @@ API = "/api"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -54,16 +53,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
     yield
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "system_settings"]:
-        await db[coll].drop()
-
 
 def mobile(prefix="9"):
     return f"{prefix}{int(time.time() * 1000) % 1000000000:09d}"
@@ -80,7 +70,7 @@ async def create_test_lawyer(m=None):
         "referred_by": None, "favourite_courts": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id, "balance": 50, "free_credits_granted": 50,
         "total_used": 0, "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -304,7 +294,7 @@ class TestCorsAndJwt:
         code = (
             "import os\n"
             "os.environ['ENVIRONMENT']='production'\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
+            "os.environ['JWT_SECRET']=''\n"
             "os.environ['DB_NAME']='nyaysetu_jwt_fail'\n"
             "import server\n"
         )
@@ -317,7 +307,6 @@ class TestCorsAndJwt:
             "import os\n"
             "os.environ['ENVIRONMENT']='production'\n"
             "os.environ['JWT_SECRET']='nyaysetu-dev-secret-please-change'\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
             "os.environ['DB_NAME']='nyaysetu_jwt_fail'\n"
             "import server\n"
         )
@@ -329,7 +318,6 @@ class TestCorsAndJwt:
             "import os\n"
             "os.environ['ENVIRONMENT']='production'\n"
             "os.environ['JWT_SECRET']='" + "x" * 64 + "'\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
             "os.environ['DB_NAME']='nyaysetu_jwt_ok'\n"
             "import server\n"
             "print('OK')\n"
@@ -346,7 +334,6 @@ class TestCorsAndJwt:
             "import os\n"
             "os.environ['RENDER']='true'\n"
             "os.environ['JWT_SECRET']='some-secret'\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
             "os.environ['DB_NAME']='nyaysetu_jwt_warn'\n"
             "import logging\n"
             "logging.disable(logging.CRITICAL)\n"
@@ -366,11 +353,8 @@ class TestDevOtpRenderGuard:
         code = (
             "import os\n"
             "os.environ['RENDER']='true'\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
             "os.environ['DB_NAME']='nyaysetu_render_otp'\n"
-            "import mongomock_motor\n"
             "import server\n"
-            "server.db = mongomock_motor.AsyncMongoMockClient()['nyaysetu_render_otp']\n"
             "from starlette.testclient import TestClient\n"
             "c = TestClient(server.app)\n"
             "r = c.post('/api/auth/send-otp', json={'mobile':'9999999999'})\n"
@@ -387,9 +371,7 @@ class TestDevOtpRenderGuard:
         # No RENDER, no ENVIRONMENT=production -> local dev keeps the fixed OTP.
         code = (
             "import os\n"
-            "os.environ['MONGO_URL']='mongodb://localhost:27017'\n"
             "os.environ['DB_NAME']='nyaysetu_local_otp'\n"
-            "import mongomock_motor\n"
             "import server\n"
             "assert server._DEV_OTP_ALLOWED is True\n"
             "print('OK')\n"

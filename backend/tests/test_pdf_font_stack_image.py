@@ -1,3 +1,5 @@
+import server
+db = server.db
 """Regression tests for the Gujarati font stack and the "Download as Image" export.
 
 Covers:
@@ -21,20 +23,16 @@ from pathlib import Path
 
 import pytest
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_font_stack")
 
-import mongomock_motor
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_font_stack"]
 
 import doc_generator
 import server
 
-server.db = mock_db
 doc_generator.register_fonts()
 
 from starlette.testclient import TestClient
@@ -218,7 +216,7 @@ class TestDownloadImageEndpoint:
         assert history[0]["font_family"] == "NotoSansGujarati"
 
     def test_pdf_download_records_artifact_metadata(self):
-        tok = _login("9898000002")
+        tok = _login("9898000999")
         r = app_client.post(f"{BASE}/applications/download", headers=_hdr(tok), json={
             "template_id": "return_documents", "language": "gu", "format": "pdf",
             "values": {"document_name": "દસ્તાવેજ", "date": "15/08/2026"},
@@ -233,7 +231,7 @@ class TestDownloadImageEndpoint:
         assert rec["generator_version"]
 
     def test_invalid_format_still_rejected(self):
-        tok = _login("9898000003")
+        tok = _login("9898099903")
         before = app_client.get(f"{BASE}/wallet", headers=_hdr(tok)).json()["balance"]
         r = app_client.post(f"{BASE}/applications/download", headers=_hdr(tok), json={
             "template_id": "return_documents", "language": "gu", "format": "exe",

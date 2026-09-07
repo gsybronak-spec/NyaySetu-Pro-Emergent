@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression tests for the v2 application-template catalog.
 
 Covers:
@@ -23,19 +28,15 @@ from pathlib import Path
 
 import pytest
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_catalog_v2")
 
-import mongomock_motor
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_catalog_v2"]
 
 import server
 
-server.db = mock_db
 
 from starlette.testclient import TestClient
 
@@ -147,7 +148,7 @@ class TestV2Catalog:
         archived (production migration), they disappear from the public list
         while the v2 templates remain active."""
         import asyncio
-        from seed_data import TEMPLATES as OLD_TEMPLATES
+        from test_seed_data import TEMPLATES as OLD_TEMPLATES
         old_ids = [t["id"] for t in OLD_TEMPLATES]
         loop = asyncio.new_event_loop()
         try:
@@ -391,6 +392,6 @@ class TestAdminPlaceholderRegistry:
         import asyncio as _aio
         _loop = _aio.new_event_loop()
         try:
-            _loop.run_until_complete(server.db.templates.delete_one({"id": tid}))
+            _loop.run_until_complete(server.db.collection("templates").document(tid).delete())
         finally:
             _loop.close()

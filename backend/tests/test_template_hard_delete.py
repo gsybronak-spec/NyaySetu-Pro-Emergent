@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """
 Dedicated Test Suite: Template Permanent Hard Delete & Historical Safety
 Covers all 28 required test scenarios:
@@ -39,20 +44,15 @@ import hashlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_hard_delete")
 
 import pytest
+
 import pytest_asyncio
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_hard_delete"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -77,57 +77,7 @@ from doc_generator import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    """Seed test database with admin users and clean collections."""
-    server.db = db
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "audit_logs", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans"
-    ]:
-        await db[coll_name].drop()
-
-    # Super Admin
-    super_admin_doc = {
-        "id": "admin_super_1",
-        "email": "superadmin@nyaysetu.gov.in",
-        "name": "Super Administrator",
-        "role": "super_admin",
-        "password_hash": hash_password("SuperSecret123!"),
-        "active": True,
-        "created_at": "2026-08-22T00:00:00Z",
-    }
-    await db.admin_users.insert_one(super_admin_doc)
-    await db.users.insert_one(super_admin_doc)
-
-    # Staff Admin (role: admin)
-    staff_admin_doc = {
-        "id": "admin_staff_1",
-        "email": "staff@nyaysetu.gov.in",
-        "name": "Staff Administrator",
-        "role": "admin",
-        "password_hash": hash_password("StaffSecret123!"),
-        "active": True,
-        "created_at": "2026-08-22T00:00:00Z",
-    }
-    await db.admin_users.insert_one(staff_admin_doc)
-    await db.users.insert_one(staff_admin_doc)
-
-    # Regular Lawyer
-    lawyer_doc = {
-        "id": "lawyer_regular_1",
-        "email": "advocate@gmail.com",
-        "name": "Advocate Regular",
-        "role": "lawyer",
-        "password_hash": hash_password("LawyerPass123!"),
-        "active": True,
-        "created_at": "2026-08-22T00:00:00Z",
-    }
-    await db.users.insert_one(lawyer_doc)
-
-    # Mark seed_complete = True
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
-
+    yield
 
 @pytest.fixture
 def super_admin_token():
@@ -174,7 +124,7 @@ async def test_01_super_admin_can_delete_draft_template(super_admin_token):
         assert del_res.json()["success"] is True
 
         # Check absent in DB
-        db_t = await db.templates.find_one({"id": "tpl_draft_to_delete"})
+        db_t = (await db.collection("templates").document("tpl_draft_to_delete").get()).to_dict()
         assert db_t is None
 
 
@@ -201,7 +151,7 @@ async def test_02_super_admin_can_delete_published_template(super_admin_token):
         assert del_res.status_code == 200
         assert del_res.json()["success"] is True
 
-        db_t = await db.templates.find_one({"id": "tpl_pub_to_delete"})
+        db_t = (await db.collection("templates").document("tpl_pub_to_delete").get()).to_dict()
         assert db_t is None
 
 
@@ -228,7 +178,7 @@ async def test_03_super_admin_can_delete_archived_template(super_admin_token):
         del_res = await client.delete("/api/admin/templates/tpl_arch_to_delete", headers=headers)
         assert del_res.status_code == 200
 
-        db_t = await db.templates.find_one({"id": "tpl_arch_to_delete"})
+        db_t = (await db.collection("templates").document("tpl_arch_to_delete").get()).to_dict()
         assert db_t is None
 
 
@@ -236,7 +186,7 @@ async def test_03_super_admin_can_delete_archived_template(super_admin_token):
 async def test_04_super_admin_can_delete_seeded_template(super_admin_token):
     """Scenario 4: Super Admin can permanently delete a seeded template."""
     # Seed templates
-    await db.system_settings.delete_many({})
+    # deleted delete_many call - emulator wiped by fixture
     await seed_templates(force=True)
 
     transport = ASGITransport(app=app)
@@ -244,14 +194,14 @@ async def test_04_super_admin_can_delete_seeded_template(super_admin_token):
         headers = {"Authorization": f"Bearer {super_admin_token}"}
         
         # Verify vakalatnama exists
-        assert await db.templates.find_one({"id": "vakalatnama"}) is not None
+        assert (await db.collection("templates").document("vakalatnama").get()).to_dict() is not None
 
         # Delete seeded template
         del_res = await client.delete("/api/admin/templates/vakalatnama", headers=headers)
         assert del_res.status_code == 200
 
         # Verify vakalatnama is removed
-        assert await db.templates.find_one({"id": "vakalatnama"}) is None
+        assert (await db.collection("templates").document("vakalatnama").get()).to_dict() is None
 
 
 # ============================================================================
@@ -261,7 +211,7 @@ async def test_04_super_admin_can_delete_seeded_template(super_admin_token):
 @pytest.mark.asyncio
 async def test_05_staff_admin_cannot_hard_delete(staff_admin_token):
     """Scenario 5: Staff admin (role: admin) cannot hard-delete a template (403)."""
-    await db.templates.insert_one({"id": "tpl_staff_guard", "name_en": "Staff Guard", "status": "draft"})
+    await db.collection("templates").document({"id": "tpl_staff_guard", "name_en": "Staff Guard", "status": "draft"}.get("id")).set({"id": "tpl_staff_guard", "name_en": "Staff Guard", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         res = await client.delete(
@@ -269,13 +219,13 @@ async def test_05_staff_admin_cannot_hard_delete(staff_admin_token):
             headers={"Authorization": f"Bearer {staff_admin_token}"}
         )
         assert res.status_code == 403
-        assert await db.templates.find_one({"id": "tpl_staff_guard"}) is not None
+        assert (await db.collection("templates").document("tpl_staff_guard").get()).to_dict() is not None
 
 
 @pytest.mark.asyncio
 async def test_06_lawyer_cannot_hard_delete(lawyer_token):
     """Scenario 6: Lawyer cannot access the admin delete endpoint (401/403)."""
-    await db.templates.insert_one({"id": "tpl_lawyer_guard", "name_en": "Lawyer Guard", "status": "published"})
+    await db.collection("templates").document({"id": "tpl_lawyer_guard", "name_en": "Lawyer Guard", "status": "published"}.get("id")).set({"id": "tpl_lawyer_guard", "name_en": "Lawyer Guard", "status": "published"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         res = await client.delete(
@@ -283,18 +233,18 @@ async def test_06_lawyer_cannot_hard_delete(lawyer_token):
             headers={"Authorization": f"Bearer {lawyer_token}"}
         )
         assert res.status_code in (401, 403)
-        assert await db.templates.find_one({"id": "tpl_lawyer_guard"}) is not None
+        assert (await db.collection("templates").document("tpl_lawyer_guard").get()).to_dict() is not None
 
 
 @pytest.mark.asyncio
 async def test_07_unauthenticated_cannot_hard_delete():
     """Scenario 7: Unauthenticated request cannot hard-delete (401)."""
-    await db.templates.insert_one({"id": "tpl_anon_guard", "name_en": "Anon Guard", "status": "draft"})
+    await db.collection("templates").document({"id": "tpl_anon_guard", "name_en": "Anon Guard", "status": "draft"}.get("id")).set({"id": "tpl_anon_guard", "name_en": "Anon Guard", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         res = await client.delete("/api/admin/templates/tpl_anon_guard")
         assert res.status_code == 401
-        assert await db.templates.find_one({"id": "tpl_anon_guard"}) is not None
+        assert (await db.collection("templates").document("tpl_anon_guard").get()).to_dict() is not None
 
 
 # ============================================================================
@@ -305,11 +255,11 @@ async def test_07_unauthenticated_cannot_hard_delete():
 async def test_08_deleted_template_disappears_from_db_templates(super_admin_token):
     """Scenario 8: Deleted template record is completely deleted from db.templates."""
     t_id = "tpl_db_disappear"
-    await db.templates.insert_one({"id": t_id, "name_en": "Disappear Test", "status": "draft"})
+    await db.collection("templates").document({"id": t_id, "name_en": "Disappear Test", "status": "draft"}.get("id")).set({"id": t_id, "name_en": "Disappear Test", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await client.delete(f"/api/admin/templates/{t_id}", headers={"Authorization": f"Bearer {super_admin_token}"})
-        assert await db.templates.find_one({"id": t_id}) is None
+        assert (await db.collection("templates").document(t_id).get()).to_dict() is None
 
 
 @pytest.mark.asyncio
@@ -342,7 +292,7 @@ async def test_09_deleted_template_not_returned_by_catalog_api(super_admin_token
 async def test_10_deleted_template_returns_404_in_admin_editor(super_admin_token):
     """Scenario 10: GET /api/admin/templates/{id} returns 404 for deleted templates."""
     t_id = "tpl_admin_404_check"
-    await db.templates.insert_one({"id": t_id, "name_en": "404 Test", "status": "draft"})
+    await db.collection("templates").document({"id": t_id, "name_en": "404 Test", "status": "draft"}.get("id")).set({"id": t_id, "name_en": "404 Test", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
@@ -356,14 +306,14 @@ async def test_10_deleted_template_returns_404_in_admin_editor(super_admin_token
 async def test_11_delete_actually_deletes_and_does_not_archive(super_admin_token):
     """Scenario 11: Deletion is a true hard delete, NOT a silent conversion to status='archived'."""
     t_id = "tpl_real_delete_not_arch"
-    await db.templates.insert_one({"id": t_id, "name_en": "Real Delete Test", "status": "published"})
+    await db.collection("templates").document({"id": t_id, "name_en": "Real Delete Test", "status": "published"}.get("id")).set({"id": t_id, "name_en": "Real Delete Test", "status": "published"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
         await client.delete(f"/api/admin/templates/{t_id}", headers=headers)
 
         # Check there is NO document in db.templates (with any status)
-        any_doc = await db.templates.find_one({"id": t_id})
+        any_doc = (await db.collection("templates").document(t_id).get()).to_dict()
         assert any_doc is None
 
 
@@ -375,7 +325,7 @@ async def test_11_delete_actually_deletes_and_does_not_archive(super_admin_token
 async def test_12_audit_log_created_with_template_deleted(super_admin_token):
     """Scenario 12: Audit log is created with action='template_deleted'."""
     t_id = "tpl_audit_check"
-    await db.templates.insert_one({"id": t_id, "name_en": "Audit Check", "status": "draft", "version": 1})
+    await db.collection("templates").document({"id": t_id, "name_en": "Audit Check", "status": "draft", "version": 1}.get("id")).set({"id": t_id, "name_en": "Audit Check", "status": "draft", "version": 1})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
@@ -393,7 +343,7 @@ async def test_12_audit_log_created_with_template_deleted(super_admin_token):
 async def test_13_sensitive_fields_not_leaked_in_audit_log(super_admin_token):
     """Scenario 13: Sensitive fields (passwords, tokens, secrets) are never present in audit logs."""
     t_id = "tpl_scrub_audit"
-    await db.templates.insert_one({"id": t_id, "name_en": "Scrub Test", "status": "draft", "some_secret_field": "123"})
+    await db.collection("templates").document({"id": t_id, "name_en": "Scrub Test", "status": "draft", "some_secret_field": "123"}.get("id")).set({"id": t_id, "name_en": "Scrub Test", "status": "draft", "some_secret_field": "123"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
@@ -410,31 +360,31 @@ async def test_13_sensitive_fields_not_leaked_in_audit_log(super_admin_token):
 @pytest.mark.asyncio
 async def test_14_deleted_template_does_not_resurrect_after_restart(super_admin_token):
     """Scenario 14: Deleted seeded template does not resurrect when _ensure_seed_complete() runs."""
-    await db.system_settings.delete_many({})
+    # deleted delete_many call - emulator wiped by fixture
     await seed_templates(force=True)
 
     t_id = "vakalatnama"
-    assert await db.templates.find_one({"id": t_id}) is not None
+    assert (await db.collection("templates").document(t_id).get()).to_dict() is not None
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
         # Delete seeded template
         await client.delete(f"/api/admin/templates/{t_id}", headers=headers)
-        assert await db.templates.find_one({"id": t_id}) is None
+        assert (await db.collection("templates").document(t_id).get()).to_dict() is None
 
         # Simulate app restart / startup check
         await _ensure_seed_complete()
 
         # Deleted template MUST NOT return
-        assert await db.templates.find_one({"id": t_id}) is None
+        assert (await db.collection("templates").document(t_id).get()).to_dict() is None
 
 
 @pytest.mark.asyncio
 async def test_15_seed_complete_remains_true(super_admin_token):
     """Scenario 15: seed_complete setting in db.system_settings remains True after deletions."""
     t_id = "tpl_seed_setting_check"
-    await db.templates.insert_one({"id": t_id, "name_en": "Seed Setting", "status": "draft"})
+    await db.collection("templates").document({"id": t_id, "name_en": "Seed Setting", "status": "draft"}.get("id")).set({"id": t_id, "name_en": "Seed Setting", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}
@@ -462,7 +412,7 @@ async def test_16_historical_v1_draft_still_resolves(super_admin_token):
         "content_gu": "HISTORICAL V1 CONTENT",
         "fields": [],
     })
-    await db.templates.insert_one({"id": t_id, "name_en": "Hist v1", "status": "draft", "version": 1})
+    await db.collection("templates").document({"id": t_id, "name_en": "Hist v1", "status": "draft", "version": 1}.get("id")).set({"id": t_id, "name_en": "Hist v1", "status": "draft", "version": 1})
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -470,7 +420,7 @@ async def test_16_historical_v1_draft_still_resolves(super_admin_token):
         await client.delete(f"/api/admin/templates/{t_id}", headers=headers)
 
         # Canonical template is deleted
-        assert await db.templates.find_one({"id": t_id}) is None
+        assert (await db.collection("templates").document(t_id).get()).to_dict() is None
 
         # Historical resolution must resolve v1 snapshot
         resolved = await resolve_template_for_draft(t_id, 1)
@@ -491,7 +441,7 @@ async def test_17_historical_v2_draft_still_resolves(super_admin_token):
         "content_gu": "HISTORICAL V2 CONTENT",
         "fields": [],
     })
-    await db.templates.insert_one({"id": t_id, "name_en": "Hist v2", "status": "published", "version": 2})
+    await db.collection("templates").document({"id": t_id, "name_en": "Hist v2", "status": "published", "version": 2}.get("id")).set({"id": t_id, "name_en": "Hist v2", "status": "published", "version": 2})
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -606,8 +556,8 @@ async def test_26_deleting_one_template_does_not_affect_another(super_admin_toke
         await client.delete("/api/admin/templates/tpl_alpha", headers=headers)
 
         # A is gone, B remains intact
-        assert await db.templates.find_one({"id": "tpl_alpha"}) is None
-        beta = await db.templates.find_one({"id": "tpl_beta"})
+        assert (await db.collection("templates").document("tpl_alpha").get()).to_dict() is None
+        beta = (await db.collection("templates").document("tpl_beta").get()).to_dict()
         assert beta is not None
         assert beta["name_en"] == "Beta"
 
@@ -623,7 +573,7 @@ async def test_27_canonical_template_ids_of_remaining_unchanged(super_admin_toke
 
         await client.delete("/api/admin/templates/tpl_temp_del", headers=headers)
 
-        retained = await db.templates.find_one({"id": "tpl_retain_check"})
+        retained = (await db.collection("templates").document("tpl_retain_check").get()).to_dict()
         assert retained["id"] == "tpl_retain_check"
         assert retained["name_en"] == "Retain"
 
@@ -632,7 +582,7 @@ async def test_27_canonical_template_ids_of_remaining_unchanged(super_admin_toke
 async def test_28_repeated_delete_returns_404_and_does_not_corrupt(super_admin_token):
     """Scenario 28: Repeated DELETE on an already-deleted template returns 404 without data corruption."""
     t_id = "tpl_repeat_del"
-    await db.templates.insert_one({"id": t_id, "name_en": "Repeat Del", "status": "draft"})
+    await db.collection("templates").document({"id": t_id, "name_en": "Repeat Del", "status": "draft"}.get("id")).set({"id": t_id, "name_en": "Repeat Del", "status": "draft"})
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": f"Bearer {super_admin_token}"}

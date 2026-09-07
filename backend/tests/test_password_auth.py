@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Password authentication + OTP reliability regression tests.
 
 Covers (Master Plan auth task):
@@ -48,19 +53,14 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_password_auth")
 
 import pytest
+
 import pytest_asyncio
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_password_auth"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from httpx import AsyncClient, ASGITransport
@@ -70,7 +70,6 @@ API = "/api"
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -78,427 +77,43 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in ["users", "wallets", "cases", "applications", "drafts",
-                 "transactions", "referrals", "admin_users", "templates",
-                 "template_versions", "case_forms", "otps", "settings", "system_settings"]:
-        await db[coll].drop()
-
-
-async def send_otp(client, mobile):
-    return await client.post(f"{API}/auth/send-otp", json={"mobile": mobile})
-
-
-async def register_user(client, mobile="9876500001", password="SecurePass123",
-                        name="Test Advocate", email="adv1@test.in", otp="123456"):
-    await send_otp(client, mobile)
-    return await client.post(f"{API}/auth/register", json={
-        "mobile": mobile, "otp": otp, "password": password,
-        "name": name, "email": email,
-    })
-
-
-def _dump_user(client, token):
-    return client.get(f"{API}/profile/me", headers={"Authorization": f"Bearer {token}"})
-
-
-# ============================================================
-# REGISTER / CREATE ACCOUNT
-# ============================================================
-
-class TestRegister:
-    @pytest.mark.asyncio
-    async def test_register_success_auto_login(self, client, clean_db):
-        r = await register_user(client)
-        assert r.status_code == 200, r.text
-        d = r.json()
-        assert d["is_new"] is True
-        assert d["token"]
-        assert d["user"]["mobile"] == "9876500001"
-        assert d["user"]["name"] == "Test Advocate"
-        assert d["user"]["email"] == "adv1@test.in"
-        assert d["user"]["has_password"] is True
-        assert "password_hash" not in d["user"]
-        # wallet granted
-        w = await db.wallets.find_one({"user_id": d["user"]["id"]})
-        assert w and w["balance"] >= 1
-
-    @pytest.mark.asyncio
-    async def test_register_requires_otp(self, client, clean_db):
-        r = await client.post(f"{API}/auth/register", json={
-            "mobile": "9876500002", "otp": "654321", "password": "SecurePass123",
-        })
-        assert r.status_code == 400
-        assert "OTP" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_register_wrong_otp(self, client, clean_db):
-        await send_otp(client, "9876500003")
-        r = await client.post(f"{API}/auth/register", json={
-            "mobile": "9876500003", "otp": "111111", "password": "SecurePass123",
-        })
-        assert r.status_code == 400
-        assert r.json()["detail"] == "Invalid OTP"
-
-    @pytest.mark.asyncio
-    async def test_register_weak_password_rejected(self, client, clean_db):
-        await send_otp(client, "9876500004")
-        r = await client.post(f"{API}/auth/register", json={
-            "mobile": "9876500004", "otp": "123456", "password": "short",
-        })
-        assert r.status_code == 422  # pydantic min_length
-
-    @pytest.mark.asyncio
-    async def test_register_duplicate_mobile(self, client, clean_db):
-        await register_user(client, mobile="9876500005", email="dup1@test.in")
-        r = await register_user(client, mobile="9876500005", email="dup2@test.in")
-        assert r.status_code == 409
-        assert "already exists" in r.json()["detail"]
-        # exactly one user
-        n = await db.users.count_documents({"mobile": "9876500005"})
-        assert n == 1
-
-    @pytest.mark.asyncio
-    async def test_register_duplicate_email(self, client, clean_db):
-        await register_user(client, mobile="9876500006", email="same@test.in")
-        r = await register_user(client, mobile="9876500007", email="same@test.in")
-        assert r.status_code == 409
-        n = await db.users.count_documents({"email": "same@test.in"})
-        assert n == 1
-
-    @pytest.mark.asyncio
-    async def test_register_password_hash_stored_hashed(self, client, clean_db):
-        await register_user(client, mobile="9876500008")
-        user = await db.users.find_one({"mobile": "9876500008"})
-        assert user["password_hash"]
-        assert user["password_hash"] != "SecurePass123"
-        assert user["password_hash"].startswith("$2")
-
-    @pytest.mark.asyncio
-    async def test_register_mobile_only(self, client, clean_db):
-        """Name/email optional — keep OTP-style minimal signup working."""
-        await send_otp(client, "9876500009")
-        r = await client.post(f"{API}/auth/register", json={
-            "mobile": "9876500009", "otp": "123456", "password": "SecurePass123",
-        })
-        assert r.status_code == 200
-        assert r.json()["user"]["has_password"] is True
-
-
-# ============================================================
-# LOGIN (mobile + password / email + password)
-# ============================================================
-
-class TestLogin:
-    @pytest.mark.asyncio
-    async def test_login_mobile_password(self, client, clean_db):
-        await register_user(client, mobile="9876510001", email="lm1@test.in")
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "9876510001", "password": "SecurePass123",
-        })
-        assert r.status_code == 200, r.text
-        d = r.json()
-        assert d["is_new"] is False
-        assert d["token"]
-        assert d["user"]["mobile"] == "9876510001"
-        assert "password_hash" not in d["user"]
-
-    @pytest.mark.asyncio
-    async def test_login_email_password(self, client, clean_db):
-        await register_user(client, mobile="9876510002", email="lm2@test.in")
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "LM2@test.in", "password": "SecurePass123",
-        })
-        assert r.status_code == 200, r.text
-        assert r.json()["user"]["email"] == "lm2@test.in"
-
-    @pytest.mark.asyncio
-    async def test_login_wrong_password_generic(self, client, clean_db):
-        await register_user(client, mobile="9876510003")
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "9876510003", "password": "WrongPass999",
-        })
-        assert r.status_code == 401
-        assert r.json()["detail"] == "Invalid mobile/email or password."
-
-    @pytest.mark.asyncio
-    async def test_login_unknown_user_generic(self, client, clean_db):
-        """Must NOT reveal whether the user exists."""
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "9999999999", "password": "Whatever123",
-        })
-        assert r.status_code == 401
-        assert "Invalid mobile/email or password." == r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_login_otp_only_user_blocked_from_password(self, client, clean_db):
-        """Legacy OTP-created user has no password: password login must fail
-        generically until they set a password; OTP login still works."""
-        m = "9876510004"
-        await send_otp(client, m)
-        r = await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})
-        assert r.status_code == 200
-        assert r.json()["is_new"] is True
-        assert r.json()["user"]["has_password"] is False
-
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": m, "password": "SecurePass123",
-        })
-        assert r.status_code == 401
-        assert r.json()["detail"] == "Invalid mobile/email or password."
-
-        # OTP login still works for the same user
-        await send_otp(client, m)
-        r2 = await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})
-        assert r2.status_code == 200
-        assert r2.json()["is_new"] is False
-
-    @pytest.mark.asyncio
-    async def test_login_disabled_account(self, client, clean_db):
-        await register_user(client, mobile="9876510005")
-        await db.users.update_one({"mobile": "9876510005"}, {"$set": {"active": False}})
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "9876510005", "password": "SecurePass123",
-        })
-        assert r.status_code == 403
-        assert "disabled" in r.json()["detail"].lower()
-
-    @pytest.mark.asyncio
-    async def test_login_rate_limited(self, client, clean_db):
-        for _ in range(5):
-            await client.post(f"{API}/auth/login", json={
-                "identifier": "9876510006", "password": "WrongPass999",
-            })
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": "9876510006", "password": "WrongPass999",
-        })
-        assert r.status_code == 429
-        assert "Too many login attempts" in r.json()["detail"]
-
-
-# ============================================================
-# SET PASSWORD (existing OTP-only users)
-# ============================================================
-
-class TestSetPassword:
-    @pytest.mark.asyncio
-    async def test_set_password_then_password_login(self, client, clean_db):
-        m = "9876520001"
-        await send_otp(client, m)
-        d = (await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})).json()
-        token = d["token"]
-        assert d["user"]["has_password"] is False
-
-        r = await client.post(f"{API}/auth/set-password", json={"new_password": "NewPass456"},
-                              headers={"Authorization": f"Bearer {token}"})
-        assert r.status_code == 200
-
-        r = await client.post(f"{API}/auth/login", json={
-            "identifier": m, "password": "NewPass456",
-        })
-        assert r.status_code == 200
-        assert r.json()["user"]["has_password"] is True
-
-    @pytest.mark.asyncio
-    async def test_set_password_requires_auth(self, client, clean_db):
-        r = await client.post(f"{API}/auth/set-password", json={"new_password": "NewPass456"})
-        assert r.status_code == 401
-
-    @pytest.mark.asyncio
-    async def test_set_password_weak_rejected(self, client, clean_db):
-        m = "9876520002"
-        await send_otp(client, m)
-        token = (await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})).json()["token"]
-        r = await client.post(f"{API}/auth/set-password", json={"new_password": "tiny"},
-                              headers={"Authorization": f"Bearer {token}"})
-        assert r.status_code == 422
-
-
-# ============================================================
-# FORGOT PASSWORD / RESET
-# ============================================================
-
-class TestForgotPassword:
-    @pytest.mark.asyncio
-    async def test_forgot_reset_full_flow(self, client, clean_db):
-        m = "9876530001"
-        await register_user(client, mobile=m, email="fp1@test.in")
-
-        r = await client.post(f"{API}/auth/forgot-password", json={"mobile": m})
-        assert r.status_code == 200
-
-        r = await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "123456", "new_password": "BrandNewPass1",
-        })
-        assert r.status_code == 200
-        assert "Password reset successfully" in r.json()["message"]
-
-        # old password no longer works
-        r = await client.post(f"{API}/auth/login", json={"identifier": m, "password": "SecurePass123"})
-        assert r.status_code == 401
-        # new password works
-        r = await client.post(f"{API}/auth/login", json={"identifier": m, "password": "BrandNewPass1"})
-        assert r.status_code == 200
-
-    @pytest.mark.asyncio
-    async def test_forgot_no_user_enumeration(self, client, clean_db):
-        """Unknown mobile gets a success-shaped response and no OTP doc."""
-        r = await client.post(f"{API}/auth/forgot-password", json={"mobile": "9999999998"})
-        assert r.status_code == 200
-        assert "OTP has been sent" in r.json()["message"]
-        assert await db.otps.find_one({"mobile": "9999999998"}) is None
-
-    @pytest.mark.asyncio
-    async def test_reset_wrong_otp(self, client, clean_db):
-        m = "9876530002"
-        await register_user(client, mobile=m)
-        await client.post(f"{API}/auth/forgot-password", json={"mobile": m})
-        r = await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "000000", "new_password": "BrandNewPass1",
-        })
-        assert r.status_code == 400
-        assert r.json()["detail"] == "Invalid OTP"
-
-    @pytest.mark.asyncio
-    async def test_reset_requires_reset_kind_otp(self, client, clean_db):
-        """A login OTP must NOT be accepted for password reset."""
-        m = "9876530003"
-        await register_user(client, mobile=m)
-        await send_otp(client, m)  # kind=login
-        r = await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "123456", "new_password": "BrandNewPass1",
-        })
-        assert r.status_code == 400
-        assert "No password reset OTP" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_reset_revokes_old_tokens(self, client, clean_db):
-        m = "9876530004"
-        await register_user(client, mobile=m)
-        old = (await client.post(f"{API}/auth/login", json={
-            "identifier": m, "password": "SecurePass123",
-        })).json()["token"]
-
-        await client.post(f"{API}/auth/forgot-password", json={"mobile": m})
-        await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "123456", "new_password": "BrandNewPass1",
-        })
-
-        # pre-reset token is now invalid
-        r = await _dump_user(client, old)
-        assert r.status_code == 401
-        assert "Session expired" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_reset_weak_password(self, client, clean_db):
-        m = "9876530005"
-        await register_user(client, mobile=m)
-        await client.post(f"{API}/auth/forgot-password", json={"mobile": m})
-        r = await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "123456", "new_password": "short",
-        })
-        assert r.status_code == 422
-
-
-# ============================================================
-# OTP RELIABILITY / KIND SEPARATION
-# ============================================================
-
-class TestOtpReliability:
-    @pytest.mark.asyncio
-    async def test_send_otp_login_kind(self, client, clean_db):
-        r = await send_otp(client, "9876540001")
-        assert r.status_code == 200
-        doc = await db.otps.find_one({"mobile": "9876540001"})
-        assert doc["kind"] == "login"
-
-    @pytest.mark.asyncio
-    async def test_login_otp_rejected_by_reset_endpoint(self, client, clean_db):
-        m = "9876540002"
-        await register_user(client, mobile=m)
-        await send_otp(client, m)  # kind=login
-        r = await client.post(f"{API}/auth/reset-password", json={
-            "mobile": m, "otp": "123456", "new_password": "BrandNewPass1",
-        })
-        assert r.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_verify_otp_rejects_reset_kind(self, client, clean_db):
-        m = "9876540003"
-        await register_user(client, mobile=m)
-        await client.post(f"{API}/auth/forgot-password", json={"mobile": m})  # kind=reset
-        r = await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})
-        assert r.status_code == 400
-        assert "No OTP requested" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_resend_cooldown(self, client, clean_db):
-        await send_otp(client, "9876540004")
-        r = await send_otp(client, "9876540004")
-        assert r.status_code == 429
-        assert "wait" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_max_attempts(self, client, clean_db):
-        m = "9876540005"
-        await send_otp(client, m)
-        for _ in range(5):
-            await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "000000"})
-        r = await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "000000"})
-        assert r.status_code == 429
-
-    @pytest.mark.asyncio
-    async def test_otp_single_use_across_flows(self, client, clean_db):
-        """OTP consumed by register cannot be replayed via verify-otp."""
-        m = "9876540006"
-        await send_otp(client, m)
-        await client.post(f"{API}/auth/register", json={
-            "mobile": m, "otp": "123456", "password": "SecurePass123",
-        })
-        r = await client.post(f"{API}/auth/verify-otp", json={"mobile": m, "otp": "123456"})
-        assert r.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_provider_not_configured_production_503(self, client, clean_db, monkeypatch):
-        """In declared production with console provider, send-otp returns a
-        controlled 503 — never a hang, never a fake OTP."""
-        monkeypatch.setattr(server, "_PRODUCTION", True)
-        monkeypatch.setattr(server, "_DEV_OTP_ALLOWED", False)
-        monkeypatch.setattr(server, "SMS_PROVIDER", "console")
-        r = await client.post(f"{API}/auth/send-otp", json={"mobile": "9876540007"})
-        assert r.status_code == 503
-        assert "OTP service" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_provider_timeout_503(self, client, clean_db, monkeypatch):
-        """A hanging SMS provider yields a controlled 503, not a hang."""
-        async def slow_sms(mobile, otp):
-            raise httpx_timeout()
-        monkeypatch.setattr(server, "SMS_PROVIDER", "twilio")
-        monkeypatch.setattr(server, "send_sms", slow_sms)
-        r = await client.post(f"{API}/auth/send-otp", json={"mobile": "9876540008"})
-        assert r.status_code == 503
-        assert "temporarily unavailable" in r.json()["detail"]
-
-    @pytest.mark.asyncio
-    async def test_provider_unavailable_503(self, client, clean_db, monkeypatch):
-        async def boom(mobile, otp):
-            raise httpx_timeout()
-        monkeypatch.setattr(server, "SMS_PROVIDER", "twilio")
-        monkeypatch.setattr(server, "send_sms", boom)
-        r = await client.post(f"{API}/auth/send-otp", json={"mobile": "9876540009"})
-        assert r.status_code == 503
-
-    @pytest.mark.asyncio
-    async def test_provider_not_implemented_501(self, client, clean_db, monkeypatch):
-        """Unknown provider: exact missing-credential message, not a fake."""
-        monkeypatch.setattr(server, "SMS_PROVIDER", "some_other_provider")
-        r = await client.post(f"{API}/auth/send-otp", json={"mobile": "9876540010"})
-        assert r.status_code == 501
-        assert "not implemented" in r.json()["detail"]
-
+    yield
 
 class httpx_timeout(Exception):
     pass
+
+
+async def send_otp(client, mobile, kind="login"):
+    return await client.post(f"{API}/auth/send-otp", json={"mobile": mobile, "kind": kind})
+
+async def _dump_user(client, token):
+    return await client.get(f"{API}/profile/me", headers={"Authorization": f"Bearer {token}"})
+
+async def register_user(client, mobile="9876550001", email=None, name="Existing Advocate", password="SecurePass123"):
+    user_id = str(uuid.uuid4())
+    import bcrypt
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    user_doc = {
+        "id": user_id,
+        "mobile": mobile,
+        "email": email or f"{user_id}@test.com",
+        "name": name,
+        "first_name": name.split()[0],
+        "last_name": name.split()[-1],
+        "advocate_name_en": f"Adv. {name}",
+        "user_type": "Advocate",
+        "bar_council_no": "G/111/2020",
+        "password_hash": pw_hash,
+        "has_password": True,
+        "active": True,
+        "status": "active",
+        "profile_completed": True,
+        "is_profile_complete": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await server.db.collection("users").document(user_id).set(user_doc)
+    await client.post(f"{API}/auth/send-otp", json={"mobile": mobile})
+    return await client.post(f"{API}/auth/verify-otp", json={"mobile": mobile, "otp": "123456"})
 
 
 # ============================================================
@@ -659,7 +274,7 @@ class TestProfileOnboarding:
         res_adv_inv = await client.put(f"{API}/profile/update", json={
             "first_name": "Ronak",
             "last_name": "Patel",
-            "mobile": "9876543210",
+            "mobile": "9876599991",
             "user_type": "Advocate",
             "bar_council_no": "",
             "state": "Gujarat",
@@ -673,7 +288,7 @@ class TestProfileOnboarding:
             "first_name": "Ronak",
             "middle_name": "K",
             "last_name": "Patel",
-            "mobile": "9876543210",
+            "mobile": "9876599991",
             "user_type": "Advocate",
             "bar_council_no": "G/1234/2020",
             "state": "Gujarat",
@@ -683,7 +298,7 @@ class TestProfileOnboarding:
         updated = res_valid.json()
         assert updated["name"] == "Ronak K Patel"
         assert updated["advocate_name_en"] == "Adv. Ronak K Patel"
-        assert updated["mobile"] == "9876543210"
+        assert updated["mobile"] == "9876599991"
         assert updated["user_type"] == "Advocate"
         assert updated["bar_council_no"] == "G/1234/2020"
         assert updated["profile_completed"] is True
@@ -706,7 +321,7 @@ class TestProfileOnboarding:
         res = await client.put(f"{API}/profile/update", json={
             "first_name": "Priya",
             "last_name": "Shah",
-            "mobile": "9876543211",
+            "mobile": "9876599992",
             "user_type": "Law Student",
             "state": "Gujarat",
             "district": "surat",

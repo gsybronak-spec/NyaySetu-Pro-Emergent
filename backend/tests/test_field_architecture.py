@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Comprehensive automated test suite for NyaySetu Pro Application Field Architecture,
 Single-Application / No-Case Workflow, and Language-Aware Drafting.
 """
@@ -6,6 +11,7 @@ import os
 import sys
 import base64
 import pytest
+
 from datetime import datetime
 
 # Add backend directory to sys.path
@@ -13,7 +19,7 @@ backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
-from seed_data_templates_v2 import TEMPLATES_V2
+from test_seed_data_templates_v2 import TEMPLATES_V2
 from server import (
     ROLE_MAP,
     _ROLE_CANONICAL_LOOKUP,

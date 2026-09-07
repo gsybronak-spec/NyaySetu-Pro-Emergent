@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for Phase 2: Backend Admin API Expansion.
 
 Covers all 33 required scenarios across:
@@ -20,21 +25,16 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_phase2_admin")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_phase2_admin"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -47,29 +47,27 @@ from server import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    server.db = db
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "audit_logs", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans", "districts", "talukas", "courts",
-        "case_types", "police_stations", "laws", "settings"
-    ]:
-        await db[coll_name].drop()
+    from conftest import _global_firestore_proxy
+    client = _global_firestore_proxy._get_client()
+    target_colls = [
+        "users", "wallets", "cases", "drafts", "applications",
+        "transactions", "audit_logs", "admin_audit_logs",
+        "templates", "template_revisions", "template_versions",
+    ]
+    async def _wipe():
+        for coll in target_colls:
+            docs = [d async for d in client.collection(coll).stream()]
+            if docs:
+                batch = client.batch()
+                for d in docs:
+                    batch.delete(d.reference)
+                await batch.commit()
+    await _wipe()
     yield
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "audit_logs", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans", "districts", "talukas", "courts",
-        "case_types", "police_stations", "laws", "settings"
-    ]:
-        await db[coll_name].drop()
-
+    await _wipe()
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -255,8 +253,8 @@ async def test_06_users_detail_view(client, super_admin_auth):
         "total_used": 12,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
-    await db.cases.insert_one({"id": "case_1", "user_id": user_id, "nickname": "Test Case"})
-    await db.applications.insert_one({"id": "app_1", "user_id": user_id, "template_id": "vakalatnama"})
+    await db.collection("cases").document({"id": "case_1", "user_id": user_id, "nickname": "Test Case"}.get("id")).set({"id": "case_1", "user_id": user_id, "nickname": "Test Case"})
+    await db.collection("applications").document({"id": "app_1", "user_id": user_id, "template_id": "vakalatnama"}.get("id")).set({"id": "app_1", "user_id": user_id, "template_id": "vakalatnama"})
 
     res = await client.get(f"/api/admin/users/{user_id}", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res.status_code == 200
@@ -287,21 +285,21 @@ async def test_07_users_suspend_activate_ban_and_bulk_status(client, super_admin
     res1 = await client.post(f"/api/admin/users/{u1}/suspend", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res1.status_code == 200
     assert res1.json()["status"] == "suspended"
-    db_u1 = await db.users.find_one({"id": u1})
+    db_u1 = (await db.collection("users").document(u1).get()).to_dict()
     assert db_u1["active"] is False
 
     # Activate u1
     res2 = await client.post(f"/api/admin/users/{u1}/activate", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res2.status_code == 200
     assert res2.json()["status"] == "active"
-    db_u1 = await db.users.find_one({"id": u1})
+    db_u1 = (await db.collection("users").document(u1).get()).to_dict()
     assert db_u1["active"] is True
 
     # Ban u1
     res3 = await client.post(f"/api/admin/users/{u1}/ban", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res3.status_code == 200
     assert res3.json()["status"] == "banned"
-    db_u1 = await db.users.find_one({"id": u1})
+    db_u1 = (await db.collection("users").document(u1).get()).to_dict()
     assert db_u1["active"] is False
 
     # Bulk suspend
@@ -339,7 +337,7 @@ async def test_08_users_profile_update_and_audit_logging(client, super_admin_aut
     assert res.json()["user"]["name"] == "New Valid Name"
     assert "password_hash" not in res.json()["user"]
 
-    db_u = await db.users.find_one({"id": user_id})
+    db_u = (await db.collection("users").document(user_id).get()).to_dict()
     assert db_u["name"] == "New Valid Name"
     assert db_u["password_hash"] == "secret_hashed_password_never_expose"
 
@@ -359,7 +357,7 @@ async def test_08_users_profile_update_and_audit_logging(client, super_admin_aut
 async def test_09_wallet_view_endpoint(client, super_admin_auth):
     """Scenario 9: Admin can view user wallet with earned, consumed, and recent transactions."""
     user_id = "u_wallet_view"
-    await db.users.insert_one({"id": user_id, "name": "Wallet User", "active": True})
+    await db.collection("users").document({"id": user_id, "name": "Wallet User", "active": True}.get("id")).set({"id": user_id, "name": "Wallet User", "active": True})
     await db.wallets.insert_one({
         "user_id": user_id,
         "balance": 20,
@@ -388,8 +386,8 @@ async def test_09_wallet_view_endpoint(client, super_admin_auth):
 async def test_10_positive_credit_adjustment(client, super_admin_auth):
     """Scenario 10: Positive credit adjustment credits wallet atomically and records transaction."""
     user_id = "u_adj_pos"
-    await db.users.insert_one({"id": user_id, "name": "Credit User", "active": True})
-    await db.wallets.insert_one({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0})
+    await db.collection("users").document({"id": user_id, "name": "Credit User", "active": True}.get("id")).set({"id": user_id, "name": "Credit User", "active": True})
+    await db.collection("wallets").document({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0}.get("id")).set({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0})
 
     res = await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": 25,
@@ -410,8 +408,8 @@ async def test_10_positive_credit_adjustment(client, super_admin_auth):
 async def test_11_debit_credit_adjustment(client, super_admin_auth):
     """Scenario 11: Debit credit adjustment decreases balance atomically."""
     user_id = "u_adj_deb"
-    await db.users.insert_one({"id": user_id, "name": "Debit User", "active": True})
-    await db.wallets.insert_one({"user_id": user_id, "balance": 30, "free_credits_granted": 5, "total_used": 0})
+    await db.collection("users").document({"id": user_id, "name": "Debit User", "active": True}.get("id")).set({"id": user_id, "name": "Debit User", "active": True})
+    await db.collection("wallets").document({"user_id": user_id, "balance": 30, "free_credits_granted": 5, "total_used": 0}.get("id")).set({"user_id": user_id, "balance": 30, "free_credits_granted": 5, "total_used": 0})
 
     res = await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": -10,
@@ -429,7 +427,7 @@ async def test_11_debit_credit_adjustment(client, super_admin_auth):
 async def test_12_wallet_adjustment_requires_reason(client, super_admin_auth):
     """Scenario 12: Adjustment without mandatory reason is rejected with 400."""
     user_id = "u_adj_no_reason"
-    await db.users.insert_one({"id": user_id, "name": "User", "active": True})
+    await db.collection("users").document({"id": user_id, "name": "User", "active": True}.get("id")).set({"id": user_id, "name": "User", "active": True})
 
     res = await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": 10,
@@ -443,8 +441,8 @@ async def test_12_wallet_adjustment_requires_reason(client, super_admin_auth):
 async def test_13_wallet_negative_balance_prevention(client, super_admin_auth):
     """Scenario 13: Debit that would make balance negative is rejected with 400."""
     user_id = "u_adj_neg_test"
-    await db.users.insert_one({"id": user_id, "name": "Low Balance User", "active": True})
-    await db.wallets.insert_one({"user_id": user_id, "balance": 5, "free_credits_granted": 5, "total_used": 0})
+    await db.collection("users").document({"id": user_id, "name": "Low Balance User", "active": True}.get("id")).set({"id": user_id, "name": "Low Balance User", "active": True})
+    await db.collection("wallets").document({"user_id": user_id, "balance": 5, "free_credits_granted": 5, "total_used": 0}.get("id")).set({"user_id": user_id, "balance": 5, "free_credits_granted": 5, "total_used": 0})
 
     res = await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": -10,
@@ -461,8 +459,8 @@ async def test_13_wallet_negative_balance_prevention(client, super_admin_auth):
 async def test_14_wallet_adjustment_creates_transaction_record(client, super_admin_auth):
     """Scenario 14: Adjustment creates transaction with type=admin_adjustment, balance_before/after, reason, admin_id."""
     user_id = "u_txn_verify"
-    await db.users.insert_one({"id": user_id, "name": "Txn User", "active": True})
-    await db.wallets.insert_one({"user_id": user_id, "balance": 15, "free_credits_granted": 5, "total_used": 0})
+    await db.collection("users").document({"id": user_id, "name": "Txn User", "active": True}.get("id")).set({"id": user_id, "name": "Txn User", "active": True})
+    await db.collection("wallets").document({"user_id": user_id, "balance": 15, "free_credits_granted": 5, "total_used": 0}.get("id")).set({"user_id": user_id, "balance": 15, "free_credits_granted": 5, "total_used": 0})
 
     res = await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": 5,
@@ -472,7 +470,7 @@ async def test_14_wallet_adjustment_creates_transaction_record(client, super_adm
     assert res.status_code == 200
     txn_id = res.json()["transaction_id"]
 
-    txn = await db.transactions.find_one({"id": txn_id})
+    txn = (await db.collection("transactions").document(txn_id).get()).to_dict()
     assert txn is not None
     assert txn["type"] == "admin_adjustment"
     assert txn["credits"] == 5
@@ -487,8 +485,8 @@ async def test_14_wallet_adjustment_creates_transaction_record(client, super_adm
 async def test_15_wallet_adjustment_creates_audit_log(client, super_admin_auth):
     """Scenario 15: Wallet adjustment produces an audit log record with old and new values."""
     user_id = "u_wallet_audit"
-    await db.users.insert_one({"id": user_id, "name": "Audit User", "active": True})
-    await db.wallets.insert_one({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0})
+    await db.collection("users").document({"id": user_id, "name": "Audit User", "active": True}.get("id")).set({"id": user_id, "name": "Audit User", "active": True})
+    await db.collection("wallets").document({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0}.get("id")).set({"user_id": user_id, "balance": 10, "free_credits_granted": 5, "total_used": 0})
 
     await client.post(f"/api/admin/users/{user_id}/wallet/adjust", json={
         "amount": 10,
@@ -511,7 +509,7 @@ async def test_15_wallet_adjustment_creates_audit_log(client, super_admin_auth):
 async def test_16_audit_log_created_across_mutations(client, super_admin_auth):
     """Scenario 16: Administrative actions across users, wallets, and plans all create audit entries."""
     user_id = "u_multi_audit"
-    await db.users.insert_one({"id": user_id, "name": "Test Multi", "active": True})
+    await db.collection("users").document({"id": user_id, "name": "Test Multi", "active": True}.get("id")).set({"id": user_id, "name": "Test Multi", "active": True})
 
     # User suspend
     await client.post(f"/api/admin/users/{user_id}/suspend", headers={"Authorization": super_admin_auth["Authorization"]})
@@ -520,7 +518,7 @@ async def test_16_audit_log_created_across_mutations(client, super_admin_auth):
     # Plan create
     await client.post("/api/admin/plans", json={"name": "Special Plan", "price": 499, "credits": 50}, headers={"Authorization": super_admin_auth["Authorization"]})
 
-    count = await db.audit_logs.count_documents({})
+    count = len(await db.collection("audit_logs").get())
     assert count >= 3
 
 
@@ -563,7 +561,7 @@ async def test_17_audit_log_filtering_and_pagination(client, super_admin_auth):
 async def test_18_applications_admin_listing(client, super_admin_auth):
     """Scenario 18: GET /api/admin/applications returns paginated, enriched document list."""
     user_id = "usr_app_list"
-    await db.users.insert_one({"id": user_id, "name": "App Lawyer", "email": "app@nyaysetu.in", "active": True})
+    await db.collection("users").document({"id": user_id, "name": "App Lawyer", "email": "app@nyaysetu.in", "active": True}.get("id")).set({"id": user_id, "name": "App Lawyer", "email": "app@nyaysetu.in", "active": True})
     await db.applications.insert_one({
         "id": "app_doc_1",
         "user_id": user_id,
@@ -588,8 +586,8 @@ async def test_19_applications_admin_detail(client, super_admin_auth):
     """Scenario 19: GET /api/admin/applications/{id} exposes engine, font, sha256, user, and case details."""
     app_id = "app_detail_full"
     user_id = "usr_app_full"
-    await db.users.insert_one({"id": user_id, "name": "Full User", "active": True})
-    await db.cases.insert_one({"id": "case_full_1", "user_id": user_id, "nickname": "Special Civil Suit"})
+    await db.collection("users").document({"id": user_id, "name": "Full User", "active": True}.get("id")).set({"id": user_id, "name": "Full User", "active": True})
+    await db.collection("cases").document({"id": "case_full_1", "user_id": user_id, "nickname": "Special Civil Suit"}.get("id")).set({"id": "case_full_1", "user_id": user_id, "nickname": "Special Civil Suit"})
     await db.applications.insert_one({
         "id": app_id,
         "user_id": user_id,
@@ -625,7 +623,7 @@ async def test_19_applications_admin_detail(client, super_admin_auth):
 async def test_20_cases_admin_list_and_filters(client, super_admin_auth):
     """Scenario 20: GET /api/admin/cases supports filters, search, and pagination."""
     user_id = "usr_case_owner"
-    await db.users.insert_one({"id": user_id, "name": "Case Owner", "active": True})
+    await db.collection("users").document({"id": user_id, "name": "Case Owner", "active": True}.get("id")).set({"id": user_id, "name": "Case Owner", "active": True})
     await db.cases.insert_one({
         "id": "case_cma_101",
         "user_id": user_id,
@@ -648,10 +646,10 @@ async def test_21_cases_admin_detail_and_archive_restore(client, super_admin_aut
     """Scenario 21: GET /api/admin/cases/{id} resolves owner, drafts, applications; archive/restore works."""
     case_id = "case_lifecycle_1"
     user_id = "usr_lifecycle"
-    await db.users.insert_one({"id": user_id, "name": "Lifecycle Owner", "active": True})
-    await db.cases.insert_one({"id": case_id, "user_id": user_id, "nickname": "Lifecycle Case", "status": "active"})
-    await db.drafts.insert_one({"id": "drf_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"})
-    await db.applications.insert_one({"id": "app_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"})
+    await db.collection("users").document({"id": user_id, "name": "Lifecycle Owner", "active": True}.get("id")).set({"id": user_id, "name": "Lifecycle Owner", "active": True})
+    await db.collection("cases").document({"id": case_id, "user_id": user_id, "nickname": "Lifecycle Case", "status": "active"}.get("id")).set({"id": case_id, "user_id": user_id, "nickname": "Lifecycle Case", "status": "active"})
+    await db.collection("drafts").document({"id": "drf_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"}.get("id")).set({"id": "drf_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"})
+    await db.collection("applications").document({"id": "app_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"}.get("id")).set({"id": "app_1", "case_id": case_id, "user_id": user_id, "template_id": "vakalatnama"})
 
     res_detail = await client.get(f"/api/admin/cases/{case_id}", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res_detail.status_code == 200
@@ -661,13 +659,13 @@ async def test_21_cases_admin_detail_and_archive_restore(client, super_admin_aut
     # Archive
     res_arch = await client.post(f"/api/admin/cases/{case_id}/archive", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res_arch.status_code == 200
-    db_c = await db.cases.find_one({"id": case_id})
+    db_c = (await db.collection("cases").document(case_id).get()).to_dict()
     assert db_c["status"] == "archived"
 
     # Restore
     res_rest = await client.post(f"/api/admin/cases/{case_id}/restore", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res_rest.status_code == 200
-    db_c = await db.cases.find_one({"id": case_id})
+    db_c = (await db.collection("cases").document(case_id).get()).to_dict()
     assert db_c["status"] == "active"
 
 
@@ -793,9 +791,9 @@ async def test_26_templates_list_with_revision_count(client, super_admin_auth):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
-    await db.template_revisions.insert_one({"template_id": t_id, "version": 1, "name_en": "V1"})
-    await db.template_revisions.insert_one({"template_id": t_id, "version": 2, "name_en": "V2"})
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("template_revisions").document({"template_id": t_id, "version": 1, "name_en": "V1"}.get("id")).set({"template_id": t_id, "version": 1, "name_en": "V1"})
+    await db.collection("template_revisions").document({"template_id": t_id, "version": 2, "name_en": "V2"}.get("id")).set({"template_id": t_id, "version": 2, "name_en": "V2"})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     res = await client.get("/api/admin/templates?page=1&category=Criminal", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res.status_code == 200
@@ -842,7 +840,7 @@ async def test_28_linear_versioning_publish(client, super_admin_auth):
         "locked": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     res = await client.post(f"/api/admin/templates/{t_id}/publish", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res.status_code == 200
@@ -865,18 +863,18 @@ async def test_29_template_archive_and_restore(client, super_admin_auth):
         "status": "published",
         "version": 1,
     })
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     # Archive
     res_arch = await client.post(f"/api/admin/templates/{t_id}/archive", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res_arch.status_code == 200
-    db_t = await db.templates.find_one({"id": t_id})
+    db_t = (await db.collection("templates").document(t_id).get()).to_dict()
     assert db_t["status"] == "archived"
 
     # Restore
     res_rest = await client.post(f"/api/admin/templates/{t_id}/restore", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res_rest.status_code == 200
-    db_t = await db.templates.find_one({"id": t_id})
+    db_t = (await db.collection("templates").document(t_id).get()).to_dict()
     assert db_t["status"] == "published"
 
 
@@ -898,13 +896,13 @@ async def test_30_permanent_delete_preserves_revisions(client, super_admin_auth)
         "title": "Snapshot of Obsolete Custom Template",
         "content_en": "Historical content {{today}}",
     })
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     res = await client.delete(f"/api/admin/templates/{t_id}", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res.status_code == 200
 
     # Removed from db.templates
-    db_t = await db.templates.find_one({"id": t_id})
+    db_t = (await db.collection("templates").document(t_id).get()).to_dict()
     assert db_t is None
 
     # CRITICAL: Preserved in db.template_revisions
@@ -955,7 +953,7 @@ async def test_32_duplicate_as_new_creates_standalone_template(client, super_adm
         "status": "published",
         "version": 1,
     })
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     res = await client.post(f"/api/admin/templates/{t_id}/duplicate", json={
         "as_new_template": True,
@@ -985,7 +983,7 @@ async def test_33_stable_id_editing_no_copy_timestamp_ids(client, super_admin_au
         "version": 1,
         "locked": False,
     })
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
+    await db.collection("system_settings").document({"key": "seed_complete", "value": True}.get("id")).set({"key": "seed_complete", "value": True})
 
     res = await client.put(f"/api/admin/templates/{t_id}", json={
         "content_en": "Updated draft content in-place without new ID",

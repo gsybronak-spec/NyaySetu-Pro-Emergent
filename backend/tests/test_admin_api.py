@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro Admin Portal API — Phase 1.
 
 Covers:
@@ -10,7 +15,6 @@ Covers:
 - password_hash never exposed in API responses
 - Security isolation between admin and lawyer JWTs
 
-Uses mongomock_motor (same pattern as existing test suite).
 """
 
 import os
@@ -21,21 +25,16 @@ from pathlib import Path
 
 # Ensure the backend package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_admin")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone, timedelta
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_admin"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, JWT_SECRET
@@ -48,7 +47,6 @@ from httpx import AsyncClient, ASGITransport
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -56,19 +54,10 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    """Drop all test collections before/after the test."""
-    for coll_name in ["admin_users", "users", "wallets", "cases",
-                      "applications", "transactions", "referrals", "drafts", "system_settings"]:
-        await db[coll_name].drop()
+    docs = [d async for d in server.db.collection("admin_users").where(filter=server.firestore.FieldFilter("email", "==", "admin@test.com")).stream()]
+    for d in docs:
+        await d.reference.delete()
     yield
-    for coll_name in ["admin_users", "users", "wallets", "cases",
-                      "applications", "transactions", "referrals", "drafts", "system_settings"]:
-        await db[coll_name].drop()
-
-
-# ============================================================
-# Helpers
-# ============================================================
 
 async def create_test_admin(
     email="admin@test.com",
@@ -79,7 +68,7 @@ async def create_test_admin(
 ):
     """Helper: create an admin user directly in the DB."""
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-    admin_id = str(uuid.uuid4())
+    admin_id = f"test_admin_{email.replace('@', '_').replace('.', '_')}"
     admin_doc = {
         "id": admin_id,
         "email": email,
@@ -91,7 +80,7 @@ async def create_test_admin(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin_doc.copy())
+    await db.collection("admin_users").document(admin_doc.copy().get("id")).set(admin_doc.copy())
     return admin_doc
 
 
@@ -115,7 +104,7 @@ async def create_test_lawyer(mobile="9999900001"):
         "favourite_courts": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id,
         "balance": 5,
@@ -253,7 +242,7 @@ class TestAdminAuthMe:
         admin = await create_test_admin(active=True)
         token = make_admin_token(admin["id"], admin["email"], admin["role"])
         # Deactivate the admin
-        await db.admin_users.update_one({"id": admin["id"]}, {"$set": {"active": False}})
+        await db.collection("admin_users").document(admin["id"]).set({"active": False}, merge=True)
         r = await client.get("/api/admin/auth/me", headers=auth(token))
         assert r.status_code == 401
 

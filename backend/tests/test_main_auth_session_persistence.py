@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Comprehensive tests for Main Lawyer App Persistent Sessions and Silent Renewal.
 
 Validates the complete dual-token lifecycle:
@@ -28,22 +33,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 # Environment configuration
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("JWT_SECRET", "test-secret-key-1234567890-must-be-long")
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_main_persistence")
 os.environ.setdefault("DEV_OTP_ALLOWED", "true")
 
 import pytest
+
 import pytest_asyncio
 import jwt
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_main_persistence"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -61,13 +61,7 @@ pytestmark = pytest.mark.asyncio
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    server.db = db
-    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs", "system_settings"]:
-        await db[coll_name].drop()
     yield
-    for coll_name in ["users", "user_sessions", "otps", "admin_users", "admin_sessions", "audit_logs", "system_settings"]:
-        await db[coll_name].drop()
-
 
 @pytest_asyncio.fixture
 async def client():
@@ -100,7 +94,7 @@ async def create_test_user(mobile=None, email=None, password="Password@123", act
         "token_version": 0,
         "created_at": now().isoformat(),
     }
-    await db.users.insert_one(user_doc)
+    await db.collection("users").document(user_doc.get("id")).set(user_doc)
     return user_doc
 
 

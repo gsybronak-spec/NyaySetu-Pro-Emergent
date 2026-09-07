@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Tests for NyaySetu Pro Admin Modules — User Management + Audit Logs (Master Plan Phases 36 & 41).
 
 Covers:
@@ -11,7 +16,6 @@ Covers:
 - Audit-logs endpoint requires auth, returns newest-first entries, supports action filter
 - Audit log insert failure never breaks the primary action
 
-Uses mongomock_motor (same pattern as existing test suite).
 """
 
 import os
@@ -21,21 +25,16 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_admin_modules")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone, timedelta
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_admin_modules"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, now
@@ -48,20 +47,25 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
+    async def _wipe():
+        for coll in ["users", "wallets", "audit_logs", "admin_audit_logs"]:
+            docs = [d async for d in client.collection(coll).stream()]
+            if docs:
+                batch = client.batch()
+                for d in docs:
+                    batch.delete(d.reference)
+                await batch.commit()
+    await _wipe()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
+    await _wipe()
 
 async def create_admin(role="super_admin", email=None):
     admin_id = str(uuid.uuid4())
@@ -77,7 +81,7 @@ async def create_admin(role="super_admin", email=None):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -94,7 +98,7 @@ async def create_lawyer(mobile, name="Test Lawyer", active=None):
     }
     if active is not None:
         user["active"] = active
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id,
         "balance": 5,
@@ -106,17 +110,14 @@ async def create_lawyer(mobile, name="Test Lawyer", active=None):
 
 
 async def seed_otp(mobile, otp="123456"):
-    await db.otps.update_one(
-        {"mobile": mobile},
-        {"$set": {
-            "mobile": mobile,
-            "otp": otp,
-            "expires_at": (now() + timedelta(seconds=300)).isoformat(),
-            "attempts": 0,
-            "last_sent_at": now().isoformat(),
-        }},
-        upsert=True,
-    )
+    await server.db.collection("otps").document(mobile).set({
+        "mobile": mobile,
+        "otp": otp,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+        "verified": False,
+        "attempts": 0,
+        "kind": "login"
+    }, merge=True)
 
 
 # ============================================================
@@ -174,9 +175,9 @@ async def test_list_users_and_search(client, clean_db):
 
 async def test_user_detail_with_wallet_and_counts(client, clean_db):
     user = await create_lawyer("9876500001")
-    await db.cases.insert_one({"id": str(uuid.uuid4()), "user_id": user["id"],
+    await db.collection("cases").document("case1").set({"id": "case1", "user_id": user["id"],
                                "status": "active", "created_at": now().isoformat()})
-    await db.applications.insert_one({"id": str(uuid.uuid4()), "user_id": user["id"],
+    await db.collection("applications").document("app1").set({"id": "app1", "user_id": user["id"],
                                       "template_id": "x", "template_name": "X",
                                       "created_at": now().isoformat()})
     _, token = await create_admin()
@@ -266,7 +267,7 @@ async def test_disabled_google_user_blocked(client, clean_db, monkeypatch):
         "active": False,
         "created_at": now().isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 5, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
 
@@ -371,3 +372,5 @@ async def test_audit_records_template_publish_and_case_form_save(client, clean_d
     assert "template_publish" in actions
     assert "case_form_save" in actions
     assert r.json()["total"] >= 3
+    await server.db.collection("templates").document("audit_test_tpl").delete()
+    await server.db.collection("case_forms").document("audit_case_type").delete()

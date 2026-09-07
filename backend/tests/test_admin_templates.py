@@ -1,3 +1,5 @@
+import server
+db = server.db
 """Tests for NyaySetu Pro Admin Template Management — Phase 2A.
 
 Covers:
@@ -23,7 +25,6 @@ Covers:
 - Admin JWT can access admin template APIs
 - Full backward compatibility
 
-Uses mongomock_motor (same pattern as existing test suite).
 """
 
 import os
@@ -34,21 +35,16 @@ from pathlib import Path
 
 # Ensure the backend package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_templates")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_templates"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, JWT_SECRET, TEMPLATES
@@ -61,7 +57,6 @@ from httpx import AsyncClient, ASGITransport
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -69,21 +64,15 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    """Drop all test collections before/after the test."""
-    for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals",
-                      "templates", "template_versions", "template_revisions", "system_settings", "audit_logs"]:
-        await db[coll_name].drop()
+    for coll in ["templates", "template_revisions", "template_versions", "system_settings", "admin_users", "audit_logs"]:
+        async for d in db.collection(coll).stream():
+            await d.reference.delete()
     yield
-    for coll_name in ["admin_users", "users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals",
-                      "templates", "template_versions", "template_revisions", "system_settings", "audit_logs"]:
-        await db[coll_name].drop()
-
-
-# ============================================================
-# Helpers
-# ============================================================
+    for coll in ["templates", "template_revisions", "template_versions", "system_settings", "admin_users", "audit_logs"]:
+        async for d in db.collection(coll).stream():
+            await d.reference.delete()
+    await server.seed_templates(force=True)
+    await server.seed_catalogs()
 
 async def create_super_admin():
     """Create a super_admin and return (admin_doc, token)."""
@@ -100,7 +89,7 @@ async def create_super_admin():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -120,7 +109,7 @@ async def create_regular_admin():
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -136,7 +125,7 @@ async def create_lawyer():
         "referral_code": "NS" + uuid.uuid4().hex[:6].upper(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({
         "user_id": user_id, "balance": 5,
         "free_credits_granted": 5, "total_used": 0,
@@ -214,7 +203,7 @@ class TestSeedMigration:
         # adjournment should be skipped (already exists)
         assert "adjournment" in r.json()["skipped_ids"]
         # Verify edit is preserved
-        t = await db.templates.find_one({"id": "adjournment"}, {"_id": 0})
+        t = (await db.collection("templates").document("adjournment").get()).to_dict()
         assert t["name_en"] == "Custom Adjournment"
 
     @pytest.mark.asyncio
@@ -484,7 +473,7 @@ class TestTemplateVersioning:
         await client.post("/api/admin/templates/migrate-seed", headers=auth(token))
         r = await client.post("/api/admin/templates/adjournment/archive", headers=auth(token))
         assert r.status_code == 200
-        t = await db.templates.find_one({"id": "adjournment"}, {"_id": 0})
+        t = (await db.collection("templates").document("adjournment").get()).to_dict()
         assert t["status"] == "archived"
 
 
@@ -693,7 +682,7 @@ class TestTemplateLockLifecycle:
         })
         assert c.status_code == 200, c.text
         tid = c.json()["id"]
-        await db.templates.update_one({"id": tid}, {"$set": {"locked": True}})
+        await db.collection("templates").document(tid).set({"locked": True}, merge=True)
         # Editing must succeed (status is draft -> not locked)
         r = await client.put(f"/api/admin/templates/{tid}", headers=auth(token), json={"name_en": "Lock Test v2"})
         assert r.status_code == 200, r.text

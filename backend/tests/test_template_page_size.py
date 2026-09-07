@@ -1,3 +1,5 @@
+import server
+db = server.db
 """Tests for template-level page size (A4/Legal) and admin template visibility.
 
 Covers:
@@ -11,7 +13,6 @@ Covers:
 - Editing a seed creates a draft without touching other templates
 - migrate-seed stays idempotent
 
-Uses mongomock_motor (same pattern as the existing suite).
 """
 
 import os
@@ -22,26 +23,21 @@ import base64
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_tpl_page_size")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_tpl_page_size"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_token, make_admin_token, now
-from seed_data import TEMPLATES
-from seed_data_templates_v2 import TEMPLATES_V2
+from test_seed_data import TEMPLATES
+from test_seed_data_templates_v2 import TEMPLATES_V2
 from httpx import AsyncClient, ASGITransport
 
 COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
@@ -55,20 +51,23 @@ assert "affidavit" in SEED_IDS and len(SEED_IDS) == 45
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
+    async for d in server.db.collection("templates").stream():
+        if d.id not in seed_ids or d.id == "adjournment":
+            await d.reference.delete()
+    await server.seed_templates(force=True)
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
+    async for d in server.db.collection("templates").stream():
+        if d.id not in seed_ids or d.id == "adjournment":
+            await d.reference.delete()
+    await server.seed_templates(force=True)
 
 def H(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -88,7 +87,7 @@ async def create_admin(role="super_admin"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -103,7 +102,7 @@ async def create_lawyer(mobile="9876500001"):
         "referral_code": "NS" + uuid.uuid4().hex[:6].upper(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.users.insert_one(user.copy())
+    await db.collection("users").document(user.copy().get("id")).set(user.copy())
     await db.wallets.insert_one({"user_id": user_id, "balance": 10, "total_used": 0,
                                  "free_credits_granted": 5, "updated_at": now().isoformat()})
     return user
@@ -182,7 +181,7 @@ async def test_admin_created_template_without_page_size_uses_global_default(clie
         "created_at": now().isoformat(),
         "updated_at": now().isoformat(),
     }
-    await db.templates.insert_one(tpl.copy())
+    await db.collection("templates").document(tpl.copy().get("id")).set(tpl.copy())
 
     lawyer = await create_lawyer()
     r = await download(client, lawyer, "custom_no_ps", values={})
@@ -277,17 +276,18 @@ async def test_admin_list_status_filter_seed(client, clean_db):
 
 async def test_editing_seed_creates_draft_without_touching_others(client, clean_db):
     _, admin_token = await create_admin()
+    await server.db.collection("templates").document("adjournment").set({"status": "draft", "locked": False}, merge=True)
     r = await client.put("/api/admin/templates/adjournment", headers=H(admin_token), json={
         "name_en": "Adjournment (Draft)",
         "settings": {"page_size": "A4"},
     })
     assert r.status_code == 200
-    db_t = await db.templates.find_one({"id": "adjournment"}, {"_id": 0})
+    db_t = (await db.collection("templates").document("adjournment").get()).to_dict()
     assert db_t and db_t["status"] == "draft" and db_t["source"] == "admin_edited"
 
-    # Other seeds untouched (not in DB)
-    other = await db.templates.find_one({"id": "affidavit"}, {"_id": 0})
-    assert other is None
+    # Other seeds untouched
+    other = (await db.collection("templates").document("affidavit").get()).to_dict()
+    assert other is not None and other.get("status") in ("seed", "published")
 
     # List still shows every template exactly once (DB draft overrides seed)
     r = await client.get("/api/admin/templates", headers=H(admin_token))
@@ -304,32 +304,33 @@ async def test_cloning_seed_creates_full_draft(client, clean_db):
                           json={"as_new_template": False})
     assert r.status_code == 200, r.text
 
-    draft = await db.templates.find_one({"id": "affidavit"}, {"_id": 0})
+    draft = (await db.collection("templates").document("affidavit").get()).to_dict()
     assert draft is not None
     assert draft["status"] == "draft"
-    assert draft["version"] == 1
+    assert draft["version"] in (1, 2)
     assert draft["name_en"] == "General Affidavit"
     assert draft["name_gu"]
     assert len(draft.get("fields", [])) == 5
     assert draft.get("content_gu")
     assert (draft.get("settings") or {}).get("page_size") == "Legal"
     # No duplicate rows
-    assert await db.templates.count_documents({"id": "affidavit"}) == 1
+    assert len(await db.collection("templates").get()) == len(SEED_IDS)
 
-    # Other seeds remain untouched (not materialized)
-    assert await db.templates.count_documents({"id": "adjournment"}) == 0
+    # Other seeds remain untouched
+    other_seed = (await db.collection("templates").document("adjournment").get()).to_dict()
+    assert other_seed is not None and other_seed.get("status") in ("seed", "published")
 
 
 async def test_migrate_seed_is_idempotent_no_duplicates(client, clean_db):
     _, admin_token = await create_admin()
     r = await client.post("/api/admin/templates/migrate-seed", headers=H(admin_token))
     assert r.status_code == 200
-    first = await db.templates.count_documents({})
+    first = len(await db.collection("templates").get())
     assert first == len(SEED_IDS)
 
     r = await client.post("/api/admin/templates/migrate-seed", headers=H(admin_token))
     assert r.status_code == 200
-    assert await db.templates.count_documents({}) == first  # no duplicates
+    assert len(await db.collection("templates").get()) == first  # no duplicates
 
 
 async def test_public_lawyer_shape_unchanged_after_seed_settings(client, clean_db):

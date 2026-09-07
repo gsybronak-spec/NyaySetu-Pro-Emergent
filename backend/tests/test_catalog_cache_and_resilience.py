@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """
 Regression and reliability tests for NyaySetu Pro master catalog caching,
 district-specific filtering, cache invalidation, and auth session resilience.
@@ -7,17 +12,13 @@ import sys
 from pathlib import Path
 import pytest
 
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_cache")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_cache"]
 
 import server
-server.db = mock_db
 
 from starlette.testclient import TestClient
 client = TestClient(server.app)

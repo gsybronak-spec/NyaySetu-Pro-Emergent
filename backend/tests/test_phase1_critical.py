@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Phase 1 Critical Fix Tests — NyaySetu Pro.
 
 Tests all 20 scenarios specified for Phase 1 verification:
@@ -17,21 +22,17 @@ import sys
 import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, patch, MagicMock
+from google.cloud import firestore
 
 import pytest
 
+
 # Ensure the backend package is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_phase1")
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_phase1"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 from httpx import AsyncClient, ASGITransport
 
@@ -45,7 +46,6 @@ import pytest_asyncio
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -53,17 +53,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    """Drop all test collections before/after the test."""
-    for coll_name in ["users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals", "templates", "template_revisions", "system_settings"]:
-        await db[coll_name].drop()
-    await server.seed_templates(force=True)
     yield
-    for coll_name in ["users", "wallets", "cases", "drafts",
-                      "applications", "transactions", "referrals", "templates", "template_revisions", "system_settings"]:
-        await db[coll_name].drop()
-
-
 
 async def register_user(client: AsyncClient, mobile: str = "9876543210") -> dict:
     """Create a user via OTP and return {token, user}."""
@@ -684,7 +674,9 @@ async def test_wallet_no_repeat_free_credits(client, clean_db):
     assert w1["balance"] == 5
 
     # Manually delete the wallet document to simulate abuse
-    await db.wallets.delete_one({"user_id": creds["user"]["id"]})
+    _snaps = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", creds["user"]["id"])).get()
+    for _d in _snaps:
+        await _d.reference.delete()
 
     # GET wallet again — must NOT recreate with 5 credits
     w2 = (await client.get("/api/wallet", headers=h)).json()

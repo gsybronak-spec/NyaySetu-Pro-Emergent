@@ -1,3 +1,5 @@
+import server
+db = server.db
 """Tests for the safe removal of shadow draft/archived records of seed templates.
 
 A seed template becomes "shadowed" when an admin branches it for editing: the
@@ -15,7 +17,6 @@ single GET -> 404). This module covers the super_admin-only removal endpoint:
 - After removal the seed becomes visible again: lawyer count back to 24,
   GET /api/templates/document_return_application -> 200
 
-Uses mongomock_motor (same pattern as the existing suite).
 """
 
 import os
@@ -24,26 +25,21 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_shadow_draft")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_shadow_draft"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_admin_token, now
-from seed_data import TEMPLATES
-from seed_data_templates_v2 import TEMPLATES_V2
+from test_seed_data import TEMPLATES
+from test_seed_data_templates_v2 import TEMPLATES_V2
 from httpx import AsyncClient, ASGITransport
 
 API = "/api"
@@ -61,7 +57,6 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -69,12 +64,9 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
+    async for d in db.collection("audit_logs").stream():
+        await d.reference.delete()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
 
 async def create_admin(role="super_admin"):
     admin_id = str(uuid.uuid4())
@@ -90,7 +82,7 @@ async def create_admin(role="super_admin"):
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    await db.admin_users.insert_one(admin.copy())
+    await db.collection("admin_users").document(admin.copy().get("id")).set(admin.copy())
     token = make_admin_token(admin_id, admin["email"], admin["role"])
     return admin, token
 
@@ -124,17 +116,18 @@ async def lawyer_template_count(client):
 class TestShadowDraftRemoval:
     @pytest.mark.asyncio
     async def test_regular_admin_cannot_remove_shadow(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application")
+        await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="admin")  # regular admin
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 403, r.text
         # record untouched
-        assert await db.templates.find_one({"id": "document_return_application"}) is not None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
 
     @pytest.mark.asyncio
     async def test_super_admin_removes_valid_draft_shadow(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
                                 headers=H(token))
@@ -142,27 +135,27 @@ class TestShadowDraftRemoval:
         body = r.json()
         assert body["success"] is True
         assert body["removed_status"] == "draft"
-        assert await db.templates.find_one({"id": "document_return_application"}) is None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is None
 
     @pytest.mark.asyncio
     async def test_published_template_refused(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application", "published")).copy())
+        sdoc = await shadow_doc("document_return_application", "published"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 409, r.text
         assert "ublished" in r.json()["detail"]
-        assert await db.templates.find_one({"id": "document_return_application"}) is not None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
 
     @pytest.mark.asyncio
     async def test_non_seed_template_refused(self, client, clean_db):
         # A real admin-created template (no seed counterpart) must never be deleted
-        await db.templates.insert_one((await shadow_doc("custom_user_template")).copy())
+        sdoc = await shadow_doc("custom_user_template"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         r = await client.delete(f"{ADMIN}/templates/custom_user_template/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 409, r.text
-        assert await db.templates.find_one({"id": "custom_user_template"}) is not None
+        assert (await db.collection("templates").document("custom_user_template").get()).to_dict() is not None
 
     @pytest.mark.asyncio
     async def test_missing_record_clean_404(self, client, clean_db):
@@ -173,22 +166,22 @@ class TestShadowDraftRemoval:
 
     @pytest.mark.asyncio
     async def test_archived_shadow_requires_confirmation(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application", "archived")).copy())
+        sdoc = await shadow_doc("document_return_application", "archived"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         # without confirm -> 400, record kept
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
                                 headers=H(token))
         assert r.status_code == 400, r.text
-        assert await db.templates.find_one({"id": "document_return_application"}) is not None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
         # with confirm -> removed
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 200, r.text
-        assert await db.templates.find_one({"id": "document_return_application"}) is None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is None
 
     @pytest.mark.asyncio
     async def test_audit_log_created(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
                                 headers=H(token))
@@ -208,7 +201,7 @@ class TestShadowDraftRestoresSeed:
         assert n0 == len(SEED_IDS) == 45 and present0 is True
 
         # Reproduce the production blocker: a draft record shadows the seed
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         n1, present1 = await lawyer_template_count(client)
         assert n1 == 44 and present1 is False, f"shadow not effective: {n1}/{present1}"
         r = await client.get(f"{API}/templates/document_return_application")
@@ -226,12 +219,12 @@ class TestShadowDraftRestoresSeed:
         r = await client.get(f"{API}/templates/document_return_application")
         assert r.status_code == 200, r.text
         assert r.json()["name_gu"] == "દસ્તાવેજ પરત મેળવવાની અરજી"
-        assert await db.templates.count_documents({}) == 0  # no other records left
+        assert len(await db.collection("templates").get()) == 0  # no other records left
 
     @pytest.mark.asyncio
     async def test_admin_list_flags_shadow_rows(self, client, clean_db):
         """The admin list must expose is_seed_template so the UI can show the action."""
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         r = await client.get(f"{ADMIN}/templates", headers=H(token))
         assert r.status_code == 200, r.text
@@ -244,7 +237,7 @@ class TestShadowDraftRestoresSeed:
 
     @pytest.mark.asyncio
     async def test_unauth_and_lawyer_token_rejected(self, client, clean_db):
-        await db.templates.insert_one((await shadow_doc("document_return_application")).copy())
+        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true")
         assert r.status_code == 401, r.text
         from server import make_token
@@ -252,4 +245,4 @@ class TestShadowDraftRestoresSeed:
         r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
                                 headers=H(lawyer_tok))
         assert r.status_code == 401, r.text
-        assert await db.templates.find_one({"id": "document_return_application"}) is not None
+        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None

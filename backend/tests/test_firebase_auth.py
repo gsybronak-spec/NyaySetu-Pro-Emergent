@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """Regression tests for Firebase Authentication integration (POST /api/auth/firebase).
 
 Covers:
@@ -16,27 +21,40 @@ import time
 from pathlib import Path
 
 import pytest
+
 import jwt as pyjwt
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_firebase")
 
-import mongomock_motor
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_firebase"]
 
 import server
 
-server.db = mock_db
 
 from starlette.testclient import TestClient
 
 app_client = TestClient(server.app)
 
 BASE = "/api"
+
+import pytest_asyncio
+
+@pytest_asyncio.fixture(autouse=True)
+async def clean_test_users():
+    async def _cleanup():
+        for email in ["fire.new@test.in", "ref.new@test.in", "link1@test.in"]:
+            docs = [d async for d in server.db.collection("users").where(filter=server.firestore.FieldFilter("email", "==", email)).stream()]
+            for d in docs:
+                await d.reference.delete()
+        for m in ["9876599977", "9898000001", "9898000002", "9898000003", "9999000001"]:
+            docs = [d async for d in server.db.collection("users").where(filter=server.firestore.FieldFilter("mobile", "==", m)).stream()]
+            for d in docs:
+                await d.reference.delete()
+    await _cleanup()
+    yield
+    await _cleanup()
 
 # --- RSA keypair for minting test Firebase tokens ---
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -174,11 +192,11 @@ def test_new_email_user_created_and_jwt_works():
 
 
 def test_new_phone_user_mobile_normalized():
-    tok = _firebase_token(uid="fb-new-phone", phone="+919876543210")
+    tok = _firebase_token(uid="fb-new-phone", phone="+919876599977")
     r = app_client.post(f"{BASE}/auth/firebase", json={"id_token": tok})
     assert r.status_code == 200, r.text
     u = r.json()["user"]
-    assert u["mobile"] == "9876543210"
+    assert u["mobile"] == "9876599977"
     assert u.get("firebase_uid") == "fb-new-phone"
     assert u["provider"] == "firebase"
 

@@ -1,33 +1,39 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 import bcrypt
 import uuid
 import pytest
+
 import os
 import sys
 import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import mongomock_motor
 from server import app
 from httpx import AsyncClient, ASGITransport
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_env():
-    os.environ["MONGO_URL"] = "mongodb://localhost:27017"
     os.environ["DB_NAME"] = "nyaysetu_test_db"
     os.environ["JWT_SECRET"] = "test-secret"
     os.environ["ADMIN_SEED_EMAIL"] = "admin@nyaysetu.com"
     os.environ["ADMIN_SEED_PASSWORD"] = "NyaySetu@Admin2026!"
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 async def clean_db():
-    import server
-    client = mongomock_motor.AsyncMongoMockClient()
-    db = client[os.environ["DB_NAME"]]
-    server.db = db
-    server._rate_buckets.clear()
-    # Drop all relevant collections
-    for coll in ["districts", "talukas", "courts", "police_stations", "case_types", "laws", "cases", "users", "audit_logs", "templates", "admin_users", "system_settings"]:
-        await db[coll].drop()
+    async for d in server.db.collection("admin_audit_logs").stream():
+        await d.reference.delete()
+    async for d in server.db.collection("audit_logs").stream():
+        await d.reference.delete()
     yield db
+    for coll, doc_id in [("districts", "dist_1"), ("districts", "dist_3"), ("districts", "dist_4"), ("districts", "dist_x"),
+                         ("districts", "ahmedabad"), ("districts", "surat"),
+                         ("courts", "court_1"), ("laws", "law_1"), ("cases", "c1"), ("cases", "c2"), ("cases", "c3"), ("users", "u1"), ("users", "lawyer_1")]:
+        await server.db.collection(coll).document(doc_id).delete()
+    await server.seed_catalogs()
+    server._invalidate_catalog_cache()
 
 @pytest.fixture
 async def app_client(clean_db):
@@ -91,7 +97,7 @@ class TestCatalogHardDelete:
         assert "_id" not in log["old_value"]
 
     async def test_07_district_referenced_by_user_returns_409(self, app_client, super_admin_token, clean_db):
-        await clean_db.districts.insert_one({"id": "ahmedabad", "en": "Ahmedabad"})
+        await clean_db.districts.insert_one({"id": "ahmedabad", "en": "Ahmedabad", "gu": "અમદાવાદ"})
         await clean_db.users.insert_one({"id": "u1", "district": "ahmedabad"})
         
         res = await app_client.delete("/api/admin/catalog/districts/ahmedabad?hard=true", headers={"Authorization": f"Bearer {super_admin_token}"})
@@ -100,7 +106,7 @@ class TestCatalogHardDelete:
         assert await clean_db.districts.find_one({"id": "ahmedabad"}) is not None
 
     async def test_08_district_referenced_by_case_returns_409(self, app_client, super_admin_token, clean_db):
-        await clean_db.districts.insert_one({"id": "surat", "en": "Surat"})
+        await clean_db.districts.insert_one({"id": "surat", "en": "Surat", "gu": "સુરત"})
         await clean_db.cases.insert_one({"id": "c1", "district_id": "surat"})
         
         res = await app_client.delete("/api/admin/catalog/districts/surat?hard=true", headers={"Authorization": f"Bearer {super_admin_token}"})
@@ -148,8 +154,7 @@ class TestStuckTemplateResolution:
         assert stuck["id"] == ""
         
         # Directly delete it to simulate resolution
-        res = await clean_db.templates.delete_one({"id": ""})
-        assert res.deleted_count == 1
+        await server.db.collection("templates").document("").delete()
         
-        stuck_after = await clean_db.templates.find_one({"id": ""})
+        stuck_after = (await server.db.collection("templates").document("").get()).to_dict()
         assert stuck_after is None

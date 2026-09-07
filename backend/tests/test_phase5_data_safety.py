@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """
 Phase 5 Test Suite: Data Safety, Historical Document Integrity,
 Regression, Security, and Production Cutover Verification.
@@ -38,20 +43,15 @@ import hashlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_phase5")
 
 import pytest
+
 import pytest_asyncio
-import mongomock_motor
 from httpx import AsyncClient, ASGITransport
 
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_phase5"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import (
@@ -77,49 +77,9 @@ from doc_generator import (
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    """Seed test database with admin user and clean collections."""
-    server.db = db
-    for coll_name in [
-        "admin_users", "users", "wallets", "cases", "drafts",
-        "applications", "transactions", "audit_logs", "referrals",
-        "templates", "template_versions", "template_revisions",
-        "system_settings", "plans"
-    ]:
-        await db[coll_name].drop()
-
-    admin_doc = {
-        "id": "admin_super_1",
-        "email": "superadmin@nyaysetu.gov.in",
-        "name": "Super Administrator",
-        "role": "super_admin",
-        "password_hash": hash_password("SuperSecret123!"),
-        "active": True,
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.admin_users.insert_one(admin_doc)
-    await db.users.insert_one(admin_doc)
-
-    lawyer_doc = {
-        "id": "lawyer_regular_1",
-        "email": "advocate@gmail.com",
-        "name": "Advocate Regular",
-        "role": "lawyer",
-        "password_hash": hash_password("LawyerPass123!"),
-        "active": True,
-        "created_at": "2026-08-21T00:00:00Z",
-    }
-    await db.users.insert_one(lawyer_doc)
-
-    wallet_doc = {
-        "user_id": "lawyer_regular_1",
-        "balance": 100,
-        "total_used": 0,
-        "updated_at": "2026-08-21T00:00:00Z",
-    }
-    await db.wallets.insert_one(wallet_doc)
-
-    await db.system_settings.insert_one({"key": "seed_complete", "value": True})
-
+    async for d in server.db.collection("audit_logs").stream():
+        await d.reference.delete()
+    yield
 
 @pytest.fixture
 def admin_token():
@@ -308,7 +268,7 @@ class TestHistoricalResolutionAndDeletionSafety:
             assert del_res.status_code == 200
 
             # Verify template is gone from db.templates
-            curr = await db.templates.find_one({"id": "tpl_delete_safety"})
+            curr = (await db.collection("templates").document("tpl_delete_safety").get()).to_dict()
             assert curr is None
 
             # Verify BOTH historical drafts v1 and v2 continue to resolve from db.template_revisions
@@ -669,9 +629,9 @@ class TestSecurityAuditApplicationsAndIndexes:
         # Verify unique index definition function
         await _ensure_index(db.template_revisions, [("template_id", 1), ("version", 1)], unique=True)
         # Attempting to insert duplicate should raise or be prevented
-        await db.template_revisions.insert_one({"template_id": "idx_test", "version": 1, "data": "A"})
+        await db.collection("template_revisions").document({"template_id": "idx_test", "version": 1, "data": "A"}.get("id")).set({"template_id": "idx_test", "version": 1, "data": "A"})
         try:
-            await db.template_revisions.insert_one({"template_id": "idx_test", "version": 1, "data": "B"})
+            await db.collection("template_revisions").document({"template_id": "idx_test", "version": 1, "data": "B"}.get("id")).set({"template_id": "idx_test", "version": 1, "data": "B"})
             # If mock doesn't enforce, clean up
         except Exception:
             pass  # Expected in real Mongo
@@ -688,7 +648,7 @@ class TestSecurityAuditApplicationsAndIndexes:
             "version": 1,
             "status": "published",
         }
-        await db.templates.insert_one(legacy_doc)
+        await db.collection("templates").document(legacy_doc.get("id")).set(legacy_doc)
 
         resolved = await resolve_template_for_draft("legacy_certified_copy")
         assert resolved is not None

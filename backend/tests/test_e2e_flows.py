@@ -1,3 +1,8 @@
+import server
+
+from tests.firestore_test_utils import FirestoreDBSurrogate
+mock_db = FirestoreDBSurrogate()
+db = FirestoreDBSurrogate()
 """NyaySetu Pro Phase G — End-to-End acceptance flows (API level).
 
 Walks the complete approved user journeys:
@@ -29,20 +34,15 @@ import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "nyaysetu_test_e2e")
 
 import pytest
+
 import pytest_asyncio
 import bcrypt
 
-import mongomock_motor
-mock_client = mongomock_motor.AsyncMongoMockClient()
-mock_db = mock_client["nyaysetu_test_e2e"]
 
 import server
-server.db = mock_db
-db = mock_db
 app = server.app
 
 from server import make_admin_token
@@ -59,7 +59,6 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
-    server.db = mock_db
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
@@ -67,15 +66,7 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-    # Seed catalogs like startup does — keeps the shared in-memory catalog
-    # maps complete when admin mutations refresh them.
-    await server.seed_catalogs()
     yield
-    for coll in COLLECTIONS:
-        await db[coll].drop()
-
 
 async def fresh_lawyer(client):
     """Flow A: OTP signup -> token -> user."""
