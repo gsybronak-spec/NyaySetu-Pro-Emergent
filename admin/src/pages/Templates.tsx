@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import { useAdminAuth } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
+import { ADMIN_TEMPLATE_PAIRS, AdminTemplatePair, getOrderedAdminPairs } from '../lib/templatePairs';
 
 export default function Templates() {
   const navigate = useNavigate();
@@ -38,6 +39,76 @@ export default function Templates() {
     loading: boolean;
     error: string;
   } | null>(null);
+
+  const [orderModal, setOrderModal] = useState<{
+    open: boolean;
+    pairs: AdminTemplatePair[];
+    loading: boolean;
+    saving: boolean;
+    successMsg: string;
+    error: string;
+  } | null>(null);
+
+  const handleOpenOrderModal = async () => {
+    setOrderModal({
+      open: true,
+      pairs: [...ADMIN_TEMPLATE_PAIRS],
+      loading: true,
+      saving: false,
+      successMsg: '',
+      error: '',
+    });
+    try {
+      const res = await adminApi.getTemplateOrder();
+      const order = res?.template_order || [];
+      const ordered = getOrderedAdminPairs(order);
+      setOrderModal(prev => prev ? { ...prev, pairs: ordered, loading: false } : null);
+    } catch (err: any) {
+      setOrderModal(prev => prev ? { ...prev, loading: false, error: 'Failed to fetch current order: ' + err.message } : null);
+    }
+  };
+
+  const moveOrder = (index: number, direction: 'up' | 'down' | 'top' | 'bottom') => {
+    if (!orderModal) return;
+    const current = [...orderModal.pairs];
+    if (direction === 'up' && index > 0) {
+      const temp = current[index];
+      current[index] = current[index - 1];
+      current[index - 1] = temp;
+    } else if (direction === 'down' && index < current.length - 1) {
+      const temp = current[index];
+      current[index] = current[index + 1];
+      current[index + 1] = temp;
+    } else if (direction === 'top' && index > 0) {
+      const [item] = current.splice(index, 1);
+      current.unshift(item);
+    } else if (direction === 'bottom' && index < current.length - 1) {
+      const [item] = current.splice(index, 1);
+      current.push(item);
+    }
+    setOrderModal({ ...orderModal, pairs: current, successMsg: '', error: '' });
+  };
+
+  const resetToDefaultOrder = () => {
+    if (!orderModal) return;
+    setOrderModal({ ...orderModal, pairs: [...ADMIN_TEMPLATE_PAIRS], successMsg: '', error: '' });
+  };
+
+  const handleSaveOrder = async () => {
+    if (!orderModal) return;
+    setOrderModal(prev => prev ? { ...prev, saving: true, error: '', successMsg: '' } : null);
+    try {
+      const keys = orderModal.pairs.map(p => p.baseKey);
+      await adminApi.updateTemplateOrder(keys);
+      setOrderModal(prev => prev ? {
+        ...prev,
+        saving: false,
+        successMsg: '✅ Display order updated successfully! The first 10 items will appear on the Home Page and all 21 in the Main Catalog.',
+      } : null);
+    } catch (err: any) {
+      setOrderModal(prev => prev ? { ...prev, saving: false, error: err.message || 'Failed to save order' } : null);
+    }
+  };
 
   const loadTemplates = () => {
     setLoading(true);
@@ -291,6 +362,9 @@ export default function Templates() {
           <p className="dashboard-desc">Manage legal document templates, custom fields, and version lifecycles</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          <button className="btn-secondary" onClick={handleOpenOrderModal} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span>📐</span> Template Placement / Order
+          </button>
           <button className="btn-secondary" onClick={handleMigrate}>Migrate Seed Templates</button>
           {isSuperAdmin && (
             <button className="btn-secondary" onClick={() => setImportModal({
@@ -858,6 +932,193 @@ export default function Templates() {
               >
                 {deleteModal.loading ? 'Deleting...' : 'Permanently Delete Template'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {orderModal && (
+        <div className="modal-overlay" style={{ zIndex: 1100 }}>
+          <div className="modal-content" style={{ maxWidth: '850px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header">
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>📐 Template Placement & Display Order / પ્લેસમેન્ટ ક્રમ</h2>
+                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#6b7280' }}>
+                  Authoritative ordering for all 21 templates. The <strong>first 10 templates</strong> appear on the Home Page.
+                </p>
+              </div>
+              <button
+                className="btn-icon"
+                onClick={() => setOrderModal(null)}
+                style={{ fontSize: '1.2rem', background: 'none', border: 'none', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
+              {orderModal.error && (
+                <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: '6px', marginBottom: '12px', fontSize: '0.88rem' }}>
+                  {orderModal.error}
+                </div>
+              )}
+              {orderModal.successMsg && (
+                <div style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '10px 14px', borderRadius: '6px', marginBottom: '12px', fontSize: '0.88rem', fontWeight: 600 }}>
+                  {orderModal.successMsg}
+                </div>
+              )}
+
+              {orderModal.loading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>
+                  <div className="spinner" style={{ margin: '0 auto 12px' }}></div>
+                  <p>Loading authoritative order...</p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {orderModal.pairs.map((pair, index) => {
+                    const isTop10 = index < 10;
+                    return (
+                      <div
+                        key={pair.baseKey}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: isTop10 ? '1px solid #c5a059' : '1px solid #e5e7eb',
+                          backgroundColor: isTop10 ? '#fffdf7' : '#fafafa',
+                          gap: '12px',
+                        }}
+                      >
+                        {/* Position Number & Destination Badge */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '150px' }}>
+                          <span
+                            style={{
+                              width: '28px',
+                              height: '28px',
+                              borderRadius: '50%',
+                              backgroundColor: isTop10 ? '#0b1b3d' : '#9ca3af',
+                              color: '#fff',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                            }}
+                          >
+                            {index + 1}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              backgroundColor: isTop10 ? '#fef3c7' : '#f3f4f6',
+                              color: isTop10 ? '#92400e' : '#6b7280',
+                              border: isTop10 ? '1px solid #fde68a' : '1px solid #e5e7eb',
+                            }}
+                          >
+                            {isTop10 ? '🏠 Home (1-10)' : 'Catalog (11-21)'}
+                          </span>
+                        </div>
+
+                        {/* Titles */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
+                            {pair.name_gu}
+                          </div>
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
+                            {pair.name_en}
+                          </div>
+                        </div>
+
+                        {/* Category */}
+                        <div style={{ minWidth: '80px', textAlign: 'center' }}>
+                          <span
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              backgroundColor: '#e0e7ff',
+                              color: '#3730a3',
+                            }}
+                          >
+                            {pair.category}
+                          </span>
+                        </div>
+
+                        {/* Move Actions */}
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={index === 0 || orderModal.saving}
+                            onClick={() => moveOrder(index, 'up')}
+                            style={{ padding: '4px 8px', fontSize: '0.78rem', minWidth: '32px' }}
+                            title="Move Up"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={index === orderModal.pairs.length - 1 || orderModal.saving}
+                            onClick={() => moveOrder(index, 'down')}
+                            style={{ padding: '4px 8px', fontSize: '0.78rem', minWidth: '32px' }}
+                            title="Move Down"
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            disabled={index === 0 || orderModal.saving}
+                            onClick={() => moveOrder(index, 'top')}
+                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                            title="Move to Top"
+                          >
+                            Top
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetToDefaultOrder}
+                disabled={orderModal.saving || orderModal.loading}
+                style={{ color: '#b45309' }}
+              >
+                🔄 Reset to Default
+              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setOrderModal(null)}
+                  disabled={orderModal.saving}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSaveOrder}
+                  disabled={orderModal.saving || orderModal.loading}
+                  style={{ backgroundColor: '#0b1b3d' }}
+                >
+                  {orderModal.saving ? 'Saving...' : 'Save Display Order (ઓર્ડર સેવ કરો)'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

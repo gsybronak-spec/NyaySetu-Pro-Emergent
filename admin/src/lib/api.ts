@@ -229,4 +229,6 @@ export const adminApi = {
   setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
   listSettings: () => request('/settings'),
   updateSetting: (key: string, value: number | string) => request(`/settings/${key}`, 'PUT', { value }),
+  getTemplateOrder: () => request('/template-order'),
+  updateTemplateOrder: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
 };

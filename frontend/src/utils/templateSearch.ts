@@ -72,7 +72,8 @@ function wordsMatch(w1: string, w2: string): boolean {
 export function searchTemplatePairs(
   query: string,
   categoryFilter?: string | null,
-  favoriteIds?: Set<string>
+  favoriteIds?: Set<string>,
+  sourcePairs?: TemplateLogicalPair[]
 ): SearchMatchedPair[] {
   const rawQ = query.trim();
   const q = normalize(rawQ);
@@ -85,9 +86,10 @@ export function searchTemplatePairs(
     qTokens = allTokens;
   }
 
+  const catalog = Array.isArray(sourcePairs) && sourcePairs.length > 0 ? sourcePairs : TEMPLATE_LOGICAL_PAIRS;
   const results: SearchMatchedPair[] = [];
 
-  for (const pair of TEMPLATE_LOGICAL_PAIRS) {
+  for (const pair of catalog) {
     // 1. Category check
     if (categoryFilter && categoryFilter !== "All") {
       if (categoryFilter === "Favorites") {
@@ -102,7 +104,7 @@ export function searchTemplatePairs(
     const isFav =
       (favoriteIds && (favoriteIds.has(pair.guId) || favoriteIds.has(pair.enId) || favoriteIds.has(pair.baseKey))) || false;
 
-    // If no search query, return full catalog with base score 100
+    // If no search query, return catalog order with base score 100
     if (!q) {
       results.push({ pair, score: 100, is_favorite: isFav });
       continue;
@@ -195,6 +197,11 @@ export function searchTemplatePairs(
     if (maxScore > 0) {
       results.push({ pair, score: maxScore, is_favorite: isFav });
     }
+  }
+
+  // If query is empty, return results preserving the exact order of the catalog
+  if (!q) {
+    return results;
   }
 
   // Sort descending by score, then category / alphabetical

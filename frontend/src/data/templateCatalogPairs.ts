@@ -326,3 +326,56 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
     ],
   },
 ];
+
+/**
+ * Find a logical template pair by baseKey, guId, enId, or raw id.
+ */
+export function findTemplatePair(idOrBaseKey?: string | null): TemplateLogicalPair | undefined {
+  if (!idOrBaseKey) return undefined;
+  const raw = String(idOrBaseKey).trim();
+  const base = raw.replace(/_(gu|en)$/, "");
+  return TEMPLATE_LOGICAL_PAIRS.find(
+    (p) => p.baseKey === raw || p.guId === raw || p.enId === raw || p.baseKey === base
+  );
+}
+
+/**
+ * Resolve an id or baseKey to a specific language template ID.
+ */
+export function resolveTemplateId(idOrBaseKey: string, lang: "gu" | "en" = "gu"): string {
+  if (!idOrBaseKey) return "";
+  const raw = String(idOrBaseKey).trim();
+  if (raw.endsWith(`_${lang}`)) return raw;
+  const pair = findTemplatePair(raw);
+  if (pair) return lang === "gu" ? pair.guId : pair.enId;
+  return raw;
+}
+
+/**
+ * Return the 21 logical template pairs sorted according to an authoritative display order.
+ * Accepts an array of baseKeys, guIds, or enIds. Any templates not in the custom order
+ * retain their authoritative catalog default position.
+ */
+export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogicalPair[] {
+  if (!Array.isArray(order) || order.length === 0) {
+    return [...TEMPLATE_LOGICAL_PAIRS];
+  }
+  const orderMap = new Map<string, number>();
+  order.forEach((key, index) => {
+    if (typeof key === "string" && key.trim()) {
+      const k = key.trim();
+      const base = k.replace(/_(gu|en)$/, "");
+      orderMap.set(k, index);
+      orderMap.set(base, index);
+    }
+  });
+
+  const sorted = [...TEMPLATE_LOGICAL_PAIRS].sort((a, b) => {
+    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : 9999;
+    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : 9999;
+    return idxA - idxB;
+  });
+
+  return sorted;
+}
+

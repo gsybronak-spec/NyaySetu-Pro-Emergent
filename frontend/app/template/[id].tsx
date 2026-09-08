@@ -26,6 +26,8 @@ import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { ErrorBoundary } from "@/src/components/ErrorBoundary";
+import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
 
 type Step = "fields" | "preview" | "output";
 
@@ -134,6 +136,7 @@ export default function TemplateApplication() {
   const [preview, setPreview] = useState("");
   const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | "png" | null>(null);
   const [filename, setFilename] = useState("");
@@ -148,24 +151,48 @@ export default function TemplateApplication() {
 
   const draftTimer = useRef<any>(null);
 
-  useEffect(() => {
-    (async () => {
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Resolve template ID safely (handle base keys or language-specific keys)
+      let effectiveId = templateId;
+      if (!effectiveId.endsWith("_gu") && !effectiveId.endsWith("_en")) {
+        effectiveId = resolveTemplateId(effectiveId, language) || templateId;
+      }
+
+      let t: any = null;
       try {
-        const [t, me, dists, cts] = await Promise.all([
-          api.template(templateId),
-          api.me().catch(() => null),
-          catalogCache.getDistricts(),
-          catalogCache.getCaseTypes(),
-        ]);
-        setTemplate(t);
-        setUserProfile(me);
-        setDistricts(Array.isArray(dists) ? dists : []);
-        setCaseTypes(Array.isArray(cts) ? cts : []);
-        setFilename(`${t.name_en.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+        t = await api.template(effectiveId);
+      } catch (err: any) {
+        if (effectiveId !== templateId) {
+          t = await api.template(templateId);
+        } else {
+          throw err;
+        }
+      }
 
-        const initialValues: Record<string, any> = {};
+      if (!t) {
+        throw new Error("Template data not found");
+      }
 
-        if (caseId) {
+      const [me, dists, cts] = await Promise.all([
+        api.me().catch(() => null),
+        catalogCache.getDistricts(),
+        catalogCache.getCaseTypes(),
+      ]);
+
+      setTemplate(t);
+      setUserProfile(me);
+      setDistricts(Array.isArray(dists) ? dists : []);
+      setCaseTypes(Array.isArray(cts) ? cts : []);
+      const enName = t.name_en || t.name_gu || "Document";
+      setFilename(`${enName.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+
+      const initialValues: Record<string, any> = {};
+
+      if (caseId) {
+        try {
           const c = await api.getCase(caseId);
           setCaseData(c);
           if (c.language) setLanguage(c.language);
@@ -191,45 +218,62 @@ export default function TemplateApplication() {
               if (v !== null && v !== undefined && v !== "") initialValues[k] = v;
             }
           }
-        } else {
-          // No-case default party roles
-          initialValues["party_role"] = "plaintiff";
-          initialValues["opposite_party_role"] = "defendant";
-          if (me?.district) initialValues["district"] = me.district;
-          if (me?.court) initialValues["court"] = me.court;
+        } catch (cErr) {
+          console.warn("[template] could not load case data", cErr);
         }
+      } else {
+        // No-case default party roles
+        initialValues["party_role"] = "plaintiff";
+        initialValues["opposite_party_role"] = "defendant";
+        if (me?.district) initialValues["district"] = me.district;
+        if (me?.court) initialValues["court"] = me.court;
+      }
 
-        // Advocate name from profile (language-aware default)
-        const advName = formatAdvocateName(
-          (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
-          language
-        );
-        initialValues["advocate_name"] = advName;
-        initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+      // Advocate name from profile (language-aware default)
+      const advName = formatAdvocateName(
+        (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
+        language
+      );
+      initialValues["advocate_name"] = advName;
+      initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
 
-        // Date fields default to today when unset (always editable)
-        for (const f of t.fields || []) {
-          if (f.type === "date" && !initialValues[f.key]) initialValues[f.key] = new Date().toISOString().slice(0, 10);
-        }
-        if (!initialValues["date"]) initialValues["date"] = new Date().toISOString().slice(0, 10);
+      // Date fields default to today when unset (always editable)
+      for (const f of t?.fields || []) {
+        if (f.type === "date" && !initialValues[f.key]) initialValues[f.key] = new Date().toISOString().slice(0, 10);
+      }
+      if (!initialValues["date"]) initialValues["date"] = new Date().toISOString().slice(0, 10);
 
-        setValues((prev) => ({ ...initialValues, ...prev }));
+      setValues((prev) => ({ ...initialValues, ...prev }));
 
-        if (params.draft === "1") {
+      if (params.draft === "1") {
+        try {
           const drafts = await api.drafts();
-          const d = drafts.find((x: any) => x.template_id === templateId && (x.case_id || undefined) === caseId);
+          const baseKey = templateId.replace(/_(gu|en)$/, "");
+          const d = (drafts || []).find((x: any) => {
+            const xBase = (x.template_id || "").replace(/_(gu|en)$/, "");
+            const matchTpl = x.template_id === templateId || x.template_id === effectiveId || xBase === baseKey;
+            const matchCase = (x.case_id || undefined) === caseId;
+            return matchTpl && matchCase;
+          });
           if (d) {
             setValues((prev) => ({ ...prev, ...(d.values || {}) }));
-            setLanguage(d.language || "en");
+            if (d.language) setLanguage(d.language);
           }
+        } catch (dErr) {
+          console.warn("[template] draft recovery warning", dErr);
         }
-      } catch (e: any) {
-        Alert.alert("Error", e.message);
-      } finally {
-        setLoading(false);
       }
-    })();
-  }, [templateId, caseId]);
+    } catch (e: any) {
+      console.error("[template] load failed", e);
+      setError(e?.message || "Could not load template. Please check your network connection.");
+    } finally {
+      setLoading(false);
+    }
+  }, [templateId, caseId, language, params.draft]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Load talukas & courts when district changes in No-Case mode
   useEffect(() => {
@@ -557,24 +601,59 @@ export default function TemplateApplication() {
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color={colors.brandPrimary} />
+        <ActivityIndicator size="large" color={colors.brandPrimary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!template) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", padding: Spacing.xl }}>
+        <Ionicons name="alert-circle-outline" size={54} color={colors.error || "#B91C1C"} />
+        <Text style={{ color: colors.onSurface, fontSize: 18, fontWeight: "700", marginTop: Spacing.md, textAlign: "center" }}>
+          {language === "gu" ? "અરજી લોડ કરી શકાઈ નથી" : "Could not load application template"}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 13, marginTop: Spacing.xs, textAlign: "center", maxWidth: 420 }}>
+          {error || (language === "gu" ? "કૃપા કરીને તમારું નેટવર્ક કનેક્શન તપાસો અથવા ફરી પ્રયાસ કરો." : "Please check your network connection and try again.")}
+        </Text>
+        <View style={{ flexDirection: "row", gap: Spacing.md, marginTop: Spacing.xl }}>
+          <Pressable
+            testID="tpl-error-back"
+            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+            style={{ paddingHorizontal: Spacing.lg, paddingVertical: 12, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}
+          >
+            <Text style={{ color: colors.onSurface, fontWeight: "600" }}>
+              {language === "gu" ? "પાછા જાઓ (Back)" : "Back"}
+            </Text>
+          </Pressable>
+          <Pressable
+            testID="tpl-error-retry"
+            onPress={loadData}
+            style={{ paddingHorizontal: Spacing.xl, paddingVertical: 12, borderRadius: Radius.md, backgroundColor: colors.brandPrimary }}
+          >
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>
+              {language === "gu" ? "ફરી પ્રયાસ કરો (Retry)" : "Retry"}
+            </Text>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        {/* Header */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable testID="tpl-back" onPress={() => (step === "fields" ? router.back() : setStep("fields"))} hitSlop={12}>
-            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
-          </Pressable>
-          <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>
-            {language === "gu" ? template.name_gu : template.name_en}
-          </Text>
-          <View style={{ width: 24 }} />
-        </View>
+    <ErrorBoundary fallbackTitle={language === "gu" ? "અરજી પ્રદર્શિત કરવામાં ક્ષતિ" : "Template Rendering Error"} onRetry={loadData}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          {/* Header */}
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Pressable testID="tpl-back" onPress={() => (step === "fields" ? (router.canGoBack() ? router.back() : router.replace("/(tabs)/home")) : setStep("fields"))} hitSlop={12}>
+              <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+            </Pressable>
+            <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>
+              {language === "gu" ? template?.name_gu || template?.name_en : template?.name_en || template?.name_gu}
+            </Text>
+            <View style={{ width: 24 }} />
+          </View>
 
         {/* Step indicator */}
         <View style={styles.steps}>
@@ -813,10 +892,10 @@ export default function TemplateApplication() {
                     DOCUMENT SUMMARY
                   </Text>
                   <Text style={{ color: colors.onSurface, fontWeight: "800", fontSize: 16, fontFamily: "serif", marginTop: Spacing.sm }}>
-                    {language === "gu" ? template.name_gu : template.name_en}
+                    {language === "gu" ? template?.name_gu || template?.name_en : template?.name_en || template?.name_gu}
                   </Text>
                   <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-                    {language === "gu" ? template.name_en : template.name_gu}
+                    {language === "gu" ? template?.name_en || template?.name_gu : template?.name_gu || template?.name_en}
                   </Text>
 
                   <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
@@ -1084,6 +1163,7 @@ export default function TemplateApplication() {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 

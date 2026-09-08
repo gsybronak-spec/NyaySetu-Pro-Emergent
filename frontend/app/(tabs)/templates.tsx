@@ -10,7 +10,8 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
-import { TemplateLogicalPair } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { catalogCache } from "@/src/services/catalogCache";
 
 export default function Templates() {
   const { colors } = useTheme();
@@ -21,6 +22,20 @@ export default function Templates() {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+
+  // Fetch authoritative template order
+  useEffect(() => {
+    catalogCache.getTemplateOrder().then((order) => {
+      if (Array.isArray(order) && order.length > 0) {
+        setTemplateOrder(order);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const orderedBasePairs = useMemo(() => {
+    return getOrderedTemplatePairs(templateOrder);
+  }, [templateOrder]);
 
   // Load user favorites on mount
   useEffect(() => {
@@ -66,10 +81,10 @@ export default function Templates() {
     }
   };
 
-  // Perform deterministic bilingual search & category filter
+  // Perform deterministic bilingual search & category filter over authoritative ordered pairs
   const matchedPairs: SearchMatchedPair[] = useMemo(() => {
-    return searchTemplatePairs(q, cat, favoriteIds);
-  }, [q, cat, favoriteIds]);
+    return searchTemplatePairs(q, cat, favoriteIds, orderedBasePairs);
+  }, [q, cat, favoriteIds, orderedBasePairs]);
 
   const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail"];
 
@@ -308,11 +323,13 @@ export default function Templates() {
           style={{ flex: 1 }}
           data={matchedPairs}
           keyExtractor={(item) => item.pair.baseKey}
+          numColumns={2}
+          columnWrapperStyle={styles.mobileColWrapper}
           contentContainerStyle={{
-            paddingHorizontal: Spacing.lg,
+            paddingHorizontal: Spacing.md,
             paddingTop: Spacing.xs,
             paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl),
-            gap: Spacing.md,
+            gap: Spacing.sm,
           }}
           renderItem={({ item }) => {
             const { pair, is_favorite } = item;
@@ -420,11 +437,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  mobileColWrapper: {
+    justifyContent: "space-between",
+  },
   card: {
-    padding: Spacing.md,
+    width: "48.5%",
+    padding: Spacing.sm,
     borderRadius: Radius.md,
     borderWidth: 1,
-    gap: 4,
+    justifyContent: "space-between",
+    minHeight: 165,
+    marginBottom: Spacing.xs,
   },
   catPill: {
     alignSelf: "flex-start",
@@ -500,11 +523,11 @@ const styles = StyleSheet.create({
   dGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
+    justifyContent: "space-between",
     gap: Spacing.md,
   },
   dCard: {
-    width: "31.5%",
-    minWidth: 260,
+    width: "48.5%",
     padding: Spacing.lg,
     borderRadius: 14,
     borderWidth: 1,

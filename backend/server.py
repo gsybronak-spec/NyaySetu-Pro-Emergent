@@ -220,6 +220,29 @@ _SETTING_DEFAULTS = {
     "otp_ttl_seconds": OTP_TTL_SECONDS,
     "otp_resend_cooldown_seconds": OTP_RESEND_COOLDOWN_SECONDS,
     "otp_max_attempts": OTP_MAX_ATTEMPTS,
+    "template_display_order": [
+        "mudat_arji",
+        "exemption_arji",
+        "warrant_rad_karvani_arji",
+        "vakilatnama_civil",
+        "vakilatnama_criminal",
+        "jamin_bond_swikarvani_arji",
+        "document_swikaravani_arji",
+        "document_parat_levani_arji",
+        "certified_report",
+        "samadhan_purshish",
+        "aanke_padvani_arji",
+        "closing_purshish",
+        "saaxi_ne_summons",
+        "kam_board_par_levani_arji",
+        "dd_karavani_arji",
+        "warrant_no_hath_bido_apvani_arji",
+        "undertaking",
+        "ulat_tapas_no_haq_bandh_karavani_arji",
+        "ulat_tapas_no_haq_kholvani_arji",
+        "fs_no_haq_bandh_karvani_arji",
+        "fs_no_haq_kholvani_arji",
+    ],
 }
 _SETTING_DESCRIPTIONS = {
     "signup_credits": "Free credits granted to each new account",
@@ -227,11 +250,17 @@ _SETTING_DESCRIPTIONS = {
     "otp_ttl_seconds": "OTP validity in seconds",
     "otp_resend_cooldown_seconds": "Minimum seconds between OTP resends",
     "otp_max_attempts": "Max incorrect OTP attempts before a new OTP is required",
+    "template_display_order": "Authoritative display order for court application templates",
 }
 
 
 def _setting_type(key: str):
-    return int if isinstance(_SETTING_DEFAULTS[key], int) else str
+    val = _SETTING_DEFAULTS.get(key)
+    if isinstance(val, int):
+        return int
+    if isinstance(val, list):
+        return list
+    return str
 
 
 async def _get_setting(key: str):
@@ -240,7 +269,7 @@ async def _get_setting(key: str):
     doc = _snap.to_dict() if _snap.exists else None
     if doc is not None and "value" in doc:
         return doc["value"]
-    return _SETTING_DEFAULTS[key]
+    return _SETTING_DEFAULTS.get(key)
 
 
 # ============================================================
@@ -3405,6 +3434,20 @@ async def update_template_order(req: TemplateOrderReq, user=Depends(get_user)):
     }
 
 
+@api.get("/catalog/template-order")
+async def get_catalog_template_order():
+    order = await _get_setting("template_display_order")
+    if isinstance(order, str):
+        try:
+            order = json.loads(order)
+        except Exception:
+            order = []
+    if not isinstance(order, list) or len(order) == 0:
+        order = _SETTING_DEFAULTS["template_display_order"]
+    return {"template_order": order}
+
+
+
 
 # ============================================================
 # DRAFTS
@@ -5251,6 +5294,9 @@ def _validate_setting_value(key: str, value) -> None:
         lo, hi = ranges.get(key, (0, 10 ** 9))
         if not (lo <= value <= hi):
             raise HTTPException(422, f"Setting '{key}' must be between {lo} and {hi}")
+    elif expected is list:
+        if not isinstance(value, list):
+            raise HTTPException(422, f"Setting '{key}' requires a list value")
     else:
         if not isinstance(value, str):
             raise HTTPException(422, f"Setting '{key}' requires a string value")
@@ -5263,12 +5309,14 @@ async def admin_list_settings(admin=Depends(get_admin)):
     """List all operational settings with current values, defaults and types."""
     items = []
     for key in _SETTING_DEFAULTS:
+        t = _setting_type(key)
+        type_str = "int" if t is int else ("list" if t is list else "str")
         items.append({
             "key": key,
             "value": await _get_setting(key),
             "default": _SETTING_DEFAULTS[key],
             "description": _SETTING_DESCRIPTIONS[key],
-            "type": "int" if _setting_type(key) is int else "str",
+            "type": type_str,
         })
     return items
 
@@ -5285,9 +5333,40 @@ async def admin_update_setting(key: str, req: SettingsUpdateReq,
     _validate_setting_value(key, value)
     await db.collection('settings').document(key).set({"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
     await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
+    t = _setting_type(key)
+    type_str = "int" if t is int else ("list" if t is list else "str")
     return {"success": True, "key": key, "value": value,
             "default": _SETTING_DEFAULTS[key], "description": _SETTING_DESCRIPTIONS[key],
-            "type": "int" if _setting_type(key) is int else "str"}
+            "type": type_str}
+
+
+@admin_api.get("/template-order")
+async def admin_get_template_order(admin=Depends(get_admin)):
+    """Get the authoritative template display order."""
+    order = await _get_setting("template_display_order")
+    if isinstance(order, str):
+        try:
+            order = json.loads(order)
+        except Exception:
+            order = []
+    if not isinstance(order, list) or len(order) == 0:
+        order = _SETTING_DEFAULTS["template_display_order"]
+    return {"template_order": order}
+
+
+@admin_api.put("/template-order")
+async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_admin)):
+    """Update the authoritative template display order in settings."""
+    if not isinstance(req.template_order, list):
+        raise HTTPException(422, "template_order must be a list of string IDs")
+    await db.collection('settings').document("template_display_order").set({
+        "value": req.template_order,
+        "updated_by": admin["id"],
+        "updated_at": now().isoformat(),
+    })
+    await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
+    return {"success": True, "template_order": req.template_order}
+
 
 
 def _validate_placeholders(content_en: str, content_gu: str, template_fields: list) -> dict:

@@ -12,6 +12,8 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
+import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { catalogCache } from "@/src/services/catalogCache";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -20,7 +22,9 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
+    getOrderedTemplatePairs(catalogCache.peekTemplateOrder()).slice(0, 10)
+  );
   const [drafts, setDrafts] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
@@ -29,16 +33,17 @@ export default function Home() {
 
   const load = useCallback(async () => {
     let failed = false;
-    const [q, w, tpls, drs] = await Promise.all([
+    const [q, w, drs, order] = await Promise.all([
       api.quote().catch(() => { failed = true; return null; }),
       api.wallet().catch(() => { failed = true; return null; }),
-      api.templates().catch(() => { failed = true; return []; }),
       api.drafts().catch(() => { failed = true; return []; }),
+      catalogCache.getTemplateOrder().catch(() => null),
     ]);
     if (q?.quote) setQuote(q.quote);
     if (w && typeof w === "object") setWallet(w);
-    setTemplates(Array.isArray(tpls) ? tpls.slice(0, 10) : []);
     setDrafts(Array.isArray(drs) ? drs : []);
+    const ordered = getOrderedTemplatePairs(order);
+    setTemplatePairs(ordered.slice(0, 10));
     setLoadError(failed);
     // Desktop dashboard only — avoid extra API calls on the mobile home screen.
     if (isDesktop) {
@@ -215,41 +220,81 @@ export default function Home() {
           </View>
         )}
 
-        {/* Most used templates */}
+        {/* Most used templates / Top 10 Ordered Templates */}
         <View style={styles.desktopSection}>
           <View style={styles.desktopRowBetween}>
-            <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Most Used Templates</Text>
+            <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
             <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All (21) / બધા જુઓ</Text>
             </Pressable>
           </View>
-          <View style={styles.tplGrid}>
-            {templates.map((item) => (
+          <View style={styles.homeTplGridDesktop}>
+            {templatePairs.map((pair) => (
               <Pressable
-                key={item.id}
-                testID={`tpl-card-${item.id}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
+                key={pair.baseKey}
+                testID={`tpl-card-${pair.baseKey}`}
+                onPress={() => router.push({ pathname: "/template/[id]", params: { id: pair.guId } })}
                 style={({ pressed }) => [
-                  styles.desktopTplCard,
+                  styles.homeTplCardDesktop,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                  pressed && { opacity: 0.85 },
+                  pressed && { opacity: 0.88 },
                 ]}
               >
-                <View style={[styles.desktopTplIcon, { backgroundColor: colors.brandTertiary }]}>
-                  <Ionicons name="document-text" size={20} color={colors.onBrandTertiary} />
+                <View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
+                    </View>
+                    <Ionicons name="document-text" size={18} color={colors.brandPrimary} />
+                  </View>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
+                    {pair.name_gu}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 3, fontWeight: "500" }} numberOfLines={2}>
+                    {pair.name_en}
+                  </Text>
                 </View>
-                <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 13 }} numberOfLines={2}>
-                  {item.name_en}
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {item.name_gu}
-                </Text>
-                <View style={[styles.recentPill, { backgroundColor: colors.brandTertiary, marginTop: Spacing.sm, alignSelf: "flex-start" }]}>
-                  <Text style={{ color: colors.onBrandTertiary, fontSize: 10, fontWeight: "600" }}>{item.category}</Text>
+                <View style={styles.homeTplBtnRow}>
+                  <Pressable
+                    testID={`home-tpl-gu-${pair.baseKey}`}
+                    onPress={(e) => {
+                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                      router.push({ pathname: "/template/[id]", params: { id: pair.guId } });
+                    }}
+                    style={({ pressed }) => [
+                      styles.homeLangBtn,
+                      { backgroundColor: colors.brandPrimary },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.homeLangBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`home-tpl-en-${pair.baseKey}`}
+                    onPress={(e) => {
+                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                      router.push({ pathname: "/template/[id]", params: { id: pair.enId } });
+                    }}
+                    style={({ pressed }) => [
+                      styles.homeLangBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.homeLangBtnText, { color: colors.onSurface }]}>English</Text>
+                  </Pressable>
                 </View>
               </Pressable>
             ))}
           </View>
+          <Pressable
+            testID="desktop-see-more-templates"
+            onPress={() => router.push("/(tabs)/templates")}
+            style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+          >
+            <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ (21)</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFF" />
+          </Pressable>
         </View>
       </DesktopPage>
     );
@@ -370,32 +415,81 @@ export default function Home() {
           </View>
         </View>
 
-        {/* Most Used Templates */}
+        {/* Legal Templates - First 10 Templates (5 rows x 2 cards) */}
         <View style={styles.section}>
           <View style={styles.rowBetween}>
-            <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Most Used Templates</Text>
+            <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
             <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All (21)</Text>
             </Pressable>
           </View>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: Spacing.md, marginTop: Spacing.md }}>
-            {templates.map((item) => (
+          <View style={styles.homeTplGrid}>
+            {templatePairs.map((pair) => (
               <Pressable
-                key={item.id}
-                testID={`tpl-card-${item.id}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.id } })}
-                style={[styles.tplCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+                key={pair.baseKey}
+                testID={`tpl-card-${pair.baseKey}`}
+                onPress={() => router.push({ pathname: "/template/[id]", params: { id: pair.guId } })}
+                style={({ pressed }) => [
+                  styles.homeTplCard,
+                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                  pressed && { opacity: 0.88 },
+                ]}
               >
-                <Ionicons name="document-text" size={22} color={colors.brandPrimary} />
-                <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm }} numberOfLines={2}>
-                  {item.name_en}
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {item.name_gu}
-                </Text>
+                <View>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+                    </View>
+                    <Ionicons name="document-text" size={16} color={colors.brandPrimary} />
+                  </View>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }} numberOfLines={2}>
+                    {pair.name_gu}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "500" }} numberOfLines={2}>
+                    {pair.name_en}
+                  </Text>
+                </View>
+                <View style={styles.homeTplBtnRow}>
+                  <Pressable
+                    testID={`home-tpl-gu-${pair.baseKey}`}
+                    onPress={(e) => {
+                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                      router.push({ pathname: "/template/[id]", params: { id: pair.guId } });
+                    }}
+                    style={({ pressed }) => [
+                      styles.homeLangBtn,
+                      { backgroundColor: colors.brandPrimary },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.homeLangBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`home-tpl-en-${pair.baseKey}`}
+                    onPress={(e) => {
+                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
+                      router.push({ pathname: "/template/[id]", params: { id: pair.enId } });
+                    }}
+                    style={({ pressed }) => [
+                      styles.homeLangBtn,
+                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+                      pressed && { opacity: 0.8 },
+                    ]}
+                  >
+                    <Text style={[styles.homeLangBtnText, { color: colors.onSurface }]}>English</Text>
+                  </Pressable>
+                </View>
               </Pressable>
             ))}
           </View>
+          <Pressable
+            testID="home-see-more-templates"
+            onPress={() => router.push("/(tabs)/templates")}
+            style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+          >
+            <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ (21)</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFF" />
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -453,6 +547,75 @@ const styles = StyleSheet.create({
   catIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   tplCard: {
     width: "48%", padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1, minHeight: 110,
+  },
+  catPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  homeTplGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginTop: Spacing.md,
+    gap: Spacing.sm,
+  },
+  homeTplCard: {
+    width: "48.5%",
+    padding: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    justifyContent: "space-between",
+    minHeight: 145,
+    marginBottom: Spacing.xs,
+  },
+  homeTplGridDesktop: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    gap: Spacing.md,
+  },
+  homeTplCardDesktop: {
+    width: "48.5%",
+    padding: Spacing.md,
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "space-between",
+    minHeight: 155,
+    marginBottom: Spacing.sm,
+  },
+  homeTplBtnRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: Spacing.sm,
+  },
+  homeLangBtn: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: Radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  homeLangBtnText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  seeMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: Spacing.lg,
+    paddingVertical: 12,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.md,
+  },
+  seeMoreBtnText: {
+    color: "#FFF",
+    fontWeight: "700",
+    fontSize: 14,
   },
   // Desktop
   desktopSearch: {

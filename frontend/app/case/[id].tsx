@@ -9,6 +9,7 @@ import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
+import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
@@ -90,16 +91,25 @@ export default function CaseDetail() {
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center", padding: Spacing.xl }}>
         {error ? (
           <>
-            <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
-            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load this case</Text>
-            <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center" }}>{error}</Text>
-            <Pressable
-              testID="case-error-retry"
-              onPress={load}
-              style={{ marginTop: Spacing.lg, paddingHorizontal: Spacing.xl, paddingVertical: Spacing.sm, borderRadius: Radius.md, backgroundColor: colors.brandPrimary }}
-            >
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
-            </Pressable>
+            <Ionicons name="cloud-offline-outline" size={48} color={colors.error || "#B91C1C"} />
+            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12, fontSize: 17 }}>Couldn't load this case / કેસ લોડ કરી શકાયો નથી</Text>
+            <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: "center", maxWidth: 380 }}>{error}</Text>
+            <View style={{ flexDirection: "row", gap: 12, marginTop: Spacing.lg }}>
+              <Pressable
+                testID="case-error-back"
+                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/cases"))}
+                style={{ paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}
+              >
+                <Text style={{ color: colors.onSurface, fontWeight: "600" }}>Back / પાછા જાઓ</Text>
+              </Pressable>
+              <Pressable
+                testID="case-error-retry"
+                onPress={load}
+                style={{ paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: Radius.md, backgroundColor: colors.brandPrimary }}
+              >
+                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry / ફરી પ્રયાસ કરો</Text>
+              </Pressable>
+            </View>
           </>
         ) : (
           <ActivityIndicator color={colors.brandPrimary} size="large" />
@@ -139,7 +149,8 @@ export default function CaseDetail() {
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
     return (
-      <DesktopPage
+      <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
+        <DesktopPage
         sidebarOffset={false}
         title={c.nickname || c.party_name || "Case Details"}
         subtitle={c.case_number ? `${c.case_number} • ${c.case_type_label || "Case"}` : c.case_type_label || "Case details"}
@@ -227,10 +238,10 @@ export default function CaseDetail() {
                     </View>
                     <View style={{ flex: 1, marginLeft: Spacing.md }}>
                       <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                        {c.language === "gu" ? t.name_gu : t.name_en}
+                        {c.language === "gu" ? t?.name_gu || t?.name_en : t?.name_en || t?.name_gu}
                       </Text>
                       <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                        {c.language === "gu" ? t.name_en : t.name_gu} • {t.category}
+                        {c.language === "gu" ? t?.name_en || t?.name_gu : t?.name_gu || t?.name_en} • {t?.category || "General"}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -241,12 +252,14 @@ export default function CaseDetail() {
           </View>
         </View>
       </DesktopPage>
+      </ErrorBoundary>
     );
   }
 
-  // ------------------------- MOBILE (unchanged) -------------------------
+  // ------------------------- MOBILE -------------------------
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
+    <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable testID="case-back" onPress={() => router.back()} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
@@ -309,10 +322,10 @@ export default function CaseDetail() {
               </View>
               <View style={{ flex: 1, marginLeft: Spacing.md }}>
                 <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                  {c.language === "gu" ? t.name_gu : t.name_en}
+                  {c.language === "gu" ? t?.name_gu || t?.name_en : t?.name_en || t?.name_gu}
                 </Text>
                 <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {c.language === "gu" ? t.name_en : t.name_gu} • {t.category}
+                  {c.language === "gu" ? t?.name_en || t?.name_gu : t?.name_gu || t?.name_en} • {t?.category || "General"}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -335,6 +348,7 @@ export default function CaseDetail() {
         </View>
       </ScrollView>
     </SafeAreaView>
+    </ErrorBoundary>
   );
 }
 

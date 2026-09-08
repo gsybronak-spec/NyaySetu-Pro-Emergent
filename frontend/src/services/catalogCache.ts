@@ -245,6 +245,22 @@ export const catalogCache = {
     );
   },
 
+  getTemplateOrder: (forceRefresh = false): Promise<string[]> => {
+    return fetchCatalogWithSWR(
+      "template_order",
+      async () => {
+        try {
+          const res = await api.catalogTemplateOrder();
+          return Array.isArray(res?.template_order) ? res.template_order : [];
+        } catch {
+          return [];
+        }
+      },
+      [],
+      forceRefresh
+    );
+  },
+
   /**
    * Synchronous peek into memory cache. Returns fallback seed if not in memory.
    */
@@ -256,9 +272,11 @@ export const catalogCache = {
   peekCaseTypes: (): any[] => memoryCache.get("case_types") || SEED_CASE_TYPES,
   peekLaws: (): any[] => memoryCache.get("laws") || SEED_LAWS,
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
+  peekTemplateOrder: (): string[] => memoryCache.get("template_order") || [],
 
   clearCache: () => {
     memoryCache.clear();
     inFlightRequests.clear();
   },
 };
+
