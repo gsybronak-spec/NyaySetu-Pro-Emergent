@@ -18,6 +18,8 @@ const GENERIC_STOP_WORDS = new Set([
   "for",
   "of",
   "in",
+  "the",
+  "and",
   "અંગે",
   "બાબત",
   "બાબતે",
@@ -59,6 +61,14 @@ function normalize(text: string): string {
     .trim();
 }
 
+function wordsMatch(w1: string, w2: string): boolean {
+  if (w1 === w2) return true;
+  if (w1.length >= 4 && w2.length >= 4) {
+    return w1.startsWith(w2) || w2.startsWith(w1);
+  }
+  return false;
+}
+
 export function searchTemplatePairs(
   query: string,
   categoryFilter?: string | null,
@@ -66,7 +76,14 @@ export function searchTemplatePairs(
 ): SearchMatchedPair[] {
   const rawQ = query.trim();
   const q = normalize(rawQ);
-  const isGenericOnly = GENERIC_STOP_WORDS.has(q);
+  const qNoSpaces = q.replace(/\s+/g, "");
+
+  const allTokens = q.split(" ").filter((w) => w.length > 0);
+  let qTokens = allTokens.filter((w) => !GENERIC_STOP_WORDS.has(w));
+  const isGenericOnly = qTokens.length === 0 && allTokens.length > 0;
+  if (isGenericOnly) {
+    qTokens = allTokens;
+  }
 
   const results: SearchMatchedPair[] = [];
 
@@ -95,33 +112,38 @@ export function searchTemplatePairs(
 
     const normNameGu = normalize(pair.name_gu);
     const normNameEn = normalize(pair.name_en);
+    const titleWordsGu = normNameGu.split(" ").filter((w) => !GENERIC_STOP_WORDS.has(w) || isGenericOnly);
+    const titleWordsEn = normNameEn.split(" ").filter((w) => !GENERIC_STOP_WORDS.has(w) || isGenericOnly);
 
     // Tier 1 (Score 100): Exact match on Gujarati or English name
     if (q === normNameGu || q === normNameEn || rawQ === pair.name_gu) {
       maxScore = Math.max(maxScore, 100);
     }
-
     // Tier 2 (Score 80): Prefix / Starts-with match on Gujarati or English name
     else if (normNameGu.startsWith(q) || normNameEn.startsWith(q)) {
       maxScore = Math.max(maxScore, 80);
     }
-
-    // Tier 3 (Score 60): Word or phrase match inside Title
-    else {
-      const wordsEn = normNameEn.split(" ").filter((w) => !GENERIC_STOP_WORDS.has(w) || isGenericOnly);
-      const wordsGu = normNameGu.split(" ").filter((w) => !GENERIC_STOP_WORDS.has(w) || isGenericOnly);
-
-      const phraseMatchEn = normNameEn.includes(q);
-      const phraseMatchGu = normNameGu.includes(q);
-
-      if (phraseMatchEn || phraseMatchGu) {
+    // Tier 3 (Score 75): Exact phrase match inside Title
+    else if (normNameGu.includes(q) || normNameEn.includes(q)) {
+      maxScore = Math.max(maxScore, 75);
+    }
+    // Tier 4 (Score 65): Multi-word Token Matching in Title (Order-Independent)
+    else if (qTokens.length >= 2) {
+      const allGuMatched = qTokens.every((qTok) => titleWordsGu.some((tw) => wordsMatch(qTok, tw)));
+      const allEnMatched = qTokens.every((qTok) => titleWordsEn.some((tw) => wordsMatch(qTok, tw)));
+      if (allGuMatched || allEnMatched) {
         maxScore = Math.max(maxScore, 65);
-      } else if (wordsEn.some((w) => w.startsWith(q)) || wordsGu.some((w) => w.startsWith(q))) {
+      }
+    }
+    // Tier 4b (Score 60): Single non-generic token matches word in Title
+    else if (qTokens.length === 1) {
+      const singleTok = qTokens[0];
+      if (titleWordsEn.some((w) => wordsMatch(singleTok, w)) || titleWordsGu.some((w) => wordsMatch(singleTok, w))) {
         maxScore = Math.max(maxScore, 60);
       }
     }
 
-    // Tier 4 (Score 40-50): Keywords, synonyms, transliterations, aliases
+    // Tier 5 (Score 40-50): Keywords, synonyms, transliterations, aliases
     const allKeywords = [
       ...pair.keywords_en,
       ...pair.keywords_gu,
@@ -132,25 +154,30 @@ export function searchTemplatePairs(
     for (const kw of allKeywords) {
       const normKw = normalize(kw);
       if (!normKw) continue;
+      const kwNoSpaces = normKw.replace(/\s+/g, "");
 
-      if (normKw === q) {
+      if (normKw === q || (qNoSpaces.length >= 4 && kwNoSpaces === qNoSpaces)) {
         maxScore = Math.max(maxScore, 50);
         break;
       } else if (normKw.startsWith(q)) {
         maxScore = Math.max(maxScore, 45);
       } else if (normKw.includes(q)) {
         maxScore = Math.max(maxScore, 40);
+      } else if (qTokens.length >= 2) {
+        const kwWords = normKw.split(" ").filter((w) => !GENERIC_STOP_WORDS.has(w));
+        if (kwWords.length >= 2 && qTokens.every((qTok) => kwWords.some((kwTok) => wordsMatch(qTok, kwTok)))) {
+          maxScore = Math.max(maxScore, 48);
+        }
       }
     }
 
-    // Tier 5 (Score 20-25): Fuzzy typo tolerance (only for queries with length >= 4)
+    // Tier 6 (Score 20-25): Fuzzy typo tolerance (only for queries with length >= 4)
     if (maxScore === 0 && q.length >= 4) {
-      // Check distance against transliterations, aliases, and title words
       const candidates = [
         ...pair.transliterations,
         ...pair.aliases,
-        ...normNameEn.split(" "),
-        ...normNameGu.split(" "),
+        ...titleWordsEn,
+        ...titleWordsGu,
       ].map(normalize).filter((c) => c.length >= 4 && (!GENERIC_STOP_WORDS.has(c) || isGenericOnly));
 
       for (const cand of candidates) {
