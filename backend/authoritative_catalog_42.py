@@ -12,7 +12,7 @@ All templates adhere to:
   1. Exact field definitions, types, dropdowns, conditional "Other" (અન્ય) inputs.
   2. Case-owned fields omitted from form (inherited automatically from linked Case).
   3. Date ordered as the LAST field.
-  4. Authoritative Gujarati legal draft with {{placeholders}}.
+  4. Authoritative Gujarati legal draft with {{placeholders}} character-for-character from source ODT.
   5. Accurate, legally sound English court translations.
   6. Standard layout settings (A4, margins, HarfBuzz fonts).
 """
@@ -40,7 +40,6 @@ DEFAULT_SETTINGS = {
 
 # The 21 Authoritative Template Definitions (Base Specifications)
 BASE_TEMPLATES = [
-    # 1. Aanke Padvani Arji
     {
         "base_key": "aanke_padvani_arji",
         "aliases": ["aanke", "exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક", "આંક પાડવાની અરજી"],
@@ -49,13 +48,9 @@ BASE_TEMPLATES = [
         "category": "General",
         "description": "Application to mark/assign exhibit numbers to documents produced on record.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "document_details", "label_en": "Document details to be exhibited", "label_gu": "ક્યા દસ્તાવેજને આંક પાડવાના તેની વિગત", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'document_details', 'label_en': 'Document details to be exhibited', 'label_gu': 'ક્યા દસ્તાવેજને આંક પાડવાના તેની વિગત', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -75,8 +70,7 @@ BASE_TEMPLATES = [
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -90,16 +84,13 @@ SUBJECT: APPLICATION TO EXHIBIT DOCUMENT
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending for hearing before this Hon'ble Court. In the said case, {{document_details}} is of immense importance and necessary for the proper adjudication of the matter. It is in the interest of justice that the said document be taken on record as evidence. Therefore, it is prayed that this Hon'ble Court may be pleased to take the said document on record and assign a proper exhibit number to it.
+The said case is pending before this Hon'ble Court. In the said case, {{document_details}} is of great significance and is necessary for the proper adjudication of the case. As it is in the interest of justice to take the said document on record as evidence, it is prayed that this Hon'ble Court may be pleased to take the said document on record and assign appropriate exhibit number to it.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 2. Certified Report / Nakal
     {
         "base_key": "certified_report",
         "aliases": ["certified copy", "પ્રમાણિત નકલ", "pramanit nakal", "નકલ", "સર્ટિફાઇડ રિપોર્ટ", "inspection"],
@@ -108,85 +99,72 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application for certified copies of judicial orders, evidence, or inspection reports.",
         "fields": [
-            {"key": "presiding_officer", "label_en": "Court / Presiding Judge details", "label_gu": "કયા સાહેબની કોર્ટનો કેસ છે તેની વિગત", "type": "text", "required": False},
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ / ત્રાહિત વકીલ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-                 {"value": "other", "label_en": "Other (Third Party)", "label_gu": "અન્ય (ત્રાહિત પક્ષ)"},
-             ]},
-            {"key": "advocate_other", "label_en": "If Other — details of person requesting copies", "label_gu": "અન્ય હોય તો તેઓની વિગત", "type": "text", "required": False, "depends_on": "advocate_side", "show_when": "other"},
-            {"key": "copy_type", "label_en": "Type of copy requested", "label_gu": "નકલ માંગેલ બાબત", "type": "select", "required": True,
-             "options": [
-                 {"value": "સર્ટિફાઇડ નકલ", "label_en": "Certified Copy", "label_gu": "સર્ટિફાઇડ નકલ"},
-                 {"value": "ઇન્સ્પેક્શન રિપોર્ટ", "label_en": "Inspection Report", "label_gu": "ઇન્સ્પેક્શન રિપોર્ટ"},
-                 {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
-             ]},
-            {"key": "copy_type_other", "label_en": "Specify other copy type", "label_gu": "અન્ય નકલ પ્રકાર જણાવો", "type": "text", "required": False, "depends_on": "copy_type", "show_when": "other"},
-            {"key": "document_details", "label_en": "Details of documents/copies required", "label_gu": "માંગેલ નકલના દસ્તાવેજોની વિગત", "type": "textarea", "required": True},
-            {"key": "urgency", "label_en": "Mode of copy", "label_gu": "નકલનો પ્રકાર", "type": "select", "required": True,
-             "options": [
-                 {"value": "સાદી", "label_en": "Ordinary", "label_gu": "સાદી"},
-                 {"value": "અર્જન્ટ", "label_en": "Urgent", "label_gu": "અર્જન્ટ"},
-             ]},
-            {"key": "reason_for_copy", "label_en": "Reason for obtaining copy", "label_gu": "નકલ મેળવવાનું કારણ", "type": "text", "required": False},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'presiding_officer', 'label_en': 'Presiding officer designation / name', 'label_gu': 'પીઠાશીન અધિકારીશ્રીનું નામ / હોદ્દો', 'type': 'text', 'required': False},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'other', 'label_en': 'Third party / Other', 'label_gu': 'ત્રીજા પક્ષકાર / અન્ય'}]},
+            {'key': 'advocate_other', 'label_en': 'If other, specify party', 'label_gu': 'અન્ય પક્ષકારની વિગત', 'type': 'text', 'required': False, 'depends_on': 'advocate_side=other'},
+            {'key': 'copy_type', 'label_en': 'Type of copy requested', 'label_gu': 'માગેલ નકલનો પ્રકાર', 'type': 'select', 'required': True, 'options': [{'value': 'સર્ટિફાઇડ નકલ', 'label_en': 'Certified Copy', 'label_gu': 'સર્ટિફાઇડ નકલ'}, {'value': 'ઇન્સ્પેક્શન રિપોર્ટ', 'label_en': 'Inspection Report', 'label_gu': 'ઇન્સ્પેક્શન રિપોર્ટ'}, {'value': 'other', 'label_en': 'Other copy type', 'label_gu': 'અન્ય નકલનો પ્રકાર'}]},
+            {'key': 'copy_type_other', 'label_en': 'If other, specify copy type', 'label_gu': 'અન્ય નકલ પ્રકારની વિગત', 'type': 'text', 'required': False, 'depends_on': 'copy_type=other'},
+            {'key': 'document_details', 'label_en': 'Details of documents requested', 'label_gu': 'માંગેલ દસ્તાવેજની વિગત', 'type': 'textarea', 'required': True},
+            {'key': 'representative_name', 'label_en': 'Representative authorized to collect copy (if any)', 'label_gu': 'નકલ મેળવવા અધિકૃત પ્રતિનિધિનું નામ (જો હોય તો)', 'type': 'text', 'required': False},
+            {'key': 'urgency', 'label_en': 'Urgency', 'label_gu': 'અરજીનો પ્રકાર (તાકીદ)', 'type': 'select', 'required': True, 'options': [{'value': 'સાદી', 'label_en': 'Ordinary (સાદી)', 'label_gu': 'સાદી'}, {'value': 'અર્જન્ટ', 'label_en': 'Urgent (અર્જન્ટ)', 'label_gu': 'અર્જન્ટ'}]},
+            {'key': 'reason_for_copy', 'label_en': 'Reason for requiring copy', 'label_gu': 'નકલ મેળવવાનું કારણ', 'type': 'text', 'required': False},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
 {{presiding_officer}}
-
 {{case_type}} નં. : {{case_number}}
-
+{{police_station_crime_no}}
+{{hearing_or_disposal_date}}
 {{party_line}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- સર્ટિફાઇડ નકલ / રિપોર્ટ મેળવવા બાબત...
+બાબત : પ્રમાણિત નકલ મેળવવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+અમો નીચે સહી કરનાર એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ પેન્ડિંગ / ફેસલ થયેલ છે. સદર કેસમાં અમારે {{copy_type}} ની જરૂરિયાત હોય, નીચે મુજબના દસ્તાવેજોની સર્ટિફાઇડ નકલ તૈયાર કરાવી {{urgency}} ધોરણે આપવા હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરિયાત હોય, નીચે મુજબની સહિ-સિક્કાવાળી પ્રમાણિત નકલ કુલ નંગ તાત્કાલીક આપવા મહેરબાની કરશોજી.
 
-નકલ મેળવવાની વિગત:
+માંગેલ દસ્તાવેજ ની વિગત
 {{document_details}}
 
-કારણ : {{reason_for_copy}}
+સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{representative_name}} ને આપશોજી. જે નકલ માટે ડિપોઝિટ પેટે રૂ. જમા કરાવેલ છે.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+-------------------
+{{advocate_name}}
+{{advocate_mobile}}""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 {{presiding_officer}}
-
 {{case_type}} No. : {{case_number}}
-
+{{police_station_crime_no}}
+{{hearing_or_disposal_date}}
 {{party_line}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR CERTIFIED COPY / INSPECTION REPORT
+SUBJECT: APPLICATION FOR OBTAINING CERTIFIED COPY
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+We, the undersigned advocate, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending / disposed of before this Hon'ble Court. In the said matter, {{copy_type}} is required on behalf of the applicant. Therefore, it is prayed that this Hon'ble Court may be pleased to issue certified copies of the documents specified below on {{urgency}} basis in the interest of justice.
+In the said case, the certified copy with official seal and signature of the documents mentioned below is required for study and judicial proceedings. It is therefore prayed that this Hon'ble Court may be pleased to urgently issue certified copies with official seal and signature of the following documents:
 
-Details of copies required:
+Details of Documents Requested:
 {{document_details}}
 
-Reason : {{reason_for_copy}}
+The said certified copy may kindly be delivered to the undersigned or to {{representative_name}} on our behalf. Towards deposit for the copy, Rs. has been deposited.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+-------------------
+{{advocate_name}}
+{{advocate_mobile}}""",
     },
-
-    # 3. Closing Purshish
     {
         "base_key": "closing_purshish",
         "aliases": ["closing", "purshis", "પુરાવો બંધ", "પુરશીશ", "closure of evidence"],
@@ -195,13 +173,8 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Purshis submitted to formally close oral and documentary evidence on behalf of a party.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "closing_note", "label_en": "Special note / reason (optional)", "label_gu": "વિશેષ નોંધ / કારણ (મરજિયાત)", "type": "textarea", "required": False},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -212,19 +185,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- પુરાવો બંધ અંગેની પુરશિસ...
+ક્લોઝિંગ પુરસીસ
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટ પુરસીસ થી જાહેર કરીએ છીએ કે...
 
-સદર કામમાં અમો {{selected_party_role}} તરફથી અમારો મૌખિક તેમજ દસ્તાવેજી પુરાવો પૂરો થયેલ હોવાથી હવે પછી અમારે કોઈ વધુ પુરાવો રજૂ કરવાનો રહેતો ન હોય, સદર કામમાં અમારો પુરાવો બંધ રાખવા બાબતે આ પુરાવા બંધની પુરશિસ રજૂ કરીએ છીએ, જે રેકર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
-
-{{closing_note}}
+સદર કામ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{selected_party_role}} તરફથી જરૂરી પુરાવા તથા રજૂઆતો પૂર્ણ કરવામાં આવેલ છે અને હવે અમારા તરફથી વધુ કોઈ પુરાવા કે રજૂઆત કરવાની ન હોય, સદર પક્ષકાર તરફનો પુરાવાનો સ્ટેજ બંધ ગણાવી સદર કેસમાં આગળની કાર્યવાહી કરવા તથા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -234,22 +204,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: PURSHIS CLOSING ORAL AND DOCUMENTARY EVIDENCE
+CLOSING PURSHIS
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+In the above matter, we, the advocate for {{selected_party_role}}, hereby declare by this purshis before this Hon'ble Court that:
 
-In the said case, oral as well as documentary evidence on behalf of {{selected_party_role}} has been concluded. The applicant does not wish to lead any further evidence in this matter. Therefore, this closing purshis is submitted to close the evidence on behalf of {{selected_party_role}}. It is prayed that the same be taken on record and appropriate orders be passed.
-
-{{closing_note}}
+The said case is pending before this Hon'ble Court. On behalf of {{selected_party_role}}, the necessary evidence and submissions have been completed and no further evidence or submissions are to be made on our behalf. It is therefore prayed that this Hon'ble Court may be pleased to close the stage of evidence on behalf of the said party and pass appropriate orders to proceed further in the case.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 4. DD Karavani Arji (Dismissal in Default)
     {
         "base_key": "dd_karavani_arji",
         "aliases": ["dd", "dismiss in default", "ડિસમિસ", "ડિસમિસ ઇન ડિફોલ્ટ", "ડી.ડી."],
@@ -258,14 +223,10 @@ Advocate for {{selected_party_role}}
         "category": "Civil",
         "description": "Application to dismiss case due to non-prosecution or absence of complainant/plaintiff.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Defendant / Accused side", "label_gu": "પ્રતિવાદી / આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Plaintiff / Complainant side", "label_gu": "વાદી / ફરિયાદી તરફથી"},
-             ]},
-            {"key": "absence_period", "label_en": "Duration/period of continuous absence", "label_gu": "કેટલા સમયથી ગેરહાજર રહે છે તેની વિગત", "type": "text", "required": True},
-            {"key": "dd_grounds", "label_en": "Grounds for dismissal", "label_gu": "ડિસમિસ કરવાના કારણો", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Opposite party / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
+            {'key': 'case_or_suit', 'label_en': 'Case or Suit', 'label_gu': 'કેસ અથવા દાવો', 'type': 'select', 'required': True, 'options': [{'value': 'કેસ', 'label_en': 'Case', 'label_gu': 'કેસ'}, {'value': 'દાવો', 'label_en': 'Suit', 'label_gu': 'દાવો'}]},
+            {'key': 'dismiss_reason', 'label_en': 'Reason / grounds for dismissal', 'label_gu': 'ડિસમીસ કરવાના કારણો (દા.ત. ફરીયાદી મુદ્દતે હાજર રહેતા નથી...)', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -276,19 +237,18 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- કેસ ડિસમિસ ઇન ડિફોલ્ટ (ડી.ડી.) કરવા બાબત...
+બાબત :- {{case_or_suit}} ડિસમીસ કરવા બાબત...
 
 સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં સામા પક્ષકાર છેલ્લા ઘણા સમયથી એટલે કે {{absence_period}} થી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી કે કેસ આગળ ચલાવવામાં રસ ધરાવતા નથી. {{dd_grounds}}
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismiss_reason}} હોવાથી સદર કેસ આગળ ચલાવવાની જરૂરિયાત રહેતી નથી.
 
-આમ, સામા પક્ષકારની સતત ગેરહાજરીના કારણે અમારા પક્ષકારને બિનજરૂરી હેરાનગતિ ભોગવવી પડે છે. જેથી સદર કેસને ડિસમિસ ઇન ડિફોલ્ટ કરી યોગ્ય તે ન્યાયિક હુકમ કરવા મહેરબાની કરશોજી.
+વધુમા આવા ખોટા કેસ ડિસમીસ કરવામાં આવે તે ન્યાયના હિતમાં હોય, જેથી સદર કેસ ડિસમીસ કરી આગળની કાર્યવાહી પૂર્ણ કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -298,22 +258,19 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR DISMISSAL IN DEFAULT (D.D.)
+SUBJECT: APPLICATION TO DISMISS {{case_or_suit}}
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. The opposite party has failed to appear before this Hon'ble Court for a considerable period, namely {{absence_period}}, and shows no interest in prosecuting the case diligently. {{dd_grounds}}
+The said case is pending before this Hon'ble Court. In the said matter, as {{dismiss_reason}}, there remains no necessity to proceed further with the said case.
 
-Due to the continuous and unexplained absence of the opposite party, our client is subjected to undue hardship and prejudice. It is therefore prayed that this Hon'ble Court may be pleased to dismiss the case in default in the interest of justice.
+Furthermore, it is in the interest of justice that such false cases be dismissed. It is therefore prayed that this Hon'ble Court may be pleased to dismiss the said case and pass appropriate orders to conclude further proceedings.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 5. Document Parat Levani Arji (Return of Documents)
     {
         "base_key": "document_parat_levani_arji",
         "aliases": ["document_return", "parat", "return document", "દસ્તાવેજ પરત", "પરત મેળવવા"],
@@ -322,20 +279,10 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application to return original documents produced on court record with undertaking.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "case_status", "label_en": "Case Status", "label_gu": "કેસની સ્થિતિ", "type": "select", "required": True,
-             "options": [
-                 {"value": "ચાલુ", "label_en": "Pending / Ongoing", "label_gu": "ચાલુ"},
-                 {"value": "ડિસ્પોસ્ડ", "label_en": "Disposed", "label_gu": "ડિસ્પોસ્ડ"},
-             ]},
-            {"key": "documents_list", "label_en": "Details of documents to be returned", "label_gu": "પરત મેળવવાના દસ્તાવેજોની વિગત", "type": "textarea", "required": True},
-            {"key": "reason_for_return", "label_en": "Reason for return of documents", "label_gu": "દસ્તાવેજ પરત મેળવવાનું કારણ", "type": "text", "required": True},
-            {"key": "undertaking_text", "label_en": "Undertaking statement", "label_gu": "કોર્ટ ફરમાવે ત્યારે રજૂ કરવાની બાંહેધરી", "type": "text", "required": False, "default_value": "જ્યારે પણ નામદાર કોર્ટ દ્વારા માંગણી કરવામાં આવશે ત્યારે અસલ દસ્તાવેજ રજૂ કરવાની બાંહેધરી આપીએ છીએ."},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'case_status_phrase', 'label_en': 'Case Status (Ongoing / Completed)', 'label_gu': 'કેસની સ્થિતિ (ચાલુ / પૂર્ણ થયેલ)', 'type': 'select', 'required': True, 'options': [{'value': 'ચાલુ', 'label_en': 'Ongoing', 'label_gu': 'ચાલુ'}, {'value': 'પૂર્ણ થયેલ', 'label_en': 'Completed / Disposed', 'label_gu': 'પૂર્ણ થયેલ'}]},
+            {'key': 'document_details', 'label_en': 'Details of documents to be returned', 'label_gu': 'પરત મેળવવાના મૂળ દસ્તાવેજોની વિગત', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -346,26 +293,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- દસ્તાવેજો પરત મેળવવા બાબત...
+બાબત :- દસ્તાવેજ પરત મેળવવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ {{case_status_clause}} {{tense}}. સદર કામમાં અમારા પક્ષકાર તરફથી અસલ દસ્તાવેજો રજૂ કરવામાં આવેલ હતા. જે પૈકી નીચે મુજબના દસ્તાવેજોની અમારા પક્ષકારને જરૂરિયાત હોવાથી પરત મેળવવા જરૂરી છે:
-
-દસ્તાવેજોની વિગત:
-{{documents_list}}
-
-કારણ : {{reason_for_return}}
-
-{{undertaking_text}}
-
-તેથી ન્યાયના હિતમાં સદર દસ્તાવેજોની પ્રમાણિત નકલ રેકર્ડ પર રાખી અસલ દસ્તાવેજો પરત સોંપવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટમા {{case_status_phrase}}. સદર કામમાં {{document_details}} રજૂ કરવામાં આવેલ, જે દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરીયાત ન હોય અને અમોને તે દસ્તાવેજની ખુબ જ જરૂરીયાત હોય તેમજ દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -375,29 +312,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR RETURN OF DOCUMENTS
+SUBJECT: APPLICATION FOR RETURN OF ORIGINAL DOCUMENTS
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case {{case_status_clause}} before this Hon'ble Court. In the said proceedings, original documents were produced on behalf of our client. Out of the same, our client urgently requires the return of the following documents:
-
-Details of Documents:
-{{documents_list}}
-
-Reason : {{reason_for_return}}
-
-Undertaking: The applicant hereby undertakes to produce the said original documents as and when directed by this Hon'ble Court.
-
-Therefore, it is prayed that this Hon'ble Court may be pleased to return the said original documents after retaining certified copies on record, in the interest of justice.
+The said case is pending before this Hon'ble Court, in which {{document_details}} have been produced. The said case being {{case_status_phrase}}, it is necessary for our client to obtain back the said documents. It is therefore prayed that this Hon'ble Court may be pleased to pass an appropriate order returning the said documents to our client.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 6. Document Swikaravani Arji (Production and Acceptance)
     {
         "base_key": "document_swikaravani_arji",
         "aliases": ["document_on_record", "production", "દસ્તાવેજ રજૂ", "દસ્તાવેજ સ્વીકારવા", "record par"],
@@ -406,14 +331,9 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application to produce and accept documents on court record as evidence.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "documents_produced", "label_en": "Details of documents produced", "label_gu": "રજૂ કરેલ દસ્તાવેજોની વિગત", "type": "textarea", "required": True},
-            {"key": "relevance_reason", "label_en": "Relevance and reason for production", "label_gu": "દસ્તાવેજ રજૂ કરવાનું કારણ / મહત્વ", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'documents_produced', 'label_en': 'List of documents produced', 'label_gu': 'રજૂ કરેલ દસ્તાવેજી પુરાવાની યાદી', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -424,24 +344,18 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- દસ્તાવેજો રજૂ કરી રેકર્ડ પર સ્વીકારવા બાબત...
+બાબત :- દસ્તાવેજી પુરાવા સ્વીકારી રેકર્ડ પર લેવા બાબતે...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં અમારા પક્ષકારના હિત અને કેસના સાચા ન્યાયિક નિર્ણય માટે નીચે મુજબના દસ્તાવેજો રજૂ કરવા અત્યંત જરૂરી છે:
-
-રજૂ કરેલ દસ્તાવેજોની વિગત:
-{{documents_produced}}
-
-કારણ : {{relevance_reason}}
-
-સદર દસ્તાવેજો કેસના પુરાવા માટે અનિવાર્ય હોઈ, તેને કોર્ટ રેકર્ડ પર સ્વીકારી યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આ અરજી સાથે રજુ કરેલ દસ્તાવેજી પુરાવાની જરૂરિયાત હોવાથી રજૂ કરવામાં આવે છે. સદર દસ્તાવેજી પુરાવા ન્યાયના હિતમાં હોય, અને સદર પુરાવા રેકર્ડ પર લેવાથી કેસની ન્યાયિક કાર્યવાહી કરવામાં સહાયરૂપ થશે. આથી આપ નામદાર કોર્ટ આ અરજી સાથે રજૂ કરેલ પુરાવા રેકર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ
+
+બિડાણ :- {{documents_produced}}""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -451,27 +365,19 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR PRODUCTION AND ACCEPTANCE OF DOCUMENTS
+SUBJECT: APPLICATION TO ACCEPT DOCUMENTARY EVIDENCE ON RECORD
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. For the proper adjudication of the matter and in the interest of justice, it is necessary to produce the following documents on record:
-
-Details of Documents Produced:
-{{documents_produced}}
-
-Reason and Relevance: {{relevance_reason}}
-
-The said documents are indispensable for establishing the facts of the case. It is therefore prayed that this Hon'ble Court may be pleased to take the said documents on record in the interest of justice.
+The said case is pending before this Hon'ble Court. The documentary evidence produced along with this application is necessary for the case and is being produced herewith. As the said documentary evidence is in the interest of justice and taking the said evidence on record will assist in the judicial proceedings of the case, it is therefore prayed that this Hon'ble Court may be pleased to take the evidence produced along with this application on record and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
-    },
+--------------------------- Advocate for {{selected_party_role}}
 
-    # 7. Exemption Arji (Hazari Mafi)
+Enclosure :- {{documents_produced}}""",
+    },
     {
         "base_key": "exemption_arji",
         "aliases": ["hazari_mafi_arji", "exemption", "હાજરી માફી", "mafi", "hazari mafi"],
@@ -480,21 +386,10 @@ Advocate for {{selected_party_role}}
         "category": "Criminal",
         "description": "Application seeking exemption from personal appearance for the accused on the date of hearing.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Accused side", "label_gu": "આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Applicant side", "label_gu": "અરજદાર તરફથી"},
-             ]},
-            {"key": "applicant_person", "label_en": "Name of person seeking exemption", "label_gu": "કોની હાજરી માફી જોઈએ છે તેનું નામ", "type": "text", "required": True},
-            {"key": "reason", "label_en": "Reason for absence", "label_gu": "ગેરહાજરીનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "માંદગીના કારણોસર", "label_en": "Due to sudden illness", "label_gu": "માંદગીના કારણોસર / બિમાર હોવાથી"},
-                 {"value": "કામ સબબ બહારગામ ગયેલ હોવાથી", "label_en": "Out of station for urgent work", "label_gu": "કામ સબબ બહારગામ ગયેલ હોવાથી"},
-                 {"value": "other", "label_en": "Other reason", "label_gu": "અન્ય કારણ"},
-             ]},
-            {"key": "reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "reason", "show_when": "other"},
-            {"key": "undertaking_next_date", "label_en": "Undertaking for next date", "label_gu": "આગામી તારીખે હાજર રહેવાની બાંહેધરી", "type": "text", "required": False, "default_value": "આગામી મુદ્દતે અમારા પક્ષકાર અચૂક હાજર રહેશે તેવી બાંહેધરી આપીએ છીએ."},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
+            {'key': 'reason', 'label_en': 'Reason for absence', 'label_gu': 'ગેરહાજરીનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'અનિવાર્ય સંજોગોના', 'label_en': 'Unavoidable circumstances', 'label_gu': 'અનિવાર્ય સંજોગોના'}, {'value': 'બહારગામ ગયેલ હોવાના', 'label_en': 'Out of station', 'label_gu': 'બહારગામ ગયેલ હોવાના'}, {'value': 'માંદગીના', 'label_en': 'Due to illness', 'label_gu': 'માંદગીના'}, {'value': 'સામાજીક કાર્યોમા રોકાયેલ હોવાના', 'label_en': 'Engaged in social functions', 'label_gu': 'સામાજીક કાર્યોમા રોકાયેલ હોવાના'}, {'value': 'બીજી કોર્ટમા પણ મુદ્દત હોય જેથી બીજી કોર્ટમા ગયેલ હોવાના', 'label_en': 'Attending hearing in another court', 'label_gu': 'બીજી કોર્ટમા પણ મુદ્દત હોય જેથી બીજી કોર્ટમા ગયેલ હોવાના'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય'}]},
+            {'key': 'reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -505,21 +400,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- આજ રોજની મુદ્દત પૂરતી હાજરી માફી મળવા બાબત...
+બાબત :- હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ)
 
 સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કામમાં અમારા પક્ષકાર {{applicant_person}} આજ રોજની મુદ્દતે હાજર રહી શકે તેમ નથી, કારણ કે {{reason}}.
-
-અમારા પક્ષકાર જાણીબુઝીને ગેરહાજર રહેલ નથી. {{undertaking_next_date}}
-
-આજ રોજ અમારા વકીલશ્રી મારફત કાર્યવાહી ચલાવવા તૈયાર છીએ. જેથી ન્યાયના હિતમાં અમારા પક્ષકારની આજ રોજની મુદ્દત પૂરતી હાજરી માફ રાખવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેની મુદ્દત આજ રોજની છે પરંતુ સદર કામના {{selected_party_role}} આજરોજ {{reason}} કારણોસર આપ નામદાર કોર્ટ સમક્ષ હાજર રહી શકે તેમ નથી. જેથી આજના દિવસ પૂરતી {{selected_party_role}}ની વ્યક્તિગત હાજરી માફ રાખી સદર કેસમાં આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -529,24 +419,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR EXEMPTION FROM PERSONAL APPEARANCE FOR THE DAY
+SUBJECT: APPLICATION FOR EXEMPTION FROM PERSONAL ATTENDANCE (EXEMPTION REPORT)
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-In the said case, our client {{applicant_person}} is unable to remain present in person before this Hon'ble Court today because {{reason}}.
-
-The absence of the applicant is neither deliberate nor intentional, but due to bona fide reasons beyond control. {{undertaking_next_date}}
-
-The advocate on behalf of the applicant is present to proceed with the matter. It is therefore prayed that this Hon'ble Court may be pleased to grant exemption from personal appearance for today only in the interest of justice.
+The said case is pending before this Hon'ble Court. The date of hearing is today, but {{selected_party_role}} is unable to remain present before this Hon'ble Court today due to {{reason}}. It is therefore prayed that this Hon'ble Court may be pleased to exempt the personal attendance of {{selected_party_role}} for today and pass appropriate orders to proceed further in the case.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 8. FS no haq bandh karvani arji (Close Further Statement)
     {
         "base_key": "fs_no_haq_bandh_karvani_arji",
         "aliases": ["fs_haq_bandh", "further statement", "એફ.એસ.", "હક બંધ", "fs close"],
@@ -555,14 +438,9 @@ Advocate for {{selected_party_role}}
         "category": "Criminal",
         "description": "Application to close the right of accused to give further statement under section 313 Cr.P.C.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Complainant side", "label_gu": "ફરિયાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "સામાવાળા તરફથી"},
-             ]},
-            {"key": "accused_target", "label_en": "Name of accused whose F.S. right is to be closed", "label_gu": "જે આરોપીનું F.S. બંધ કરવાનું હોય તેનું નામ", "type": "text", "required": False},
-            {"key": "ground_notes", "label_en": "Grounds / remarks", "label_gu": "હક્ક બંધ કરવાના કારણો / નોંધ", "type": "textarea", "required": False},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'target_party_role', 'label_en': 'Party whose F.S. right to close (e.g. Accused)', 'label_gu': 'જેનો એફ.એસ. હક બંધ કરવાનો છે તે (દા.ત. આરોપી)', 'type': 'text', 'required': True, 'default': 'આરોપી'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -573,19 +451,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- આરોપીનું ફર્ધર સ્ટેટમેન્ટ (F.S.) લેવાનો હક્ક બંધ કરવા બાબત...
+બાબત :- એફ.એસ.નો હક બંધ કરવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં પુરાવાનો તબક્કો પૂર્ણ થયેલ છે અને કેસ આરોપીના ફર્ધર સ્ટેટમેન્ટ (F.S.) માટે મુલતવી રાખવામાં આવેલ છે. આપ નામદાર કોર્ટે પૂરતી તકો આપવા છતાં આરોપી હાજર રહી પોતાનું ફર્ધર સ્ટેટમેન્ટ નોંધાવતા નથી અને કેસ બિનજરૂરી લંબાવવાનો પ્રયાસ કરે છે. {{ground_notes}}
-
-આથી ન્યાયના હિતમાં આરોપી {{accused_target}} નું ફર્ધર સ્ટેટમેન્ટ (F.S.) લેવાનો હક્ક બંધ કરી કેસ આગળ ચલાવવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{target_party_role}} નો એફ.એસ. કરવાનો હક હોવા છતાં ઘણી મુદ્દતોથી એફ. એસ. કરવા માટે આપ નામદાર કોર્ટ સમક્ષ ઉપસ્થિત થયેલ ન હોવાથી તેમજ એફ.એસ. કરવા માટે પૂરતી તક આપવામાં આવેલ હોવા છતાં તકનો ઉપયોગ કરવામાં આવેલ ન હોય તેમજ એફ. એસ. નો હક વધુ ચાલુ રાખવો ન્યાયના હિતમાં યોગ્ય ન હોવાથી {{target_party_role}} નો એફ. એસ. કરવાનો હક બંધ કરી આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -595,22 +470,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION TO CLOSE RIGHT OF FURTHER STATEMENT (F.S.) OF ACCUSED
+SUBJECT: APPLICATION TO CLOSE RIGHT OF FURTHER STATEMENT (F.S.)
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. The evidence stage has concluded, and the matter was posted for recording the further statement (F.S.) of the accused under Section 313 Cr.P.C. Despite sufficient opportunities granted by this Hon'ble Court, the accused has failed to record statement and is deliberately delaying the proceedings. {{ground_notes}}
-
-It is therefore prayed in the interest of justice that this Hon'ble Court may be pleased to close the right of further statement (F.S.) of the accused {{accused_target}} and proceed further with the case.
+The said case is pending before this Hon'ble Court. Despite the right of {{target_party_role}} to give further statement (F.S.), they have not appeared before this Hon'ble Court for several dates for giving F.S., and despite sufficient opportunity having been granted to give F.S., the opportunity has not been availed. As it is not proper in the interest of justice to keep the right of F.S. continuing further, it is prayed that this Hon'ble Court may be pleased to close the right of {{target_party_role}} to give F.S. and pass appropriate orders to proceed further.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 9. FS no haq kholvani arji (Reopen Further Statement)
     {
         "base_key": "fs_no_haq_kholvani_arji",
         "aliases": ["fs_haq_khol", "reopen fs", "એફ.એસ. ખોલવા", "fs khol", "reopen further statement"],
@@ -619,19 +489,10 @@ Advocate for {{selected_party_role}}
         "category": "Criminal",
         "description": "Application to reopen the closed right of accused to record further statement under section 313 Cr.P.C.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Accused side", "label_gu": "આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Applicant side", "label_gu": "અરજદાર તરફથી"},
-             ]},
-            {"key": "reopen_reason", "label_en": "Reason for previous absence / closure", "label_gu": "હક્ક બંધ થવાનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "અનિવાર્ય માંદગીના કારણોસર", "label_en": "Bona fide illness", "label_gu": "અનિવાર્ય માંદગીના કારણોસર"},
-                 {"value": "મુદ્દતની જાણ ન હોવાના કારણે", "label_en": "Lack of knowledge of the date", "label_gu": "મુદ્દતની જાણ ન હોવાના કારણે"},
-                 {"value": "other", "label_en": "Other unavoidable reason", "label_gu": "અન્ય અનિવાર્ય કારણ"},
-             ]},
-            {"key": "reopen_reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "reopen_reason", "show_when": "other"},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
+            {'key': 'reopen_reason', 'label_en': 'Reason for reopening F.S.', 'label_gu': 'એફ.એસ. ન થઈ શકવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના', 'label_en': 'Bereavement in family', 'label_gu': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના'}, {'value': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના', 'label_en': 'Travelled abroad for business', 'label_gu': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના'}, {'value': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના', 'label_en': 'Advocate was indisposed due to illness', 'label_gu': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના'}, {'value': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય', 'label_en': 'Accused was in custody in another matter', 'label_gu': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
+            {'key': 'reopen_reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'reopen_reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -642,19 +503,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- આરોપીનું ફર્ધર સ્ટેટમેન્ટ (F.S.) આપવાનો હક્ક ફરીથી ખોલવા બાબત...
+બાબત :- એફ.એસ.નો હક ફરીથી ખોલવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસમાં અમારા પક્ષકાર {{reopen_reason}} આપ નામદાર કોર્ટ સમક્ષ હાજર રહી શકેલ ન હતા, જેથી આપ નામદાર કોર્ટે અમારા પક્ષકારનું ફર્ધર સ્ટેટમેન્ટ નોંધાવવાનો હક્ક બંધ કરેલ છે. અમારા પક્ષકાર જાણીબુઝીને ગેરહાજર રહેલ નથી.
-
-જો ફર્ધર સ્ટેટમેન્ટનો હક્ક ફરીથી ખોલવામાં નહીં આવે તો અમારા પક્ષકારને કાયમી અન્યાય થશે. અમારા પક્ષકાર આજ રોજ કોર્ટ સમક્ષ હાજર છે અને ફર્ધર સ્ટેટમેન્ટ નોંધાવવા તૈયાર છે. જેથી ન્યાયના હિતમાં ફર્ધર સ્ટેટમેન્ટ (F.S.) નો હક્ક ફરીથી ખોલવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો એફ. એસ. કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} કારણોસર એફ. એસ. થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી તેમજ યોગ્ય હોવાથી તથા એફ. એસ. કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો એફ. એસ. કરવાનો હક ફરીથી ખોલી અમોને એફ.એસ. કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -664,22 +522,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION TO REOPEN RIGHT OF FURTHER STATEMENT (F.S.) OF ACCUSED
+SUBJECT: APPLICATION TO REOPEN RIGHT OF FURTHER STATEMENT (F.S.)
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-In the said case, the applicant could not remain present before this Hon'ble Court due to {{reopen_reason}}, on account of which the right to record further statement (F.S.) came to be closed. The absence was neither intentional nor deliberate.
-
-If the right to record further statement is not reopened, irreparable loss and prejudice will be caused to the applicant. The applicant is present today and is ready to record statement. It is therefore prayed that this Hon'ble Court may be pleased to reopen the right of further statement (F.S.) in the interest of justice.
+The said case is pending before this Hon'ble Court, wherein our right to give further statement (F.S.) was closed by this Hon'ble Court. F.S. could not be recorded due to {{reopen_reason}}, and as the said reason is reasonable and genuine and getting an opportunity to give F.S. is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to reopen our right to give F.S. and grant us an opportunity to give F.S.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 10. Jamin Bond Swikarvani Arji (Bail Bond Acceptance)
     {
         "base_key": "jamin_bond_swikarvani_arji",
         "aliases": ["jamin_bond", "bail bond", "જામીન બોન્ડ", "મુચરકો", "surety bond"],
@@ -688,59 +541,50 @@ Advocate for {{selected_party_role}}
         "category": "Criminal",
         "description": "Application to accept bail bond and surety pursuant to bail order and issue release warrant.",
         "fields": [
-            {"key": "bail_order_date", "label_en": "Bail Order Date", "label_gu": "જામીન મંજૂર થયા તારીખ", "type": "text", "required": True},
-            {"key": "bail_order_court", "label_en": "Court that granted bail", "label_gu": "જામીન મંજૂર કરનાર કોર્ટ", "type": "text", "required": True},
-            {"key": "surety_name", "label_en": "Name of Surety", "label_gu": "જામીનદારનું નામ", "type": "text", "required": True},
-            {"key": "bond_amount", "label_en": "Bail bond amount (Rs.)", "label_gu": "જામીન રકમ (રૂ.)", "type": "text", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'case_or_crime', 'label_en': 'Case No. / Police Station Crime Register No.', 'label_gu': 'કેસ / પો.સ્ટે. ગુન્હા રજીસ્ટર નંબર', 'type': 'text', 'required': True},
+            {'key': 'bail_order_court', 'label_en': "Court that granted bail (Hon'ble Court / Sessions Court / High Court)", 'label_gu': 'જામીન મંજૂર કરનાર કોર્ટ (આપ નામદાર કોર્ટ / નામદાર સેસન્સ કોર્ટ / હાઈકોર્ટ)', 'type': 'text', 'required': True, 'default': 'આપ નામદાર કોર્ટ'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
 
-{{case_or_crime}}
+{{case_type}} નં. : {{case_number}}
+{{police_station_crime_no}}
 
 {{party_line}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- જામીન મુચરકો / બોન્ડ સ્વીકારવા બાબત...
+બાબત : જામીન બોન્ડ સ્વીકારવા બાબત...
 
-સદર કામમાં અમો આરોપીના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો આરોપીના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
 
-સદર કેસમાં આપ નામદાર કોર્ટ / {{bail_order_court}} દ્વારા તારીખ {{bail_order_date}} ના રોજ આરોપીને જામીન પર મુક્ત કરવાનો હુકમ ફરમાવેલ છે. સદર હુકમની શરતો મુજબ આરોપી તરફથી જામીનદાર {{surety_name}} નો રૂ. {{bond_amount}} નો જામીન મુચરકો તેમજ સોલવન્સી પુરાવા સાથે રજૂ કરીએ છીએ.
-
-જેથી આપ નામદાર કોર્ટના હુકમ મુજબનો જામીન મુચરકો સ્વીકારી આરોપીને મુક્ત કરવા યોગ્ય તે હુકમ તથા રિલીઝ વોરંટ કાઢી આપવા મહેરબાની કરશોજી.
+ઉપરોક્ત જણાવેલ {{case_or_crime}} ના કામે {{bail_order_court}} મુજબ આરોપીને જામીન પર મુક્ત કરવાનો હુકમ કરવામાં આવેલ છે. આ હુકમના અનુસંધાને આરોપી તરફે જરૂરી જામીન બોન્ડ તથા જામીનદારના બોન્ડ રજૂ કરવામા આવે છે તે જામીન બોન્ડ તથા જામીનદારના બોન્ડ સ્વીકારી આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-આરોપીના એડવોકેટ
-""",
+--------------------------- આરોપી ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
-
-{{case_or_crime}}
+{{case_type}} No. : {{case_number}}
+{{police_station_crime_no}}
 
 {{party_line}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR ACCEPTANCE OF BAIL BOND AND SURETY
+SUBJECT: APPLICATION TO ACCEPT BAIL BOND
 
 In the above matter, we, the advocate for the Accused, most respectfully submit before this Hon'ble Court that:
 
-In the said case, this Hon'ble Court / {{bail_order_court}} was pleased to enlarge the accused on bail vide order dated {{bail_order_date}}. In compliance with the bail conditions, the accused is submitting a bail bond of Rs. {{bond_amount}} along with surety of {{surety_name}} and necessary solvency documents.
-
-It is therefore prayed that this Hon'ble Court may be pleased to accept the bail bond and surety, and issue necessary release order / release warrant for the release of the accused in the interest of justice.
+In connection with the abovementioned {{case_or_crime}}, an order has been passed by {{bail_order_court}} releasing the accused on bail. In pursuance of this order, the required bail bond and surety bond are submitted herewith on behalf of the accused. It is therefore prayed that this Hon'ble Court may be pleased to accept the said bail bond and surety bond and pass appropriate orders for further proceedings.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for the Accused
-""",
+--------------------------- Advocate for the Accused""",
     },
-
-    # 11. Kam Board Par Levani Arji (Preponement)
     {
         "base_key": "kam_board_par_levani_arji",
         "aliases": ["kam_board", "preponement", "board par", "કામ બોર્ડ પર", "કામ બોર્ડ"],
@@ -749,20 +593,11 @@ Advocate for the Accused
         "category": "General",
         "description": "Application to prepone the hearing and take the case on board on urgent grounds.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "scheduled_date", "label_en": "Scheduled / next date of hearing", "label_gu": "હાલની મુદતની તારીખ", "type": "text", "required": True},
-            {"key": "urgent_reason", "label_en": "Reason to take on board", "label_gu": "કામ બોર્ડ પર લેવાનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "સમાધાન પુરશિસ રજૂ કરવી હોવાથી", "label_en": "To submit compromise purshis", "label_gu": "સમાધાન પુરશિસ રજૂ કરવી હોવાથી"},
-                 {"value": "અર્જન્ટ હુકમ મેળવવા સારુ", "label_en": "For urgent orders", "label_gu": "અર્જન્ટ હુકમ મેળવવા સારુ"},
-                 {"value": "other", "label_en": "Other urgent grounds", "label_gu": "અન્ય અર્જન્ટ કારણ"},
-             ]},
-            {"key": "urgent_reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "urgent_reason", "show_when": "other"},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'scheduled_date', 'label_en': 'Previously scheduled next date', 'label_gu': 'કેસની આગામી નીમેલ તારીખ (દા.ત. ૨૫/૧૦/૨૦૨૬)', 'type': 'text', 'required': True},
+            {'key': 'urgent_reason', 'label_en': 'Urgent reason for taking matter on board', 'label_gu': 'કામ બોર્ડ પર લેવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'વોરંટ રદ કરાવવાનો હોય', 'label_en': 'For cancellation of warrant', 'label_gu': 'વોરંટ રદ કરાવવાનો હોય'}, {'value': 'સમાધાન પુરશિસ રજૂ કરવી હોવાથી', 'label_en': 'For presenting compromise purshis', 'label_gu': 'સમાધાન પુરશિસ રજૂ કરવી હોવાથી'}, {'value': 'અર્જન્ટ હુકમ મેળવવા સારુ', 'label_en': 'For urgent order', 'label_gu': 'અર્જન્ટ હુકમ મેળવવા સારુ'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
+            {'key': 'urgent_reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'urgent_reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -773,19 +608,16 @@ Advocate for the Accused
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- કામ આજ રોજ બોર્ડ પર લેવા બાબત...
+બાબત :- કામ બોર્ડ પર લેવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ આગામી તારીખ {{scheduled_date}} ના રોજ નિયત થયેલ છે. પરંતુ સદર કામમાં {{urgent_reason}} હોવાથી આજ રોજ કામ બોર્ડ પર લેવું અત્યંત જરૂરી અને અનિવાર્ય છે.
-
-જેથી ન્યાયના હિતમાં સદર કામનું રોજકામ તથા કેસની ફાઇલ આજ રોજ બોર્ડ પર લઈ યોગ્ય તે કાર્યવાહી કરવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે તેમજ કેસની આગામી તા. {{scheduled_date}} નીમવામાં આવેલ છે પરંતુ સદર કામમાં આજ રોજ {{urgent_reason}} જેથી કામ બોર્ડ પર લેવામાં આવે તે જરૂરી છે. સદર કાર્યવાહી ન્યાયના હિતમાં હોય, જેથી સદર કામને આજ રોજ બોર્ડ પર લઈ જરૂરી કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -795,22 +627,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION TO TAKE MATTER ON BOARD TODAY
+SUBJECT: APPLICATION TO TAKE UP MATTER ON BOARD
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is scheduled for hearing on {{scheduled_date}}. However, it is urgently necessary to take the matter on board today because {{urgent_reason}}.
-
-Therefore, it is respectfully prayed that this Hon'ble Court may be pleased to call for the case record and take the matter on board today for appropriate proceedings in the interest of justice.
+The said case is pending before this Hon'ble Court and the next date is fixed on {{scheduled_date}}. However, in the said matter today {{urgent_reason}}, hence it is necessary that the matter be taken up on board. As the said proceeding is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to take up the matter on board today and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 12. Mudat Arji (Adjournment)
     {
         "base_key": "mudat_arji",
         "aliases": ["mudat", "adjournment", "મુદ્દત", "મુદત અરજી", "adjourn"],
@@ -819,21 +646,10 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application seeking postponement/adjournment of today's court hearing date.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "reason", "label_en": "Grounds for adjournment", "label_gu": "મુદ્દત માંગવાનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "માંદગીના કારણોસર", "label_en": "Illness of party / advocate", "label_gu": "પક્ષકાર/વકીલશ્રી માંદગીના કારણોસર"},
-                 {"value": "દસ્તાવેજી પુરાવા એકત્રિત કરવા સારુ", "label_en": "To gather documentary evidence", "label_gu": "દસ્તાવેજી પુરાવા એકત્રિત કરવા સારુ"},
-                 {"value": "સમાધાનની વાતચીત ચાલુ હોવાથી", "label_en": "Settlement talks are in progress", "label_gu": "સમાધાનની વાતચીત ચાલુ હોવાથી"},
-                 {"value": "વકીલશ્રી અન્ય કોર્ટમાં રોકાયેલ હોવાથી", "label_en": "Advocate engaged in another court", "label_gu": "વકીલશ્રી અન્ય કોર્ટમાં રોકાયેલ હોવાથી"},
-                 {"value": "other", "label_en": "Other reason", "label_gu": "અન્ય કારણ"},
-             ]},
-            {"key": "reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "reason", "show_when": "other"},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'reason', 'label_en': 'Reason for adjournment', 'label_gu': 'મુદ્દત માંગવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'માંદગીના', 'label_en': 'Due to illness', 'label_gu': 'માંદગીના'}, {'value': 'અનિવાર્ય સંજોગોના', 'label_en': 'Unavoidable circumstances', 'label_gu': 'અનિવાર્ય સંજોગોના'}, {'value': 'દસ્તાવેજી પુરાવા એકત્રિત કરવાના', 'label_en': 'Collecting documentary evidence', 'label_gu': 'દસ્તાવેજી પુરાવા એકત્રિત કરવાના'}, {'value': 'સમાધાનની વાતચીત ચાલુ હોવાના', 'label_en': 'Compromise talks ongoing', 'label_gu': 'સમાધાનની વાતચીત ચાલુ હોવાના'}, {'value': 'વકીલશ્રી અન્ય કોર્ટમાં રોકાયેલ હોવાના', 'label_en': 'Advocate busy in another court', 'label_gu': 'વકીલશ્રી અન્ય કોર્ટમાં રોકાયેલ હોવાના'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
+            {'key': 'reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -844,19 +660,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- આજ રોજની મુદ્દત મુલતવી રાખવા બાબત...
+બાબત :- મુદ્દત આપવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ આજ રોજ ચાલવા પર છે. સદર કામમાં {{reason}} હોવાથી આજ રોજ કેસ ચલાવી શકાય તેમ નથી.
-
-અમો જાણીબુઝીને મુદ્દત માંગતા નથી. જેથી ન્યાયના હિતમાં આજ રોજની મુદ્દત મુલતવી રાખી યોગ્ય તે આગળની લાંબી મુદ્દત ફરમાવવા આપ નામદાર કોર્ટને નમ્ર વિનંતી છેજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેની મુદ્દત આજ રોજની છે પરંતુ સદર કામના {{selected_party_role}} આજરોજ {{reason}} કારણોસર આજરોજ આપ નામદાર કોર્ટ સમક્ષ હાજર રહી શકે તેમ ન હોઈ, સદરહુ કામમાં આજરોજ કેસ આગળ ન ચલાવવા ન્યાયના હિતમાં એક મુદ્દત આપવાનો હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+------------ {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -870,18 +683,13 @@ SUBJECT: APPLICATION FOR ADJOURNMENT
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said matter is listed today before this Hon'ble Court. The applicant is unable to proceed with the matter today because {{reason}}.
-
-The adjournment is sought bona fide and not with any intent to cause delay. It is therefore prayed that this Hon'ble Court may be pleased to adjourn today's hearing and grant a suitable next date in the interest of justice.
+The said case is pending before this Hon'ble Court. The date of hearing is today, but the {{selected_party_role}} is unable to remain present before this Hon'ble Court today due to {{reason}}, hence in the interest of justice an order may be pleased to grant an adjournment not to proceed further with the case today.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+------------ Advocate for {{selected_party_role}}""",
     },
-
-    # 13. Saaxi ne Summons (Witness Summons)
     {
         "base_key": "saaxi_ne_summons",
         "aliases": ["saaxi_summons", "witness summons", "સાક્ષી", "સમન્સ", "witness"],
@@ -890,15 +698,9 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application to issue court summons to call a witness for deposition or production of documents.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "witness_name", "label_en": "Witness Name", "label_gu": "સાક્ષીનું નામ", "type": "text", "required": True},
-            {"key": "witness_address", "label_en": "Witness Address", "label_gu": "સાક્ષીનું સરનામું", "type": "textarea", "required": True},
-            {"key": "witness_purpose", "label_en": "Purpose of witness / documents to produce", "label_gu": "સાક્ષીને બોલાવવાનો હેતુ / દસ્તાવેજ રજૂ કરવા બાબત", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'witness_name', 'label_en': 'Name of witness to be summoned', 'label_gu': 'સાક્ષીનું નામ', 'type': 'text', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -911,21 +713,14 @@ Advocate for {{selected_party_role}}
 
 બાબત :- સાક્ષીને સમન્સ કાઢવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં નીચે જણાવેલ સાક્ષીની જુબાની કેસના સત્ય ન્યાયિક નિર્ણય માટે ખૂબ જ જરૂરી અને મહત્વપૂર્ણ છે:
-
-સાક્ષીનું નામ : {{witness_name}}
-સરનામું : {{witness_address}}
-જુબાની / દસ્તાવેજનો હેતુ : {{witness_purpose}}
-
-સદર સાક્ષી કોર્ટના સમન્સ વગર હાજર રહે તેમ ન હોવાથી, ન્યાયના હિતમાં સદર સાક્ષીને નિયત તારીખે જુબાની આપવા તેમજ જરૂરી દસ્તાવેજો સાથે હાજર રહેવા અંગે સમન્સ કાઢી આપવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{witness_name}} નામના સાક્ષીની જુબાનીની જરૂરિયાત હોવાથી તેમજ સદર સાક્ષીની જુબાની કેસના ન્યાયના હિતમાં હોય અને જેનાથી કેસની યોગ્ય કાર્યવાહી કરવામાં સહાયરૂપ થાય તેમ છે. જેથી સદર {{witness_name}} નાઓને આપ નામદાર કોર્ટ સમક્ષ હાજર રહેવા માટે સમન્સ કાઢી આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -935,26 +730,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR ISSUANCE OF WITNESS SUMMONS
+SUBJECT: APPLICATION TO ISSUE SUMMONS TO WITNESS
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. The testimony of the witness mentioned below is indispensable and material for the fair and just adjudication of this case:
-
-Witness Name : {{witness_name}}
-Address : {{witness_address}}
-Purpose / Documents to Produce : {{witness_purpose}}
-
-The said witness cannot attend this Hon'ble Court without the issuance of summons. It is therefore prayed that this Hon'ble Court may be pleased to issue witness summons to the above-named witness to depose and/or produce documents in the interest of justice.
+The said case is pending before this Hon'ble Court. In the said case, the testimony of witness named {{witness_name}} is required, and the testimony of the said witness is in the interest of justice and will assist in the proper conduct of the case. It is therefore prayed that this Hon'ble Court may be pleased to issue summons directing the said {{witness_name}} to remain present before this Hon'ble Court.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 14. Samadhan Purshish (Compromise Purshis)
     {
         "base_key": "samadhan_purshish",
         "aliases": ["samadhan", "compromise", "settlement", "સમાધાન", "પુરશિસ સમાધાન"],
@@ -963,9 +749,8 @@ Advocate for {{selected_party_role}}
         "category": "Civil",
         "description": "Joint purshis submitted by both parties recording amicable settlement and terms of compromise.",
         "fields": [
-            {"key": "settlement_terms", "label_en": "Terms and conditions of compromise", "label_gu": "સમાધાનની શરતો તથા વિગતો", "type": "textarea", "required": True},
-            {"key": "prayer_disposal", "label_en": "Prayer for disposal / acquittal", "label_gu": "કેસ નિકાલ અંગેની માંગણી", "type": "text", "required": False, "default_value": "સદર કેસ સમાધાનના આધારે આખરી નિકાલ કરવાનો હુકમ કરવા વિનંતી છે."},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'settlement_terms', 'label_en': 'Settlement terms / conditions (e.g. subject to conditions...)', 'label_gu': 'સમાધાનની શરતો (દા.ત. શરતો ને આધીન / એવી શરત ને આધીન)', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -976,24 +761,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- બંને પક્ષકારો વચ્ચે સમાધાન થયેલ હોવા અંગેની પુરશિસ...
+સમાધાન પુરસીસ
 
-સદર કામમાં બંને પક્ષકારો તેમજ તેઓના એડવોકેટશ્રીઓ આપ નામદાર કોર્ટ સમક્ષ નમ્રતાપૂર્વક સંયુક્ત પુરશિસ રજૂ કરે છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટ પુરસીસ થી જાહેર કરીએ છીએ કે.....
 
-સદર કામમાં બંને પક્ષકારો વચ્ચે વડીલો તથા મિત્રોની દરમિયાનગીરીથી સુખદ સમાધાન થઈ ગયેલ છે. બંને પક્ષકારો હવે એકબીજા સામે કોઈ પ્રકારનો વાંધો કે તકરાર ધરાવતા નથી. સમાધાનની શરતો નીચે મુજબ છે:
-
-સમાધાનની શરતો:
-{{settlement_terms}}
-
-બંને પક્ષકારોએ કોઈપણ જાતના ડર, ધાકધમકી કે અયોગ્ય દબાણ વગર પોતાની રાજીખુશીથી આ સમાધાન સ્વીકારેલ છે. {{prayer_disposal}}
-
-તેથી ન્યાયના હિતમાં આ સમાધાન પુરશિસ રેકર્ડ પર લઈ સદર કેસનો સુખદ નિકાલ કરવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસના પક્ષકારો વચ્ચે {{settlement_terms}} પરસ્પર સમાધાન થયેલ છે. બંને પક્ષકારોએ પોતાની સ્વતંત્ર ઇચ્છાથી તથા કોઈપણ જાતના દબાણ, ધાકધમકી કે લાલચ વગર સદર સમાધાન કરેલ છે અને સદર સમાધાન મુજબ આગળની કાર્યવાહી કરવા બંને પક્ષકારો સંમત છે. સદર સમાધાન પુરસીસ રેકોર્ડ પર લઈ યોગ્ય કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{party_role}} / એડવોકેટ               {{opposite_party_role}} / એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1003,27 +780,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: COMPROMISE PURSHIS / SETTLEMENT TERMS
+COMPROMISE PURSHIS
 
-In the above matter, both the parties and their respective advocates most respectfully submit this joint purshis before this Hon'ble Court that:
+In the above matter, we, the advocate for {{selected_party_role}}, hereby declare by this purshis before this Hon'ble Court that:
 
-Through the intervention of elders, common friends and well-wishers, both the parties have arrived at an amicable and full settlement of all disputes involved in this matter. Neither party has any grievance or claim against the other. The terms of compromise are as follows:
-
-Terms of Settlement:
-{{settlement_terms}}
-
-The parties have entered into this compromise voluntarily, with free consent and without any force, coercion or undue influence. {{prayer_disposal}}
-
-It is therefore prayed that this Hon'ble Court may be pleased to record this compromise purshis and dispose of the proceedings in the interest of justice.
+The said case is pending before this Hon'ble Court. A mutual compromise has been arrived at between the parties {{settlement_terms}}. Both parties have entered into the said compromise voluntarily of their own free will and without any coercion, threat or undue influence, and both parties agree to proceed further in terms of the said compromise. It is therefore prayed that this Hon'ble Court may be pleased to take this compromise purshis on record and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-{{party_role}} / Advocate             {{opposite_party_role}} / Advocate
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 15. Ulat Tapas no Haq Bandh Karavani Arji
     {
         "base_key": "ulat_tapas_no_haq_bandh_karavani_arji",
         "aliases": ["ulat_tapas_bandh", "close cross examination", "ઉલટતપાસ બંધ", "હક બંધ ઉલટતપાસ"],
@@ -1032,14 +799,11 @@ Place : {{taluka_place}}
         "category": "General",
         "description": "Application to close the right of cross-examination due to repeated delay and absence of opposite party.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Plaintiff / Complainant side", "label_gu": "વાદી / ફરિયાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "સામાવાળા તરફથી"},
-             ]},
-            {"key": "witness_name", "label_en": "Name of witness whose cross-examination right to close", "label_gu": "જે સાક્ષીની ઉલટતપાસનો હક બંધ કરવાનો છે તેનું નામ", "type": "text", "required": True},
-            {"key": "delay_reasons", "label_en": "Grounds and delays", "label_gu": "હક્ક બંધ કરવાના કારણો (વિગત)", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'witness_name', 'label_en': 'Name of witness whose cross-examination was pending', 'label_gu': 'જે સાક્ષીની ઉલટતપાસ કરવાની છે તેમનું નામ', 'type': 'text', 'required': True},
+            {'key': 'target_party_role', 'label_en': 'Party failing to cross-examine (e.g. Accused)', 'label_gu': 'જેનો હક્ક બંધ કરવાનો છે તે (દા.ત. આરોપી)', 'type': 'text', 'required': True, 'default': 'આરોપી'},
+            {'key': 'delay_period', 'label_en': 'Period of default / delay', 'label_gu': 'વિલંબનો સમયગાળો (ઘણી મુદ્દતથી / આજ દીન સુધી)', 'type': 'select', 'required': True, 'options': [{'value': 'ઘણી મુદ્દતથી', 'label_en': 'Since several dates', 'label_gu': 'ઘણી મુદ્દતથી'}, {'value': 'આજ દીન સુધી', 'label_en': 'Till today', 'label_gu': 'આજ દીન સુધી'}]},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -1050,19 +814,16 @@ Place : {{taluka_place}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- સાક્ષીની ઉલટતપાસ કરવાનો હક્ક બંધ કરવા બાબત...
+બાબત :- ઉલટતપાસનો હક બંધ કરવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં સાક્ષી {{witness_name}} ની સરતપાસ પૂર્ણ થયેલ છે અને કેસ ઉલટતપાસ માટે નિયત થયેલ છે. સામા પક્ષકારને પૂરતી તકો આપવા છતાં તેઓ વારંવાર મુદ્દતો માંગી ઉલટતપાસ કરતા નથી અને કેસ વિલંબિત કરવાનો પ્રયાસ કરે છે. {{delay_reasons}}
-
-સાક્ષી વારંવાર કોર્ટમાં હાજર રહેવા છતાં સામા પક્ષકાર ઉલટતપાસ કરતા ન હોવાથી સાક્ષીનો કિંમતી સમય વેડફાય છે. જેથી ન્યાયના હિતમાં સાક્ષી {{witness_name}} ની ઉલટતપાસ કરવાનો સામા પક્ષકારનો હક્ક બંધ કરવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર અને કેસમાં {{witness_name}} નાઓની લેખીત જુબાની પૂર્ણ થયેલ હોવા છતાં {{target_party_role}} તરફથી {{witness_name}} ની ઉલટતપાસ કરવામાં આવેલ નથી. સામાવાળા ને ઉલટતપાસ માટે પૂરતી તક આપવામાં આવેલ હોવા છતાં {{delay_period}} આપ નામદાર સાહેબશ્રીની કોર્ટ સમક્ષ ઊપસ્થિત રહેલ ન હોય, તેમજ નામદાર કોર્ટનો સમય ખુબ જ કિંમતી છે. જેથી સદર {{target_party_role}} નાઓનો ઉલટતપાસનો હક બંધ કરવો ન્યાયના હિતમાં છે. આથી {{target_party_role}} નો {{witness_name}} નાઓની ઉલટતપાસ કરવાનો હક બંધ કરી આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1076,18 +837,13 @@ SUBJECT: APPLICATION TO CLOSE RIGHT OF CROSS-EXAMINATION
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. The examination-in-chief of witness {{witness_name}} has been completed, and the matter was posted for cross-examination. Despite repeated opportunities, the opposite party has failed to cross-examine the witness and is continuously taking adjournments with a view to delay the proceedings. {{delay_reasons}}
-
-The witness has attended the court repeatedly at considerable personal inconvenience. It is therefore prayed in the interest of justice that this Hon'ble Court may be pleased to close the right of cross-examination of witness {{witness_name}}.
+The said case is pending before this Hon'ble Court, and though the examination-in-chief of {{witness_name}} has been completed, cross-examination of {{witness_name}} has not been conducted by {{target_party_role}}. Despite sufficient opportunity having been granted for cross-examination, {{target_party_role}} has not remained present before this Hon'ble Court {{delay_period}}, and the time of the Hon'ble Court is very precious. Therefore, it is in the interest of justice to close the right of {{target_party_role}} to cross-examine. It is therefore prayed that this Hon'ble Court may be pleased to close the right of {{target_party_role}} to cross-examine {{witness_name}} and pass appropriate orders to proceed further.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 16. Ulat Tapas no Haq Kholvani Arji (Reopen Cross-Examination)
     {
         "base_key": "ulat_tapas_no_haq_kholvani_arji",
         "aliases": ["ulat_tapas_khol", "reopen cross examination", "ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ"],
@@ -1096,21 +852,10 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Application to reopen the closed right of cross-examination and recall witness.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "સામાવાળા / આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Plaintiff / Complainant side", "label_gu": "વાદી / ફરિયાદી તરફથી"},
-             ]},
-            {"key": "witness_name", "label_en": "Name of witness to cross-examine", "label_gu": "જે સાક્ષીની ઉલટતપાસ કરવાની છે તેનું નામ", "type": "text", "required": True},
-            {"key": "reopen_reason", "label_en": "Reason for default in cross-examination", "label_gu": "ઉલટતપાસ ન થઈ શકવાનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "વકીલશ્રીની અચાનક માંદગીના કારણે", "label_en": "Sudden illness of advocate", "label_gu": "વકીલશ્રીની અચાનક માંદગીના કારણે"},
-                 {"value": "કુટુંબમાં અવસાન / શોકના કારણે", "label_en": "Bereavement in family", "label_gu": "કુટુંબમાં અવસાન / શોકના કારણે"},
-                 {"value": "અનિવાર્ય સંજોગોમાં બહારગામ હોવાના કારણે", "label_en": "Unavoidably out of station", "label_gu": "અનિવાર્ય સંજોગોમાં બહારગામ હોવાના કારણે"},
-                 {"value": "other", "label_en": "Other material reason", "label_gu": "અન્ય અગત્યનું કારણ"},
-             ]},
-            {"key": "reopen_reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "reopen_reason", "show_when": "other"},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
+            {'key': 'reopen_reason', 'label_en': 'Reason for reopening cross-examination', 'label_gu': 'ઉલટતપાસ ન થઈ શકવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના', 'label_en': 'Bereavement in family', 'label_gu': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના'}, {'value': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના', 'label_en': 'Travelled abroad for business', 'label_gu': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના'}, {'value': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના', 'label_en': 'Advocate was indisposed due to illness', 'label_gu': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના'}, {'value': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય', 'label_en': 'Accused was in custody in another matter', 'label_gu': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
+            {'key': 'reopen_reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'reopen_reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -1121,19 +866,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- સાક્ષીની ઉલટતપાસ કરવાનો હક્ક ફરીથી ખોલવા બાબત...
+બાબત :- ઉલટતપાસનો હક ફરીથી ખોલી આપવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસમાં આપ નામદાર કોર્ટે સાક્ષી {{witness_name}} ની ઉલટતપાસ કરવાનો અમારો હક્ક બંધ કરેલ છે. પાછલી મુદતે {{reopen_reason}} અમારાથી ઉલટતપાસ થઈ શકેલ ન હતી. ગેરહાજરી જાણીબુઝીને ન હતી પરંતુ અનિવાર્ય સંજોગોના કારણે હતી.
-
-સદર સાક્ષીની ઉલટતપાસ કેસના ન્યાયિક નિર્ણય અને અમારા પક્ષકારના બચાવ માટે અતિ મહત્વપૂર્ણ છે. અમો સાક્ષીને સમન્સનો ખર્ચ ભોગવવા તૈયાર છીએ. જેથી ન્યાયના હિતમાં સાક્ષી {{witness_name}} ની ઉલટતપાસ કરવાનો હક્ક ફરીથી ખોલવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો ઉલટતપાસ કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} હોવાના કારણોસર થઈ શકેલ નહી તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટતપાસ કરવાની તક મળવી એ ન્યાયના હિતમા હોય, અમોનો ઉલટતપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટતપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1147,18 +889,13 @@ SUBJECT: APPLICATION TO REOPEN RIGHT OF CROSS-EXAMINATION
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-In the said case, this Hon'ble Court was pleased to close our right to cross-examine witness {{witness_name}}. On the previous date, cross-examination could not be conducted due to {{reopen_reason}}. The default was neither intentional nor deliberate.
-
-Cross-examination of the said witness is crucial and indispensable for establishing the defense of the applicant. The applicant is willing to bear any costs for recalling the witness. It is therefore prayed that this Hon't Court may be pleased to recall witness {{witness_name}} and reopen our right of cross-examination in the interest of justice.
+The said case is pending before this Hon'ble Court, wherein our right of cross-examination was closed by this Hon'ble Court. Cross-examination could not be conducted on account of {{reopen_reason}}, and as the said reason is reasonable and genuine and getting an opportunity to cross-examine is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to reopen our right of cross-examination and grant us an opportunity to cross-examine.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 17. Undertaking
     {
         "base_key": "undertaking",
         "aliases": ["bahedhari", "undertaking purshis", "બાંહેધરી", "બાહેધરી પત્રક"],
@@ -1167,14 +904,10 @@ Advocate for {{selected_party_role}}
         "category": "General",
         "description": "Formal written undertaking submitted to the court promising compliance with judicial conditions.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "undertaking_subject", "label_en": "Subject / condition of undertaking", "label_gu": "બાંહેધરીની બાબત / શરત", "type": "text", "required": True},
-            {"key": "undertaking_details", "label_en": "Full details of undertaking / action to perform", "label_gu": "કરવાની કાર્યવાહી / બાંહેધરીની સંપૂર્ણ વિગત", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'undertaking_subject', 'label_en': 'Subject / court condition for undertaking', 'label_gu': 'બાંહેધરીની બાબત / શરત', 'type': 'text', 'required': True},
+            {'key': 'undertaking_details', 'label_en': 'Details of undertaking / action to be taken', 'label_gu': 'બાંહેધરીની વિગત / કરવાની કાર્યવાહી', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -1185,22 +918,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- બાંહેધરી પત્રક રજૂ કરવા બાબત...
+બાંહેધરી
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટ આપ નામદાર કોર્ટ સમક્ષ નમ્રતાપૂર્વક આ બાંહેધરી પત્રક રજૂ કરીએ છીએ કે...
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કામમાં આપ નામદાર કોર્ટ દ્વારા ફરમાવેલ શરત / {{undertaking_subject}} ના અનુસંધાને અમારા પક્ષકાર તરફથી આપ નામદાર કોર્ટ સમક્ષ નીચે મુજબની બાંહેધરી આપવામાં આવે છે:
-
-બાંહેધરીની વિગતો:
-{{undertaking_details}}
-
-અમો ખાતરી આપીએ છીએ કે ઉપર જણાવેલ બાંહેધરીનું ચુસ્તપણે પાલન કરવામાં આવશે. તેથી ન્યાયના હિતમાં આ બાંહેધરી પત્રક રેકર્ડ પર સ્વીકારવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આપ નામદાર કોર્ટના હુકમ મુજબ {{undertaking_subject}} જે અંગે અમો નીચે સહી કરનાર તરફથી આ બાંહેધરી આપવામાં આવે છે કે, {{undertaking_details}} નું પાલન કરીશું તથા સદર કેસમાં આપ નામદાર કોર્ટના અન્ય હુકમો તથા નિર્દેશોનું પાલન કરીશું. જેથી સદર બાંહેધરી રેકોર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1210,25 +937,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: WRITTEN UNDERTAKING / PURSHIS
+UNDERTAKING
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit this written undertaking before this Hon'ble Court that:
+In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-In compliance with the directions of this Hon'ble Court regarding {{undertaking_subject}}, the applicant hereby gives the following unconditional undertaking:
-
-Details of Undertaking:
-{{undertaking_details}}
-
-The applicant assures this Hon'ble Court that the undertaking stated herein shall be scrupulously adhered to. It is therefore prayed that this written undertaking be taken on record in the interest of justice.
+The said case is pending before this Hon'ble Court. Pursuant to the order of this Hon'ble Court regarding {{undertaking_subject}}, the undersigned hereby gives this undertaking that we shall comply with {{undertaking_details}} and shall comply with other orders and directions of this Hon'ble Court in the said case. It is therefore prayed that this Hon'ble Court may be pleased to take the said undertaking on record and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 18. Vakilatnama Civil
     {
         "base_key": "vakilatnama_civil",
         "aliases": ["vakalatnama", "civil vakalatnama", "વકીલાતનામું", "સિવિલ વકીલાતનામું"],
@@ -1237,24 +956,15 @@ Advocate for {{selected_party_role}}
         "category": "Civil",
         "description": "Formal legal vakalatnama empowering an advocate to represent a client in civil proceedings.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે વકીલાતનામું", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Plaintiff / Applicant side", "label_gu": "વાદી / અરજદાર તરફથી"},
-                 {"value": "opposite", "label_en": "Defendant / Opponent side", "label_gu": "પ્રતિવાદી / સામાવાળા તરફથી"},
-             ]},
-            {"key": "advocate_name", "label_en": "Advocate Name", "label_gu": "વકીલશ્રીનું નામ", "type": "text", "required": True},
-            {"key": "advocate_qualification", "label_en": "Advocate Qualification", "label_gu": "લાયકાત", "type": "text", "required": False, "default_value": "B.Com., LL.B., Advocate"},
-            {"key": "advocate_address", "label_en": "Office Address", "label_gu": "ઓફિસનું સરનામું", "type": "textarea", "required": True},
-            {"key": "advocate_mobile", "label_en": "Mobile Number", "label_gu": "મોબાઇલ નંબર", "type": "text", "required": False},
-            {"key": "advocate_enrollment_no", "label_en": "Bar Council Enrollment No.", "label_gu": "સનદ નંબર", "type": "text", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફથી છો તેની વિગત', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Plaintiff / Applicant', 'label_gu': 'વાદી / અરજદાર'}, {'value': 'opposite', 'label_en': 'Defendant / Respondent', 'label_gu': 'પ્રતિવાદી / સામાવાળા'}]},
+            {'key': 'advocate_name', 'label_en': 'Advocate Name', 'label_gu': 'વકીલનું નામ', 'type': 'text', 'required': True},
+            {'key': 'advocate_qualification', 'label_en': 'Advocate Qualification', 'label_gu': 'વકીલની લાયકાત (દા.ત. B.Com., LL.B.)', 'type': 'text', 'required': False},
+            {'key': 'advocate_address', 'label_en': 'Advocate Office Address', 'label_gu': 'વકીલની ઓફિસનું સરનામું', 'type': 'textarea', 'required': False},
+            {'key': 'advocate_mobile', 'label_en': 'Advocate Mobile No.', 'label_gu': 'વકીલનો મોબાઇલ નં.', 'type': 'text', 'required': False},
+            {'key': 'advocate_enrollment_no', 'label_en': 'Bar Council Enrollment No.', 'label_gu': 'સનદ / એનરોલમેન્ટ નં.', 'type': 'text', 'required': False},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
-        "content_gu": """{{advocate_name}}
-{{advocate_qualification}}
-{{advocate_address}}
-મોબાઇલ નં. {{advocate_mobile}}  |  સનદ નં. {{advocate_enrollment_no}}
-
-મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
@@ -1263,25 +973,18 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-વકીલાતનામું (સિવિલ)
+-------------------------------------------------------------------------------------------
 
-જાણો કે સદરહુ કામમાં અમો નીચે સહી કરનાર {{selected_party_role}} અમારા તરફથી સદર કામ ચલાવવા તથા દલીલ કરવા સારું આ કામમાં વકીલ તરીકે શ્રી {{advocate_name}} ને રોકીએ છીએ. સદરહુ વકીલશ્રી આ કામમાં અમારા તરફથી હાજર થઈ દાવાઅરજી, જવાબ, એફિડેવિટ, અપીલ, રિવિઝન, દસ્તાવેજો રજૂ કરવા તથા પરત લેવા, સમાધાન કરવા, પૈસા મેળવવા તથા પાવતી આપવા બાબતે અમારા કાયદેસરના તમામ અધિકારો ભોગવશે અને તેઓ જે કંઈ કામ કરશે તે જાણે અમોએ રૂબરૂ હાજર રહીને કર્યું હોય તેટલું જ અમને કબૂલ અને મંજૂર રહેશે. જેની ખાતરી બદલ આ વકીલાતનામું સહી કરી આપ્યું છે.
+અમો {{selected_party_role}} તરીકે ઉપર દર્શાવેલ દાવામાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી કરારદાદ કબુલ કરવા તથા કોર્ટમાં હાજર રહેવા, દસ્તાવેજો કરવા, પૈસા રજુ કરવા, પૈસા પરત લેવા, તેમના નામનો કોર્ટફીઝ રીફંડનો દાખલો લેવા, રકમો લેવા, અમારા વતી દાવો પરત ખેંચી લેવા, અપીલ કરવા તેમજ સદર દાવા સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
+
+અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-પક્ષકારની સહી : ________________________
-
-હું સદર વકીલાતનામું સ્વીકારું છું.
-{{advocate_name}}
-એડવોકેટ
-""",
-        "content_en": """{{advocate_name}}
-{{advocate_qualification}}
-{{advocate_address}}
-Mobile: {{advocate_mobile}}  |  Enrollment No.: {{advocate_enrollment_no}}
-
-IN THE COURT OF {{court}},
+પક્ષકારની સહી :-  એડવોકેટની સહી :-
+પક્ષકારનુ નામ :-  એડવોકેટનુ નામ :-""",
+        "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
@@ -1290,24 +993,18 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-VAKALATNAMA (CIVIL)
+-------------------------------------------------------------------------------------------
 
-Know all men by these presents that I/we, the undersigned {{selected_party_role}}, do hereby appoint, nominate and constitute Shri {{advocate_name}}, Advocate, to be our true and lawful advocate in the above matter. The said advocate is empowered to appear, plead, act, file plaints, written statements, affidavits, appeals, revisions, produce and withdraw documents, enter into compromise, receive money and grant receipts, and perform all necessary legal acts on our behalf. All acts done by the said advocate shall be ratified and confirmed as if done by us personally.
+We, as {{selected_party_role}}, do hereby appoint and authorize Advocate {{advocate_name}} to appear in court, consent to compromise, submit documents, deposit and withdraw money, obtain court fee refund certificates, withdraw the suit on our behalf, file appeals, and take all necessary lawful proceedings in connection with the said suit on our behalf.
 
-In witness whereof, we have executed this Vakalatnama.
+We accept all lawful acts done by the said Advocate on our behalf and the same shall be binding upon us.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Signature of Client: ________________________
-
-I accept this Vakalatnama.
-{{advocate_name}}
-Advocate
-""",
+Signature of Client :-  Signature of Advocate :-
+Name of Client :-       Name of Advocate :-""",
     },
-
-    # 19. Vakilatnama Criminal
     {
         "base_key": "vakilatnama_criminal",
         "aliases": ["criminal vakalatnama", "ક્રિમિનલ વકીલાતનામું"],
@@ -1316,24 +1013,15 @@ Advocate
         "category": "Criminal",
         "description": "Formal legal vakalatnama empowering an advocate to defend or represent a party in criminal proceedings.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે વકીલાતનામું", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Accused side", "label_gu": "આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Complainant side", "label_gu": "ફરિયાદી તરફથી"},
-             ]},
-            {"key": "advocate_name", "label_en": "Advocate Name", "label_gu": "વકીલશ્રીનું નામ", "type": "text", "required": True},
-            {"key": "advocate_qualification", "label_en": "Advocate Qualification", "label_gu": "લાયકાત", "type": "text", "required": False, "default_value": "B.Com., LL.B., Advocate"},
-            {"key": "advocate_address", "label_en": "Office Address", "label_gu": "ઓફિસનું સરનામું", "type": "textarea", "required": True},
-            {"key": "advocate_mobile", "label_en": "Mobile Number", "label_gu": "મોબાઇલ નંબર", "type": "text", "required": False},
-            {"key": "advocate_enrollment_no", "label_en": "Bar Council Enrollment No.", "label_gu": "સનદ નંબર", "type": "text", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફથી છો તેની વિગત', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent', 'label_gu': 'આરોપી / સામાવાળા'}, {'value': 'party', 'label_en': 'Complainant / Applicant', 'label_gu': 'ફરિયાદી / અરજદાર'}]},
+            {'key': 'advocate_name', 'label_en': 'Advocate Name', 'label_gu': 'વકીલનું નામ', 'type': 'text', 'required': True},
+            {'key': 'advocate_qualification', 'label_en': 'Advocate Qualification', 'label_gu': 'વકીલની લાયકાત (દા.ત. B.Com., LL.B.)', 'type': 'text', 'required': False},
+            {'key': 'advocate_address', 'label_en': 'Advocate Office Address', 'label_gu': 'વકીલની ઓફિસનું સરનામું', 'type': 'textarea', 'required': False},
+            {'key': 'advocate_mobile', 'label_en': 'Advocate Mobile No.', 'label_gu': 'વકીલનો મોબાઇલ નં.', 'type': 'text', 'required': False},
+            {'key': 'advocate_enrollment_no', 'label_en': 'Bar Council Enrollment No.', 'label_gu': 'સનદ / એનરોલમેન્ટ નં.', 'type': 'text', 'required': False},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
-        "content_gu": """{{advocate_name}}
-{{advocate_qualification}}
-{{advocate_address}}
-મોબાઇલ નં. {{advocate_mobile}}  |  સનદ નં. {{advocate_enrollment_no}}
-
-મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
@@ -1342,25 +1030,18 @@ Advocate
 વિરુદ્ધ
 {{opposite_party_line}}
 
-વકીલાતનામું (ક્રિમિનલ)
+-------------------------------------------------------------------------------------------
 
-જાણો કે સદરહુ ફોજદારી કામમાં અમો નીચે સહી કરનાર {{selected_party_role}} અમારા તરફથી સદર કામ ચલાવવા સારું વકીલ તરીકે શ્રી {{advocate_name}} ને રોકીએ છીએ. સદરહુ વકીલશ્રી આ કામમાં અમારા તરફથી હાજર થઈ જામીન અરજી, હાજરી માફી, પુરાવો રજૂ કરવા, ઉલટતપાસ કરવા, અપીલ, રિવિઝન કરવા તથા અમારા બચાવ માટે કાયદેસરના તમામ કાર્યો કરવા અધિકૃત રહેશે. તેઓ જે કંઈ કાર્ય કરશે તે અમને કબૂલ અને મંજૂર રહેશે. જેની ખાતરી બદલ આ વકીલાતનામું સહી કરી આપ્યું છે.
+અમો {{selected_party_role}} તરીકે ઉપર દર્શાવેલ કેસમાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી હાજર રહેવા, અરજીઓ કરવા, પુરશીશ આપવા, દસ્તાવેજો રજૂ કરવા, પુરાવા આપવા, સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા, સમાધાન કરવા, પ્રમાણિત નકલ મેળવવા અપીલ કરવા, રિવિઝન કરવા તેમજ અન્ય કાયદેસરની કાર્યવાહી કરવા અને સદર કેસ સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
+
+અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-પક્ષકારની સહી : ________________________
-
-હું સદર વકીલાતનામું સ્વીકારું છું.
-{{advocate_name}}
-એડવોકેટ
-""",
-        "content_en": """{{advocate_name}}
-{{advocate_qualification}}
-{{advocate_address}}
-Mobile: {{advocate_mobile}}  |  Enrollment No.: {{advocate_enrollment_no}}
-
-IN THE COURT OF {{court}},
+પક્ષકારની સહી :-  એડવોકેટની સહી :-
+પક્ષકારનુ નામ :-  એડવોકેટનુ નામ :-""",
+        "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
@@ -1369,24 +1050,18 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-VAKALATNAMA (CRIMINAL)
+-------------------------------------------------------------------------------------------
 
-Know all men by these presents that I/we, the undersigned {{selected_party_role}}, do hereby appoint, nominate and constitute Shri {{advocate_name}}, Advocate, to be our true and lawful advocate in the above criminal proceedings. The said advocate is empowered to appear, plead, act, file bail applications, exemption applications, lead evidence, cross-examine witnesses, file appeals/revisions, and do all lawful acts necessary for our defense. All acts done by the said advocate shall be ratified and confirmed as if done by us personally.
+We, as {{selected_party_role}}, do hereby appoint and authorize Advocate {{advocate_name}} to appear in court, submit applications, file purshis, produce documents, lead evidence, examine and cross-examine witnesses, enter into compromise, obtain certified copies, file appeals and revisions, and take all necessary lawful proceedings in connection with the said case on our behalf.
 
-In witness whereof, we have executed this Vakalatnama.
+We accept all lawful acts done by the said Advocate on our behalf and the same shall be binding upon us.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Signature of Client: ________________________
-
-I accept this Vakalatnama.
-{{advocate_name}}
-Advocate
-""",
+Signature of Client :-  Signature of Advocate :-
+Name of Client :-       Name of Advocate :-""",
     },
-
-    # 20. Warrant no Hath-bido Apvani Arji
     {
         "base_key": "warrant_no_hath_bido_apvani_arji",
         "aliases": ["warrant_hathbido", "hathbido", "direct service", "હાથબીડો", "સમન્સ હાથબીડો"],
@@ -1395,20 +1070,10 @@ Advocate
         "category": "Criminal",
         "description": "Application to hand over summons or warrant directly to advocate/complainant for prompt service through police.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Complainant / Applicant side", "label_gu": "ફરિયાદી / અરજદાર તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "સામાવાળા તરફથી"},
-             ]},
-            {"key": "warrant_kind", "label_en": "Type of process / warrant", "label_gu": "ક્યા પ્રકારનો હાથબીડો જોઈએ છે", "type": "select", "required": True,
-             "options": [
-                 {"value": "સમન્સ", "label_en": "Summons", "label_gu": "સમન્સ"},
-                 {"value": "જામીનપાત્ર (બેલેબલ) વોરંટ", "label_en": "Bailable Warrant", "label_gu": "જામીનપાત્ર (બેલેબલ) વોરંટ"},
-                 {"value": "બિનજામીનપાત્ર (નોન-બેલેબલ) વોરંટ", "label_en": "Non-Bailable Warrant", "label_gu": "બિનજામીનપાત્ર (નોન-બેલેબલ) વોરંટ"},
-             ]},
-            {"key": "target_party", "label_en": "Person against whom process is issued", "label_gu": "કોનો સમન્સ/વોરંટ લેવાનો છે તેની વિગત", "type": "text", "required": True},
-            {"key": "service_reason", "label_en": "Grounds for direct service / handing over", "label_gu": "હાથબીડો આપવાનું કારણ", "type": "textarea", "required": False, "default_value": "પોલીસ સ્ટેશન મારફતે ત્વરિત બજવણી કરાવી શકાય તે સારું હાથબીડો આપવો જરૂરી છે."},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'warrant_kind', 'label_en': 'Process Type', 'label_gu': 'પ્રક્રિયા પ્રકાર (સમન્સ / વોરંટ / નોટીસ)', 'type': 'select', 'required': True, 'options': [{'value': 'સમન્સ', 'label_en': 'Summons', 'label_gu': 'સમન્સ'}, {'value': 'વોરંટ', 'label_en': 'Warrant', 'label_gu': 'વોરંટ'}, {'value': 'નોટીસ', 'label_en': 'Notice', 'label_gu': 'નોટીસ'}]},
+            {'key': 'target_party', 'label_en': 'Name of party to be served', 'label_gu': 'જેની સામે બજવણી કરવાની હોય તેનું નામ (સાક્ષી / સામાવાળા)', 'type': 'text', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -1419,19 +1084,16 @@ Advocate
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- {{warrant_kind}} નો હાથબીડો આપવા બાબત...
+બાબત :- {{warrant_kind}}નો હાથબીડો આપવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{target_party}} સામે {{warrant_kind}} કાઢવાનો હુકમ ફરમાવેલ છે. સદર {{warrant_kind}} ની સંબંધિત પોલીસ સ્ટેશન મારફતે યોગ્ય અને ત્વરિત બજવણી થઈ શકે તે સારૂ અમારા પક્ષકારને તેનો હાથબીડો આપવો અત્યંત જરૂરી છે. {{service_reason}}
-
-જેથી ન્યાયના હિતમાં {{target_party}} સામેનો {{warrant_kind}} અમારા પક્ષકાર/વકીલશ્રીને હાથબીડા મારફત આપવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{target_party}}ને બજવણી માટે {{warrant_kind}} ઇશ્યુ કરવામા આવેલ છે જેની બજવણી યોગ્ય રીતે ન થતી હોય, તેમજ સદર {{warrant_kind}} ની યોગ્ય રીતે બજવણી થવી ન્યાયના હિતમાં હોય, સદર {{warrant_kind}} ની બજવણી કરાવવા માટે હાથબીડો આપવો જરૂરી છે. જેથી સમન્સ/વોરંટનો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1441,22 +1103,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR HANDING OVER SUMMONS / WARRANT FOR DIRECT SERVICE
+SUBJECT: APPLICATION FOR HAND DELIVERY OF {{warrant_kind}}
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. An order has been passed for the issuance of {{warrant_kind}} against {{target_party}}. In order to ensure effective, expeditious and direct service through the concerned police station, it is necessary that the process be handed over directly to our client / advocate. {{service_reason}}
-
-It is therefore prayed in the interest of justice that this Hon'ble Court may be pleased to hand over the {{warrant_kind}} issued against {{target_party}} to our client / advocate for service.
+The said case is pending before this Hon'ble Court. In the said case, {{warrant_kind}} has been issued for service upon {{target_party}}, but the service is not taking place properly, and proper service of the said {{warrant_kind}} is in the interest of justice, for which hand delivery is necessary to effect service of the said {{warrant_kind}}. It is therefore prayed that this Hon'ble Court may be pleased to grant necessary hand delivery of summons/warrant to effect service and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
-
-    # 21. Warrant Rad Karvani Arji (Cancellation of Warrant)
     {
         "base_key": "warrant_rad_karvani_arji",
         "aliases": ["warrant_rad", "cancel warrant", "recall warrant", "વોરંટ રદ", "વોરંટ રીકોલ"],
@@ -1465,21 +1122,11 @@ Advocate for {{selected_party_role}}
         "category": "Criminal",
         "description": "Application to cancel or recall a warrant issued against the accused on showing bona fide cause.",
         "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "opposite", "label_en": "Accused side", "label_gu": "આરોપી તરફથી"},
-                 {"value": "party", "label_en": "Applicant side", "label_gu": "અરજદાર તરફથી"},
-             ]},
-            {"key": "warrant_date", "label_en": "Date of warrant issuance", "label_gu": "વોરંટ નીકળ્યા તારીખ", "type": "text", "required": True},
-            {"key": "absence_reason", "label_en": "Reason for absence", "label_gu": "ગેરહાજરીનું કારણ", "type": "select", "required": True,
-             "options": [
-                 {"value": "સમન્સ / નોટિસની બજવણી થયેલ ન હોવાથી", "label_en": "No service of summons or notice", "label_gu": "સમન્સ / નોટિસની બજવણી થયેલ ન હોવાથી"},
-                 {"value": "અનિવાર્ય માંદગીના કારણોસર", "label_en": "Unavoidable illness", "label_gu": "અનિવાર્ય માંદગીના કારણોસર"},
-                 {"value": "કામ સબબ બહારગામ હોવાથી", "label_en": "Out of station for urgent work", "label_gu": "કામ સબબ બહારગામ હોવાથી"},
-                 {"value": "other", "label_en": "Other grounds", "label_gu": "અન્ય અગત્યનું કારણ"},
-             ]},
-            {"key": "absence_reason_other", "label_en": "Specify other reason", "label_gu": "અન્ય કારણ જણાવો", "type": "text", "required": False, "depends_on": "absence_reason", "show_when": "other"},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
+            {'key': 'warrant_date', 'label_en': 'Date warrant was issued', 'label_gu': 'વોરંટ કાઢ્યાની તારીખ (દા.ત. ૨૦/૦૮/૨૦૨૬)', 'type': 'text', 'required': True},
+            {'key': 'absence_reason', 'label_en': 'Reason for prior absence', 'label_gu': 'ગેરહાજર રહેવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'સમન્સ / નોટિસની બજવણી થયેલ ન હોવાથી', 'label_en': 'Summons/notice was not served', 'label_gu': 'સમન્સ / નોટિસની બજવણી થયેલ ન હોવાથી'}, {'value': 'અનિવાર્ય માંદગીના કારણોસર', 'label_en': 'Due to unavoidable illness', 'label_gu': 'અનિવાર્ય માંદગીના કારણોસર'}, {'value': 'કામ સબબ બહારગામ હોવાથી', 'label_en': 'Out of station for urgent work', 'label_gu': 'કામ સબબ બહારગામ હોવાથી'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
+            {'key': 'absence_reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'absence_reason=other'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
 મુકામ :- {{taluka_place}}
@@ -1490,19 +1137,16 @@ Advocate for {{selected_party_role}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- વોરંટ રદ / રીકોલ કરવા બાબત...
+બાબત :- વોરંટ રદ કરાવવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસમાં આપ નામદાર કોર્ટ દ્વારા તારીખ {{warrant_date}} ના રોજ અમારા પક્ષકાર સામે વોરંટ કાઢવાનો હુકમ ફરમાવેલ છે. અમારા પક્ષકાર {{absence_reason}} આપ નામદાર કોર્ટ સમક્ષ હાજર રહી શકેલ ન હતા. અમારા પક્ષકાર કાયદાનું સન્માન કરનાર નાગરિક છે અને જાણીબુઝીને ગેરહાજર રહેલ નથી.
-
-અમારા પક્ષકાર આજ રોજ કોર્ટ સમક્ષ રૂબરૂ હાજર થયેલ છે અને કેસની તમામ મુદ્દતોએ નિયમિત હાજર રહેવાની બાંહેધરી આપે છે. જેથી ન્યાયના હિતમાં અમારા પક્ષકાર સામે નીકળેલ વોરંટ રદ / રીકોલ કરવાનો દયાળુ હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આરોપી વિરુદ્ધ તા. {{warrant_date}}ના રોજ વોરંટ કાઢવામાં આવેલ છે. સદર વોરંટની બજવણી થઈ શકે તે પહેલાં આરોપી આજ રોજ આપ નામદાર કોર્ટ સમક્ષ હાજર થયેલ છે તથા {{absence_reason}} કારણોસર ગેરહાજર રહેલ છે. ગેરહાજર રહેવાનો કોઈ દુર્ભાવ કે આપ નામદાર કોર્ટની કાર્યવાહીમાં વિલંબ કરવાનો આશય નથી. વધુમાં સદર આરોપી હવે પછી કેસની દરેક તારીખે નિયમિત હાજર રહી આપ નામદાર કોર્ટની કાર્યવાહીમાં સંપૂર્ણ સહકાર આપશે. જેથી સદર આરોપી વિરુદ્ધ કાઢવામાં આવેલ વોરંટ રદ કરી કેસમાં આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
-{{selected_party_role}} ના એડવોકેટ
-""",
+--------------------------- {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1512,19 +1156,16 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR CANCELLATION / RECALL OF WARRANT
+SUBJECT: APPLICATION TO CANCEL / RECALL WARRANT
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-In the said case, this Hon'ble Court was pleased to issue a warrant against the applicant on {{warrant_date}}. The applicant was unable to attend the court due to {{absence_reason}}. The absence was neither willful nor intentional.
-
-The applicant is a law-abiding citizen, has voluntarily surrendered before this Hon'ble Court today, and undertakes to remain present on all future dates of hearing. It is therefore prayed that this Hon'ble Court may be pleased to cancel / recall the warrant issued against the applicant in the interest of justice.
+The said case is pending before this Hon'ble Court. In the said case, a warrant was issued against the accused on {{warrant_date}}. Before service of the said warrant could be effected, the accused has appeared before this Hon'ble Court today and had remained absent due to {{absence_reason}}. There was no mala fide intention to remain absent or to cause delay in the proceedings of this Hon'ble Court. Furthermore, the said accused shall remain regularly present on every date of hearing of the case hereafter and shall fully cooperate with the proceedings of this Hon'ble Court. It is therefore prayed that this Hon'ble Court may be pleased to cancel the warrant issued against the said accused and pass appropriate orders to proceed further in the case.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
-Advocate for {{selected_party_role}}
-""",
+--------------------------- Advocate for {{selected_party_role}}""",
     },
 ]
 
