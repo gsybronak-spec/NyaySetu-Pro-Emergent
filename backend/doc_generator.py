@@ -228,10 +228,31 @@ def get_doc_settings(overrides: dict = None) -> dict:
                 settings["page_size"] = _norm_page_size(v)
             elif k in ("gujarati_font", "english_font", "gujarati_font_docx", "english_font_docx"):
                 settings[k] = v
+            elif k == "line_spacing":
+                try:
+                    ls_val = float(v)
+                    # If <= 3.0, it was supplied as a line-height multiplier (e.g. 1.15 or 1.5).
+                    # Indian court filing standards require baseline-to-baseline leading in points.
+                    # Standard 1.5x line spacing for 12-13pt legal text is 18pt.
+                    if ls_val <= 3.0:
+                        settings["line_spacing"] = 18.0
+                    else:
+                        settings["line_spacing"] = max(14.0, ls_val)
+                except (TypeError, ValueError):
+                    settings["line_spacing"] = 18.0
             elif k in ("margin_top_cm", "margin_bottom_cm", "margin_left_cm", "margin_right_cm",
-                       "body_size", "heading_size", "line_spacing", "paragraph_spacing",
+                       "body_size", "heading_size", "paragraph_spacing",
                        "first_line_indent_pt", "alignment", "format_version"):
                 settings[k] = v
+
+    # Final defensive guard: ensure line_spacing is never less than body_size
+    try:
+        bs = float(settings.get("body_size", 12))
+        ls = float(settings.get("line_spacing", 18))
+        if ls <= 3.0 or ls < bs:
+            settings["line_spacing"] = max(16.0, round(bs * 1.4, 1))
+    except (TypeError, ValueError):
+        settings["line_spacing"] = 18.0
     return settings
 
 
@@ -765,6 +786,11 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
         if b.get("section") == "page_break":
             story.append(RLPageBreak())
             continue
+        body_sz = float(s.get("body_size", 12))
+        raw_ls = float(s.get("line_spacing", 18))
+        if raw_ls <= 3.0 or raw_ls < body_sz:
+            raw_ls = max(16.0, round(body_sz * 1.4, 1))
+
         if b.get("section") == "table":
             table_data = []
             for row in b.get("rows", []):
@@ -774,8 +800,8 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
                     style = ParagraphStyle(
                         "p",
                         fontName=font_normal,
-                        fontSize=s["body_size"],
-                        leading=s["line_spacing"],
+                        fontSize=body_sz,
+                        leading=max(raw_ls, body_sz * 1.25, 16.0),
                         alignment=0, # Left
                     )
                     table_row.append(Paragraph(safe, style))
@@ -801,11 +827,13 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
         safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         if b.get("section") == "title":
             safe = f"<u>{safe}</u>"
+        f_size = s["heading_size"] if b["bold"] else body_sz
+        lead = max(raw_ls + (2 if b["bold"] else 0), f_size * 1.25, 16.0)
         style = ParagraphStyle(
             "p",
             fontName=font_bold if b["bold"] else font_normal,
-            fontSize=s["heading_size"] if b["bold"] else s["body_size"],
-            leading=s["line_spacing"] + (2 if b["bold"] else 0),
+            fontSize=f_size,
+            leading=lead,
             alignment=_pdf_align(b["align"]),
             firstLineIndent=(para_indent if b.get("indent") and b.get("align") in ("justify", "left") else 0.0),
             spaceAfter=para_space,
@@ -1072,7 +1100,10 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     s = get_doc_settings(settings)
     body_size = float(s.get("body_size", 12))
     heading_size = float(s.get("heading_size", 13))
-    line_spacing = float(s.get("line_spacing", 18))
+    raw_ls = float(s.get("line_spacing", 18))
+    if raw_ls <= 3.0 or raw_ls < body_size:
+        raw_ls = max(16.0, round(body_size * 1.4, 1))
+    line_spacing = max(raw_ls, body_size * 1.25, 16.0)
     para_space = float(s.get("paragraph_spacing", 6))
     para_indent_pt = float(s.get("first_line_indent_pt", 24.0))
     margin_t = s["margin_top_cm"] * 28.35
@@ -1671,7 +1702,10 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
     body_size = float(s.get("body_size", 12))
     heading_size = float(s.get("heading_size", 13))
     para_space = float(s.get("paragraph_spacing", 6))
-    line_spacing = float(s.get("line_spacing", 18))
+    raw_ls = float(s.get("line_spacing", 18))
+    if raw_ls <= 3.0 or raw_ls < body_size:
+        raw_ls = max(16.0, round(body_size * 1.4, 1))
+    line_spacing = max(raw_ls, body_size * 1.25, 16.0)
     line_height_pct = int(round(100.0 * line_spacing / max(body_size, 1)))
 
     # Per-block style declarations (deduped).
@@ -1867,7 +1901,11 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT
 
         p.paragraph_format.space_after = Pt(s.get("paragraph_spacing", 6))
-        p.paragraph_format.line_spacing = Pt(s.get("line_spacing", 18))
+        body_sz = float(s.get("body_size", 12))
+        raw_ls = float(s.get("line_spacing", 18))
+        if raw_ls <= 3.0 or raw_ls < body_sz:
+            raw_ls = max(16.0, round(body_sz * 1.4, 1))
+        p.paragraph_format.line_spacing = Pt(max(raw_ls, 16.0))
 
         run = p.add_run(b["text"])
         run.font.name = font_name

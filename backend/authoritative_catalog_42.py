@@ -33,7 +33,7 @@ DEFAULT_SETTINGS = {
     "english_font_docx": "Times New Roman",
     "body_size": 13,
     "heading_size": 14,
-    "line_spacing": 1.15,
+    "line_spacing": 18,
     "paragraph_spacing": 6,
     "alignment": "justify",
 }
