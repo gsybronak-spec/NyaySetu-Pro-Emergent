@@ -74,12 +74,24 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   const [dob, setDob] = useState(user?.dob || "");
   const [userType, setUserType] = useState<string>(user?.user_type || "Advocate");
   const [barCouncilNo, setBarCouncilNo] = useState(user?.bar_council_no || "");
+  const [advocateNameEn, setAdvocateNameEn] = useState(user?.advocate_name_en || "");
+  const [advocateNameGu, setAdvocateNameGu] = useState(user?.advocate_name_gu || "");
   const [state, setState] = useState(user?.state || "Gujarat");
   const [district, setDistrict] = useState<string | null>(user?.district || null);
   const [districts, setDistricts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Auto-fill advocate English name from First/Last name if untouched
+  useEffect(() => {
+    if (userType === "Advocate" && !advocateNameEn) {
+      const full = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+      if (full) {
+        setAdvocateNameEn(`Adv. ${full}`);
+      }
+    }
+  }, [firstName, middleName, lastName, userType]);
 
   // Load districts catalog
   useEffect(() => {
@@ -99,10 +111,12 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
       if (user.dob) setDob(user.dob);
       if (user.user_type) setUserType(user.user_type);
       if (user.bar_council_no) setBarCouncilNo(user.bar_council_no);
+      if (user.advocate_name_en) setAdvocateNameEn(user.advocate_name_en);
+      if (user.advocate_name_gu) setAdvocateNameGu(user.advocate_name_gu);
       if (user.state) setState(user.state);
       if (user.district) setDistrict(user.district);
     }
-  }, [user?.id, user?.name, user?.mobile, user?.district, user?.bar_council_no, user?.user_type]);
+  }, [user?.id, user?.name, user?.mobile, user?.district, user?.bar_council_no, user?.user_type, user?.advocate_name_en, user?.advocate_name_gu]);
 
   const handleSave = async () => {
     setErr(null);
@@ -132,9 +146,19 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
       setErr("Please select your User Type / Role.");
       return;
     }
-    if (userType === "Advocate" && !barCouncilNo.trim()) {
-      setErr("Bar Council / Enrollment Number is required for Advocates (e.g. G/1234/2020).");
-      return;
+    if (userType === "Advocate") {
+      if (!barCouncilNo.trim()) {
+        setErr("Bar Council / Enrollment Number is required for Advocates (e.g. G/1234/2020).");
+        return;
+      }
+      if (!advocateNameEn.trim()) {
+        setErr("Advocate Full Name in English is required (e.g. Adv. Ramesh Patel).");
+        return;
+      }
+      if (!advocateNameGu.trim()) {
+        setErr("એડવોકેટનું પૂરું નામ ગુજરાતીમાં દાખલ કરવું ફરજિયાત છે (Advocate Full Name in Gujarati is required, e.g. એડવોકેટ રમેશ પટેલ).");
+        return;
+      }
     }
     if (!state.trim()) {
       setErr("Please enter your State.");
@@ -146,7 +170,8 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
     }
 
     const fullName = [fName, mName, lName].filter(Boolean).join(" ").trim();
-    const advName = userType === "Advocate" ? `Adv. ${fullName}` : fullName;
+    const finalAdvNameEn = userType === "Advocate" ? advocateNameEn.trim() : fullName;
+    const finalAdvNameGu = userType === "Advocate" ? advocateNameGu.trim() : undefined;
 
     setLoading(true);
     try {
@@ -155,7 +180,8 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
         middle_name: mName || undefined,
         last_name: lName,
         name: fullName,
-        advocate_name_en: advName,
+        advocate_name_en: finalAdvNameEn,
+        advocate_name_gu: finalAdvNameGu,
         mobile: cleanMobile,
         gender: gender || undefined,
         dob: dob.trim() || undefined,
@@ -419,16 +445,34 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
               </View>
             </View>
 
-            {/* Bar Council / Enrollment Number (Dynamic: required only for Advocate) */}
+            {/* Bar Council / Enrollment Number & Bilingual Advocate Names (Required for Advocates) */}
             {userType === "Advocate" && (
-              <Field
-                testID="setup-bar-council"
-                label="Bar Council / Enrollment Number *"
-                labelColor="#D1D8E5"
-                placeholder="e.g. G/1234/2020"
-                value={barCouncilNo}
-                onChangeText={setBarCouncilNo}
-              />
+              <>
+                <Field
+                  testID="setup-bar-council"
+                  label="Bar Council / Enrollment Number *"
+                  labelColor="#D1D8E5"
+                  placeholder="e.g. G/1234/2020"
+                  value={barCouncilNo}
+                  onChangeText={setBarCouncilNo}
+                />
+                <Field
+                  testID="setup-advocate-name-en"
+                  label="Advocate Full Name - English *"
+                  labelColor="#D1D8E5"
+                  placeholder="e.g. Adv. Ramesh B. Patel"
+                  value={advocateNameEn}
+                  onChangeText={setAdvocateNameEn}
+                />
+                <Field
+                  testID="setup-advocate-name-gu"
+                  label="એડવોકેટનું પૂરું નામ - ગુજરાતી / Advocate Full Name - Gujarati *"
+                  labelColor="#D1D8E5"
+                  placeholder="દા.ત. એડવોકેટ રમેશ બી. પટેલ"
+                  value={advocateNameGu}
+                  onChangeText={setAdvocateNameGu}
+                />
+              </>
             )}
 
             <Field

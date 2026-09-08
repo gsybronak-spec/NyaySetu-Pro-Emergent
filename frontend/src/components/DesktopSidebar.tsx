@@ -89,6 +89,35 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         </Pressable>
       </View>
 
+      {/* Wallet Credits Indicator */}
+      <Pressable
+        testID="desktop-sidebar-wallet"
+        onPress={() => go("subscription")}
+        style={{
+          marginHorizontal: 16,
+          marginBottom: 12,
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          borderRadius: 8,
+          backgroundColor: "rgba(197,160,89,0.12)",
+          borderWidth: 1,
+          borderColor: "rgba(197,160,89,0.3)",
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Ionicons name="diamond" size={16} color="#C5A059" />
+          <Text style={{ fontSize: 12, fontWeight: "700", color: "#FDFDFD" }}>
+            Credits
+          </Text>
+        </View>
+        <Text style={{ fontSize: 13, fontWeight: "800", color: "#C5A059" }}>
+          {user?.wallet_balance ?? 0}
+        </Text>
+      </Pressable>
+
       {/* User footer */}
       <View style={[styles.footer, { borderTopColor: "rgba(255,255,255,0.08)" }]}>
         <View style={styles.avatar}>

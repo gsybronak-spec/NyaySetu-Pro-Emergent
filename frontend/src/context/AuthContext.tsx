@@ -26,6 +26,8 @@ interface User {
   has_password?: boolean;
   is_profile_complete?: boolean;
   profile_completed?: boolean;
+  wallet_balance?: number;
+  total_credits_used?: number;
 }
 
 interface AuthResult {
@@ -133,6 +135,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Live profile & wallet sync: periodically sync latest credits/profile from backend
+  useEffect(() => {
+    if (!user?.id) return;
+    const syncWallet = async () => {
+      try {
+        if (typeof document !== "undefined" && document.hidden) return;
+        const u = await api.me();
+        if (u && typeof u === "object") {
+          setUser((prev) => (prev ? { ...prev, ...u } : u));
+        }
+      } catch {
+        // Silently ignore background sync failures
+      }
+    };
+
+    const interval = setInterval(syncWallet, 12000);
+    const onFocus = () => { syncWallet(); };
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", onFocus);
+      document.addEventListener("visibilitychange", onFocus);
+    }
+    return () => {
+      clearInterval(interval);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", onFocus);
+        document.removeEventListener("visibilitychange", onFocus);
+      }
+    };
+  }, [user?.id]);
 
   // C4: definitive unauthorized callback with Firebase recovery attempt before logout
   useEffect(() => {

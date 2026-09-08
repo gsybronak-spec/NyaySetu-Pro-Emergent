@@ -28,6 +28,7 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
+import { PlanPurchaseModal } from "@/src/components/PlanPurchaseModal";
 
 type Step = "fields" | "preview" | "output";
 
@@ -147,6 +148,8 @@ export default function TemplateApplication() {
   const [talukas, setTalukas] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [caseTypes, setCaseTypes] = useState<any[]>(() => catalogCache.peekCaseTypes());
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const draftTimer = useRef<any>(null);
@@ -156,70 +159,59 @@ export default function TemplateApplication() {
     setError(null);
     try {
       // Resolve template ID safely (handle base keys or language-specific keys)
-      let effectiveId = templateId;
-      if (!effectiveId.endsWith("_gu") && !effectiveId.endsWith("_en")) {
-        effectiveId = resolveTemplateId(effectiveId, language) || templateId;
-      }
+      const effectiveId = resolveTemplateId(templateId, language) || templateId;
 
-      let t: any = null;
-      try {
-        t = await api.template(effectiveId);
-      } catch (err: any) {
-        if (effectiveId !== templateId) {
-          t = await api.template(templateId);
-        } else {
-          throw err;
-        }
-      }
+      // Parallelize ALL data fetching concurrently for sub-second load times
+      const [t, me, dists, cts, cs, w, drafts] = await Promise.all([
+        api.template(effectiveId).catch(() => api.template(templateId)),
+        api.me().catch(() => null),
+        catalogCache.getDistricts(),
+        catalogCache.getCaseTypes(),
+        caseId ? api.getCase(caseId).catch(() => null) : Promise.resolve(null),
+        api.wallet().catch(() => ({ balance: 0 })),
+        params.draft === "1" ? api.drafts().catch(() => []) : Promise.resolve([]),
+      ]);
 
       if (!t) {
         throw new Error("Template data not found");
       }
 
-      const [me, dists, cts] = await Promise.all([
-        api.me().catch(() => null),
-        catalogCache.getDistricts(),
-        catalogCache.getCaseTypes(),
-      ]);
-
       setTemplate(t);
       setUserProfile(me);
       setDistricts(Array.isArray(dists) ? dists : []);
       setCaseTypes(Array.isArray(cts) ? cts : []);
+      if (w && typeof w.balance === "number") {
+        setWalletBalance(w.balance);
+      }
       const enName = t.name_en || t.name_gu || "Document";
-      setFilename(`${enName.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+      setFilename(`${enName.replace(/\\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
 
       const initialValues: Record<string, any> = {};
 
-      if (caseId) {
-        try {
-          const c = await api.getCase(caseId);
-          setCaseData(c);
-          if (c.language) setLanguage(c.language);
-          if (c.party_name) initialValues["party_name"] = c.party_name;
-          if (c.client_name || c.party_name) initialValues["client_name"] = c.client_name || c.party_name;
-          if (c.opposite_party) initialValues["opposite_party"] = c.opposite_party;
-          if (c.case_number) initialValues["case_number"] = c.case_number;
-          if (c.district_id) initialValues["district"] = c.district_id;
-          if (c.taluka_id) initialValues["taluka"] = c.taluka_id;
-          if (c.court_id) initialValues["court"] = c.court_id;
-          if (c.case_type_id) initialValues["case_type"] = c.case_type_id;
-          if (c.police_station_label) initialValues["police_station"] = c.police_station_label;
-          if (c.client_mobile) initialValues["client_mobile"] = c.client_mobile;
-          if (c.client_email) initialValues["client_email"] = c.client_email;
-          if (c.client_address) initialValues["client_address"] = c.client_address;
-          if (c.law_label) initialValues["law"] = c.law_label;
-          if (c.section_label) initialValues["section"] = c.section_label;
-          initialValues["party_role"] = NORMALIZE_ROLE_MAP[c.party_role || ""] || "plaintiff";
-          initialValues["opposite_party_role"] = NORMALIZE_ROLE_MAP[c.opposite_party_role || ""] || "defendant";
+      if (cs) {
+        setCaseData(cs);
+        if (cs.language && !params.lang) setLanguage(cs.language);
+        if (cs.party_name) initialValues["party_name"] = cs.party_name;
+        if (cs.client_name || cs.party_name) initialValues["client_name"] = cs.client_name || cs.party_name;
+        if (cs.opposite_party) initialValues["opposite_party"] = cs.opposite_party;
+        if (cs.case_number) initialValues["case_number"] = cs.case_number;
+        if (cs.district_id) initialValues["district"] = cs.district_id;
+        if (cs.taluka_id) initialValues["taluka"] = cs.taluka_id;
+        if (cs.court_id) initialValues["court"] = cs.court_id;
+        if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
+        if (cs.police_station_label) initialValues["police_station"] = cs.police_station_label;
+        if (cs.client_mobile) initialValues["client_mobile"] = cs.client_mobile;
+        if (cs.client_email) initialValues["client_email"] = cs.client_email;
+        if (cs.client_address) initialValues["client_address"] = cs.client_address;
+        if (cs.law_label) initialValues["law"] = cs.law_label;
+        if (cs.section_label) initialValues["section"] = cs.section_label;
+        initialValues["party_role"] = NORMALIZE_ROLE_MAP[cs.party_role || ""] || "plaintiff";
+        initialValues["opposite_party_role"] = NORMALIZE_ROLE_MAP[cs.opposite_party_role || ""] || "defendant";
 
-          if (c.custom_fields) {
-            for (const [k, v] of Object.entries(c.custom_fields)) {
-              if (v !== null && v !== undefined && v !== "") initialValues[k] = v;
-            }
+        if (cs.custom_fields) {
+          for (const [k, v] of Object.entries(cs.custom_fields)) {
+            if (v !== null && v !== undefined && v !== "") initialValues[k] = v;
           }
-        } catch (cErr) {
-          console.warn("[template] could not load case data", cErr);
         }
       } else {
         // No-case default party roles
@@ -235,7 +227,7 @@ export default function TemplateApplication() {
         language
       );
       initialValues["advocate_name"] = advName;
-      initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+      initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\\//g, "-");
 
       // Date fields default to today when unset (always editable)
       for (const f of t?.fields || []) {
@@ -245,22 +237,17 @@ export default function TemplateApplication() {
 
       setValues((prev) => ({ ...initialValues, ...prev }));
 
-      if (params.draft === "1") {
-        try {
-          const drafts = await api.drafts();
-          const baseKey = templateId.replace(/_(gu|en)$/, "");
-          const d = (drafts || []).find((x: any) => {
-            const xBase = (x.template_id || "").replace(/_(gu|en)$/, "");
-            const matchTpl = x.template_id === templateId || x.template_id === effectiveId || xBase === baseKey;
-            const matchCase = (x.case_id || undefined) === caseId;
-            return matchTpl && matchCase;
-          });
-          if (d) {
-            setValues((prev) => ({ ...prev, ...(d.values || {}) }));
-            if (d.language) setLanguage(d.language);
-          }
-        } catch (dErr) {
-          console.warn("[template] draft recovery warning", dErr);
+      if (params.draft === "1" && Array.isArray(drafts) && drafts.length > 0) {
+        const baseKey = templateId.replace(/_(gu|en)$/, "");
+        const d = drafts.find((x: any) => {
+          const xBase = (x.template_id || "").replace(/_(gu|en)$/, "");
+          const matchTpl = x.template_id === templateId || x.template_id === effectiveId || xBase === baseKey;
+          const matchCase = (x.case_id || undefined) === caseId;
+          return matchTpl && matchCase;
+        });
+        if (d) {
+          setValues((prev) => ({ ...prev, ...(d.values || {}) }));
+          if (d.language && !params.lang) setLanguage(d.language);
         }
       }
     } catch (e: any) {
@@ -434,6 +421,10 @@ export default function TemplateApplication() {
   };
 
   const download = async (format: "pdf" | "docx" | "odt" | "png") => {
+    if (walletBalance <= 0) {
+      setShowPurchaseModal(true);
+      return;
+    }
     setBusy(true);
     setDownloading(format);
     setNotice(null);
@@ -449,6 +440,7 @@ export default function TemplateApplication() {
       if (!res?.base64) {
         throw new Error("The server returned an empty document. Please try again.");
       }
+      setWalletBalance((prev) => Math.max(0, prev - 1));
       await saveDocument({ filename: res.filename, mime_type: res.mime_type, base64: res.base64 }, format);
       const okText = `${res.filename} generated successfully. 1 template credit consumed.`;
       setNotice({ tone: "ok", text: `Download started — ${res.filename}. 1 template credit consumed.` });
@@ -461,10 +453,7 @@ export default function TemplateApplication() {
       const msg = e?.message || "Unknown error";
       if (msg.toLowerCase().includes("insufficient") || msg.includes("402")) {
         setNotice({ tone: "err", text: "You have no templates remaining. Please purchase a plan." });
-        Alert.alert("No Credits", "You have no templates remaining. Please purchase a plan.", [
-          { text: "Cancel", style: "cancel" },
-          { text: "View Plans", onPress: () => router.push("/(tabs)/subscription") },
-        ]);
+        setShowPurchaseModal(true);
       } else if (msg.includes("429") || msg.toLowerCase().includes("too many")) {
         setNotice({ tone: "err", text: "Too many requests. Please wait a moment before trying again." });
         Alert.alert("Too Many Requests", "Please wait a moment before trying again.");
@@ -652,7 +641,26 @@ export default function TemplateApplication() {
             <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>
               {language === "gu" ? template?.name_gu || template?.name_en : template?.name_en || template?.name_gu}
             </Text>
-            <View style={{ width: 24 }} />
+            <Pressable
+              testID="template-wallet-badge"
+              onPress={() => setShowPurchaseModal(true)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                backgroundColor: colors.surfaceSecondary,
+                paddingHorizontal: 10,
+                paddingVertical: 5,
+                borderRadius: Radius.md,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
+            >
+              <Ionicons name="diamond" size={13} color="#C5A059" />
+              <Text style={{ fontSize: 11, fontWeight: "700", color: walletBalance > 0 ? colors.onSurface : "#EF4444" }}>
+                {walletBalance}
+              </Text>
+            </Pressable>
           </View>
 
         {/* Step indicator */}
@@ -1162,6 +1170,15 @@ export default function TemplateApplication() {
           </View>
         )}
       </KeyboardAvoidingView>
+      <PlanPurchaseModal
+        visible={showPurchaseModal}
+        currentBalance={walletBalance}
+        onClose={() => setShowPurchaseModal(false)}
+        onSuccess={(newBal) => {
+          setWalletBalance(newBal);
+          setNotice({ tone: "ok", text: `Credits added successfully. Available balance: ${newBal} templates.` });
+        }}
+      />
     </SafeAreaView>
     </ErrorBoundary>
   );

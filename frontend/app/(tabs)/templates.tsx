@@ -12,6 +12,7 @@ import { DesktopPage } from "@/src/components/DesktopPage";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
 import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
+import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
 export default function Templates() {
   const { colors } = useTheme();
@@ -24,6 +25,7 @@ export default function Templates() {
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+  const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
 
   // Debounce search query by 150ms to prevent expensive re-renders while typing
   useEffect(() => {
@@ -179,14 +181,14 @@ export default function Templates() {
               <Pressable
                 key={pair.baseKey}
                 testID={`tpl-pair-${pair.baseKey}`}
-                onPress={() => openTemplate(pair.guId)}
+                onPress={() => setSelectedPair(pair)}
                 style={({ pressed }) => [
                   styles.dCard,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
                   pressed && { opacity: 0.9 },
                 ]}
               >
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
@@ -205,7 +207,7 @@ export default function Templates() {
                     </Pressable>
                   </View>
 
-                  {/* Clean Legal Titles (No raw IDs like mudat_arji_gu) */}
+                  {/* Clean Legal Titles */}
                   <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
                     {pair.name_gu}
                   </Text>
@@ -217,35 +219,29 @@ export default function Templates() {
                   </Text>
                 </View>
 
-                {/* Prominent Bilingual Action Buttons */}
-                <View style={styles.actionButtonRow}>
-                  <Pressable
-                    testID={`btn-gu-${pair.baseKey}`}
-                    onPress={(e) => openTemplate(pair.guId, e)}
-                    style={({ pressed }) => [
-                      styles.langBtn,
-                      { backgroundColor: colors.brandPrimary },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.langBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`btn-en-${pair.baseKey}`}
-                    onPress={(e) => openTemplate(pair.enId, e)}
-                    style={({ pressed }) => [
-                      styles.langBtn,
-                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.langBtnText, { color: colors.onSurface }]}>English</Text>
-                  </Pressable>
+                {/* Subtle Action Cue */}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                  <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
                 </View>
               </Pressable>
             ))}
           </View>
         )}
+        <LanguageSelectModal
+          visible={selectedPair !== null}
+          onClose={() => setSelectedPair(null)}
+          templateNameGu={selectedPair?.name_gu}
+          templateNameEn={selectedPair?.name_en}
+          category={selectedPair?.category}
+          onSelect={(lang) => {
+            if (selectedPair) {
+              const id = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+              router.push({ pathname: "/template/[id]", params: { id, lang } });
+              setSelectedPair(null);
+            }
+          }}
+        />
       </DesktopPage>
     );
   }
@@ -345,75 +341,71 @@ export default function Templates() {
             return (
               <Pressable
                 testID={`tpl-pair-${pair.baseKey}`}
-                onPress={() => openTemplate(pair.guId)}
+                onPress={() => setSelectedPair(pair)}
                 style={[
                   styles.card,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
                 ]}
               >
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                  <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                    <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+                    </View>
+                    <Pressable
+                      testID={`tpl-fav-${pair.baseKey}`}
+                      hitSlop={8}
+                      onPress={(e) => toggleFavorite(pair, e)}
+                      style={styles.favBtn}
+                    >
+                      <Ionicons
+                        name={is_favorite ? "star" : "star-outline"}
+                        size={20}
+                        color={is_favorite ? "#E5A93C" : colors.muted}
+                      />
+                    </Pressable>
                   </View>
-                  <Pressable
-                    testID={`tpl-fav-${pair.baseKey}`}
-                    hitSlop={8}
-                    onPress={(e) => toggleFavorite(pair, e)}
-                    style={styles.favBtn}
-                  >
-                    <Ionicons
-                      name={is_favorite ? "star" : "star-outline"}
-                      size={20}
-                      color={is_favorite ? "#E5A93C" : colors.muted}
-                    />
-                  </Pressable>
+
+                  {/* Clean Gujarati Title */}
+                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }}>
+                    {pair.name_gu}
+                  </Text>
+
+                  {/* Clean English Subtitle */}
+                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "600" }}>
+                    {pair.name_en}
+                  </Text>
+
+                  {/* Description */}
+                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={2}>
+                    {pair.description_gu}
+                  </Text>
                 </View>
 
-                {/* Clean Gujarati Title */}
-                <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }}>
-                  {pair.name_gu}
-                </Text>
-
-                {/* Clean English Subtitle */}
-                <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "600" }}>
-                  {pair.name_en}
-                </Text>
-
-                {/* Description */}
-                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={2}>
-                  {pair.description_gu}
-                </Text>
-
-                {/* Prominent Bilingual Buttons */}
-                <View style={styles.actionButtonRow}>
-                  <Pressable
-                    testID={`btn-gu-${pair.baseKey}`}
-                    onPress={(e) => openTemplate(pair.guId, e)}
-                    style={({ pressed }) => [
-                      styles.langBtn,
-                      { backgroundColor: colors.brandPrimary },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.langBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`btn-en-${pair.baseKey}`}
-                    onPress={(e) => openTemplate(pair.enId, e)}
-                    style={({ pressed }) => [
-                      styles.langBtn,
-                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.langBtnText, { color: colors.onSurface }]}>English</Text>
-                  </Pressable>
+                {/* Subtle Action Cue */}
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                  <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
                 </View>
               </Pressable>
             );
           }}
         />
       )}
+      <LanguageSelectModal
+        visible={selectedPair !== null}
+        onClose={() => setSelectedPair(null)}
+        templateNameGu={selectedPair?.name_gu}
+        templateNameEn={selectedPair?.name_en}
+        category={selectedPair?.category}
+        onSelect={(lang) => {
+          if (selectedPair) {
+            const id = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+            router.push({ pathname: "/template/[id]", params: { id, lang } });
+            setSelectedPair(null);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

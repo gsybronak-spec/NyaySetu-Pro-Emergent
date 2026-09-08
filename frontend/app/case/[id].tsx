@@ -10,6 +10,7 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
+import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
@@ -17,6 +18,7 @@ export default function CaseDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
   const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -230,7 +232,7 @@ export default function CaseDetail() {
                   <Pressable
                     key={t.id}
                     testID={`case-tpl-${t.id}`}
-                    onPress={() => router.push({ pathname: "/template/[id]", params: { id: t.id, case_id: c.id, lang: c.language } })}
+                    onPress={() => setSelectedTemplate(t)}
                     style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   >
                     <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
@@ -251,6 +253,24 @@ export default function CaseDetail() {
             </View>
           </View>
         </View>
+        <LanguageSelectModal
+          visible={selectedTemplate !== null}
+          onClose={() => setSelectedTemplate(null)}
+          templateNameGu={selectedTemplate?.name_gu}
+          templateNameEn={selectedTemplate?.name_en}
+          category={selectedTemplate?.category}
+          onSelect={(lang) => {
+            if (selectedTemplate) {
+              const baseId = (selectedTemplate.id || "").replace(/_(gu|en)$/, "");
+              const effectiveId = `${baseId}_${lang}`;
+              router.push({
+                pathname: "/template/[id]",
+                params: { id: effectiveId, case_id: c.id, lang },
+              });
+              setSelectedTemplate(null);
+            }
+          }}
+        />
       </DesktopPage>
       </ErrorBoundary>
     );
@@ -314,7 +334,7 @@ export default function CaseDetail() {
             <Pressable
               key={t.id}
               testID={`case-tpl-${t.id}`}
-              onPress={() => router.push({ pathname: "/template/[id]", params: { id: t.id, case_id: c.id, lang: c.language } })}
+              onPress={() => setSelectedTemplate(t)}
               style={[styles.tplRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
             >
               <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
@@ -347,6 +367,24 @@ export default function CaseDetail() {
           </Pressable>
         </View>
       </ScrollView>
+      <LanguageSelectModal
+        visible={selectedTemplate !== null}
+        onClose={() => setSelectedTemplate(null)}
+        templateNameGu={selectedTemplate?.name_gu}
+        templateNameEn={selectedTemplate?.name_en}
+        category={selectedTemplate?.category}
+        onSelect={(lang) => {
+          if (selectedTemplate) {
+            const baseId = (selectedTemplate.id || "").replace(/_(gu|en)$/, "");
+            const effectiveId = `${baseId}_${lang}`;
+            router.push({
+              pathname: "/template/[id]",
+              params: { id: effectiveId, case_id: c.id, lang },
+            });
+            setSelectedTemplate(null);
+          }
+        }}
+      />
     </SafeAreaView>
     </ErrorBoundary>
   );

@@ -41,7 +41,7 @@ export default function Profile() {
     {
       icon: "key-outline",
       label: user?.has_password ? "Change Password" : "Set Password",
-      onPress: () => router.push("/(auth)/set-password" as any),
+      onPress: () => router.push("/profile/set-password" as any),
     },
     { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription" as any) },
     { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription" as any) },
@@ -60,8 +60,8 @@ export default function Profile() {
         />
       ),
     },
-    { icon: "mail-outline", label: "Contact Support", onPress: () => Alert.alert("Support", "Email us at support@nyaysetupro.in") },
-    { icon: "information-circle-outline", label: "About Us", onPress: () => Alert.alert("About NyaySetu Pro", "The New Era of Advocacy — helping Indian Advocates draft routine court documents faster and more affordably.") },
+    { icon: "mail-outline", label: "Contact Support", onPress: () => router.push("/support" as any) },
+    { icon: "information-circle-outline", label: "About Us", onPress: () => router.push("/about" as any) },
     { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy" as any) },
     { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms" as any) },
     { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund" as any) },

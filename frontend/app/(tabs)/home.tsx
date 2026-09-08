@@ -14,6 +14,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
 import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
+import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -25,6 +26,7 @@ export default function Home() {
   const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
     getOrderedTemplatePairs(catalogCache.peekTemplateOrder()).slice(0, 10)
   );
+  const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [drafts, setDrafts] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
@@ -233,14 +235,14 @@ export default function Home() {
               <Pressable
                 key={pair.baseKey}
                 testID={`tpl-card-${pair.baseKey}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: pair.guId } })}
+                onPress={() => setSelectedPair(pair)}
                 style={({ pressed }) => [
                   styles.homeTplCardDesktop,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
                   pressed && { opacity: 0.88 },
                 ]}
               >
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
@@ -254,35 +256,9 @@ export default function Home() {
                     {pair.name_en}
                   </Text>
                 </View>
-                <View style={styles.homeTplBtnRow}>
-                  <Pressable
-                    testID={`home-tpl-gu-${pair.baseKey}`}
-                    onPress={(e) => {
-                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
-                      router.push({ pathname: "/template/[id]", params: { id: pair.guId } });
-                    }}
-                    style={({ pressed }) => [
-                      styles.homeLangBtn,
-                      { backgroundColor: colors.brandPrimary },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.homeLangBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`home-tpl-en-${pair.baseKey}`}
-                    onPress={(e) => {
-                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
-                      router.push({ pathname: "/template/[id]", params: { id: pair.enId } });
-                    }}
-                    style={({ pressed }) => [
-                      styles.homeLangBtn,
-                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.homeLangBtnText, { color: colors.onSurface }]}>English</Text>
-                  </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                  <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                  <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
                 </View>
               </Pressable>
             ))}
@@ -296,6 +272,20 @@ export default function Home() {
             <Ionicons name="arrow-forward" size={18} color="#FFF" />
           </Pressable>
         </View>
+        <LanguageSelectModal
+          visible={selectedPair !== null}
+          onClose={() => setSelectedPair(null)}
+          templateNameGu={selectedPair?.name_gu}
+          templateNameEn={selectedPair?.name_en}
+          category={selectedPair?.category}
+          onSelect={(lang) => {
+            if (selectedPair) {
+              const id = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+              router.push({ pathname: "/template/[id]", params: { id, lang } });
+              setSelectedPair(null);
+            }
+          }}
+        />
       </DesktopPage>
     );
   }
@@ -428,14 +418,14 @@ export default function Home() {
               <Pressable
                 key={pair.baseKey}
                 testID={`tpl-card-${pair.baseKey}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: pair.guId } })}
+                onPress={() => setSelectedPair(pair)}
                 style={({ pressed }) => [
                   styles.homeTplCard,
                   { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
                   pressed && { opacity: 0.88 },
                 ]}
               >
-                <View>
+                <View style={{ flex: 1 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                     <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                       <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
@@ -449,35 +439,9 @@ export default function Home() {
                     {pair.name_en}
                   </Text>
                 </View>
-                <View style={styles.homeTplBtnRow}>
-                  <Pressable
-                    testID={`home-tpl-gu-${pair.baseKey}`}
-                    onPress={(e) => {
-                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
-                      router.push({ pathname: "/template/[id]", params: { id: pair.guId } });
-                    }}
-                    style={({ pressed }) => [
-                      styles.homeLangBtn,
-                      { backgroundColor: colors.brandPrimary },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.homeLangBtnText, { color: colors.onBrandPrimary }]}>ગુજરાતી</Text>
-                  </Pressable>
-                  <Pressable
-                    testID={`home-tpl-en-${pair.baseKey}`}
-                    onPress={(e) => {
-                      if (e && typeof e.stopPropagation === "function") e.stopPropagation();
-                      router.push({ pathname: "/template/[id]", params: { id: pair.enId } });
-                    }}
-                    style={({ pressed }) => [
-                      styles.homeLangBtn,
-                      { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-                      pressed && { opacity: 0.8 },
-                    ]}
-                  >
-                    <Text style={[styles.homeLangBtnText, { color: colors.onSurface }]}>English</Text>
-                  </Pressable>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                  <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
                 </View>
               </Pressable>
             ))}
@@ -492,6 +456,20 @@ export default function Home() {
           </Pressable>
         </View>
       </ScrollView>
+      <LanguageSelectModal
+        visible={selectedPair !== null}
+        onClose={() => setSelectedPair(null)}
+        templateNameGu={selectedPair?.name_gu}
+        templateNameEn={selectedPair?.name_en}
+        category={selectedPair?.category}
+        onSelect={(lang) => {
+          if (selectedPair) {
+            const id = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+            router.push({ pathname: "/template/[id]", params: { id, lang } });
+            setSelectedPair(null);
+          }
+        }}
+      />
     </SafeAreaView>
   );
 }

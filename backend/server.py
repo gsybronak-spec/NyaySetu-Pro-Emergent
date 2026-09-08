@@ -28,7 +28,7 @@ import bcrypt
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
-from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, LEGACY_COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
+from seed_data import CASE_TYPES, LAWS, DISTRICTS, TALUKAS, COURTS, LEGACY_COURTS, LEGACY_NUMBERED_COURTS, POLICE_STATIONS, TEMPLATES, PLANS, QUOTES
 from seed_data_templates_v2 import TEMPLATES_V2
 from doc_generator import (
     generate_pdf,
@@ -571,12 +571,15 @@ def _public_user(user: dict) -> dict:
         user_type = user.get("user_type") or ("Advocate" if user.get("bar_council_no") else None)
         has_user_type = bool(user_type)
         has_bar = bool(user.get("bar_council_no")) if user_type == "Advocate" else True
+        has_adv_gu = bool((user.get("advocate_name_gu") or "").strip())
+        has_adv_en = bool((user.get("advocate_name_en") or "").strip())
+        has_adv_names = (has_adv_gu and has_adv_en) if user_type == "Advocate" else True
 
         # Existing mobile/password users registered before this requirement
-        if user.get("provider") != "google" and has_mobile and has_name:
+        if user.get("provider") != "google" and has_mobile and has_name and has_adv_names:
             is_complete = True
         else:
-            is_complete = bool(has_name and has_mobile and has_state and has_district and has_user_type and has_bar)
+            is_complete = bool(has_name and has_mobile and has_state and has_district and has_user_type and has_bar and has_adv_names)
 
     u["profile_completed"] = is_complete
     u["is_profile_complete"] = is_complete
@@ -1518,7 +1521,20 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
 
 @api.get("/profile/me")
 async def me(user=Depends(get_user)):
-    return _public_user(user)
+    pub = _public_user(user)
+    try:
+        w_snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+        if w_snap:
+            w = w_snap[0].to_dict()
+            pub["wallet_balance"] = w.get("balance", 0)
+            pub["total_credits_used"] = w.get("total_used", 0)
+        else:
+            pub["wallet_balance"] = 0
+            pub["total_credits_used"] = 0
+    except Exception:
+        pub["wallet_balance"] = 0
+        pub["total_credits_used"] = 0
+    return pub
 
 @api.put("/profile/update")
 @api.patch("/profile/update")
@@ -1573,16 +1589,26 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
     check_district = updates.get("district") or user.get("district")
     check_type = updates.get("user_type") or user.get("user_type")
     check_bar = bool((updates.get("bar_council_no") or user.get("bar_council_no") or "").strip()) if check_type == "Advocate" else True
+    check_adv_gu = bool((updates.get("advocate_name_gu") or user.get("advocate_name_gu") or "").strip())
+    check_adv_en = bool((updates.get("advocate_name_en") or user.get("advocate_name_en") or "").strip())
+    check_adv_names = (check_adv_gu and check_adv_en) if check_type == "Advocate" else True
 
-    if check_name and check_mobile and check_state and check_district and check_type and check_bar:
+    # If explicitly completing profile as an advocate, both names are required
+    if (req.profile_completed is True or req.is_profile_complete is True) and check_type == "Advocate":
+        if not check_adv_gu:
+            raise HTTPException(400, "Advocate Name (Gujarati) is required.")
+        if not check_adv_en:
+            raise HTTPException(400, "Advocate Name (English) is required.")
+
+    if check_name and check_mobile and check_state and check_district and check_type and check_bar and check_adv_names:
         updates["profile_completed"] = True
         updates["is_profile_complete"] = True
     elif req.profile_completed is not None:
-        updates["profile_completed"] = req.profile_completed
-        updates["is_profile_complete"] = req.profile_completed
+        updates["profile_completed"] = req.profile_completed and check_adv_names
+        updates["is_profile_complete"] = req.profile_completed and check_adv_names
     elif req.is_profile_complete is not None:
-        updates["profile_completed"] = req.is_profile_complete
-        updates["is_profile_complete"] = req.is_profile_complete
+        updates["profile_completed"] = req.is_profile_complete and check_adv_names
+        updates["is_profile_complete"] = req.is_profile_complete and check_adv_names
 
     if updates:
         await db.collection('users').document(user["id"]).set(updates, merge=True)
@@ -2001,7 +2027,8 @@ async def _refresh_catalog_maps() -> None:
     _TALUKA_MAP = {t["id"]: t for t in await _load_catalog("talukas")}
     _loaded_courts = {c["id"]: c for c in await _load_catalog("courts")}
     _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
-    _COURT_MAP = {**_legacy_courts, **_loaded_courts}
+    _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
+    _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_courts}
     _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
     _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
     _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
@@ -2418,9 +2445,19 @@ async def _get_published_templates() -> list:
 
 
 async def _get_template_by_id(template_id: str) -> Optional[dict]:
-    """Get a single published template by ID from db.templates ONLY."""
+    """Get a single published template by ID with fast in-memory caching."""
     if _is_templates_disabled():
         return None
+    # Fast path: check in-memory cached published templates first (<0.1ms)
+    try:
+        all_tpls = await _get_published_templates()
+        for cand in (template_id, f"{template_id}_gu", f"{template_id}_en"):
+            for tpl in all_tpls:
+                if tpl.get("id") == cand or tpl.get("template_id") == cand:
+                    return {**tpl, "format_version": tpl.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+    except Exception:
+        pass
+
     _snap = await db.collection("templates").document(template_id).get()
     t = _snap.to_dict() if _snap.exists and _snap.to_dict().get("status") in ("published", None) else None
     if not t:
@@ -2646,16 +2683,27 @@ def format_advocate_name(name: Optional[str] = None, language: str = "en") -> st
 
 async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
     ctx = dict(values or {})
-    # Advocate name resolution:
-    # 1. Client-provided advocate_name wins
-    # 2. If language == "gu" -> user.get("advocate_name_gu") or user.get("name")
-    # 3. If language == "en" -> user.get("advocate_name_en") or user.get("name")
-    if not ctx.get("advocate_name"):
-        if language == "gu":
-            adv_name = user.get("advocate_name_gu") or user.get("name")
+    # Issue 3 & 16: Advocate name strictly controlled by document language.
+    # When generating Gujarati document -> use advocate_name_gu (exact stored value).
+    # When generating English document -> use advocate_name_en (exact stored value).
+    adv_gu_profile = (user.get("advocate_name_gu") or user.get("name_gu") or "").strip()
+    adv_en_profile = (user.get("advocate_name_en") or user.get("name_en") or user.get("name") or "").strip()
+    client_adv = (ctx.get("advocate_name") or "").strip()
+
+    if language == "gu":
+        # If client provided value matches English profile name (or is empty), use Gujarati profile name
+        if not client_adv or client_adv == adv_en_profile or client_adv == format_advocate_name(adv_en_profile, "en"):
+            chosen_adv = adv_gu_profile or adv_en_profile
+            ctx["advocate_name"] = format_advocate_name(chosen_adv, "gu")
         else:
-            adv_name = user.get("advocate_name_en") or user.get("name")
-        ctx["advocate_name"] = format_advocate_name(adv_name, language)
+            ctx["advocate_name"] = client_adv
+    else:
+        # If client provided value matches Gujarati profile name (or is empty), use English profile name
+        if not client_adv or client_adv == adv_gu_profile or client_adv == format_advocate_name(adv_gu_profile, "gu"):
+            chosen_adv = adv_en_profile or adv_gu_profile
+            ctx["advocate_name"] = format_advocate_name(chosen_adv, "en")
+        else:
+            ctx["advocate_name"] = client_adv
 
     # Today (formatted)
     ctx["today"] = now().strftime("%d-%m-%Y")
@@ -4554,6 +4602,8 @@ async def admin_adjust_user_wallet(
             await ref.set({"balance": firestore.Increment(req.amount), "updated_at": ts}, merge=True)
         else:
             await db.collection('wallets').document(user_id).set({"id": user_id, "user_id": user_id, "balance": req.amount, "updated_at": ts}, merge=True)
+
+    await db.collection('users').document(user_id).set({"wallet_balance": after_balance, "updated_at": ts}, merge=True)
 
     txn_id = str(uuid.uuid4())
     txn_doc = {

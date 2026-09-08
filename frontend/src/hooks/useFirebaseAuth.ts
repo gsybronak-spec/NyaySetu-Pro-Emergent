@@ -66,6 +66,25 @@ export async function firebaseEmailPasswordLogin(
   }
 }
 
+export function getOrCreateRecaptchaVerifier(
+  verifierElement: HTMLElement | string | null = 'recaptcha-container'
+): RecaptchaVerifier | null {
+  if (Platform.OS !== 'web') return null;
+  const auth = getFirebaseAuth();
+  if (!auth) return null;
+  if (activeVerifier) return activeVerifier;
+  try {
+    const verifier = new RecaptchaVerifier(auth, verifierElement as any, {
+      size: 'invisible',
+    });
+    activeVerifier = verifier;
+    return verifier;
+  } catch (e) {
+    console.warn('[useFirebaseAuth] could not initialize RecaptchaVerifier', e);
+    return null;
+  }
+}
+
 export async function firebaseSendPhoneOtp(
   mobile10: string,
   verifierElement: HTMLElement | string | null
@@ -73,11 +92,13 @@ export async function firebaseSendPhoneOtp(
   if (Platform.OS === 'web') {
     const auth = getFirebaseAuth();
     if (!auth) return null;
-    clearActiveVerifier();
-    const verifier = new RecaptchaVerifier(auth, verifierElement as any, {
-      size: 'invisible',
-    });
-    activeVerifier = verifier;
+    let verifier = activeVerifier;
+    if (!verifier) {
+      verifier = new RecaptchaVerifier(auth, verifierElement as any, {
+        size: 'invisible',
+      });
+      activeVerifier = verifier;
+    }
     try {
       const result = await signInWithPhoneNumber(auth, `+91${mobile10}`, verifier);
       pendingConfirmation = result;
