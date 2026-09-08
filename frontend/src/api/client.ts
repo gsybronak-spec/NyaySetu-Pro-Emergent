@@ -4,7 +4,36 @@ const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://backend-gold-iota-n
 const TOKEN_KEY = "nyaysetu_token";
 const REFRESH_TOKEN_KEY = "nyaysetu_refresh_token";
 
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+
+const apiGetCache = new Map<string, CacheEntry>();
+const apiInFlightGet = new Map<string, Promise<any>>();
+
+const CACHEABLE_GET_PREFIXES = [
+  "/catalog/",
+  "/templates",
+  "/favourites/templates",
+];
+
+const CACHE_TTL_MS = 60000; // 60 seconds
+
+export function invalidateApiCache(prefix?: string) {
+  if (!prefix) {
+    apiGetCache.clear();
+    return;
+  }
+  for (const key of apiGetCache.keys()) {
+    if (key.includes(prefix)) {
+      apiGetCache.delete(key);
+    }
+  }
+}
+
 export async function setTokens(accessToken: string | null, refreshToken?: string | null) {
+  invalidateApiCache();
   if (accessToken) {
     await storage.secureSet(TOKEN_KEY, accessToken);
   } else {
@@ -138,7 +167,7 @@ const AUTH_BYPASS_PATHS = [
   "/auth/logout",
 ];
 
-async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS, isRetry = false): Promise<any> {
+async function rawRequest(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS, isRetry = false): Promise<any> {
   const token = await getToken();
   const headers: any = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -173,7 +202,7 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
             if (err || !newToken) {
               reject(err || new Error("Unauthorized"));
             } else {
-              request(path, method, body, timeoutMs, true).then(resolve).catch(reject);
+              rawRequest(path, method, body, timeoutMs, true).then(resolve).catch(reject);
             }
           });
         });
@@ -185,7 +214,7 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
         onTokenRefreshed(newToken, null);
         isRefreshing = false;
         // Retry original request with newly issued access token
-        return request(path, method, body, timeoutMs, true);
+        return rawRequest(path, method, body, timeoutMs, true);
       } catch (refreshErr) {
         onTokenRefreshed(null, refreshErr);
         isRefreshing = false;
@@ -207,6 +236,39 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
   }
   return json;
+}
+
+async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS, isRetry = false): Promise<any> {
+  const isCacheable = method === "GET" && CACHEABLE_GET_PREFIXES.some((p) => path.startsWith(p));
+  if (!isCacheable) {
+    return rawRequest(path, method, body, timeoutMs, isRetry);
+  }
+
+  const token = await getToken();
+  const cacheKey = `${path}::${token || "anon"}`;
+
+  const cached = apiGetCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const inFlight = apiInFlightGet.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = (async () => {
+    try {
+      const data = await rawRequest(path, method, body, timeoutMs, isRetry);
+      apiGetCache.set(cacheKey, { data, timestamp: Date.now() });
+      return data;
+    } finally {
+      apiInFlightGet.delete(cacheKey);
+    }
+  })();
+
+  apiInFlightGet.set(cacheKey, promise);
+  return promise;
 }
 
 export const api = {
@@ -272,10 +334,22 @@ export const api = {
     return request(`/templates${qs ? `?${qs}` : ""}`);
   },
   favTemplates: () => request("/favourites/templates"),
-  addFavTemplate: (id: string) => request(`/favourites/templates/${id}`, "POST"),
-  removeFavTemplate: (id: string) => request(`/favourites/templates/${id}`, "DELETE"),
+  addFavTemplate: async (id: string) => {
+    const res = await request(`/favourites/templates/${id}`, "POST");
+    invalidateApiCache("/favourites/templates");
+    return res;
+  },
+  removeFavTemplate: async (id: string) => {
+    const res = await request(`/favourites/templates/${id}`, "DELETE");
+    invalidateApiCache("/favourites/templates");
+    return res;
+  },
   templatePreferences: () => request("/user/template-preferences"),
-  updateTemplateOrder: (template_order: string[]) => request("/user/template-order", "PUT", { template_order }),
+  updateTemplateOrder: async (template_order: string[]) => {
+    const res = await request("/user/template-order", "PUT", { template_order });
+    invalidateApiCache("/catalog/template-order");
+    return res;
+  },
   catalogTemplateOrder: () => request("/catalog/template-order"),
   template: (id: string) => request(`/templates/${id}`),
   previewApp: (data: any) => request("/applications/preview", "POST", data),

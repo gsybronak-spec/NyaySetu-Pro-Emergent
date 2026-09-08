@@ -20,9 +20,18 @@ export default function Templates() {
   const params = useLocalSearchParams<{ cat?: string }>();
 
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
   const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+
+  // Debounce search query by 150ms to prevent expensive re-renders while typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQ(q);
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   // Fetch authoritative template order
   useEffect(() => {
@@ -83,8 +92,8 @@ export default function Templates() {
 
   // Perform deterministic bilingual search & category filter over authoritative ordered pairs
   const matchedPairs: SearchMatchedPair[] = useMemo(() => {
-    return searchTemplatePairs(q, cat, favoriteIds, orderedBasePairs);
-  }, [q, cat, favoriteIds, orderedBasePairs]);
+    return searchTemplatePairs(debouncedQ, cat, favoriteIds, orderedBasePairs);
+  }, [debouncedQ, cat, favoriteIds, orderedBasePairs]);
 
   const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail"];
 

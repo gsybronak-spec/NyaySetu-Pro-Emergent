@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
@@ -263,13 +264,42 @@ def _setting_type(key: str):
     return str
 
 
+_SETTINGS_CACHE: dict = {}
+_SETTINGS_CACHE_LOCK = threading.Lock()
+_SETTINGS_CACHE_TTL_SEC = 60.0
+
+def invalidate_settings_cache(key: Optional[str] = None):
+    with _SETTINGS_CACHE_LOCK:
+        if key:
+            _SETTINGS_CACHE.pop(key, None)
+        else:
+            _SETTINGS_CACHE.clear()
+
 async def _get_setting(key: str):
-    """Resolve an operational setting: DB value if present, else the default."""
-    _snap = await db.collection('settings').document(key).get()
-    doc = _snap.to_dict() if _snap.exists else None
-    if doc is not None and "value" in doc:
-        return doc["value"]
-    return _SETTING_DEFAULTS.get(key)
+    """Resolve an operational setting: DB value if present, else the default.
+    Cached in-memory with a short 60s TTL for per-instance efficiency."""
+    now_ts = time.time()
+    with _SETTINGS_CACHE_LOCK:
+        cached = _SETTINGS_CACHE.get(key)
+        if cached is not None and now_ts < cached["expires_at"]:
+            return cached["value"]
+
+    val = None
+    if db is not None:
+        try:
+            _snap = await db.collection('settings').document(key).get()
+            doc = _snap.to_dict() if _snap.exists else None
+            if doc is not None and "value" in doc:
+                val = doc["value"]
+        except Exception:
+            pass
+
+    if val is None:
+        val = _SETTING_DEFAULTS.get(key)
+
+    with _SETTINGS_CACHE_LOCK:
+        _SETTINGS_CACHE[key] = {"value": val, "expires_at": now_ts + _SETTINGS_CACHE_TTL_SEC}
+    return val
 
 
 # ============================================================
@@ -1837,13 +1867,33 @@ async def get_template_base_fields():
         ]
     }
 
+_PLANS_CACHE: dict = {"data": None, "expires_at": 0.0}
+_PLANS_CACHE_LOCK = threading.Lock()
+_PLANS_CACHE_TTL_SEC = 60.0
+
+def invalidate_plans_cache():
+    with _PLANS_CACHE_LOCK:
+        _PLANS_CACHE["data"] = None
+        _PLANS_CACHE["expires_at"] = 0.0
+
 async def _load_plans() -> list:
     """DB plans if any exist, else the seed PLANS (backward compat when the
-    plans collection has not been initialized)."""
+    plans collection has not been initialized).
+    Cached in-memory with 60s TTL."""
+    now_ts = time.time()
+    with _PLANS_CACHE_LOCK:
+        if _PLANS_CACHE["data"] is not None and now_ts < _PLANS_CACHE["expires_at"]:
+            return list(_PLANS_CACHE["data"])
+
     items = [d.to_dict() async for d in db.collection("plans").limit(200).stream()]
-    if items:
-        return items
-    return [dict(p, active=True) for p in PLANS]
+    if not items:
+        items = [dict(p, active=True) for p in PLANS]
+
+    with _PLANS_CACHE_LOCK:
+        _PLANS_CACHE["data"] = items
+        _PLANS_CACHE["expires_at"] = now_ts + _PLANS_CACHE_TTL_SEC
+
+    return list(items)
 
 
 async def _get_plan(plan_id: str) -> Optional[dict]:
@@ -2336,14 +2386,35 @@ async def _ensure_seed_complete() -> None:
         await seed_templates()
 
 
+_PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
+_PUBLISHED_TEMPLATES_LOCK = threading.Lock()
+_PUBLISHED_TEMPLATES_TTL_SEC = 60.0
+
+def invalidate_published_templates_cache():
+    with _PUBLISHED_TEMPLATES_LOCK:
+        _PUBLISHED_TEMPLATES_CACHE["data"] = None
+        _PUBLISHED_TEMPLATES_CACHE["expires_at"] = 0.0
+
 async def _get_published_templates() -> list:
     """Return published templates from db.templates ONLY (single source of truth).
-    Hides draft, archived, or deleted templates."""
+    Hides draft, archived, or deleted templates.
+    Cached in-memory with 60s TTL."""
     if _is_templates_disabled():
         return []
+    now_ts = time.time()
+    with _PUBLISHED_TEMPLATES_LOCK:
+        if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
+            return list(_PUBLISHED_TEMPLATES_CACHE["data"])
+
     db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
     db_templates.sort(key=lambda t: t.get("category", ""))
-    return [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
+    res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
+
+    with _PUBLISHED_TEMPLATES_LOCK:
+        _PUBLISHED_TEMPLATES_CACHE["data"] = res
+        _PUBLISHED_TEMPLATES_CACHE["expires_at"] = now_ts + _PUBLISHED_TEMPLATES_TTL_SEC
+
+    return list(res)
 
 
 async def _get_template_by_id(template_id: str) -> Optional[dict]:
@@ -4986,6 +5057,7 @@ async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin
         metadata={"name": req.name, "price": req.price, "credits": req.credits},
     )
     doc.pop("_id", None)
+    invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(doc)}
 
 
@@ -5022,6 +5094,7 @@ async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(requi
         new_value=updated,
         metadata={"name": req.name, "price": req.price, "credits": req.credits},
     )
+    invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(updated)}
 
 
@@ -5048,6 +5121,7 @@ async def admin_activate_plan(plan_id: str, admin=Depends(require_super_admin)):
         new_value={"active": True},
     )
     updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
+    invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(updated)}
 
 
@@ -5073,6 +5147,7 @@ async def admin_deactivate_plan(plan_id: str, admin=Depends(require_super_admin)
         new_value={"active": False},
     )
     updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
+    invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(updated)}
 
 
@@ -5332,6 +5407,7 @@ async def admin_update_setting(key: str, req: SettingsUpdateReq,
         value = str(value).upper()
     _validate_setting_value(key, value)
     await db.collection('settings').document(key).set({"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
+    invalidate_settings_cache(key)
     await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
     t = _setting_type(key)
     type_str = "int" if t is int else ("list" if t is list else "str")
@@ -5364,6 +5440,7 @@ async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_a
         "updated_by": admin["id"],
         "updated_at": now().isoformat(),
     })
+    invalidate_settings_cache("template_display_order")
     await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
     return {"success": True, "template_order": req.template_order}
 
@@ -5595,6 +5672,7 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(require_
         metadata={"name_en": req.name_en, "category": req.category},
     )
     template_doc.pop("_id", None)
+    invalidate_published_templates_cache()
     return template_doc
 
 
@@ -5692,6 +5770,7 @@ async def admin_import_word_create(req: WordImportCreateReq, admin=Depends(requi
                   "fields": len(req.fields), "source": "word_docx"},
     )
     template_doc.pop("_id", None)
+    invalidate_published_templates_cache()
     return template_doc
 
 
@@ -5736,6 +5815,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
             metadata={"field_count": len(updates.get("fields", t.get("fields", [])))},
         )
     updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
+    invalidate_published_templates_cache()
     return updated
 
 
@@ -5829,6 +5909,7 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
         metadata={"version": current_version},
     )
     _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    invalidate_published_templates_cache()
     return {"success": True, "template": updated, "validation": validation}
 
 
@@ -5848,6 +5929,7 @@ async def admin_unpublish_template(template_id: str, admin=Depends(require_super
         entity_id=template_id,
     )
     _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    invalidate_published_templates_cache()
     return {"success": True, "template": updated}
 
 
@@ -5860,6 +5942,7 @@ async def admin_archive_template(template_id: str, admin=Depends(require_super_a
         raise HTTPException(404, "Template not found")
     await db.collection('templates').document(template_id).set({"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(admin=admin, action="template_archive", entity_type="template", entity_id=template_id)
+    invalidate_published_templates_cache()
     return {"success": True, "status": "archived"}
 
 
@@ -5873,6 +5956,7 @@ async def admin_restore_template(template_id: str, admin=Depends(require_super_a
     await db.collection('templates').document(template_id).set({"status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
     await create_admin_audit_log(admin=admin, action="template_restore", entity_type="template", entity_id=template_id)
     _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    invalidate_published_templates_cache()
     return {"success": True, "status": "published", "template": updated}
 
 
@@ -5894,6 +5978,7 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
         old_value=t,
         reason="Permanent deletion from template catalog",
     )
+    invalidate_published_templates_cache()
     return {
         "success": True,
         "message": f"Template '{template_id}' permanently deleted from catalog. Historical revisions preserved.",
@@ -5929,6 +6014,7 @@ async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = 
         entity_id=template_id,
         metadata={"removed_status": status, "seed_id": template_id, "seed_name_gu": seed.get("name_gu")},
     )
+    invalidate_published_templates_cache()
     return {"success": True, "removed_status": status,
             "message": f"Removed the {status} shadow record for seed template '{template_id}'. The seed template is visible to lawyers again."}
 
@@ -5994,6 +6080,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
             metadata={"as_new_template": True, "new_id": new_id},
         )
         new_doc.pop("_id", None)
+        invalidate_published_templates_cache()
         return {"success": True, "template": new_doc, "new_version": 1}
 
     # Version branch of existing template (linear versioning under same template_id)
@@ -6055,6 +6142,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
         metadata={"as_new_template": False, "new_version": new_version},
     )
     _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    invalidate_published_templates_cache()
     return {"success": True, "template": updated, "new_version": new_version}
 
 
@@ -6086,6 +6174,7 @@ async def admin_bulk_template_status(req: AdminTemplateBulkStatusReq, admin=Depe
         reason=req.reason or f"Bulk {action} on {len(req.template_ids)} templates",
         metadata={"template_ids": req.template_ids, "matched": res.matched_count, "modified": res.modified_count},
     )
+    invalidate_published_templates_cache()
     return {"success": True, "action": action, "affected_count": res.modified_count}
 
 
@@ -6315,6 +6404,7 @@ async def seed_templates(force: bool = False) -> dict:
     )
     if inserted:
         logger.info(f"Initialized {inserted} seed templates into db.templates (seed_complete=True).")
+        invalidate_published_templates_cache()
 
     return {
         "success": True,
@@ -6389,6 +6479,7 @@ async def seed_plans():
         _doc["id"] = _doc_id
         await db.collection("plans").document(_doc_id).set(_doc)
     logger.info(f"Seeded {len(PLANS)} plans.")
+    invalidate_plans_cache()
 
 
 async def seed_super_admin():
@@ -6448,6 +6539,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 async def _existing_index_map(collection):
@@ -6477,19 +6569,29 @@ async def _ensure_ttl_index(coll, field: str, required_seconds: int):
 
 @app.on_event("startup")
 async def create_indexes():
-    """Create MongoDB indexes idempotently on startup.
-
-    Every index is created only if an index with the same key pattern does not
-    already exist, so deployments and restarts never crash with
-    IndexOptionsConflict (e.g. the otps.ttl_at_1 TTL index whose TTL may have
-    drifted from the admin-configured otp_ttl_seconds setting)."""
+    """Verify database initialization on startup."""
     logger.info("Firestore indexes: managed via firestore.indexes.json and Cloud Firestore.")
-    # Seed super admin and static catalogs
-    await seed_plans()
-    await seed_catalogs()
-    await seed_super_admin()
-    await seed_templates()
-    await migrate_templates_to_revisions(db)
+    if db is None:
+        return
+
+    # Check existing authoritative initialization state in system_settings/seed_complete
+    is_seeded = False
+    try:
+        _snap = await db.collection("system_settings").document("seed_complete").get()
+        is_seeded = _snap.exists and _snap.to_dict().get("value") is True
+    except Exception as e:
+        logger.warning(f"Unable to check seed_complete state on startup: {e}")
+
+    if is_seeded:
+        logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding/migration bypassed.")
+    else:
+        # First-time / uninitialized database setup only
+        logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")
+        await seed_plans()
+        await seed_catalogs()
+        await seed_super_admin()
+        await seed_templates()
+        await migrate_templates_to_revisions(db)
 
 
 @app.on_event("shutdown")
