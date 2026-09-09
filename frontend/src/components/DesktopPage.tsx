@@ -5,6 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Spacing } from "@/src/theme/tokens";
 
+import { NotificationCenter } from "./NotificationCenter";
+
 /** Fixed width of the desktop sidebar — DesktopPage offsets content by it. */
 export const DESKTOP_SIDEBAR_WIDTH = 264;
 
@@ -38,7 +40,10 @@ export function DesktopPage({ title, subtitle, actions, children, maxWidth = 120
             <Text style={{ color: colors.muted, fontSize: 13, marginTop: 2 }} numberOfLines={2}>{subtitle}</Text>
           ) : null}
         </View>
-        {actions ? <View style={styles.actions}>{actions}</View> : null}
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <NotificationCenter />
+          {actions ? <View style={styles.actions}>{actions}</View> : null}
+        </View>
       </View>
     </View>
   );

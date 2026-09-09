@@ -87,6 +87,15 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
           <Ionicons name="search" size={19} color={"#A6B1C2"} />
           <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>Search</Text>
         </Pressable>
+
+        <Pressable
+          testID="desktop-nav-vault"
+          onPress={() => router.push("/vault" as any)}
+          style={({ pressed }) => [styles.navItem, pressed && { opacity: 0.8 }]}
+        >
+          <Ionicons name="file-tray-full" size={19} color={"#A6B1C2"} />
+          <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>Document Vault</Text>
+        </Pressable>
       </View>
 
       {/* Wallet Credits Indicator */}

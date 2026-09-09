@@ -46,6 +46,7 @@ export default function Profile() {
     { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription" as any) },
     { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription" as any) },
     { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions" as any) },
+    { icon: "file-tray-full-outline", label: "Document Vault & History", onPress: () => router.push("/vault" as any) },
     { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral" as any) },
     {
       icon: "moon-outline",

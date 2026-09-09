@@ -49,6 +49,7 @@ from doc_generator import (
 )
 from docx_import import analyze_docx, decode_upload, DocxImportError
 from odt_import import analyze_odt, OdtImportError
+import ai_service
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -2670,14 +2671,16 @@ def format_advocate_name(name: Optional[str] = None, language: str = "en") -> st
     if not n:
         return "એડવોકેટ" if language == "gu" else "Advocate"
     if language == "gu":
-        if re.match(r"^(એડવોકેટ|વકીલ|adv\.?)\s*", n, re.IGNORECASE):
-            return re.sub(r"^adv\.?\s*", "એડવોકેટ ", n, flags=re.IGNORECASE)
+        if re.match(r"^(એડવોકેટ|એડ\.?|વકીલ|adv\.?)\s*", n, re.IGNORECASE):
+            if re.match(r"^adv\.?\s*", n, re.IGNORECASE):
+                return re.sub(r"^adv\.?\s*", "એડવોકેટ ", n, flags=re.IGNORECASE)
+            return n
         return f"એડવોકેટ {n}"
     else:
-        if re.match(r"^adv\.?\s", n, re.IGNORECASE):
+        if re.match(r"^adv\.?\s*", n, re.IGNORECASE):
             return n
-        if re.match(r"^(એડવોકેટ|વકીલ)\s*", n):
-            return re.sub(r"^(એડવોકેટ|વકીલ)\s*", "Adv. ", n)
+        if re.match(r"^(એડવોકેટ|એડ\.?|વકીલ)\s*", n):
+            return re.sub(r"^(એડવોકેટ|એડ\.?|વકીલ)\s*", "Adv. ", n)
         return f"Adv. {n}"
 
 
@@ -3616,6 +3619,158 @@ async def delete_draft(draft_id: str, user=Depends(get_user)):
     if _draft and _draft.get("user_id") == user["id"]:
         await db.collection('drafts').document(draft_id).delete()
     return {"success": True}
+
+
+# ============================================================
+# NOTIFICATIONS & ANNOUNCEMENTS
+# ============================================================
+
+class AnnouncementReq(BaseModel):
+    title: str
+    message: str
+    priority: Optional[str] = "normal"
+    link: Optional[str] = None
+
+
+@api.get("/notifications")
+async def list_notifications(user=Depends(get_user)):
+    try:
+        user_notes = [
+            d.to_dict() async for d in db.collection('notifications')
+            .where(filter=firestore.FieldFilter('user_id', '==', user["id"]))
+            .limit(50)
+            .stream()
+        ]
+        broadcast_notes = [
+            d.to_dict() async for d in db.collection('notifications')
+            .where(filter=firestore.FieldFilter('user_id', '==', 'all'))
+            .limit(20)
+            .stream()
+        ]
+        all_notes = user_notes + broadcast_notes
+    except Exception:
+        all_notes = []
+
+    if not all_notes:
+        welcome = {
+            "id": f"notif_welcome_{user['id']}",
+            "user_id": user["id"],
+            "title": "Welcome to NyaySetu Pro",
+            "message": "Complete your advocate profile with Bar Council details to unlock Gujarati & English court documents.",
+            "type": "welcome",
+            "read": False,
+            "created_at": now().isoformat()
+        }
+        try:
+            await db.collection('notifications').document(welcome["id"]).set(welcome)
+            all_notes = [welcome]
+        except Exception:
+            all_notes = [welcome]
+
+    all_notes.sort(key=lambda n: n.get("created_at") or "", reverse=True)
+    unread_count = sum(1 for n in all_notes if not n.get("read"))
+    return {"notifications": all_notes, "unread_count": unread_count}
+
+
+@api.post("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, user=Depends(get_user)):
+    try:
+        _snap = await db.collection('notifications').document(notification_id).get()
+        if _snap.exists:
+            n = _snap.to_dict()
+            if n.get("user_id") in (user["id"], "all"):
+                await db.collection('notifications').document(notification_id).set({
+                    "read": True,
+                    "read_at": now().isoformat()
+                }, merge=True)
+    except Exception:
+        pass
+    return {"success": True}
+
+
+@api.post("/notifications/read-all")
+async def mark_all_notifications_read(user=Depends(get_user)):
+    try:
+        snaps = [
+            d async for d in db.collection('notifications')
+            .where(filter=firestore.FieldFilter('user_id', '==', user["id"]))
+            .stream()
+        ]
+        for s in snaps:
+            await s.reference.set({"read": True, "read_at": now().isoformat()}, merge=True)
+    except Exception:
+        pass
+    return {"success": True}
+
+
+@api.post("/admin/announcements")
+async def create_announcement(req: AnnouncementReq, user=Depends(get_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin privileges required")
+    notif_id = f"ann_{str(uuid.uuid4())[:8]}"
+    doc = {
+        "id": notif_id,
+        "user_id": "all",
+        "title": req.title.strip(),
+        "message": req.message.strip(),
+        "priority": req.priority or "normal",
+        "link": req.link,
+        "type": "announcement",
+        "read": False,
+        "created_at": now().isoformat(),
+        "created_by": user["id"]
+    }
+    await db.collection('notifications').document(notif_id).set(doc)
+    return {"success": True, "notification": doc}
+
+
+# ============================================================
+# AI INTELLIGENCE & LEGAL ASSISTANT
+# ============================================================
+
+class AISuggestTemplateReq(BaseModel):
+    prompt: str
+    language: Optional[str] = "gu"
+
+class AIDraftAssistanceReq(BaseModel):
+    template_id: str
+    case_facts: Optional[str] = ""
+    language: Optional[str] = "gu"
+
+class AISummarizeReq(BaseModel):
+    text: str
+    language: Optional[str] = "gu"
+
+class AIChatReq(BaseModel):
+    message: str
+    history: Optional[List[dict]] = None
+    context: Optional[dict] = None
+
+
+@api.post("/ai/suggest-template")
+async def ai_suggest_template_endpoint(req: AISuggestTemplateReq, user=Depends(get_user)):
+    return ai_service.recommend_template(req.prompt, req.language or "gu")
+
+
+@api.post("/ai/draft-assistance")
+async def ai_draft_assistance_endpoint(req: AIDraftAssistanceReq, user=Depends(get_user)):
+    return ai_service.suggest_drafting_grounds(req.template_id, req.case_facts or "", req.language or "gu")
+
+
+@api.post("/ai/summarize")
+async def ai_summarize_endpoint(req: AISummarizeReq, user=Depends(get_user)):
+    try:
+        data = json.loads(req.text)
+        if isinstance(data, dict):
+            return ai_service.summarize_case(data, req.language or "gu")
+    except Exception:
+        pass
+    return {"summary": req.text[:300] + "..." if len(req.text) > 300 else req.text}
+
+
+@api.post("/ai/chat")
+async def ai_chat_endpoint(req: AIChatReq, user=Depends(get_user)):
+    return ai_service.legal_assistant_chat(req.message, req.history, req.context)
 
 
 # ============================================================

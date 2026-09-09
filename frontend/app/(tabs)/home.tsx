@@ -15,6 +15,7 @@ import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
 import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
+import { NotificationCenter } from "@/src/components/NotificationCenter";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -298,7 +299,8 @@ export default function Home() {
           <Image source={require("../../assets/images/logo.png")} style={styles.brandLogo} resizeMode="contain" />
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
-        <View style={{ flexDirection: "row", gap: Spacing.md }}>
+        <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>
+          <NotificationCenter />
           <Pressable testID="home-search-btn" onPress={() => router.push("/search" as any)}>
             <Ionicons name="search" size={22} color={colors.onSurface} />
           </Pressable>

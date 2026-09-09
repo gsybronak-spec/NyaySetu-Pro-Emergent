@@ -369,5 +369,18 @@ export const api = {
   referral: () => request("/referral/me"),
   saveDraft: (data: any) => request("/drafts", "POST", data),
   drafts: () => request("/drafts"),
+  deleteDraft: (id: string) => request(`/drafts/${id}`, "DELETE"),
   search: (q: string) => request(`/search?q=${encodeURIComponent(q)}`),
+  // Notifications
+  notifications: () => request("/notifications"),
+  markNotificationRead: (id: string) => request(`/notifications/${id}/read`, "POST"),
+  markAllNotificationsRead: () => request("/notifications/read-all", "POST"),
+  // AI Assistant Services
+  aiSuggestTemplate: (prompt: string, language?: string) =>
+    request("/ai/suggest-template", "POST", { prompt, language }),
+  aiDraftAssistance: (data: any) => request("/ai/draft-assistance", "POST", data),
+  aiSummarize: (text: string, language?: string) =>
+    request("/ai/summarize", "POST", { text, language }),
+  aiChat: (message: string, history?: any[], context?: any) =>
+    request("/ai/chat", "POST", { message, history, context }),
 };

@@ -151,6 +151,8 @@ export default function TemplateApplication() {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const draftTimer = useRef<any>(null);
 
@@ -273,15 +275,22 @@ export default function TemplateApplication() {
     }
   }, [values.district]);
 
-  // Autosave draft when values change
+  // Autosave draft when values change with visual feedback
   useEffect(() => {
     if (loading || Object.keys(values).length === 0) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
-    draftTimer.current = setTimeout(() => {
-      api.saveDraft({ template_id: templateId, case_id: caseId, language, values }).catch(() => {});
+    setAutosaveStatus("saving");
+    draftTimer.current = setTimeout(async () => {
+      try {
+        await api.saveDraft({ template_id: templateId, case_id: caseId, language, values });
+        setAutosaveStatus("saved");
+        setLastSavedAt(new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+      } catch {
+        setAutosaveStatus("error");
+      }
     }, 1200);
     return () => draftTimer.current && clearTimeout(draftTimer.current);
-  }, [values, language, loading]);
+  }, [values, language, loading, templateId, caseId]);
 
   const update = (k: string, v: any) => setValues((prev) => ({ ...prev, [k]: v }));
 
@@ -641,26 +650,67 @@ export default function TemplateApplication() {
             <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>
               {language === "gu" ? template?.name_gu || template?.name_en : template?.name_en || template?.name_gu}
             </Text>
-            <Pressable
-              testID="template-wallet-badge"
-              onPress={() => setShowPurchaseModal(true)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-                backgroundColor: colors.surfaceSecondary,
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: Radius.md,
-                borderWidth: 1,
-                borderColor: colors.border,
-              }}
-            >
-              <Ionicons name="diamond" size={13} color="#C5A059" />
-              <Text style={{ fontSize: 11, fontWeight: "700", color: walletBalance > 0 ? colors.onSurface : "#EF4444" }}>
-                {walletBalance}
-              </Text>
-            </Pressable>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              {autosaveStatus !== "idle" && (
+                <View
+                  testID="autosave-status-badge"
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 4,
+                    backgroundColor: autosaveStatus === "error" ? "#FEE2E2" : autosaveStatus === "saving" ? "#FEF3C7" : "#DCFCE7",
+                    paddingHorizontal: 8,
+                    paddingVertical: 4,
+                    borderRadius: Radius.full,
+                    borderWidth: 1,
+                    borderColor: autosaveStatus === "error" ? "#FCA5A5" : autosaveStatus === "saving" ? "#FDE68A" : "#86EFAC",
+                  }}
+                >
+                  {autosaveStatus === "saving" ? (
+                    <ActivityIndicator size="small" color="#D97706" style={{ transform: [{ scale: 0.65 }] }} />
+                  ) : (
+                    <Ionicons
+                      name={autosaveStatus === "saved" ? "checkmark-circle" : "alert-circle"}
+                      size={12}
+                      color={autosaveStatus === "saved" ? "#15803D" : "#B91C1C"}
+                    />
+                  )}
+                  <Text
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "700",
+                      color: autosaveStatus === "error" ? "#B91C1C" : autosaveStatus === "saving" ? "#92400E" : "#15803D",
+                    }}
+                  >
+                    {autosaveStatus === "saving"
+                      ? (language === "gu" ? "સેવ થાય છે…" : "Saving…")
+                      : autosaveStatus === "saved"
+                      ? (language === "gu" ? `સેવ થયું ${lastSavedAt || ""}` : `Saved ${lastSavedAt || ""}`)
+                      : (language === "gu" ? "સેવ નિષ્ફળ" : "Save failed")}
+                  </Text>
+                </View>
+              )}
+              <Pressable
+                testID="template-wallet-badge"
+                onPress={() => setShowPurchaseModal(true)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  backgroundColor: colors.surfaceSecondary,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: Radius.md,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Ionicons name="diamond" size={13} color="#C5A059" />
+                <Text style={{ fontSize: 11, fontWeight: "700", color: walletBalance > 0 ? colors.onSurface : "#EF4444" }}>
+                  {walletBalance}
+                </Text>
+              </Pressable>
+            </View>
           </View>
 
         {/* Step indicator */}
