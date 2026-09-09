@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -11,23 +11,27 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
+import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { catalogCache } from "@/src/services/catalogCache";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [c, setC] = useState<any>(null);
-  const [templates, setTemplates] = useState<any[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<any | null>(null);
+  const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+
+  const templatePairs = useMemo(() => {
+    return getOrderedTemplatePairs(catalogCache.peekTemplateOrder());
+  }, []);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [cs, tpls] = await Promise.all([api.getCase(String(id)), api.templates()]);
+      const cs = await api.getCase(String(id));
       setC(cs);
-      setTemplates(Array.isArray(tpls) ? tpls : []);
       if (cs?.case_type_id) {
         api
           .caseFormConfig(cs.case_type_id)
@@ -223,16 +227,16 @@ export default function CaseDetail() {
 
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.section, { color: colors.brandPrimary }]}>CREATE APPLICATION</Text>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>CREATE APPLICATION / અરજી તૈયાર કરો</Text>
               <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -4 }}>
-                Choose a template — case data auto-fills. No re-entering court, district or parties.
+                Choose an application — select language and case data auto-fills.
               </Text>
               <View style={{ gap: Spacing.sm }}>
-                {templates.map((t) => (
+                {templatePairs.map((pair) => (
                   <Pressable
-                    key={t.id}
-                    testID={`case-tpl-${t.id}`}
-                    onPress={() => setSelectedTemplate(t)}
+                    key={pair.baseKey}
+                    testID={`case-tpl-${pair.baseKey}`}
+                    onPress={() => setSelectedPair(pair)}
                     style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   >
                     <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
@@ -240,10 +244,10 @@ export default function CaseDetail() {
                     </View>
                     <View style={{ flex: 1, marginLeft: Spacing.md }}>
                       <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                        {c.language === "gu" ? t?.name_gu || t?.name_en : t?.name_en || t?.name_gu}
+                        {pair.name_gu}
                       </Text>
                       <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                        {c.language === "gu" ? t?.name_en || t?.name_gu : t?.name_gu || t?.name_en} • {t?.category || "General"}
+                        {pair.name_en} • {pair.category}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -254,20 +258,19 @@ export default function CaseDetail() {
           </View>
         </View>
         <LanguageSelectModal
-          visible={selectedTemplate !== null}
-          onClose={() => setSelectedTemplate(null)}
-          templateNameGu={selectedTemplate?.name_gu}
-          templateNameEn={selectedTemplate?.name_en}
-          category={selectedTemplate?.category}
+          visible={selectedPair !== null}
+          onClose={() => setSelectedPair(null)}
+          templateNameGu={selectedPair?.name_gu}
+          templateNameEn={selectedPair?.name_en}
+          category={selectedPair?.category}
           onSelect={(lang) => {
-            if (selectedTemplate) {
-              const baseId = (selectedTemplate.id || "").replace(/_(gu|en)$/, "");
-              const effectiveId = `${baseId}_${lang}`;
+            if (selectedPair) {
+              const effectiveId = lang === "gu" ? selectedPair.guId : selectedPair.enId;
               router.push({
                 pathname: "/template/[id]",
                 params: { id: effectiveId, case_id: c.id, lang },
               });
-              setSelectedTemplate(null);
+              setSelectedPair(null);
             }
           }}
         />
@@ -326,15 +329,15 @@ export default function CaseDetail() {
           )}
         </View>
 
-        <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>Create Application</Text>
-        <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>Choose a template — case data auto-fills.</Text>
+        <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>Create Application / અરજી તૈયાર કરો</Text>
+        <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>Choose an application — select language and case data auto-fills.</Text>
 
         <View style={{ gap: Spacing.sm }}>
-          {templates.map((t) => (
+          {templatePairs.map((pair) => (
             <Pressable
-              key={t.id}
-              testID={`case-tpl-${t.id}`}
-              onPress={() => setSelectedTemplate(t)}
+              key={pair.baseKey}
+              testID={`case-tpl-${pair.baseKey}`}
+              onPress={() => setSelectedPair(pair)}
               style={[styles.tplRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
             >
               <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
@@ -342,10 +345,10 @@ export default function CaseDetail() {
               </View>
               <View style={{ flex: 1, marginLeft: Spacing.md }}>
                 <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                  {c.language === "gu" ? t?.name_gu || t?.name_en : t?.name_en || t?.name_gu}
+                  {pair.name_gu}
                 </Text>
                 <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {c.language === "gu" ? t?.name_en || t?.name_gu : t?.name_gu || t?.name_en} • {t?.category || "General"}
+                  {pair.name_en} • {pair.category}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} />
@@ -368,20 +371,19 @@ export default function CaseDetail() {
         </View>
       </ScrollView>
       <LanguageSelectModal
-        visible={selectedTemplate !== null}
-        onClose={() => setSelectedTemplate(null)}
-        templateNameGu={selectedTemplate?.name_gu}
-        templateNameEn={selectedTemplate?.name_en}
-        category={selectedTemplate?.category}
+        visible={selectedPair !== null}
+        onClose={() => setSelectedPair(null)}
+        templateNameGu={selectedPair?.name_gu}
+        templateNameEn={selectedPair?.name_en}
+        category={selectedPair?.category}
         onSelect={(lang) => {
-          if (selectedTemplate) {
-            const baseId = (selectedTemplate.id || "").replace(/_(gu|en)$/, "");
-            const effectiveId = `${baseId}_${lang}`;
+          if (selectedPair) {
+            const effectiveId = lang === "gu" ? selectedPair.guId : selectedPair.enId;
             router.push({
               pathname: "/template/[id]",
               params: { id: effectiveId, case_id: c.id, lang },
             });
-            setSelectedTemplate(null);
+            setSelectedPair(null);
           }
         }}
       />

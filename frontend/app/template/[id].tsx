@@ -29,6 +29,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
 import { PlanPurchaseModal } from "@/src/components/PlanPurchaseModal";
+import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
 type Step = "fields" | "preview" | "output";
 
@@ -131,7 +132,25 @@ export default function TemplateApplication() {
 
   const [template, setTemplate] = useState<any>(null);
   const [caseData, setCaseData] = useState<any>(null);
-  const [language, setLanguage] = useState<"en" | "gu">((params.lang as any) || "en");
+  const initialLang: "en" | "gu" =
+    params.lang === "gu" || params.lang === "en"
+      ? (params.lang as "en" | "gu")
+      : templateId.endsWith("_gu")
+      ? "gu"
+      : templateId.endsWith("_en")
+      ? "en"
+      : "gu";
+  const [language, setLanguage] = useState<"en" | "gu">(initialLang);
+
+  // If language was not explicitly specified via query param or template suffix, require user to pick
+  const hasExplicitLang = Boolean(
+    params.lang === "gu" ||
+    params.lang === "en" ||
+    templateId.endsWith("_gu") ||
+    templateId.endsWith("_en") ||
+    params.draft === "1"
+  );
+  const [showLanguageModal, setShowLanguageModal] = useState<boolean>(!hasExplicitLang);
   const [values, setValues] = useState<Record<string, any>>({});
   const [step, setStep] = useState<Step>("fields");
   const [preview, setPreview] = useState("");
@@ -195,7 +214,7 @@ export default function TemplateApplication() {
 
       if (cs) {
         setCaseData(cs);
-        if (cs.language && !params.lang) setLanguage(cs.language);
+        // Case data NEVER overrides the explicitly selected document language!
         if (cs.party_name) initialValues["party_name"] = cs.party_name;
         if (cs.client_name || cs.party_name) initialValues["client_name"] = cs.client_name || cs.party_name;
         if (cs.opposite_party) initialValues["opposite_party"] = cs.opposite_party;
@@ -1211,6 +1230,17 @@ export default function TemplateApplication() {
         onSuccess={(newBal) => {
           setWalletBalance(newBal);
           setNotice({ tone: "ok", text: `Credits added successfully. Available balance: ${newBal} templates.` });
+        }}
+      />
+      <LanguageSelectModal
+        visible={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+        templateNameGu={template?.name_gu}
+        templateNameEn={template?.name_en}
+        category={template?.category}
+        onSelect={(lang) => {
+          setLanguage(lang);
+          setShowLanguageModal(false);
         }}
       />
     </SafeAreaView>

@@ -137,7 +137,7 @@ export default function Search() {
       <View style={{ flexDirection: "row", gap: Spacing.sm, marginTop: 4 }}>
         <Pressable
           testID={`search-btn-gu-${item.pair.baseKey}`}
-          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.guId } })}
+          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.guId, lang: "gu" } })}
           style={({ pressed }) => [
             styles.langBtn,
             { backgroundColor: colors.brandPrimary },
@@ -148,7 +148,7 @@ export default function Search() {
         </Pressable>
         <Pressable
           testID={`search-btn-en-${item.pair.baseKey}`}
-          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.enId } })}
+          onPress={() => router.push({ pathname: "/template/[id]", params: { id: item.pair.enId, lang: "en" } })}
           style={({ pressed }) => [
             styles.langBtn,
             { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
