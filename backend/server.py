@@ -267,7 +267,7 @@ def _setting_type(key: str):
 
 _SETTINGS_CACHE: dict = {}
 _SETTINGS_CACHE_LOCK = threading.Lock()
-_SETTINGS_CACHE_TTL_SEC = 60.0
+_SETTINGS_CACHE_TTL_SEC = 300.0
 
 def invalidate_settings_cache(key: Optional[str] = None):
     with _SETTINGS_CACHE_LOCK:
@@ -966,8 +966,34 @@ async def register(req: RegisterReq, request: Request = None, response: Response
         raise HTTPException(400, "Invalid OTP")
     await db.collection('otps').document(mobile).delete()
 
-    if (await db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", mobile)).limit(1).get()):
-        raise HTTPException(400, "Mobile number already registered")
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", mobile)).limit(1).stream()]
+    existing_user = _d[0].to_dict() if _d else None
+    if existing_user:
+        if existing_user.get("active") is False:
+            raise HTTPException(403, "Account disabled. Contact support.")
+        # Attach password if existing user was OTP-only and lacks a password_hash
+        if not existing_user.get("password_hash") and req.password:
+            await db.collection('users').document(existing_user["id"]).set(
+                {"password_hash": hash_password(req.password)},
+                merge=True
+            )
+            existing_user["password_hash"] = True
+        ip_address = request.client.host if request and request.client else None
+        user_agent = request.headers.get("user-agent") if request else None
+        session_id, refresh_token = await create_user_session(existing_user["id"], ip_address, user_agent)
+        token = make_token(existing_user["id"], existing_user.get("token_version", 0), session_id)
+        if response:
+            response.set_cookie(
+                key="nyaysetu_refresh_token",
+                value=refresh_token,
+                httponly=True,
+                secure=True,
+                samesite="lax",
+                max_age=USER_SESSION_EXPIRY_DAYS * 86400,
+                path="/",
+            )
+        return {"token": token, "refresh_token": refresh_token, "user": _public_user(existing_user), "is_new": False}
+
     email = (req.email or "").strip().lower() or None
     if email and (await db.collection('users').where(filter=firestore.FieldFilter("email", "==", email)).limit(1).get()):
         raise HTTPException(400, "Email already registered")
@@ -2469,7 +2495,7 @@ async def _ensure_seed_complete() -> None:
 
 _PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
 _PUBLISHED_TEMPLATES_LOCK = threading.Lock()
-_PUBLISHED_TEMPLATES_TTL_SEC = 60.0
+_PUBLISHED_TEMPLATES_TTL_SEC = 300.0
 
 def invalidate_published_templates_cache():
     with _PUBLISHED_TEMPLATES_LOCK:

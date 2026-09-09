@@ -23,11 +23,17 @@ const CACHE_TTL_MS = 60000; // 60 seconds
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
     apiGetCache.clear();
+    apiInFlightGet.clear();
     return;
   }
   for (const key of apiGetCache.keys()) {
     if (key.includes(prefix)) {
       apiGetCache.delete(key);
+    }
+  }
+  for (const key of apiInFlightGet.keys()) {
+    if (key.includes(prefix)) {
+      apiInFlightGet.delete(key);
     }
   }
 }
@@ -248,8 +254,28 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
   const cacheKey = `${path}::${token || "anon"}`;
 
   const cached = apiGetCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.data;
+  if (cached) {
+    const age = Date.now() - cached.timestamp;
+    if (age < CACHE_TTL_MS) {
+      return cached.data;
+    }
+    // SWR: return cached data immediately if within 5 minutes, and refresh in background
+    if (age < 300000) {
+      if (!apiInFlightGet.has(cacheKey)) {
+        const bgPromise = (async () => {
+          try {
+            const fresh = await rawRequest(path, method, body, timeoutMs, isRetry);
+            apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+          } catch {
+            // Keep existing cache on network failure
+          } finally {
+            apiInFlightGet.delete(cacheKey);
+          }
+        })();
+        apiInFlightGet.set(cacheKey, bgPromise);
+      }
+      return cached.data;
+    }
   }
 
   const inFlight = apiInFlightGet.get(cacheKey);
@@ -294,7 +320,11 @@ export const api = {
   refreshSession: () => performSilentRefresh(),
   logout: (refresh_token?: string) => request("/auth/logout", "POST", { refresh_token }),
   me: () => request("/profile/me"),
-  updateProfile: (data: any) => request("/profile/update", "PUT", data),
+  updateProfile: async (data: any) => {
+    const res = await request("/profile/update", "PUT", data);
+    invalidateApiCache("/profile/me");
+    return res;
+  },
   lookupClient: (mobile: string) => request(`/clients/lookup?mobile=${encodeURIComponent(mobile)}`),
   caseFormConfig: (id: string) => request(`/catalog/case-forms/${id}`),
   listCaseForms: () => request("/catalog/case-forms"),

@@ -139,23 +139,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // Live profile & wallet sync: periodically sync latest credits/profile from backend
+  // Live profile & wallet sync: periodically sync latest credits/profile from backend (throttled)
   useEffect(() => {
     if (!user?.id) return;
-    const syncWallet = async () => {
+    let inFlight = false;
+    let lastSyncAt = Date.now();
+
+    const syncWallet = async (force = false) => {
+      const now = Date.now();
+      if (!force && (now - lastSyncAt < 30000 || inFlight)) return;
+      if (typeof document !== "undefined" && document.hidden) return;
+      inFlight = true;
       try {
-        if (typeof document !== "undefined" && document.hidden) return;
         const u = await api.me();
         if (u && typeof u === "object") {
+          lastSyncAt = Date.now();
           setUser((prev) => (prev ? { ...prev, ...u } : u));
+          storage.set("nyaysetu_user_profile", u);
         }
       } catch {
         // Silently ignore background sync failures
+      } finally {
+        inFlight = false;
       }
     };
 
-    const interval = setInterval(syncWallet, 12000);
-    const onFocus = () => { syncWallet(); };
+    const interval = setInterval(() => syncWallet(true), 60000);
+    const onFocus = () => { syncWallet(false); };
     if (typeof window !== "undefined") {
       window.addEventListener("focus", onFocus);
       document.addEventListener("visibilitychange", onFocus);

@@ -22,6 +22,7 @@ import { formatDateDisplay, isISODate } from "@/src/utils/date";
 import { formatAdvocateName } from "@/src/utils/advocate";
 import { saveDocument } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -125,6 +126,7 @@ function RoleChips({
 
 export default function TemplateApplication() {
   const { colors } = useTheme();
+  const { user } = useAuth();
   const { isDesktop } = useResponsive();
   const params = useLocalSearchParams<{ id: string; case_id?: string; lang?: string; draft?: string }>();
   const templateId = String(params.id);
@@ -187,7 +189,7 @@ export default function TemplateApplication() {
       // Parallelize ALL data fetching concurrently for sub-second load times
       const [t, me, dists, cts, cs, w, drafts] = await Promise.all([
         api.template(effectiveId).catch(() => api.template(templateId)),
-        api.me().catch(() => null),
+        user ? Promise.resolve(user) : api.me().catch(() => null),
         catalogCache.getDistricts(),
         catalogCache.getCaseTypes(),
         caseId ? api.getCase(caseId).catch(() => null) : Promise.resolve(null),

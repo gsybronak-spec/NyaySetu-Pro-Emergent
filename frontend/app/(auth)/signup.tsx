@@ -108,18 +108,16 @@ export default function Signup() {
           return;
         }
         const idToken = await firebaseConfirmPhoneOtp(confirmation, otp.trim());
-        const { is_new } = await firebaseExchange(idToken, referral.trim() || undefined);
+        const { is_new, is_profile_complete, profile_completed } = await firebaseExchange(idToken, referral.trim() || undefined);
         if (!is_new) {
-          // The verified mobile maps to an existing NyaySetu account — link it
-          // (no duplicate) and mirror the legacy "already exists" UX instead of
-          // silently signing in or overwriting the existing password.
-          await signOut();
-          setOtpErr("An account with this mobile number already exists. Please login.");
+          // Existing registered user verified via OTP — log in directly (never show 'already exists' error)
+          const isComplete = profile_completed ?? is_profile_complete ?? true;
+          router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
           return;
         }
         // New account: attach the chosen password + profile fields to the
         // Firebase-created user so mobile/email + password login also works.
-        await api.setPassword(password);
+        if (password) await api.setPassword(password);
         const profile: Record<string, string> = {};
         if (name.trim()) profile.name = name.trim();
         if (email.trim()) profile.email = email.trim().toLowerCase();
@@ -127,7 +125,7 @@ export default function Signup() {
         router.replace("/(auth)/onboarding");
         return;
       }
-      await registerAccount({
+      const res = await registerAccount({
         mobile: mobile.trim(),
         otp: otp.trim(),
         password,
@@ -135,6 +133,11 @@ export default function Signup() {
         email: email.trim() || undefined,
         referralCode: referral.trim() || undefined,
       });
+      if (!res.is_new) {
+        const isComplete = res.profile_completed ?? res.is_profile_complete ?? true;
+        router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
+        return;
+      }
       router.replace("/(auth)/onboarding");
     } catch (e: any) {
       setOtpErr(e?.message || "Account creation failed. Please try again.");
