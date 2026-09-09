@@ -1552,7 +1552,7 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
         if full:
             updates["name"] = full
             u_type = (updates.get("user_type") or user.get("user_type") or "").strip()
-            if not updates.get("advocate_name_en"):
+            if "advocate_name_en" not in updates and not user.get("advocate_name_en"):
                 if u_type == "Advocate":
                     updates["advocate_name_en"] = f"Adv. {full}"
                 elif u_type:
