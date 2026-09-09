@@ -28,6 +28,9 @@ interface User {
   profile_completed?: boolean;
   wallet_balance?: number;
   total_credits_used?: number;
+  unlimited_access?: boolean;
+  is_owner?: boolean;
+  is_partner?: boolean;
 }
 
 interface AuthResult {

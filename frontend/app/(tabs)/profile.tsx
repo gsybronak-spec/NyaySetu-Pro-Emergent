@@ -36,6 +36,8 @@ export default function Profile() {
     ]);
   };
 
+  const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
+
   const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/profile/edit" as any) },
     {
@@ -44,7 +46,13 @@ export default function Profile() {
       onPress: () => router.push("/profile/set-password" as any),
     },
     { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription" as any) },
-    { icon: "wallet-outline", label: `Credit Balance: ${wallet.balance} templates (Buy Credits)`, onPress: () => router.push("/(tabs)/subscription" as any) },
+    {
+      icon: "wallet-outline",
+      label: isUnlimited
+        ? (user?.is_owner ? "Credit Balance: Unlimited (Owner Access)" : "Credit Balance: Unlimited (Partner Access)")
+        : `Credit Balance: ${wallet.balance} templates (Buy Credits)`,
+      onPress: () => router.push("/(tabs)/subscription" as any),
+    },
     { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions" as any) },
     { icon: "file-tray-full-outline", label: "Document Vault & History", onPress: () => router.push("/vault" as any) },
     { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral" as any) },
@@ -96,10 +104,18 @@ export default function Profile() {
                 <Text style={{ color: "#C5A059", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>Bar: {user.bar_council_no}</Text>
               </View>
             ) : null}
+            {isUnlimited ? (
+              <View style={[styles.dBarChip, { backgroundColor: "rgba(16,185,129,0.15)", marginTop: Spacing.sm }]}>
+                <Ionicons name="shield-checkmark" size={13} color="#10B981" />
+                <Text style={{ color: "#10B981", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>
+                  {user?.is_owner ? "Owner Unlimited Access" : "Partner Unlimited Access"}
+                </Text>
+              </View>
+            ) : null}
             <View style={[styles.dWalletLine, { borderTopColor: "rgba(255,255,255,0.1)" }]}>
               <Ionicons name="wallet" size={18} color="#C5A059" />
               <Text style={{ color: "#FDFDFD", fontWeight: "800", fontSize: 16, marginLeft: 8 }}>
-                {wallet.balance} <Text style={{ color: "#A6B1C2", fontSize: 12, fontWeight: "500" }}>templates remaining</Text>
+                {isUnlimited ? "Unlimited" : wallet.balance} <Text style={{ color: "#A6B1C2", fontSize: 12, fontWeight: "500" }}>{isUnlimited ? "templates access" : "templates remaining"}</Text>
               </Text>
             </View>
             <Pressable
@@ -156,6 +172,11 @@ export default function Profile() {
             <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>{user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}</Text>
             {user?.bar_council_no ? (
               <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>
+            ) : null}
+            {isUnlimited ? (
+              <Text style={{ color: "#10B981", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
+                {user?.is_owner ? "Owner Unlimited Access" : "Partner Unlimited Access"}
+              </Text>
             ) : null}
           </View>
         </View>

@@ -10,6 +10,7 @@ import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
+import { useAuth } from "@/src/context/AuthContext";
 
 // Production payment path — enable only when Razorpay keys are configured on
 // the backend (RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET) and this flag is set in
@@ -89,9 +90,12 @@ export default function Subscription() {
   const { colors, isDark } = useTheme();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [plans, setPlans] = useState<any[]>([]);
   const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
   const [buying, setBuying] = useState<string | null>(null);
+
+  const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
 
   const load = useCallback(async () => {
     try {
@@ -201,13 +205,17 @@ export default function Subscription() {
           style={styles.dHero}
         >
           <View style={{ flex: 1 }}>
-            <Text style={styles.heroLabel}>YOUR WALLET</Text>
+            <Text style={styles.heroLabel}>
+              {isUnlimited ? (user?.is_owner ? "OWNER UNLIMITED ACCESS" : "PARTNER UNLIMITED ACCESS") : "YOUR WALLET"}
+            </Text>
             <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 8 }}>
-              <Text style={styles.heroBalance}>{wallet.balance}</Text>
-              <Text style={styles.heroSub}> Templates Remaining</Text>
+              <Text style={styles.heroBalance}>{isUnlimited ? "Unlimited" : wallet.balance}</Text>
+              <Text style={styles.heroSub}>{isUnlimited ? " Templates Access Active" : " Templates Remaining"}</Text>
             </View>
             <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 8 }}>
-              Each generated document consumes 1 template credit. Credits never expire.
+              {isUnlimited
+                ? "You have permanent unlimited access to all templates. No credits are ever deducted."
+                : "Each generated document consumes 1 template credit. Credits never expire."}
             </Text>
           </View>
           <View style={styles.dHeroStats}>
@@ -259,9 +267,11 @@ export default function Subscription() {
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
           style={styles.hero}
         >
-          <Text style={styles.heroLabel}>YOUR WALLET</Text>
-          <Text style={styles.heroBalance}>{wallet.balance}</Text>
-          <Text style={styles.heroSub}>Templates Remaining</Text>
+          <Text style={styles.heroLabel}>
+            {isUnlimited ? (user?.is_owner ? "OWNER UNLIMITED ACCESS" : "PARTNER UNLIMITED ACCESS") : "YOUR WALLET"}
+          </Text>
+          <Text style={styles.heroBalance}>{isUnlimited ? "Unlimited" : wallet.balance}</Text>
+          <Text style={styles.heroSub}>{isUnlimited ? "Templates Access Active" : "Templates Remaining"}</Text>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>{wallet.total_used}</Text>

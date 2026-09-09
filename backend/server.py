@@ -555,6 +555,51 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
+def normalize_phone(phone: Optional[str]) -> str:
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", str(phone))
+    if len(digits) == 12 and digits.startswith("91"):
+        digits = digits[2:]
+    elif len(digits) == 11 and digits.startswith("0"):
+        digits = digits[1:]
+    return digits
+
+
+def normalize_email(email: Optional[str]) -> str:
+    if not email:
+        return ""
+    return str(email).strip().lower()
+
+
+OWNER_PHONES = {"7990894898", "9157094532"}
+OWNER_EMAILS = {"rehansolanki956@gmail.com", "gsybronak@gmail.com", "jdjadav24@gmail.com"}
+
+
+def is_owner_user(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+    phone = normalize_phone(user.get("mobile"))
+    email = normalize_email(user.get("email"))
+    return phone in OWNER_PHONES or email in OWNER_EMAILS or user.get("is_owner") is True
+
+
+def is_partner_user(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+    return is_owner_user(user) or user.get("is_partner") is True
+
+
+def is_unlimited_user(user: Optional[dict]) -> bool:
+    if not user:
+        return False
+    if is_owner_user(user):
+        return True
+    if user.get("unlimited_access") is True or user.get("is_partner") is True:
+        return True
+    return False
+
+
 def _public_user(user: dict) -> dict:
     """User object safe for clients: strips the password hash and flags whether a
     password is set (so the UI can offer Set Password for legacy OTP-only users)."""
@@ -584,6 +629,10 @@ def _public_user(user: dict) -> dict:
 
     u["profile_completed"] = is_complete
     u["is_profile_complete"] = is_complete
+    unlimited = is_unlimited_user(user)
+    u["unlimited_access"] = unlimited
+    u["is_owner"] = is_owner_user(user)
+    u["is_partner"] = is_partner_user(user)
     return u
 
 
@@ -653,6 +702,10 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         user["email"] = email
     if picture is not None:
         user["picture"] = picture
+    is_owner = is_owner_user({"mobile": mobile, "email": email})
+    user["unlimited_access"] = bool(is_owner)
+    user["is_partner"] = bool(is_owner)
+    user["is_owner"] = bool(is_owner)
     __doc = user.copy()
     __doc_id = __doc.get('id') or str(uuid.uuid4())
     __doc['id'] = __doc_id
@@ -2945,25 +2998,27 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
     _validate_page_size(page_size)
 
-    # SERVER-CONTROLLED: Always consume exactly 1 credit for final downloads.
-    # The consume_credit client flag is IGNORED for security.
-    _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
-    wallet = _snap[0].to_dict() if _snap else None
-    if not wallet or wallet.get("balance", 0) < 1:
-        raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
+    # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.
+    # Regular users consume exactly 1 credit for final downloads.
+    unlimited = is_unlimited_user(user)
+    if not unlimited:
+        _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+        wallet = _snap[0].to_dict() if _snap else None
+        if not wallet or wallet.get("balance", 0) < 1:
+            raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
 
-    # Atomic credit deduction FIRST
-    wallet_doc = None
-    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
-        wallet_doc = _d
-        break
-    if not wallet_doc or wallet_doc.to_dict().get("balance", 0) < 1:
-        raise HTTPException(402, "Insufficient credits")
-    await wallet_doc.reference.update({
-        "balance": firestore.Increment(-1),
-        "total_used": firestore.Increment(1),
-        "updated_at": now().isoformat()
-    })
+        # Atomic credit deduction FIRST
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        if not wallet_doc or wallet_doc.to_dict().get("balance", 0) < 1:
+            raise HTTPException(402, "Insufficient credits")
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(-1),
+            "total_used": firestore.Increment(1),
+            "updated_at": now().isoformat()
+        })
 
     # Generate document — if this fails, refund the credit
     app_id = str(uuid.uuid4())
@@ -3004,31 +3059,32 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
             mime = "application/pdf"
     except Exception as e:
-        # Refund credit on generation failure — user must not be unfairly charged
-        wallet_doc = None
-        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
-            wallet_doc = _d
-            break
-        if wallet_doc:
-            await wallet_doc.reference.update({
-                "balance": firestore.Increment(1),
-                "total_used": firestore.Increment(-1),
-                "updated_at": now().isoformat()
-            })
-        _doc = {"id": str(uuid.uuid4()),
-            "user_id": user["id"],
-            "type": "refund",
-            "plan_name": t["name_en"],
-            "credits": 1,
-            "amount": 0,
-            "status": "refunded",
-            "reference": app_id,
-            "created_at": now().isoformat(),}
-        doc_id = _doc.get('id') or str(uuid.uuid4())
-        _doc['id'] = doc_id
-        await db.collection('transactions').document(doc_id).set(_doc)
-        logger.error(f"Document generation failed, credit refunded: {e}")
-        raise HTTPException(500, "Document generation failed. Your credit has been refunded.")
+        if not unlimited:
+            # Refund credit on generation failure — user must not be unfairly charged
+            wallet_doc = None
+            async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+                wallet_doc = _d
+                break
+            if wallet_doc:
+                await wallet_doc.reference.update({
+                    "balance": firestore.Increment(1),
+                    "total_used": firestore.Increment(-1),
+                    "updated_at": now().isoformat()
+                })
+            _doc = {"id": str(uuid.uuid4()),
+                "user_id": user["id"],
+                "type": "refund",
+                "plan_name": t["name_en"],
+                "credits": 1,
+                "amount": 0,
+                "status": "refunded",
+                "reference": app_id,
+                "created_at": now().isoformat(),}
+            doc_id = _doc.get('id') or str(uuid.uuid4())
+            _doc['id'] = doc_id
+            await db.collection('transactions').document(doc_id).set(_doc)
+        logger.error(f"Document generation failed: {e}")
+        raise HTTPException(500, "Document generation failed.")
 
     # Log usage + record the credit consumption as a transaction (Phase 24/25:
     # transaction history must show actual activity with a type).
@@ -3070,8 +3126,8 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "id": str(uuid.uuid4()),
         "user_id": user["id"],
         "type": "document",
-        "plan_name": t["name_en"],
-        "credits": -1,
+        "plan_name": t["name_en"] + (" (Unlimited)" if unlimited else ""),
+        "credits": 0 if unlimited else -1,
         "amount": 0,
         "status": "success",
         "reference": app_id,
@@ -3125,7 +3181,15 @@ async def get_wallet(user=Depends(get_user)):
         doc_id = w.get("id") or str(uuid.uuid4())
         w["id"] = doc_id
         await db.collection("wallets").document(doc_id).set(w)
-    return {"balance": w.get("balance", 0), "total_used": w.get("total_used", 0)}
+    unlimited = is_unlimited_user(user)
+    return {
+        "balance": w.get("balance", 0),
+        "total_used": w.get("total_used", 0),
+        "unlimited": unlimited,
+        "unlimited_access": unlimited,
+        "is_owner": is_owner_user(user),
+        "is_partner": is_partner_user(user),
+    }
 
 
 @api.post("/purchase/mock")

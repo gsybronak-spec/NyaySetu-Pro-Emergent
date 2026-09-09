@@ -154,6 +154,8 @@ export default function TemplateApplication() {
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
+  const isUnlimited = Boolean(userProfile?.unlimited_access || userProfile?.is_owner || userProfile?.is_partner);
+
   const draftTimer = useRef<any>(null);
 
   const loadData = useCallback(async () => {
@@ -179,7 +181,8 @@ export default function TemplateApplication() {
       }
 
       setTemplate(t);
-      setUserProfile(me);
+      const isUnl = Boolean(me?.unlimited_access || me?.is_owner || me?.is_partner || w?.unlimited || w?.unlimited_access);
+      setUserProfile(me ? { ...me, unlimited_access: isUnl } : (isUnl ? { unlimited_access: true } : null));
       setDistricts(Array.isArray(dists) ? dists : []);
       setCaseTypes(Array.isArray(cts) ? cts : []);
       if (w && typeof w.balance === "number") {
@@ -430,7 +433,7 @@ export default function TemplateApplication() {
   };
 
   const download = async (format: "pdf" | "docx" | "odt" | "png") => {
-    if (walletBalance <= 0) {
+    if (!isUnlimited && walletBalance <= 0) {
       setShowPurchaseModal(true);
       return;
     }
@@ -449,10 +452,14 @@ export default function TemplateApplication() {
       if (!res?.base64) {
         throw new Error("The server returned an empty document. Please try again.");
       }
-      setWalletBalance((prev) => Math.max(0, prev - 1));
+      if (!isUnlimited) {
+        setWalletBalance((prev) => Math.max(0, prev - 1));
+      }
       await saveDocument({ filename: res.filename, mime_type: res.mime_type, base64: res.base64 }, format);
-      const okText = `${res.filename} generated successfully. 1 template credit consumed.`;
-      setNotice({ tone: "ok", text: `Download started — ${res.filename}. 1 template credit consumed.` });
+      const okText = isUnlimited
+        ? `${res.filename} generated successfully.`
+        : `${res.filename} generated successfully. 1 template credit consumed.`;
+      setNotice({ tone: "ok", text: isUnlimited ? `Download started — ${res.filename}.` : `Download started — ${res.filename}. 1 template credit consumed.` });
       Alert.alert(
         "Document Ready",
         okText,
@@ -460,7 +467,7 @@ export default function TemplateApplication() {
       );
     } catch (e: any) {
       const msg = e?.message || "Unknown error";
-      if (msg.toLowerCase().includes("insufficient") || msg.includes("402")) {
+      if ((msg.toLowerCase().includes("insufficient") || msg.includes("402")) && !isUnlimited) {
         setNotice({ tone: "err", text: "You have no templates remaining. Please purchase a plan." });
         setShowPurchaseModal(true);
       } else if (msg.includes("429") || msg.toLowerCase().includes("too many")) {
@@ -470,15 +477,15 @@ export default function TemplateApplication() {
         setNotice({ tone: "err", text: msg });
         Alert.alert("Unable to download the document", `${msg}`);
       } else if (format === "pdf") {
-        setNotice({ tone: "err", text: "PDF generation failed. Your credit was refunded — try Download as Image." });
-        Alert.alert("PDF generation failed", "Your credit has been refunded. Try downloading the same document as an image instead.", [
+        setNotice({ tone: "err", text: isUnlimited ? "PDF generation failed — try Download as Image." : "PDF generation failed. Your credit was refunded — try Download as Image." });
+        Alert.alert("PDF generation failed", isUnlimited ? "PDF generation failed. Try downloading the same document as an image instead." : "Your credit has been refunded. Try downloading the same document as an image instead.", [
           { text: "Cancel", style: "cancel" },
           { text: "Download as Image", onPress: () => download("png") },
         ]);
         console.warn("[download] pdf generation failed", msg);
       } else {
-        setNotice({ tone: "err", text: "Unable to download the document. Please try again. Failed generations are refunded automatically." });
-        Alert.alert("Unable to download the document", "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
+        setNotice({ tone: "err", text: isUnlimited ? "Unable to download the document. Please try again." : "Unable to download the document. Please try again. Failed generations are refunded automatically." });
+        Alert.alert("Unable to download the document", isUnlimited ? "Please try again." : "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
         console.warn("[download] generation failed", msg);
       }
     } finally {
@@ -692,7 +699,7 @@ export default function TemplateApplication() {
               )}
               <Pressable
                 testID="template-wallet-badge"
-                onPress={() => setShowPurchaseModal(true)}
+                onPress={() => !isUnlimited && setShowPurchaseModal(true)}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -706,8 +713,8 @@ export default function TemplateApplication() {
                 }}
               >
                 <Ionicons name="diamond" size={13} color="#C5A059" />
-                <Text style={{ fontSize: 11, fontWeight: "700", color: walletBalance > 0 ? colors.onSurface : "#EF4444" }}>
-                  {walletBalance}
+                <Text style={{ fontSize: 11, fontWeight: "700", color: isUnlimited ? "#10B981" : walletBalance > 0 ? colors.onSurface : "#EF4444" }}>
+                  {isUnlimited ? (language === "gu" ? "અમર્યાદિત" : "Unlimited") : walletBalance}
                 </Text>
               </Pressable>
             </View>
@@ -749,33 +756,6 @@ export default function TemplateApplication() {
           >
             <View style={isDesktop ? { maxWidth: 1100, width: "100%", flexDirection: "row", gap: Spacing.xxl, alignItems: "flex-start" } : undefined}>
             <View style={isDesktop ? { flex: 1, minWidth: 0 } : undefined}>
-            
-            {/* Language toggle if no case */}
-            {!caseId && (
-              <>
-                <Text style={[styles.lbl, { color: colors.onSurface }]}>
-                  {language === "gu" ? "દસ્તાવેજની ભાષા" : "Document Language"}
-                </Text>
-                <View style={{ flexDirection: "row", gap: Spacing.sm, marginBottom: Spacing.lg, marginTop: Spacing.sm }}>
-                  {[
-                    { id: "en", label: "English" },
-                    { id: "gu", label: "ગુજરાતી" },
-                  ].map((l) => {
-                    const active = language === l.id;
-                    return (
-                      <Pressable
-                        key={l.id}
-                        testID={`tpl-lang-${l.id}`}
-                        onPress={() => handleLanguageChange(l.id as any)}
-                        style={[styles.langChip, { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border }]}
-                      >
-                        <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontWeight: "700" }}>{l.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </>
-            )}
 
             {/* Case Mode: Auto-filled from case — read-only, inherited, never re-entered */}
             {caseId && inheritedRows.length > 0 && (
@@ -959,7 +939,7 @@ export default function TemplateApplication() {
                   <View style={[styles.dSummaryRow, { borderTopColor: colors.divider }]}>
                     <Ionicons name="wallet-outline" size={16} color={colors.brandPrimary} />
                     <Text style={styles.dSummaryLabel}>Cost</Text>
-                    <Text style={styles.dSummaryValue}>1 template credit</Text>
+                    <Text style={styles.dSummaryValue}>{isUnlimited ? (language === "gu" ? "મફત / અમર્યાદિત" : "Free / Unlimited") : "1 template credit"}</Text>
                   </View>
 
                   {caseData ? (
@@ -1185,9 +1165,13 @@ export default function TemplateApplication() {
             <View style={[styles.note, { backgroundColor: colors.surfaceSecondary }]}>
               <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
               <Text style={{ color: colors.muted, fontSize: 11, flex: 1, marginLeft: 6 }}>
-                {language === "gu"
-                  ? "દસ્તાવેજ બનાવવાથી ૧ ક્રેડિટ વપરાશે. કોર્ટમાં રજૂ કરતા પહેલાં અરજીની ચકાસણી કરવી."
-                  : "Generating consumes 1 template credit. Review your document — you remain responsible for its accuracy before filing."}
+                {isUnlimited
+                  ? (language === "gu"
+                      ? "ઓનર/પાર્ટનર અમર્યાદિત ઍક્સેસ સક્રિય છે. કોઈ ક્રેડિટ કપાશે નહીં."
+                      : "Owner/Partner Unlimited Access active. No credits consumed.")
+                  : (language === "gu"
+                      ? "દસ્તાવેજ બનાવવાથી ૧ ક્રેડિટ વપરાશે. કોર્ટમાં રજૂ કરતા પહેલાં અરજીની ચકાસણી કરવી."
+                      : "Generating consumes 1 template credit. Review your document — you remain responsible for its accuracy before filing.")}
               </Text>
             </View>
             {busy && <ActivityIndicator color={colors.brandPrimary} style={{ marginTop: Spacing.lg }} />}

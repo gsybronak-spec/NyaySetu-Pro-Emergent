@@ -34,6 +34,8 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
+  const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
+
   const load = useCallback(async () => {
     let failed = false;
     const [q, w, drs, order] = await Promise.all([
@@ -107,10 +109,10 @@ export default function Home() {
           </View>
         ) : null}
 
-        {/* Welcome banner */}
+        {/* Top welcome + banner */}
         <LinearGradient
-          colors={isDark ? ["#0B1B3D", "#112240"] : ["#0B1B3D", "#1D2D50"]}
-          style={styles.desktopWelcome}
+          colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
+          style={styles.desktopHero}
         >
           <View style={{ flex: 1, paddingRight: Spacing.xl }}>
             <Text style={styles.desktopQuote}>"{quote}"</Text>
@@ -120,7 +122,7 @@ export default function Home() {
           </View>
           <View style={styles.desktopWalletChip}>
             <Ionicons name="wallet" size={16} color="#C5A059" />
-            <Text style={styles.desktopWalletTxt}>{wallet.balance} Templates Remaining</Text>
+            <Text style={styles.desktopWalletTxt}>{isUnlimited ? "Unlimited Templates" : `${wallet.balance} Templates Remaining`}</Text>
           </View>
         </LinearGradient>
 
@@ -129,7 +131,7 @@ export default function Home() {
           <StatCard label="Active Cases" value={cases.length} icon="folder-open" tone="navy" />
           <StatCard label="Drafts" value={drafts.length} icon="create" tone="gold" />
           <StatCard label="Applications Generated" value={applications.length} icon="document-text" tone="green" />
-          <StatCard label="Credits Remaining" value={wallet.balance} icon="wallet" tone="red" />
+          <StatCard label="Credits Remaining" value={isUnlimited ? "Unlimited" : wallet.balance} icon="wallet" tone="red" />
         </View>
 
         {/* Quick actions */}
@@ -336,7 +338,7 @@ export default function Home() {
           </View>
           <View style={styles.walletChip}>
             <Ionicons name="wallet" size={14} color="#C5A059" />
-            <Text style={styles.walletTxt}>{wallet.balance} Templates Remaining</Text>
+            <Text style={styles.walletTxt}>{isUnlimited ? "Unlimited Templates" : `${wallet.balance} Templates Remaining`}</Text>
           </View>
         </LinearGradient>
 

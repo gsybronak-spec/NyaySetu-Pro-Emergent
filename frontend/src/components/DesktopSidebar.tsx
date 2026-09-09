@@ -123,7 +123,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
           </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: "800", color: "#C5A059" }}>
-          {user?.wallet_balance ?? 0}
+          {user?.unlimited_access || user?.is_owner || user?.is_partner ? "Unlimited" : (user?.wallet_balance ?? 0)}
         </Text>
       </Pressable>
 
