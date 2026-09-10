@@ -35,8 +35,6 @@
     "@tiptap/pm": "3.30.2",
     "@tiptap/react": "3.30.2",
     "@tiptap/starter-kit": "3.30.2",
-    "date-fns": "4.1.0",
-    "dayjs": "1.11.13",
     "expo": "54.0.36",
     "expo-blur": "15.0.8",
     "expo-clipboard": "~8.0.8",

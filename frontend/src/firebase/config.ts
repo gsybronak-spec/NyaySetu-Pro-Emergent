@@ -1,5 +1,5 @@
-import { initializeApp, getApp, getApps, FirebaseApp } from "firebase/app";
-import { getAuth, Auth } from "firebase/auth";
+import type { FirebaseApp } from "firebase/app";
+import type { Auth } from "firebase/auth";
 
 /**
  * Firebase client configuration — activated ONLY when every required value is
@@ -28,19 +28,21 @@ export const firebaseConfigured = Boolean(
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
 
-export function getFirebaseApp(): FirebaseApp | null {
+export async function getFirebaseApp(): Promise<FirebaseApp | null> {
   if (!firebaseConfigured) return null;
   if (!_app) {
+    const { initializeApp, getApp, getApps } = await import("firebase/app");
     _app = getApps().length > 0 ? getApp() : initializeApp(cfg as any);
   }
   return _app;
 }
 
-export function getFirebaseAuth(): Auth | null {
+export async function getFirebaseAuth(): Promise<Auth | null> {
   if (!firebaseConfigured) return null;
   if (!_auth) {
-    const app = getFirebaseApp();
+    const app = await getFirebaseApp();
     if (!app) return null;
+    const { getAuth } = await import("firebase/auth");
     _auth = getAuth(app);
   }
   return _auth;
