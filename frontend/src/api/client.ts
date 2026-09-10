@@ -1,6 +1,8 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://backend-gold-iota-nyngopebeg.vercel.app";
+const ACTIVE_BACKEND = "https://backend-mktqrcse5-gsybronak-6847s-projects.vercel.app";
+const rawEnvUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
+const BASE = (!rawEnvUrl || rawEnvUrl.includes("backend-gold-iota-nyngopebeg")) ? ACTIVE_BACKEND : rawEnvUrl;
 const TOKEN_KEY = "nyaysetu_token";
 const REFRESH_TOKEN_KEY = "nyaysetu_refresh_token";
 
