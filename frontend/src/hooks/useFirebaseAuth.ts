@@ -1,8 +1,12 @@
 import { Platform } from 'react-native';
-import type {
+import {
   ConfirmationResult,
   RecaptchaVerifier,
   User,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  signOut as fbSignOut,
 } from 'firebase/auth';
 
 import { firebaseConfigured, getFirebaseAuth } from '@/src/firebase/config';
@@ -51,9 +55,8 @@ export async function firebaseEmailPasswordLogin(
   password: string
 ): Promise<{ idToken: string; firebaseUser: any } | null> {
   if (Platform.OS === 'web') {
-    const auth = await getFirebaseAuth();
+    const auth = getFirebaseAuth();
     if (!auth) return null;
-    const { signInWithEmailAndPassword } = await import('firebase/auth');
     const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
     return { idToken: await cred.user.getIdToken(), firebaseUser: cred.user };
   } else {
@@ -63,15 +66,14 @@ export async function firebaseEmailPasswordLogin(
   }
 }
 
-export async function getOrCreateRecaptchaVerifier(
+export function getOrCreateRecaptchaVerifier(
   verifierElement: HTMLElement | string | null = 'recaptcha-container'
-): Promise<RecaptchaVerifier | null> {
+): RecaptchaVerifier | null {
   if (Platform.OS !== 'web') return null;
-  const auth = await getFirebaseAuth();
+  const auth = getFirebaseAuth();
   if (!auth) return null;
   if (activeVerifier) return activeVerifier;
   try {
-    const { RecaptchaVerifier } = await import('firebase/auth');
     const verifier = new RecaptchaVerifier(auth, verifierElement as any, {
       size: 'invisible',
     });
@@ -88,16 +90,17 @@ export async function firebaseSendPhoneOtp(
   verifierElement: HTMLElement | string | null
 ): Promise<any | null> {
   if (Platform.OS === 'web') {
-    const auth = await getFirebaseAuth();
+    const auth = getFirebaseAuth();
     if (!auth) return null;
     let verifier = activeVerifier;
     if (!verifier) {
-      verifier = await getOrCreateRecaptchaVerifier(verifierElement);
+      verifier = new RecaptchaVerifier(auth, verifierElement as any, {
+        size: 'invisible',
+      });
       activeVerifier = verifier;
     }
     try {
-      const { signInWithPhoneNumber } = await import('firebase/auth');
-      const result = await signInWithPhoneNumber(auth, `+91${mobile10}`, verifier as any);
+      const result = await signInWithPhoneNumber(auth, `+91${mobile10}`, verifier);
       pendingConfirmation = result;
       return result;
     } catch (e) {
@@ -128,9 +131,8 @@ export async function firebaseConfirmPhoneOtp(
 
 export async function firebaseSendPasswordReset(email: string): Promise<boolean> {
   if (Platform.OS === 'web') {
-    const auth = await getFirebaseAuth();
+    const auth = getFirebaseAuth();
     if (!auth) return false;
-    const { sendPasswordResetEmail } = await import('firebase/auth');
     await sendPasswordResetEmail(auth, email.trim());
     return true;
   } else {
@@ -142,11 +144,10 @@ export async function firebaseSendPasswordReset(email: string): Promise<boolean>
 
 export async function firebaseSignOutClient(): Promise<void> {
   if (Platform.OS === 'web') {
-    const auth = await getFirebaseAuth();
+    const auth = getFirebaseAuth();
     if (!auth) return;
     try {
-      const { signOut } = await import('firebase/auth');
-      await signOut(auth);
+      await fbSignOut(auth);
     } catch {}
   } else {
     if (!nativeAuth) return;

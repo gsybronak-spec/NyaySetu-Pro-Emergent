@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!token && !refreshToken) {
       // If local tokens are absent, check if Firebase has an active authenticated user
-      const fbAuth = await getFirebaseAuth();
+      const fbAuth = getFirebaseAuth();
       if (fbAuth?.currentUser) {
         try {
           console.info("[AuthContext] Active Firebase session detected, establishing backend session...");
