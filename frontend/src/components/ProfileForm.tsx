@@ -175,14 +175,13 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
 
     setLoading(true);
     try {
-      await api.updateProfile({
+      const updateData: any = {
         first_name: fName,
         middle_name: mName || undefined,
         last_name: lName,
         name: fullName,
         advocate_name_en: finalAdvNameEn,
         advocate_name_gu: finalAdvNameGu,
-        mobile: cleanMobile,
         gender: gender || undefined,
         dob: dob.trim() || undefined,
         email: user?.email || undefined,
@@ -193,7 +192,14 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
         picture: user?.picture || undefined,
         profile_completed: true,
         is_profile_complete: true,
-      });
+      };
+
+      // Only send mobile if the user did not have a mobile yet (e.g. Google user) or if it changed
+      if (!user?.mobile || cleanMobile !== user.mobile) {
+        updateData.mobile = cleanMobile;
+      }
+
+      await api.updateProfile(updateData);
 
       await refresh();
       setSuccessMsg("Profile saved successfully!");

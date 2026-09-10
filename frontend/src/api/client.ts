@@ -130,8 +130,8 @@ export async function performSilentRefresh(): Promise<string> {
       await setTokens(null, null);
       onUnauthorized?.();
     }
-    const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const msg = formatApiErrorMessage(res.status, json);
+    throw new Error(msg);
   }
 
   if (!json?.token) {
@@ -145,18 +145,72 @@ export async function performSilentRefresh(): Promise<string> {
 export function describeNetworkError(e: unknown): string {
   // User-friendly copy for fetch-level failures; technical detail goes to console.
   if (e instanceof Error && e.name === "AbortError") {
-    return "Server is taking longer than expected. Please try again.";
+    return "Server is taking longer than expected to respond. Please try again.";
   }
-  return "Network error — could not reach the server. Please check your connection and try again.";
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    return "You appear to be offline. Please check your internet connection and try again.";
+  }
+  return "Unable to connect to the server. Please check your internet connection or try again shortly.";
 }
 
 // Maps backend status codes to safe, readable user copy (used when the backend
 // did not return a JSON body). Backend-provided `detail` messages are preferred.
-export function describeStatusError(status: number): string | null {
-  if (status === 429) return "Too many attempts. Please wait before trying again.";
-  if (status === 503) return "Service is temporarily unavailable. Please try again shortly.";
-  if (status === 401) return "Invalid mobile/email or password.";
-  return null;
+export function describeStatusError(status: number): string {
+  switch (status) {
+    case 400:
+      return "Invalid request. Please check the entered details and try again.";
+    case 401:
+      return "Invalid mobile/email or password.";
+    case 403:
+      return "Access denied. You do not have permission for this action.";
+    case 404:
+      return "The requested information or endpoint was not found.";
+    case 409:
+      return "This record or mobile number is already registered.";
+    case 422:
+      return "Some required fields are missing or invalid. Please check your inputs.";
+    case 429:
+      return "Too many requests. Please wait a moment before trying again.";
+    case 500:
+      return "Server encountered a temporary issue. Please try again shortly.";
+    case 502:
+      return "Server gateway error. The server is temporarily restarting, please retry.";
+    case 503:
+      return "Service is temporarily unavailable. Please try again shortly.";
+    case 504:
+      return "Server response timed out. Please try again shortly.";
+    default:
+      return `Request failed with status ${status}. Please try again.`;
+  }
+}
+
+export function formatApiErrorMessage(status: number, json: any): string {
+  if (json?.detail) {
+    if (typeof json.detail === "string") {
+      return json.detail;
+    }
+    if (Array.isArray(json.detail)) {
+      const parsed = json.detail
+        .map((item: any) => {
+          if (typeof item === "string") return item;
+          const loc = Array.isArray(item.loc) ? item.loc.filter((p: any) => p !== "body").join(".") : "";
+          const msg = item.msg || item.message || "invalid value";
+          return loc ? `${loc}: ${msg}` : msg;
+        })
+        .filter(Boolean);
+      if (parsed.length > 0) return parsed.join(", ");
+    }
+    if (typeof json.detail === "object") {
+      return JSON.stringify(json.detail);
+    }
+  }
+  if (json?.message && typeof json.message === "string") {
+    return json.message;
+  }
+  if (json?.error && typeof json.error === "string") {
+    return json.error;
+  }
+  return describeStatusError(status);
 }
 
 // Paths that bypass automatic 401 silent refresh
@@ -238,8 +292,8 @@ async function rawRequest(path: string, method = "GET", body?: any, timeoutMs: n
   }
 
   if (!res.ok) {
-    const msg = json?.detail || json?.message || describeStatusError(res.status) || `HTTP ${res.status}`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const msg = formatApiErrorMessage(res.status, json);
+    throw new Error(msg);
   }
   return json;
 }

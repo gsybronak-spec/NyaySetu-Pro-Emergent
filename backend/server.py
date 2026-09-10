@@ -1082,8 +1082,8 @@ async def forgot_password(req: ForgotPasswordReq):
     whether or not the account exists (no user enumeration); no OTP is sent for
     unknown numbers and nothing else happens."""
     mobile = req.mobile.strip()
-    _snap = await db.collection('users').document(mobile).get()
-    existing = _snap.to_dict() if _snap.exists else None
+    _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
+    existing = _d[0].to_dict() if _d else None
     if not existing:
         logger.info(f"[forgot-password] no account for {mobile} — no OTP sent")
         return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
@@ -1643,14 +1643,17 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             clean_mobile = clean_mobile[2:]
         if len(clean_mobile) != 10 or not clean_mobile[0] in "6789":
             raise HTTPException(400, "Please enter a valid 10-digit Indian mobile number.")
-        existing = None
-        async for d in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_mobile)).limit(2).stream():
-            doc = d.to_dict()
-            if doc and doc.get("id") != user.get("id"):
-                existing = doc
-                break
-        if existing:
-            raise HTTPException(400, "This mobile number is already registered with another account.")
+        if clean_mobile != user.get("mobile"):
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_mobile)).limit(2).stream()]
+            existing = None
+            for x in _d:
+                doc = x.to_dict() or {}
+                doc_id = doc.get("id") or x.id
+                if doc_id != user.get("id"):
+                    existing = doc
+                    break
+            if existing:
+                raise HTTPException(400, "This mobile number is already registered with another account.")
         updates["mobile"] = clean_mobile
 
     if "user_type" in updates and updates["user_type"]:
