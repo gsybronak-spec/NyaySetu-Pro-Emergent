@@ -1,6 +1,6 @@
 /**
  * NyaySetu Pro - Production Resilient Service Worker
- * Version: nyaysetu-pro-v1.0.1
+ * Version: nyaysetu-pro-v1.0.2
  *
  * Safety Guarantees:
  * 1. Network-First for navigation / HTML: guarantees fresh deployments are never blocked by stale cache.
@@ -10,7 +10,7 @@
  * 4. Automatic cache purging of stale caches on activation.
  */
 
-const CACHE_NAME = "nyaysetu-static-v1";
+const CACHE_NAME = "nyaysetu-static-v2";
 const IMMUTABLE_ASSETS = [
   "/icons/favicon-32x32.v2.png",
   "/icons/favicon-16x16.v2.png",
@@ -59,11 +59,14 @@ self.addEventListener("fetch", (event) => {
   // 2. NETWORK-ONLY: Never cache API, Auth, Razorpay, or third-party dynamic services
   if (
     url.pathname.startsWith("/api/") ||
+    url.pathname.startsWith("/auth/") ||
+    url.pathname.includes("download") ||
     url.hostname.includes("vercel.app") ||
     url.hostname.includes("razorpay.com") ||
     url.hostname.includes("firebase") ||
     url.hostname.includes("googleapis.com") ||
-    url.hostname.includes("google.com")
+    url.hostname.includes("google.com") ||
+    url.hostname.includes("gstatic.com")
   ) {
     return;
   }

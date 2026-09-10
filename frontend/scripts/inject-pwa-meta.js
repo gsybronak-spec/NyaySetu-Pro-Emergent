@@ -39,11 +39,24 @@ const pwaAndFontTags = `
       }
     </style>
 
-    <!-- Register Service Worker on idle/load -->
+    <!-- Register Service Worker on idle/load with seamless background update -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js').catch(function() {});
+          var hadController = !!navigator.serviceWorker.controller;
+          navigator.serviceWorker.register('/sw.js').then(function(reg) {
+            reg.update().catch(function() {});
+            document.addEventListener('visibilitychange', function() {
+              if (document.visibilityState === 'visible') {
+                reg.update().catch(function() {});
+              }
+            });
+          }).catch(function() {});
+          navigator.serviceWorker.addEventListener('controllerchange', function() {
+            if (hadController) {
+              window.location.reload();
+            }
+          });
         });
       }
     </script>`;
