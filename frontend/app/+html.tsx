@@ -91,6 +91,11 @@ export default function Root({ children }: PropsWithChildren) {
           flexDirection: "column",
         }}
       >
+        <div id="splash-loader" style={{ display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "linear-gradient(180deg,#061024,#0B1B3D,#112240)", height: "100%", flexDirection: "column" }}>
+          <img src="/logo.webp" alt="NyaySetu Pro Logo" width="120" height="129" style={{ objectFit: "contain" }} fetchpriority="high" />
+          <div style={{ color: "#FDFDFD", fontSize: "32px", fontWeight: "700", marginTop: "24px", letterSpacing: "0.5px", fontFamily: "serif" }}>NyaySetu Pro</div>
+          <div style={{ color: "#C5A059", fontSize: "14px", marginTop: "8px", letterSpacing: "1.5px", textTransform: "uppercase", fontWeight: "600" }}>The New Era of Advocacy</div>
+        </div>
         {children}
       </body>
     </html>

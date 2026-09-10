@@ -56,7 +56,7 @@ export default function Otp() {
               source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
               style={styles.logoImage}
               contentFit="contain"
-            />
+             accessibilityLabel="NyaySetu Pro Logo" />
           </View>
           <Text style={styles.title}>Verify OTP</Text>
           <Text style={styles.sub}>

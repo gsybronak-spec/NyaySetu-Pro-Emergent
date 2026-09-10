@@ -1,12 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const distHtmlPath = path.join(__dirname, '..', 'dist', 'index.html');
+const distDir = path.join(__dirname, '..', 'dist');
 
-if (fs.existsSync(distHtmlPath)) {
-  let html = fs.readFileSync(distHtmlPath, 'utf8');
-  
-  const pwaAndFontTags = `
+const pwaAndFontTags = `
     <title>NyaySetu Pro — The New Era of Advocacy</title>
     <meta name="description" content="NyaySetu Pro — The New Era of Advocacy. High-speed legal drafting and court case management platform for advocates in Gujarat and India." />
 
@@ -50,10 +47,35 @@ if (fs.existsSync(distHtmlPath)) {
         });
       }
     </script>`;
-  
-  if (!html.includes('family=Anek+Gujarati')) {
-    html = html.replace('</head>', `${pwaAndFontTags}\n  </head>`);
-    fs.writeFileSync(distHtmlPath, html, 'utf8');
-    console.log('✓ Successfully injected optimized web fonts, SEO metadata, and PWA meta tags into dist/index.html');
+
+function processHtmlFiles(dir) {
+  if (!fs.existsSync(dir)) return;
+  const files = fs.readdirSync(dir);
+  for (const file of files) {
+    const fullPath = path.join(dir, file);
+    if (fs.statSync(fullPath).isDirectory()) {
+      // Skip the admin directory to avoid breaking the Vite build
+      if (file !== 'admin') {
+        processHtmlFiles(fullPath);
+      }
+    } else if (file.endsWith('.html')) {
+      let html = fs.readFileSync(fullPath, 'utf8');
+      
+      // Clean up duplicate generic title added by Expo Router
+      if (html.includes('<title>NyaySetu Pro</title>')) {
+        html = html.replace('<title>NyaySetu Pro</title>', '');
+      }
+
+      if (!html.includes('family=Anek+Gujarati')) {
+        html = html.replace('</head>', `${pwaAndFontTags}\n  </head>`);
+        fs.writeFileSync(fullPath, html, 'utf8');
+        console.log(`✓ Injected PWA tags into ${path.relative(distDir, fullPath)}`);
+      } else {
+        // Just write if title was replaced
+        fs.writeFileSync(fullPath, html, 'utf8');
+      }
+    }
   }
 }
+
+processHtmlFiles(distDir);

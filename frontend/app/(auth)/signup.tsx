@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 
 import { Button } from "@/src/components/Button";
@@ -158,7 +158,7 @@ export default function Signup() {
                 source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
                 style={styles.logoImage}
                 contentFit="contain"
-              />
+               accessibilityLabel="NyaySetu Pro Logo" />
             </View>
             <Text style={styles.title}>NyaySetu Pro</Text>
             <Text style={styles.tagline}>The New Era of Advocacy</Text>

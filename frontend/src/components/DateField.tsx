@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";

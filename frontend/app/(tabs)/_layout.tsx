@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, Text } from "react-native";
 import { Image } from "expo-image";
@@ -31,7 +31,7 @@ export default function TabsLayout() {
   if (!ready) {
     return (
       <LinearGradient colors={["#061024", "#0B1B3D", "#112240"]} style={splashStyles.container}>
-        <Image source={require("../../assets/images/logo.png")} style={splashStyles.logo} contentFit="contain" priority="high" />
+        <Image source={require("../../assets/images/logo.png")} style={splashStyles.logo} contentFit="contain" priority="high"  accessibilityLabel="NyaySetu Pro Logo" />
         <Text style={splashStyles.title}>NyaySetu Pro</Text>
         <Text style={splashStyles.tagline}>The New Era of Advocacy</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />

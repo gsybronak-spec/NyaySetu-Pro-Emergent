@@ -2,7 +2,7 @@ import React from "react";
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -61,7 +61,7 @@ export default function AboutScreen() {
             source={Platform.OS === "web" ? "/logo.webp" : require("../assets/images/logo.png")}
             style={styles.logo}
             contentFit="contain"
-          />
+           accessibilityLabel="NyaySetu Pro Logo" />
           <Text style={[styles.appName, { color: colors.onSurface }]}>NyaySetu Pro</Text>
           <Text style={[styles.tagline, { color: colors.brandPrimary }]}>The New Era of Advocacy</Text>
           <View style={[styles.versionBadge, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>

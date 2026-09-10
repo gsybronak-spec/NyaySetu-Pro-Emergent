@@ -20,7 +20,7 @@ export default function Index() {
           style={styles.logo}
           contentFit="contain"
           priority="high"
-        />
+         accessibilityLabel="NyaySetu Pro Logo" />
         <Text style={styles.title}>NyaySetu Pro</Text>
         <Text style={styles.tagline}>The New Era of Advocacy</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />

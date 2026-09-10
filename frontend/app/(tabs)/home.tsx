@@ -3,7 +3,7 @@ import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View
 import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -303,7 +303,7 @@ export default function Home() {
             source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
             style={styles.brandLogo}
             contentFit="contain"
-          />
+           accessibilityLabel="NyaySetu Pro Logo" />
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>
