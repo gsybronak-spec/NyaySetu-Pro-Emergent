@@ -66,12 +66,24 @@ function processHtmlFiles(dir) {
         html = html.replace('<title>NyaySetu Pro</title>', '');
       }
 
+      // Inject Splash Loader inside <div id="root"> if missing
+      const splashHTML = `<div id="splash-loader" style="display:flex;flex:1;align-items:center;justify-content:center;background:linear-gradient(180deg,#061024,#0B1B3D,#112240);height:100%;flex-direction:column;width:100%;position:absolute;z-index:999999;">
+        <img fetchpriority="high" src="/logo.webp" alt="NyaySetu Pro Logo" width="120" height="129" style="object-fit:contain" />
+        <div style="color:#FDFDFD;font-size:32px;font-weight:700;margin-top:24px;letter-spacing:0.5px;font-family:serif">NyaySetu Pro</div>
+        <div style="color:#C5A059;font-size:14px;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;font-weight:600">The New Era of Advocacy</div>
+      </div>`;
+
+      if (!html.includes('splash-loader') && html.includes('<div id="root"></div>')) {
+        html = html.replace('<div id="root"></div>', `<div id="root">${splashHTML}</div>`);
+        console.log(`✓ Injected static LCP splash skeleton into ${file}`);
+      }
+
       if (!html.includes('family=Anek+Gujarati')) {
         html = html.replace('</head>', `${pwaAndFontTags}\n  </head>`);
         fs.writeFileSync(fullPath, html, 'utf8');
         console.log(`✓ Injected PWA tags into ${path.relative(distDir, fullPath)}`);
       } else {
-        // Just write if title was replaced
+        // Just write if title or splash was replaced
         fs.writeFileSync(fullPath, html, 'utf8');
       }
     }
