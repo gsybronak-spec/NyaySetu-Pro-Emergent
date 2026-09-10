@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -112,7 +113,7 @@ export default function Home() {
         {/* Top welcome + banner */}
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
-          style={styles.desktopHero}
+          style={styles.desktopWelcome}
         >
           <View style={{ flex: 1, paddingRight: Spacing.xl }}>
             <Text style={styles.desktopQuote}>"{quote}"</Text>
@@ -298,7 +299,11 @@ export default function Home() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <View style={styles.brandRow}>
-          <Image source={require("../../assets/images/logo.png")} style={styles.brandLogo} resizeMode="contain" />
+          <Image
+            source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
+            style={styles.brandLogo}
+            contentFit="contain"
+          />
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>

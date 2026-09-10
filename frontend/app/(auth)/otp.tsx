@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { router, useLocalSearchParams } from "expo-router";
 
@@ -51,7 +52,11 @@ export default function Otp() {
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.logo}>
-            <Image source={require("../../assets/images/logo.png")} style={styles.logoImage} resizeMode="contain" />
+            <Image
+              source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
+              style={styles.logoImage}
+              contentFit="contain"
+            />
           </View>
           <Text style={styles.title}>Verify OTP</Text>
           <Text style={styles.sub}>

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { ActivityIndicator, Image, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { Redirect, Stack } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -14,7 +15,12 @@ export default function Index() {
   if (!ready) {
     return (
       <LinearGradient colors={["#061024", "#0B1B3D", "#112240"]} style={styles.container}>
-        <Image source={require("../assets/images/logo.png")} style={styles.logo} resizeMode="contain" />
+        <Image
+          source={Platform.OS === "web" ? "/logo.webp" : require("../assets/images/logo.png")}
+          style={styles.logo}
+          contentFit="contain"
+          priority="high"
+        />
         <Text style={styles.title}>NyaySetu Pro</Text>
         <Text style={styles.tagline}>The New Era of Advocacy</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />

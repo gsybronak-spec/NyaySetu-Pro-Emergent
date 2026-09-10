@@ -7,7 +7,7 @@ export const LightColors = {
   onSurfaceTertiary: "#3B4A6B",
   brand: "#0B1B3D",
   brandPrimary: "#C5A059",
-  onBrandPrimary: "#FFFFFF",
+  onBrandPrimary: "#061024",
   brandSecondary: "#112240",
   brandTertiary: "#EAE5D9",
   onBrandTertiary: "#8C6A29",
@@ -59,6 +59,7 @@ export const Radius = {
   md: 12,
   lg: 20,
   pill: 999,
+  full: 999,
 };
 
 export const Fonts = {

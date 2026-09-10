@@ -1,13 +1,16 @@
 import { Redirect, Tabs } from "expo-router";
 import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Image, StyleSheet, Text } from "react-native";
+import { useEffect } from "react";
+import { ActivityIndicator, StyleSheet, Text } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopSidebar } from "@/src/components/DesktopSidebar";
+import { catalogCache } from "@/src/services/catalogCache";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function TabsLayout() {
@@ -16,11 +19,19 @@ export default function TabsLayout() {
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
 
+  useEffect(() => {
+    // Pre-warm master catalogs in background when entering main dashboard
+    catalogCache.getDistricts().catch(() => {});
+    catalogCache.getCaseTypes().catch(() => {});
+    catalogCache.getLaws().catch(() => {});
+    catalogCache.getCourts().catch(() => {});
+  }, []);
+
   // Route guard (C4): while auth initializes, render branded splash to avoid premature renders/401s
   if (!ready) {
     return (
       <LinearGradient colors={["#061024", "#0B1B3D", "#112240"]} style={splashStyles.container}>
-        <Image source={require("../../assets/images/logo.png")} style={splashStyles.logo} resizeMode="contain" />
+        <Image source={require("../../assets/images/logo.png")} style={splashStyles.logo} contentFit="contain" priority="high" />
         <Text style={splashStyles.title}>NyaySetu Pro</Text>
         <Text style={splashStyles.tagline}>The New Era of Advocacy</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />

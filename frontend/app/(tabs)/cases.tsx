@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { FlatList, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
@@ -341,6 +341,10 @@ export default function Cases() {
         style={{ flex: 1 }}
         data={cases}
         keyExtractor={(c) => c.id}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS !== "web"}
         contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
         ListEmptyComponent={

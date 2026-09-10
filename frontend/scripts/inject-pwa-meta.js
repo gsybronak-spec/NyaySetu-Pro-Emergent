@@ -7,10 +7,22 @@ if (fs.existsSync(distHtmlPath)) {
   let html = fs.readFileSync(distHtmlPath, 'utf8');
   
   const pwaAndFontTags = `
-    <!-- Google Fonts: Anek Gujarati & Inter -->
+    <title>NyaySetu Pro — The New Era of Advocacy</title>
+    <meta name="description" content="NyaySetu Pro — The New Era of Advocacy. High-speed legal drafting and court case management platform for advocates in Gujarat and India." />
+
+    <!-- Google Fonts Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- High-priority Preload for LCP Brand Logo -->
+    <link rel="preload" as="image" href="/logo.webp" type="image/webp" fetchpriority="high" />
+
+    <!-- Non-Render-Blocking Google Fonts (Anek Gujarati & Inter) -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" />
+    <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Anek+Gujarati:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    </noscript>
     
     <!-- PWA & Android / iOS High-Resolution Icons -->
     <link rel="manifest" href="/manifest.json?v=2" />
@@ -28,11 +40,20 @@ if (fs.existsSync(distHtmlPath)) {
       body, input, textarea, select, button, div, span, p, a, h1, h2, h3, h4, h5, h6 {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Anek Gujarati", sans-serif;
       }
-    </style>`;
+    </style>
+
+    <!-- Register Service Worker on idle/load -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').catch(function() {});
+        });
+      }
+    </script>`;
   
   if (!html.includes('family=Anek+Gujarati')) {
     html = html.replace('</head>', `${pwaAndFontTags}\n  </head>`);
     fs.writeFileSync(distHtmlPath, html, 'utf8');
-    console.log('✓ Successfully injected Anek Gujarati web fonts and PWA meta tags into dist/index.html');
+    console.log('✓ Successfully injected optimized web fonts, SEO metadata, and PWA meta tags into dist/index.html');
   }
 }

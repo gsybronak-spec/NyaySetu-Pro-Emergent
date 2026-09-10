@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -329,6 +329,10 @@ export default function Templates() {
           data={matchedPairs}
           keyExtractor={(item) => item.pair.baseKey}
           numColumns={2}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== "web"}
           columnWrapperStyle={styles.mobileColWrapper}
           contentContainerStyle={{
             paddingHorizontal: Spacing.md,

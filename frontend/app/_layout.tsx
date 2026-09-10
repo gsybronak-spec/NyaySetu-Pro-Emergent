@@ -1,14 +1,13 @@
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox } from "react-native";
+import { LogBox, Platform } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { ThemeProvider } from "@/src/theme/ThemeContext";
 import { AuthProvider } from "@/src/context/AuthContext";
-import { catalogCache } from "@/src/services/catalogCache";
 
 LogBox.ignoreAllLogs(true);
 
@@ -23,15 +22,8 @@ export default function RootLayout() {
     }
   }, [loaded, error]);
 
-  useEffect(() => {
-    // Pre-warm master catalogs in background on startup
-    catalogCache.getDistricts().catch(() => {});
-    catalogCache.getCaseTypes().catch(() => {});
-    catalogCache.getLaws().catch(() => {});
-    catalogCache.getCourts().catch(() => {});
-  }, []);
-
-  if (!loaded && !error) return null;
+  // On native, wait for fonts / splash hide; on web, allow immediate paint with font-display: swap
+  if (Platform.OS !== "web" && !loaded && !error) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

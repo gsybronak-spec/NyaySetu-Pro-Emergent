@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -153,7 +154,11 @@ export default function Signup() {
         <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
             <View style={styles.logo}>
-              <Image source={require("../../assets/images/logo.png")} style={styles.logoImage} resizeMode="contain" />
+              <Image
+                source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
+                style={styles.logoImage}
+                contentFit="contain"
+              />
             </View>
             <Text style={styles.title}>NyaySetu Pro</Text>
             <Text style={styles.tagline}>The New Era of Advocacy</Text>

@@ -6,6 +6,7 @@
 // ICON_VECTOR_VERSION must match @expo/vector-icons in package.json.
 // Usage: const [loaded, error] = useIconFonts();
 
+import { Platform } from "react-native";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useFonts } from "expo-font";
 
@@ -49,5 +50,7 @@ export const useIconFonts = (): readonly [boolean, Error | null] =>
     ...(Constants.executionEnvironment === ExecutionEnvironment.StoreClient
       ? iconFontMap()
       : {}),
-    AnekGujarati: require("../../assets/fonts/AnekGujarati-VariableFont.ttf"),
+    ...(Platform.OS !== "web"
+      ? { AnekGujarati: require("../../assets/fonts/AnekGujarati-VariableFont.ttf") }
+      : {}),
   });

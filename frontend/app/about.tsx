@@ -1,5 +1,6 @@
 import React from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -56,7 +57,11 @@ export default function AboutScreen() {
       <ScrollView contentContainerStyle={[styles.container, isDesktop && styles.desktopContainer]}>
         {/* Branding header */}
         <View style={styles.brandBox}>
-          <Image source={require("../assets/images/logo.png")} style={styles.logo} resizeMode="contain" />
+          <Image
+            source={Platform.OS === "web" ? "/logo.webp" : require("../assets/images/logo.png")}
+            style={styles.logo}
+            contentFit="contain"
+          />
           <Text style={[styles.appName, { color: colors.onSurface }]}>NyaySetu Pro</Text>
           <Text style={[styles.tagline, { color: colors.brandPrimary }]}>The New Era of Advocacy</Text>
           <View style={[styles.versionBadge, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>

@@ -253,7 +253,7 @@ export default function TemplateApplication() {
         language
       );
       initialValues["advocate_name"] = advName;
-      initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\\//g, "-");
+      initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
 
       // Date fields default to today when unset (always editable)
       for (const f of t?.fields || []) {
