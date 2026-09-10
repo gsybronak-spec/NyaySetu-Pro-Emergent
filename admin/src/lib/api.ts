@@ -1,6 +1,4 @@
-const ACTIVE_BACKEND = 'https://backend-mktqrcse5-gsybronak-6847s-projects.vercel.app';
-const rawEnvUrl = import.meta.env.VITE_API_BASE;
-const BASE = (!rawEnvUrl || rawEnvUrl.includes("backend-gold-iota-nyngopebeg")) ? ACTIVE_BACKEND : rawEnvUrl;
+const BASE = 'https://backend-mktqrcse5-gsybronak-6847s-projects.vercel.app';
 
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string | null, error?: Error) => void> = [];
