@@ -4,8 +4,8 @@ const path = require('path');
 const distDir = path.join(__dirname, '..', 'dist');
 
 const pwaAndFontTags = `
-    <title>NyaySetu Pro — The New Era of Advocacy</title>
-    <meta name="description" content="NyaySetu Pro — The New Era of Advocacy. High-speed legal drafting and court case management platform for advocates in Gujarat and India." />
+    <title>NyaySetu Pro - The New Era of Advocacy</title>
+    <meta name="description" content="NyaySetu Pro - The New Era of Advocacy. High-speed legal drafting and court case management platform for advocates in Gujarat and India." />
 
     <!-- Google Fonts Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
