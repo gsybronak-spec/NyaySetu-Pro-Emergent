@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { Platform } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
@@ -79,19 +80,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!token && !refreshToken) {
       // If local tokens are absent, check if Firebase has an active authenticated user
-      const fbAuth = getFirebaseAuth();
-      if (fbAuth?.currentUser) {
-        try {
-          console.info("[AuthContext] Active Firebase session detected, establishing backend session...");
-          const idToken = await fbAuth.currentUser.getIdToken(true);
-          const res = await api.firebaseAuth(idToken);
-          await setTokens(res.token, res.refresh_token);
-          setUser(res.user);
-          if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-          setReady(true);
-          return;
-        } catch (fbErr) {
-          console.warn("[AuthContext] Firebase startup session restoration failed", fbErr);
+      // Note: On web, getFirebaseAuth() instantiates the auth iframe/network worker which hurts TBT.
+      // Firebase web auth restores session asynchronously via onAuthStateChanged (deferred below),
+      // so currentUser is always null on cold boot anyway.
+      if (Platform.OS !== "web") {
+        const fbAuth = getFirebaseAuth();
+        if (fbAuth?.currentUser) {
+          try {
+            console.info("[AuthContext] Active Firebase session detected, establishing backend session...");
+            const idToken = await fbAuth.currentUser.getIdToken(true);
+            const res = await api.firebaseAuth(idToken);
+            await setTokens(res.token, res.refresh_token);
+            setUser(res.user);
+            if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+            setReady(true);
+            return;
+          } catch (fbErr) {
+            console.warn("[AuthContext] Firebase startup session restoration failed", fbErr);
+          }
         }
       }
       setUser(null);
@@ -122,27 +128,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refresh]);
 
   // Listen to Firebase Auth state transitions (handles asynchronous Web IndexedDB restore)
+  // Defer initialization on web so it doesn't block critical startup path or initial render
   useEffect(() => {
-    const fbAuth = getFirebaseAuth();
-    if (!fbAuth) return;
-    const unsubscribe = onAuthStateChanged(fbAuth, async (fbUser) => {
-      if (fbUser) {
-        const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
-        if (!token && !refreshToken) {
-          try {
-            console.info("[AuthContext] onAuthStateChanged restored user, syncing backend session...");
-            const idToken = await fbUser.getIdToken();
-            const res = await api.firebaseAuth(idToken);
-            await setTokens(res.token, res.refresh_token);
-            setUser(res.user);
-            if (res.user) await storage.set("nyaysetu_user_profile", res.user);
-          } catch (e) {
-            console.warn("[AuthContext] onAuthStateChanged silent exchange failed", e);
+    let unsubscribe: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      const fbAuth = getFirebaseAuth();
+      if (!fbAuth) return;
+      unsubscribe = onAuthStateChanged(fbAuth, async (fbUser) => {
+        if (fbUser) {
+          const [token, refreshToken] = await Promise.all([getToken(), getRefreshToken()]);
+          if (!token && !refreshToken) {
+            try {
+              console.info("[AuthContext] onAuthStateChanged restored user, syncing backend session...");
+              const idToken = await fbUser.getIdToken();
+              const res = await api.firebaseAuth(idToken);
+              await setTokens(res.token, res.refresh_token);
+              setUser(res.user);
+              if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+            } catch (e) {
+              console.warn("[AuthContext] onAuthStateChanged silent exchange failed", e);
+            }
           }
         }
-      }
-    });
-    return () => unsubscribe();
+      });
+    }, Platform.OS === "web" ? 1500 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Live profile & wallet sync: periodically sync latest credits/profile from backend (throttled)
