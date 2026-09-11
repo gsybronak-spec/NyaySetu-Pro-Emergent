@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cachedUser = await storage.get("nyaysetu_user_profile", null as any);
       if (cachedUser && typeof cachedUser === "object" && cachedUser.id) {
         setUser(cachedUser);
+        // Stale-While-Revalidate: allow immediate paint with cached profile
+        setReady(true);
       }
     } catch {
       // Ignore cache read error
@@ -86,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await setTokens(res.token, res.refresh_token);
           setUser(res.user);
           if (res.user) await storage.set("nyaysetu_user_profile", res.user);
+          setReady(true);
           return;
         } catch (fbErr) {
           console.warn("[AuthContext] Firebase startup session restoration failed", fbErr);
@@ -93,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setUser(null);
       await storage.remove("nyaysetu_user_profile");
+      setReady(true);
       return;
     }
 
@@ -108,6 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cachedUser && typeof cachedUser === "object" && cachedUser.id) {
         setUser(cachedUser);
       }
+    } finally {
+      setReady(true);
     }
   }, []);
 

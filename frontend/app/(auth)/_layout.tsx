@@ -1,5 +1,5 @@
 import { Redirect, Stack } from "expo-router";
-import { ActivityIndicator, Image, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Image, Platform, StyleSheet, Text } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@/src/context/AuthContext";
 import { Spacing } from "@/src/theme/tokens";
@@ -11,7 +11,11 @@ export default function AuthLayout() {
   if (!ready) {
     return (
       <LinearGradient colors={["#061024", "#0B1B3D", "#112240"]} style={splashStyles.container}>
-        <Image source={require("../../assets/images/logo.png")} style={splashStyles.logo} resizeMode="contain" />
+        <Image
+          source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
+          style={splashStyles.logo}
+          resizeMode="contain"
+        />
         <Text style={splashStyles.title}>NyaySetu Pro</Text>
         <Text style={splashStyles.tagline}>The New Era of Advocacy</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />

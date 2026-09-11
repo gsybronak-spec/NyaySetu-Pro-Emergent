@@ -103,6 +103,7 @@ jre21/
 *.log
 backend/*.log
 backend/scratch/
+scratch/
 backend/generated_docs/
 backend/gate_*.json
 backend/fix_targets*.txt
