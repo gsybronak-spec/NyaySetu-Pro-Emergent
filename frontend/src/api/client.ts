@@ -16,9 +16,14 @@ const CACHEABLE_GET_PREFIXES = [
   "/catalog/",
   "/templates",
   "/favourites/templates",
+  "/user/template-preferences",
+  "/wallet",
+  "/cases",
+  "/drafts",
 ];
 
 const CACHE_TTL_MS = 60000; // 60 seconds
+const FAST_CACHE_TTL_MS = 15000; // 15 seconds for dynamic user data (cases, wallet, drafts)
 
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
@@ -307,14 +312,18 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
   const token = await getToken();
   const cacheKey = `${path}::${token || "anon"}`;
 
+  const isDynamicFast = path.startsWith("/wallet") || path.startsWith("/cases") || path.startsWith("/drafts");
+  const ttl = isDynamicFast ? FAST_CACHE_TTL_MS : CACHE_TTL_MS;
+  const swrMaxAge = isDynamicFast ? 60000 : 300000;
+
   const cached = apiGetCache.get(cacheKey);
   if (cached) {
     const age = Date.now() - cached.timestamp;
-    if (age < CACHE_TTL_MS) {
+    if (age < ttl) {
       return cached.data;
     }
-    // SWR: return cached data immediately if within 5 minutes, and refresh in background
-    if (age < 300000) {
+    // SWR: return cached data immediately and refresh in background
+    if (age < swrMaxAge) {
       if (!apiInFlightGet.has(cacheKey)) {
         const bgPromise = (async () => {
           try {
@@ -395,7 +404,11 @@ export const api = {
   removeFavCourt: (id: string) => request(`/favourites/courts/${id}`, "DELETE"),
   plans: () => request("/catalog/plans"),
   quote: () => request("/catalog/quote"),
-  createCase: (data: any) => request("/cases", "POST", data),
+  createCase: async (data: any) => {
+    const res = await request("/cases", "POST", data);
+    invalidateApiCache("/cases");
+    return res;
+  },
   listCases: (params?: { q?: string; status?: string; category?: string; sort?: string }) => {
     const p = new URLSearchParams();
     if (params?.q) p.set("q", params.q);
@@ -406,10 +419,26 @@ export const api = {
     return request(`/cases${qs ? `?${qs}` : ""}`);
   },
   getCase: (id: string) => request(`/cases/${id}`),
-  updateCase: (id: string, data: any) => request(`/cases/${id}`, "PUT", data),
-  archiveCase: (id: string) => request(`/cases/${id}/archive`, "POST"),
-  restoreCase: (id: string) => request(`/cases/${id}/restore`, "POST"),
-  deleteCase: (id: string) => request(`/cases/${id}`, "DELETE"),
+  updateCase: async (id: string, data: any) => {
+    const res = await request(`/cases/${id}`, "PUT", data);
+    invalidateApiCache("/cases");
+    return res;
+  },
+  archiveCase: async (id: string) => {
+    const res = await request(`/cases/${id}/archive`, "POST");
+    invalidateApiCache("/cases");
+    return res;
+  },
+  restoreCase: async (id: string) => {
+    const res = await request(`/cases/${id}/restore`, "POST");
+    invalidateApiCache("/cases");
+    return res;
+  },
+  deleteCase: async (id: string) => {
+    const res = await request(`/cases/${id}`, "DELETE");
+    invalidateApiCache("/cases");
+    return res;
+  },
   templates: (q?: string, category?: string) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
@@ -440,20 +469,42 @@ export const api = {
   // Downloads may need longer: document generation + a cold Render instance can
   // exceed the 30s default timeout for large legal PDFs. 90s keeps the request
   // from being aborted mid-generation while still failing fast on hangs.
-  downloadApp: (data: any) => request("/applications/download", "POST", data, 90000),
+  downloadApp: async (data: any) => {
+    const res = await request("/applications/download", "POST", data, 90000);
+    invalidateApiCache("/wallet");
+    invalidateApiCache("/profile/me");
+    return res;
+  },
   history: () => request("/applications/history"),
   wallet: () => request("/wallet"),
-  purchase: (plan_id: string) => request("/purchase/mock", "POST", { plan_id }),
+  purchase: async (plan_id: string) => {
+    const res = await request("/purchase/mock", "POST", { plan_id });
+    invalidateApiCache("/wallet");
+    invalidateApiCache("/profile/me");
+    return res;
+  },
   // Razorpay production payment path (enabled via EXPO_PUBLIC_RAZORPAY_ENABLED=1)
   razorpayCreateOrder: (plan_id: string) =>
     request("/payments/razorpay/create-order", "POST", { plan_id }),
-  razorpayVerify: (data: { plan_id: string; order_id: string; payment_id: string; signature: string }) =>
-    request("/payments/razorpay/verify", "POST", data),
+  razorpayVerify: async (data: { plan_id: string; order_id: string; payment_id: string; signature: string }) => {
+    const res = await request("/payments/razorpay/verify", "POST", data);
+    invalidateApiCache("/wallet");
+    invalidateApiCache("/profile/me");
+    return res;
+  },
   transactions: () => request("/transactions"),
   referral: () => request("/referral/me"),
-  saveDraft: (data: any) => request("/drafts", "POST", data),
+  saveDraft: async (data: any) => {
+    const res = await request("/drafts", "POST", data);
+    invalidateApiCache("/drafts");
+    return res;
+  },
   drafts: () => request("/drafts"),
-  deleteDraft: (id: string) => request(`/drafts/${id}`, "DELETE"),
+  deleteDraft: async (id: string) => {
+    const res = await request(`/drafts/${id}`, "DELETE");
+    invalidateApiCache("/drafts");
+    return res;
+  },
   search: (q: string) => request(`/search?q=${encodeURIComponent(q)}`),
   // Notifications
   notifications: () => request("/notifications"),

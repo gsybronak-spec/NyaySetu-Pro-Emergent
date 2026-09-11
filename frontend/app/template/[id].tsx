@@ -169,15 +169,16 @@ export default function TemplateApplication() {
   const [talukas, setTalukas] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [caseTypes, setCaseTypes] = useState<any[]>(() => catalogCache.peekCaseTypes());
-  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [walletBalance, setWalletBalance] = useState<number>(() => user?.wallet_balance ?? 0);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-  const [userProfile, setUserProfile] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(user);
   const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
 
   const isUnlimited = Boolean(userProfile?.unlimited_access || userProfile?.is_owner || userProfile?.is_partner);
 
   const draftTimer = useRef<any>(null);
+  const initialLoadDone = useRef<boolean>(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -193,7 +194,7 @@ export default function TemplateApplication() {
         catalogCache.getDistricts(),
         catalogCache.getCaseTypes(),
         caseId ? api.getCase(caseId).catch(() => null) : Promise.resolve(null),
-        api.wallet().catch(() => ({ balance: 0 })),
+        api.wallet().catch(() => ({ balance: user?.wallet_balance ?? 0 })),
         params.draft === "1" ? api.drafts().catch(() => []) : Promise.resolve([]),
       ]);
 
@@ -210,7 +211,7 @@ export default function TemplateApplication() {
         setWalletBalance(w.balance);
       }
       const enName = t.name_en || t.name_gu || "Document";
-      setFilename(`${enName.replace(/\\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+      setFilename(`${enName.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
 
       const initialValues: Record<string, any> = {};
 
@@ -276,13 +277,14 @@ export default function TemplateApplication() {
           if (d.language && !params.lang) setLanguage(d.language);
         }
       }
+      initialLoadDone.current = true;
     } catch (e: any) {
       console.error("[template] load failed", e);
       setError(e?.message || "Could not load template. Please check your network connection.");
     } finally {
       setLoading(false);
     }
-  }, [templateId, caseId, language, params.draft]);
+  }, [templateId, caseId, params.draft]);
 
   useEffect(() => {
     loadData();
@@ -318,9 +320,16 @@ export default function TemplateApplication() {
 
   const update = (k: string, v: any) => setValues((prev) => ({ ...prev, [k]: v }));
 
-  // When language switches, update advocate name default if untouched
+  // When language switches, fetch template for new language seamlessly without full reload
   const handleLanguageChange = (newLang: "en" | "gu") => {
     setLanguage(newLang);
+    const effectiveId = resolveTemplateId(templateId, newLang) || templateId;
+    api.template(effectiveId)
+      .then((newTpl) => {
+        if (newTpl) setTemplate(newTpl);
+      })
+      .catch(() => {});
+
     if (userProfile) {
       const currentAdv = values.advocate_name;
       const oldDefault = formatAdvocateName(

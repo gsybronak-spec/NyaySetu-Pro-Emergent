@@ -24,7 +24,7 @@ export default function Home() {
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const [quote, setQuote] = useState("Justice begins with preparation.");
-  const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
+  const [wallet, setWallet] = useState(() => ({ balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }));
   const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
     getOrderedTemplatePairs(catalogCache.peekTemplateOrder()).slice(0, 10)
   );

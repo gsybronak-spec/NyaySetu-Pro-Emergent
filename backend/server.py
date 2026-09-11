@@ -516,6 +516,17 @@ async def create_user_session(user_id: str, ip_address: Optional[str] = None, us
     await db.collection('user_sessions').document(__doc_id).set(__doc)
     return session_id, raw_refresh_token
 
+_USER_SESSION_CACHE: dict[str, tuple[dict, float]] = {}
+_USER_SESSION_LOCK = threading.Lock()
+_USER_SESSION_TTL_SEC = 20.0
+
+def invalidate_user_session_cache(user_id: Optional[str] = None):
+    with _USER_SESSION_LOCK:
+        if user_id:
+            _USER_SESSION_CACHE.pop(user_id, None)
+        else:
+            _USER_SESSION_CACHE.clear()
+
 async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing auth token")
@@ -528,17 +539,33 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     # Role isolation: admin tokens cannot be used as user tokens
     if payload.get("token_type") == "admin":
         raise HTTPException(401, "Invalid token")
-    _snap = await db.collection('users').document(user_id).get()
-    user = _snap.to_dict() if _snap.exists else None
-    if not user:
-        raise HTTPException(401, "User not found")
-    user["id"] = user.get("id") or user_id
+
+    now_ts = time.time()
+    cached_user = None
+    with _USER_SESSION_LOCK:
+        if user_id in _USER_SESSION_CACHE:
+            u, exp = _USER_SESSION_CACHE[user_id]
+            if now_ts < exp:
+                cached_user = u
+
+    if cached_user is not None:
+        user = dict(cached_user)
+    else:
+        _snap = await db.collection('users').document(user_id).get()
+        user = _snap.to_dict() if _snap.exists else None
+        if not user:
+            raise HTTPException(401, "User not found")
+        user["id"] = user.get("id") or user_id
+        with _USER_SESSION_LOCK:
+            _USER_SESSION_CACHE[user_id] = (dict(user), now_ts + _USER_SESSION_TTL_SEC)
+
     if user.get("active") is False:
         raise HTTPException(401, "Account disabled. Contact support.")
     # Password reset bumps token_version, revoking previously issued JWTs.
     # Tokens issued before this feature (no `ver` claim) remain valid unless the
     # user has since bumped their version.
     if user.get("token_version") and payload.get("ver") != user["token_version"]:
+        invalidate_user_session_cache(user_id)
         raise HTTPException(401, "Session expired. Please login again.")
     return user
 
@@ -1695,6 +1722,7 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
 
     if updates:
         await db.collection('users').document(user["id"]).set(updates, merge=True)
+        invalidate_user_session_cache(user["id"])
     _snap = await db.collection('users').document(user["id"]).get()
     u = _snap.to_dict() if _snap.exists else None
     return _public_user(u)
@@ -2071,7 +2099,10 @@ _CATALOG_KINDS = {
 
 _CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
 
-_CATALOG_CACHE: dict[str, list] = {}
+_CATALOG_CACHE: dict[str, list] = {
+    kind: [dict(x, active=True) for x in seed_list]
+    for kind, (_, seed_list) in _CATALOG_KINDS.items()
+}
 
 def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
     global _CATALOG_CACHE
@@ -2496,7 +2527,8 @@ async def _ensure_seed_complete() -> None:
         await seed_templates()
 
 
-_PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
+_PRE_SEEDED_TEMPLATES = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2]
+_PUBLISHED_TEMPLATES_CACHE: dict = {"data": _PRE_SEEDED_TEMPLATES, "expires_at": time.time() + 300.0}
 _PUBLISHED_TEMPLATES_LOCK = threading.Lock()
 _PUBLISHED_TEMPLATES_TTL_SEC = 300.0
 
