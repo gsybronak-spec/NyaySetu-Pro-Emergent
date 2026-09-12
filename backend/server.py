@@ -3701,6 +3701,8 @@ async def verify_payment_endpoint(req: VerifyPaymentReq, user: Optional[dict] = 
 
     return {
         "success": True,
+        "status": "success",
+        "verified": True,
         "message": "Payment verified successfully",
         "order_id": order_id,
         "payment_id": payment_id,
