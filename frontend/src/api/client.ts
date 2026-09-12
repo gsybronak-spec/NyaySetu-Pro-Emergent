@@ -1,6 +1,6 @@
 import { storage } from "@/src/utils/storage";
 
-const BASE = "https://backend-mktqrcse5-gsybronak-6847s-projects.vercel.app";
+const BASE = process.env.EXPO_PUBLIC_BACKEND_URL || "https://backend-gold-iota-nyngopebeg.vercel.app";
 const TOKEN_KEY = "nyaysetu_token";
 const REFRESH_TOKEN_KEY = "nyaysetu_refresh_token";
 

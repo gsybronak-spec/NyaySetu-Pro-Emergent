@@ -1,4 +1,4 @@
-const BASE = 'https://backend-mktqrcse5-gsybronak-6847s-projects.vercel.app';
+const BASE = import.meta.env.VITE_API_BASE || 'https://backend-gold-iota-nyngopebeg.vercel.app';
 
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string | null, error?: Error) => void> = [];
