@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -11,37 +11,35 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { useAuth } from "@/src/context/AuthContext";
+import { getCachedPlans, setCachedPlans, getCachedWallet, setCachedWallet } from "@/src/constants/plans";
+import {
+  loadRazorpayScript,
+  preloadRazorpayScript,
+  prepareRazorpayModal,
+  RAZORPAY_THEME_COLOR,
+  RAZORPAY_BACKDROP_COLOR,
+  RAZORPAY_LOGO_URL,
+} from "@/src/utils/razorpay";
 
 // Production payment path — enable only when Razorpay keys are configured on
 // the backend (RAZORPAY_KEY_ID/RAZORPAY_KEY_SECRET) and this flag is set in
 // the Vercel/Expo environment. Until then the dev mock purchase is used.
 const RAZORPAY_ENABLED = process.env.EXPO_PUBLIC_RAZORPAY_ENABLED === "1";
 
-function loadRazorpayScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof document === "undefined") {
-      reject(new Error("Razorpay checkout requires a browser"));
-      return;
-    }
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Could not load payment gateway"));
-    document.head.appendChild(s);
-  });
-}
-
 async function buyWithRazorpay(planId: string, user?: any): Promise<{ balance: number; total_used: number }> {
-  const order = await api.razorpayCreateOrder(planId);
+  // Parallelize server order creation and client script readiness check
+  const [order] = await Promise.all([
+    api.razorpayCreateOrder(planId),
+    Platform.OS === 'web' ? loadRazorpayScript() : Promise.resolve(),
+  ]);
+
+  // Ensure viewport is stabilized and virtual keyboard is dismissed
+  prepareRazorpayModal();
+
   let paymentId = "";
   let signature = "";
 
   if (Platform.OS === 'web') {
-    await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
     const payment = await new Promise<any>((resolve, reject) => {
       const Razorpay = (window as any).Razorpay;
       if (!Razorpay) {
@@ -55,16 +53,25 @@ async function buyWithRazorpay(planId: string, user?: any): Promise<{ balance: n
         order_id: order.order_id,
         name: "NyaySetu Pro",
         description: order.plan?.name || "Legal Draft Credits",
+        image: RAZORPAY_LOGO_URL,
         prefill: {
           name: user?.name_en || user?.name_gu || "",
           email: user?.email || "",
           contact: user?.mobile || "",
         },
-        theme: { color: "#C5A059" },
-        handler: (response: any) => resolve(response),
+        theme: {
+          color: RAZORPAY_THEME_COLOR,
+          backdrop_color: RAZORPAY_BACKDROP_COLOR,
+        },
         modal: {
+          backdropclose: false,
+          escape: true,
+          handleback: true,
+          confirm_close: true,
+          animation: true,
           ondismiss: () => reject(new Error("Payment cancelled")),
         },
+        handler: (response: any) => resolve(response),
       });
       rz.on("payment.failed", (response: any) => {
         const reason = response?.error?.description || response?.error?.reason || "Payment failed";
@@ -82,13 +89,14 @@ async function buyWithRazorpay(planId: string, user?: any): Promise<{ balance: n
       currency: order.currency || "INR",
       name: "NyaySetu Pro",
       description: order.plan?.name || "Legal Draft Credits",
+      image: RAZORPAY_LOGO_URL,
       order_id: order.order_id,
       prefill: {
         name: user?.name_en || user?.name_gu || "",
         email: user?.email || "",
         contact: user?.mobile || "",
       },
-      theme: { color: "#C5A059" }
+      theme: { color: RAZORPAY_THEME_COLOR },
     });
     paymentId = payment.razorpay_payment_id;
     signature = payment.razorpay_signature;
@@ -108,24 +116,40 @@ export default function Subscription() {
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const [plans, setPlans] = useState<any[]>([]);
-  const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
+
+  // Instant render from cache — 0ms blank delay
+  const [plans, setPlans] = useState<any[]>(() => getCachedPlans());
+  const [wallet, setWallet] = useState(() => getCachedWallet() || {
+    balance: user?.wallet_balance ?? 0,
+    total_used: user?.total_credits_used ?? 0,
+  });
   const [buying, setBuying] = useState<string | null>(null);
+
+  // Proactively prefetch Razorpay Checkout script in background
+  useEffect(() => {
+    preloadRazorpayScript();
+  }, []);
 
   const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
 
   const load = useCallback(async () => {
     try {
       const [p, w] = await Promise.all([
-        api.plans().catch(() => []),
-        api.wallet().catch(() => ({ balance: 0, total_used: 0 })),
+        api.plans().catch(() => getCachedPlans()),
+        api.wallet().catch(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }),
       ]);
-      setPlans(Array.isArray(p) ? p : []);
-      if (w && typeof w === "object") setWallet(w);
+      if (Array.isArray(p) && p.length > 0) {
+        setPlans(p);
+        setCachedPlans(p);
+      }
+      if (w && typeof w === "object") {
+        setWallet(w);
+        setCachedWallet(w);
+      }
     } catch {
-      setPlans([]);
+      // Retain current plans and wallet gracefully
     }
-  }, []);
+  }, [user]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 

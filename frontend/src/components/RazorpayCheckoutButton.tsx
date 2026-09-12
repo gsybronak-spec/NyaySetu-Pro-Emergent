@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,6 +11,14 @@ import {
   ViewStyle,
 } from "react-native";
 import { api } from "@/src/api/client";
+import {
+  loadRazorpayScript,
+  preloadRazorpayScript,
+  prepareRazorpayModal,
+  RAZORPAY_THEME_COLOR,
+  RAZORPAY_BACKDROP_COLOR,
+  RAZORPAY_LOGO_URL,
+} from "@/src/utils/razorpay";
 
 export interface RazorpayCheckoutButtonProps {
   /** Amount in paise (e.g. 50000 for ₹500) or specify amountInRupees */
@@ -42,24 +50,6 @@ export interface RazorpayCheckoutButtonProps {
   onCancel?: () => void;
 }
 
-function loadRazorpayScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof document === "undefined") {
-      reject(new Error("Razorpay checkout requires a browser"));
-      return;
-    }
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Failed to load Razorpay payment script"));
-    document.head.appendChild(s);
-  });
-}
-
 export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
   amount,
   amountInRupees,
@@ -80,6 +70,10 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    preloadRazorpayScript();
+  }, []);
+
   const calculateAmountPaise = (): number => {
     if (amount !== undefined && amount > 0) return Math.round(amount);
     if (amountInRupees !== undefined && amountInRupees > 0) return Math.round(amountInRupees * 100);
@@ -96,14 +90,17 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
         throw new Error("Minimum payment amount is 100 paise (1 INR).");
       }
 
-      // STEP 1: Create order on backend (POST /api/create-order)
-      const order = await api.createOrder({
-        amount: amountPaise,
-        currency,
-        receipt,
-        plan_id: planId,
-        notes,
-      });
+      // STEP 1: Create order on backend concurrently with script load readiness check
+      const [order] = await Promise.all([
+        api.createOrder({
+          amount: amountPaise,
+          currency,
+          receipt,
+          plan_id: planId,
+          notes,
+        }),
+        Platform.OS === "web" ? loadRazorpayScript() : Promise.resolve(),
+      ]);
 
       if (!order?.order_id) {
         throw new Error("Could not initiate payment order with server.");
@@ -119,6 +116,8 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
         );
       }
 
+      prepareRazorpayModal();
+
       let paymentResult: {
         razorpay_payment_id: string;
         razorpay_order_id: string;
@@ -127,7 +126,6 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
 
       // STEP 2: Open Razorpay modal
       if (Platform.OS === "web") {
-        await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
         const Razorpay = (window as any).Razorpay;
         if (!Razorpay) {
           throw new Error("Razorpay checkout script failed to initialize");
@@ -141,19 +139,28 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
             order_id: order.order_id,
             name: "NyaySetu Pro",
             description,
+            image: RAZORPAY_LOGO_URL,
             prefill: {
               name: prefill?.name || "",
               email: prefill?.email || "",
               contact: prefill?.contact || "",
             },
-            theme: { color: "#C5A059" },
-            handler: (response: any) => resolve(response),
+            theme: {
+              color: RAZORPAY_THEME_COLOR,
+              backdrop_color: RAZORPAY_BACKDROP_COLOR,
+            },
             modal: {
+              backdropclose: false,
+              escape: true,
+              handleback: true,
+              confirm_close: true,
+              animation: true,
               ondismiss: () => {
                 onCancel?.();
                 reject(new Error("Payment cancelled by user"));
               },
             },
+            handler: (response: any) => resolve(response),
           });
 
           rz.on("payment.failed", (response: any) => {
@@ -175,12 +182,13 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
           order_id: order.order_id,
           name: "NyaySetu Pro",
           description,
+          image: RAZORPAY_LOGO_URL,
           prefill: {
             name: prefill?.name || "",
             email: prefill?.email || "",
             contact: prefill?.contact || "",
           },
-          theme: { color: "#C5A059" },
+          theme: { color: RAZORPAY_THEME_COLOR },
         });
 
         paymentResult = {
@@ -245,7 +253,7 @@ export const RazorpayCheckoutButton: React.FC<RazorpayCheckoutButtonProps> = ({
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: "#C5A059",
+    backgroundColor: RAZORPAY_THEME_COLOR,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
@@ -254,7 +262,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   buttonText: {
-    color: "#061024",
+    color: "#FFFFFF",
     fontWeight: "700",
     fontSize: 15,
   },

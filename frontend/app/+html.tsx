@@ -59,6 +59,9 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-title" content="NyaySetu Pro" />
         <meta name="application-name" content="NyaySetu Pro" />
 
+        {/* High-speed preloading for Razorpay Checkout script */}
+        <link rel="preload" href="https://checkout.razorpay.com/v1/checkout.js" as="script" />
+
         <ScrollViewStyleReset />
         <style
           dangerouslySetInnerHTML={{
@@ -68,6 +71,24 @@ export default function Root({ children }: PropsWithChildren) {
               [role="heading"], [role="heading"] * { overflow: visible !important; }
               body, input, textarea, select, button, div, span, p, a, h1, h2, h3, h4, h5, h6 {
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Anek Gujarati", sans-serif;
+              }
+              /* Razorpay Standard Checkout Viewport Centering */
+              .razorpay-container {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100vw !important;
+                height: 100vh !important;
+                height: 100dvh !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                z-index: 2147483647 !important;
+              }
+              .razorpay-container > iframe {
+                margin: auto !important;
               }
             `,
           }}

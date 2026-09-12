@@ -14,26 +14,17 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { api } from "@/src/api/client";
+import { getCachedPlans, setCachedPlans } from "@/src/constants/plans";
+import {
+  loadRazorpayScript,
+  preloadRazorpayScript,
+  prepareRazorpayModal,
+  RAZORPAY_THEME_COLOR,
+  RAZORPAY_BACKDROP_COLOR,
+  RAZORPAY_LOGO_URL,
+} from "@/src/utils/razorpay";
 
 const RAZORPAY_ENABLED = process.env.EXPO_PUBLIC_RAZORPAY_ENABLED === "1";
-
-function loadRazorpayScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof document === "undefined") {
-      reject(new Error("Razorpay checkout requires a browser"));
-      return;
-    }
-    if (document.querySelector(`script[src="${src}"]`)) {
-      resolve();
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = src;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Could not load payment gateway"));
-    document.head.appendChild(s);
-  });
-}
 
 interface PlanPurchaseModalProps {
   visible: boolean;
@@ -49,23 +40,28 @@ export function PlanPurchaseModal({
   currentBalance = 0,
 }: PlanPurchaseModalProps) {
   const { colors } = useTheme();
-  const [plans, setPlans] = useState<any[]>([]);
+  // Instant initial plans from in-memory cache — zero blank loading delay
+  const [plans, setPlans] = useState<any[]>(() => getCachedPlans());
   const [loading, setLoading] = useState(false);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setLoading(true);
+      preloadRazorpayScript();
       setError(null);
       api
         .plans()
         .then((p: any) => {
           const list = Array.isArray(p) ? p : [];
-          setPlans(list.filter((x: any) => x.active !== false));
+          const active = list.filter((x: any) => x.active !== false);
+          if (active.length > 0) {
+            setPlans(active);
+            setCachedPlans(active);
+          }
         })
         .catch((e: any) => {
-          setError(e?.message || "Could not load subscription plans.");
+          // Gracefully retain cached plans
         })
         .finally(() => setLoading(false));
     }
@@ -77,12 +73,17 @@ export function PlanPurchaseModal({
     try {
       let balance = currentBalance;
       if (RAZORPAY_ENABLED) {
-        const order = await api.razorpayCreateOrder(plan.id);
+        // Parallelize order creation with script loading check
+        const [order] = await Promise.all([
+          api.razorpayCreateOrder(plan.id),
+          Platform.OS === "web" ? loadRazorpayScript() : Promise.resolve(),
+        ]);
+
+        prepareRazorpayModal();
         let paymentId = "";
         let signature = "";
 
         if (Platform.OS === "web") {
-          await loadRazorpayScript("https://checkout.razorpay.com/v1/checkout.js");
           const payment = await new Promise<any>((resolve, reject) => {
             const Razorpay = (window as any).Razorpay;
             if (!Razorpay) {
@@ -96,9 +97,20 @@ export function PlanPurchaseModal({
               order_id: order.order_id,
               name: "NyaySetu Pro",
               description: order.plan?.name || plan.name || "",
-              theme: { color: "#C5A059" },
+              image: RAZORPAY_LOGO_URL,
+              theme: {
+                color: RAZORPAY_THEME_COLOR,
+                backdrop_color: RAZORPAY_BACKDROP_COLOR,
+              },
+              modal: {
+                backdropclose: false,
+                escape: true,
+                handleback: true,
+                confirm_close: true,
+                animation: true,
+                ondismiss: () => reject(new Error("Payment cancelled")),
+              },
               handler: (response: any) => resolve(response),
-              modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
             });
             rz.on("payment.failed", (response: any) => {
               const reason = response?.error?.description || response?.error?.reason || "Payment failed";
@@ -116,8 +128,9 @@ export function PlanPurchaseModal({
             currency: order.currency || "INR",
             name: "NyaySetu Pro",
             description: order.plan?.name || plan.name || "",
+            image: RAZORPAY_LOGO_URL,
             order_id: order.order_id,
-            theme: { color: "#C5A059" },
+            theme: { color: RAZORPAY_THEME_COLOR },
           });
           paymentId = payment.razorpay_payment_id;
           signature = payment.razorpay_signature;

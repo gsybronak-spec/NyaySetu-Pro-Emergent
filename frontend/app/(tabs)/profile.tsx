@@ -12,16 +12,28 @@ import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 
+import { getCachedWallet, setCachedPlans, setCachedWallet } from "@/src/constants/plans";
+import { preloadRazorpayScript } from "@/src/utils/razorpay";
+
 export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const [wallet, setWallet] = useState({ balance: 0, total_used: 0 });
+  const [wallet, setWallet] = useState(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 });
 
   useFocusEffect(useCallback(() => {
-    api.wallet().then(setWallet).catch(() => {});
-  }, []));
+    api.wallet().then((w) => {
+      if (w && typeof w === "object") {
+        setWallet(w);
+        setCachedWallet(w);
+      }
+    }).catch(() => {});
+    api.plans().then((p) => {
+      if (Array.isArray(p) && p.length > 0) setCachedPlans(p);
+    }).catch(() => {});
+    preloadRazorpayScript();
+  }, [user]));
 
   const logout = () => {
     if (Platform.OS === "web") {
