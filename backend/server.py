@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 
 import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response, Cookie
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -671,6 +672,7 @@ def _public_user(user: Optional[dict]) -> dict:
     if not user or not isinstance(user, dict):
         return {}
     u = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
+    u["id"] = str(user.get("id") or "")
     u["has_password"] = bool(user.get("password_hash"))
     
     # Profile completeness evaluation
@@ -804,6 +806,7 @@ async def apply_referral(referral_code: Optional[str], new_user: dict):
     referrer = _d[0].to_dict() if _d else None
     if not referrer:
         return
+    referrer["id"] = referrer.get("id") or _d[0].id
     # Prevent self-referral
     if referrer["id"] == new_user["id"]:
         return
@@ -973,6 +976,8 @@ async def verify_otp(req: VerifyOtpReq, request: Request = None, response: Respo
 
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
     user = _d[0].to_dict() if _d else None
+    if user:
+        user["id"] = user.get("id") or _d[0].id
     is_new = False
     if not user:
         is_new = True
@@ -1036,6 +1041,7 @@ async def register(req: RegisterReq, request: Request = None, response: Response
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", mobile)).limit(1).stream()]
     existing_user = _d[0].to_dict() if _d else None
     if existing_user:
+        existing_user["id"] = existing_user.get("id") or _d[0].id
         if existing_user.get("active") is False:
             raise HTTPException(403, "Account disabled. Contact support.")
         # Attach password if existing user was OTP-only and lacks a password_hash
@@ -1115,9 +1121,13 @@ async def login(req: LoginReq, request: Request = None, response: Response = Non
         if len(m) == 10:
             _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', m)).limit(1).stream()]
             user = _d[0].to_dict() if _d else None
+            if user:
+                user["id"] = user.get("id") or _d[0].id
     if not user and "@" in identifier:
         _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', identifier.strip().lower())).limit(1).stream()]
         user = _d[0].to_dict() if _d else None
+        if user:
+            user["id"] = user.get("id") or _d[0].id
 
     if not user or not user.get("password_hash") or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(401, "Invalid mobile/email or password.")
@@ -1154,6 +1164,7 @@ async def forgot_password(req: ForgotPasswordReq):
     if not existing:
         logger.info(f"[forgot-password] no account for {mobile} — no OTP sent")
         return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
+    existing["id"] = existing.get("id") or _d[0].id
     await _issue_otp(mobile, "reset")
     return {"success": True, "message": "If a matching account exists, an OTP has been sent."}
 
@@ -1191,6 +1202,7 @@ async def reset_password(req: ResetPasswordReq):
     user = _d[0].to_dict() if _d else None
     if not user:
         raise HTTPException(400, "No account found for this mobile number.")
+    user["id"] = user.get("id") or _d[0].id
     if user.get("active") is False:
         raise HTTPException(403, "Account disabled. Contact support.")
 
@@ -1253,6 +1265,7 @@ async def refresh_user_token(
     user = _snap.to_dict() if _snap.exists else None
     if not user:
         raise HTTPException(401, "User not found")
+    user["id"] = user.get("id") or session["user_id"]
     if user.get("active") is False:
         raise HTTPException(401, "Account disabled. Contact support.")
 
@@ -1340,6 +1353,8 @@ async def google_session(req: GoogleSessionReq):
 
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', email)).limit(1).stream()]
     user = _d[0].to_dict() if _d else None
+    if user:
+        user["id"] = user.get("id") or _d[0].id
     is_new = False
     if not user:
         is_new = True
@@ -1437,6 +1452,8 @@ async def google_code_exchange(req: GoogleCodeReq, request: Request = None, resp
 
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', email)).limit(1).stream()]
     user = _d[0].to_dict() if _d else None
+    if user:
+        user["id"] = user.get("id") or _d[0].id
     is_new = False
     if not user:
         is_new = True
@@ -1597,19 +1614,25 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
     info = await verify_firebase_id_token(req.id_token)
 
     # 1) Already linked to this Firebase UID
-    res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("firebase_uid", "==", info["uid"])).limit(1).stream()]
-    user = res[0] if res else None
+    _snaps = [d async for d in db.collection('users').where(filter=firestore.FieldFilter("firebase_uid", "==", info["uid"])).limit(1).stream()]
+    user = _snaps[0].to_dict() if _snaps else None
+    if user:
+        user["id"] = user.get("id") or _snaps[0].id
     # 2) Existing user with the verified email (only when Google verified it)
     if not user and info["email"] and info["email_verified"]:
-        res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("email", "==", info["email"])).limit(1).stream()]
-        user = res[0] if res else None
+        _snaps = [d async for d in db.collection('users').where(filter=firestore.FieldFilter("email", "==", info["email"])).limit(1).stream()]
+        user = _snaps[0].to_dict() if _snaps else None
+        if user:
+            user["id"] = user.get("id") or _snaps[0].id
     # 3) Existing user with the verified phone
     if not user and info["phone"]:
         clean_phone = info["phone"].replace(" ", "")
         if clean_phone.startswith("+91"):
             clean_phone = clean_phone[3:]
-        res = [d.to_dict() async for d in db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", clean_phone)).limit(1).stream()]
-        user = res[0] if res else None
+        _snaps = [d async for d in db.collection('users').where(filter=firestore.FieldFilter("mobile", "==", clean_phone)).limit(1).stream()]
+        user = _snaps[0].to_dict() if _snaps else None
+        if user:
+            user["id"] = user.get("id") or _snaps[0].id
 
     is_new = False
     if not user:
@@ -1683,6 +1706,7 @@ async def me(user=Depends(get_user)):
         pub["total_credits_used"] = 0
     return pub
 
+@api.post("/profile/update")
 @api.put("/profile/update")
 @api.patch("/profile/update")
 @api.patch("/profile")
@@ -3372,6 +3396,8 @@ async def _razorpay_create_order(
             auth=auth,
             json=payload,
         )
+    if r.status_code == 401:
+        raise HTTPException(401, "Razorpay authentication failed. Please check your API keys.")
     if r.status_code not in (200, 201):
         err_msg = "Payment provider error. Please try again."
         try:
@@ -3380,10 +3406,10 @@ async def _razorpay_create_order(
                 err_msg = err_data["error"]["description"]
         except Exception:
             pass
-        raise HTTPException(502, err_msg)
+        raise HTTPException(500, err_msg)
     data = r.json()
     if not data.get("id"):
-        raise HTTPException(502, "Payment provider returned an invalid order.")
+        raise HTTPException(500, "Payment provider returned an invalid order.")
     return data
 
 
@@ -7086,15 +7112,53 @@ _DEFAULT_CORS_ORIGINS = [
 ]
 _CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or _DEFAULT_CORS_ORIGINS
 
+_CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://([a-zA-Z0-9_-]+\.)*(nyaysetupro\.in|vercel\.app)$"
+
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
     allow_origins=_CORS_ORIGINS,
-    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
+    allow_origin_regex=_CORS_ORIGIN_REGEX,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _cors_headers_for_request(request: Request) -> dict:
+    """Ensure CORS headers are present on exception responses so browsers never mask
+    server errors or validation failures as network errors."""
+    origin = request.headers.get("origin") or ""
+    headers = {
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Allow-Methods": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+    return headers
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    headers = _cors_headers_for_request(request)
+    if exc.headers:
+        headers.update(exc.headers)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    headers = _cors_headers_for_request(request)
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+        headers=headers,
+    )
 
 
 @app.exception_handler(Exception)
@@ -7103,6 +7167,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=500,
         content={"detail": "Server encountered an unexpected error. Please retry shortly."},
+        headers=_cors_headers_for_request(request),
     )
 
 

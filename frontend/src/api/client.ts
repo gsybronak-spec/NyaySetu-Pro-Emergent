@@ -173,7 +173,7 @@ export function describeNetworkError(e: unknown): string {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return "You appear to be offline. Please check your internet connection and try again.";
   }
-  return "Unable to connect to the server. The service may be temporarily waking up. Please try again in a moment.";
+  return "Unable to connect to the server. Please check your internet connection or try again shortly.";
 }
 
 // Maps backend status codes to safe, readable user copy (used when the backend
