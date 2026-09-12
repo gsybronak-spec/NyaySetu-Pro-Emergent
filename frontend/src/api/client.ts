@@ -395,6 +395,8 @@ export const api = {
   forgotPassword: (mobile: string) => request("/auth/forgot-password", "POST", { mobile }),
   resetPassword: (mobile: string, otp: string, new_password: string) =>
     request("/auth/reset-password", "POST", { mobile, otp, new_password }),
+  resetPasswordWithFirebase: (id_token: string, new_password: string) =>
+    request("/auth/reset-password", "POST", { id_token, new_password }),
   setPassword: (new_password: string) => request("/auth/set-password", "POST", { new_password }),
   googleSession: (session_id: string, referral_code?: string) =>
     request("/auth/google-session", "POST", { session_id, referral_code }),

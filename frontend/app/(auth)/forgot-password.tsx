@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
@@ -8,12 +8,20 @@ import { router } from "expo-router";
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { api } from "@/src/api/client";
-import { firebaseConfigured, firebaseSendPasswordReset } from "@/src/hooks/useFirebaseAuth";
+import {
+  firebaseConfigured,
+  firebaseSendPasswordReset,
+  firebaseSendPhoneOtp,
+  firebaseConfirmPhoneOtp,
+  destroyFirebaseRecaptcha,
+  getPendingPhoneConfirmation,
+  isFirebaseConfigured,
+} from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function ForgotPassword() {
   const [mobile, setMobile] = useState("");
-  const [resetVia, setResetVia] = useState<"otp" | "firebase">("otp");
+  const [resetVia, setResetVia] = useState<"otp" | "firebase_email" | "firebase_phone">("otp");
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
   const [password, setPassword] = useState("");
@@ -24,22 +32,24 @@ export default function ForgotPassword() {
   const [err, setErr] = useState<string>();
   const [stepErr, setStepErr] = useState<string>();
 
+  // Invisible reCAPTCHA container for Web
+  const recaptchaAnchorRef = useRef<View | null>(null);
+
+  useEffect(() => () => destroyFirebaseRecaptcha(), []);
+
   const sendOtp = async () => {
     setErr(undefined);
     const m = mobile.trim();
-    // Firebase email reset for email input when Firebase is configured; the
-    // existing mobile-OTP reset stays for legacy accounts and mobile numbers.
+    // 1. Firebase email reset for email input when Firebase is configured
     if (m.includes("@") && firebaseConfigured) {
       setBusy(true);
       try {
         await firebaseSendPasswordReset(m);
-        setResetVia("firebase");
+        setResetVia("firebase_email");
         setDone(true);
       } catch (e: any) {
         const code = e?.code || "";
         if (code === "auth/user-not-found" || code === "auth/invalid-credential") {
-          // No Firebase account for this email — switch to the mobile-OTP
-          // path, which works for every existing NyaySetu account.
           setResetVia("otp");
           setErr("No password-reset email is available for this address. Enter your registered mobile number to reset via OTP.");
         } else {
@@ -50,17 +60,41 @@ export default function ForgotPassword() {
       }
       return;
     }
+
     if (!/^\d{10}$/.test(m)) {
       setErr("Enter a valid 10-digit mobile number");
       return;
     }
+
     setBusy(true);
     try {
+      if (isFirebaseConfigured()) {
+        if (Platform.OS === "web" && recaptchaAnchorRef.current) {
+          await firebaseSendPhoneOtp(m, recaptchaAnchorRef.current as any);
+        } else {
+          await firebaseSendPhoneOtp(m, null);
+        }
+        setResetVia("firebase_phone");
+        setOtpSent(true);
+        return;
+      }
+      // Non-Firebase development fallback ONLY (e.g. local dev mock)
       await api.forgotPassword(m);
       setResetVia("otp");
       setOtpSent(true);
     } catch (e: any) {
-      setErr(e?.message || "Could not send OTP. Please try again.");
+      const code = e?.code as string | undefined;
+      if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
+        setErr("SMS OTP is temporarily unavailable for this region. Please try again later or use email reset.");
+      } else if (code === "auth/too-many-requests") {
+        setErr("Too many OTP requests. Please wait a minute and try again.");
+      } else if (code === "auth/invalid-phone-number") {
+        setErr("Enter a valid 10-digit mobile number.");
+      } else if (code === "auth/quota-exceeded") {
+        setErr("SMS quota exceeded for today. Please use email reset or contact support.");
+      } else {
+        setErr(e?.message || "Could not send OTP. Please try again.");
+      }
     } finally {
       setBusy(false);
     }
@@ -82,6 +116,33 @@ export default function ForgotPassword() {
     }
     setBusy(true);
     try {
+      if (resetVia === "firebase_phone") {
+        const confirmation = getPendingPhoneConfirmation();
+        if (!confirmation) {
+          setStepErr("OTP session expired. Please go back and request a new OTP.");
+          return;
+        }
+        let idToken: string;
+        try {
+          idToken = await firebaseConfirmPhoneOtp(confirmation, otp.trim());
+        } catch (e: any) {
+          const code = e?.code || "";
+          if (code === "auth/invalid-verification-code") {
+            setStepErr("Invalid OTP. Please check the code and try again.");
+            return;
+          } else if (code === "auth/code-expired") {
+            setStepErr("OTP expired. Please go back and request a new OTP.");
+            return;
+          } else {
+            setStepErr(e?.message || "Failed to verify OTP. Please try again.");
+            return;
+          }
+        }
+        await api.resetPasswordWithFirebase(idToken, password);
+        setDone(true);
+        return;
+      }
+      // Non-Firebase development fallback
       await api.resetPassword(mobile.trim(), otp.trim(), password);
       setDone(true);
     } catch (e: any) {
@@ -116,7 +177,7 @@ export default function ForgotPassword() {
                 <Ionicons name="checkmark-circle" size={56} color="#4CAF50" style={{ alignSelf: "center", marginBottom: Spacing.md }} />
                 <Text style={styles.cardTitle}>Password Reset</Text>
                 <Text style={styles.cardSub}>
-                  {resetVia === "firebase"
+                  {resetVia === "firebase_email"
                     ? "If a matching account exists, a password reset email has been sent to your inbox."
                     : "Password reset successfully. Please login with your new password."}
                 </Text>
@@ -143,7 +204,10 @@ export default function ForgotPassword() {
                   onChangeText={setMobile}
                   error={err}
                 />
-                <Button testID="forgot-send-otp-button" title="Send Reset" loading={busy} onPress={sendOtp} />
+                <View style={{ position: "relative" }}>
+                  <Button testID="forgot-send-otp-button" title="Send Reset" loading={busy} onPress={sendOtp} />
+                  <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
+                </View>
               </>
             ) : (
               <>
@@ -225,4 +289,5 @@ const styles = StyleSheet.create({
   cardTitle: { color: "#FDFDFD", fontSize: 22, fontWeight: "700", marginBottom: 4 },
   cardSub: { color: "#A6B1C2", fontSize: 13, marginBottom: Spacing.lg, lineHeight: 19 },
   eyeBtn: { position: "absolute", right: 12, top: 42 },
+  recaptchaAnchor: { position: "absolute", opacity: 0, height: 0, width: 0 },
 });
