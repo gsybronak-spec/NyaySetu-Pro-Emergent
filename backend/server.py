@@ -173,7 +173,7 @@ SMS_PROVIDER = os.environ.get("SMS_PROVIDER", "console").strip().lower()
 # that forgets ENVIRONMENT=production cannot run the dev-OTP auth bypass.
 _DEV_OTP_ALLOWED = (not _PRODUCTION) and os.environ.get("RENDER", "").strip().lower() != "true"
 
-# Razorpay — production payment. When keys are absent the payment API fails safely
+# Razorpay — live production payment gateway integration. When keys are absent the payment API fails safely
 # (503 with an exact message); no default/invented credentials are ever used.
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "").strip()
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "").strip()
