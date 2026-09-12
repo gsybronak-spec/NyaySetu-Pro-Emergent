@@ -132,26 +132,30 @@ export default function Subscription() {
 
   const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
 
-  const load = useCallback(async () => {
-    try {
-      const [p, w] = await Promise.all([
-        api.plans().catch(() => getCachedPlans()),
-        api.wallet().catch(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }),
-      ]);
-      if (Array.isArray(p) && p.length > 0) {
-        setPlans(p);
-        setCachedPlans(p);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    (async () => {
+      try {
+        const [p, w] = await Promise.all([
+          api.plans().catch(() => getCachedPlans()),
+          api.wallet().catch(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }),
+        ]);
+        if (active && Array.isArray(p) && p.length > 0) {
+          setPlans(p);
+          setCachedPlans(p);
+        }
+        if (active && w && typeof w === "object") {
+          setWallet(w);
+          setCachedWallet(w);
+        }
+      } catch {
+        // Retain current plans and wallet gracefully
       }
-      if (w && typeof w === "object") {
-        setWallet(w);
-        setCachedWallet(w);
-      }
-    } catch {
-      // Retain current plans and wallet gracefully
-    }
-  }, [user]);
-
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user?.wallet_balance]));
 
   const buy = async (id: string) => {
     setBuying(id);

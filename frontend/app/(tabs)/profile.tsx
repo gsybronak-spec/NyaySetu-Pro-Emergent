@@ -23,17 +23,27 @@ export default function Profile() {
   const [wallet, setWallet] = useState(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 });
 
   useFocusEffect(useCallback(() => {
+    let active = true;
     api.wallet().then((w) => {
-      if (w && typeof w === "object") {
+      if (active && w && typeof w === "object") {
         setWallet(w);
         setCachedWallet(w);
       }
     }).catch(() => {});
     api.plans().then((p) => {
-      if (Array.isArray(p) && p.length > 0) setCachedPlans(p);
+      if (active && Array.isArray(p) && p.length > 0) {
+        setCachedPlans(p);
+      }
     }).catch(() => {});
-    preloadRazorpayScript();
-  }, [user]));
+    try {
+      preloadRazorpayScript();
+    } catch {
+      // Fire-and-forget non-blocking
+    }
+    return () => {
+      active = false;
+    };
+  }, []));
 
   const logout = () => {
     if (Platform.OS === "web") {

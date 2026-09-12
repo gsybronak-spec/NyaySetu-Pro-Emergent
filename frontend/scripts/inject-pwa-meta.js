@@ -40,8 +40,19 @@ const pwaAndFontTags = `
       body, input, textarea, select, button, div, span, p, a, h1, h2, h3, h4, h5, h6 {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Anek Gujarati", sans-serif;
       }
-      /* Razorpay Standard Checkout Viewport Centering */
+      /* Razorpay Standard Checkout — Safe Overlay Isolation & Centering */
       .razorpay-container {
+        pointer-events: none;
+      }
+      .razorpay-container[style*="display: none"],
+      .razorpay-container[style*="display:none"],
+      .razorpay-container:empty {
+        display: none !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
+      }
+      .razorpay-container:not([style*="display: none"]):not([style*="display:none"]) {
+        pointer-events: auto !important;
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
@@ -50,13 +61,7 @@ const pwaAndFontTags = `
         width: 100vw !important;
         height: 100vh !important;
         height: 100dvh !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
         z-index: 2147483647 !important;
-      }
-      .razorpay-container > iframe {
-        margin: auto !important;
       }
     </style>
 
