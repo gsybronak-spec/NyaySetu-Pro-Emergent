@@ -20,6 +20,7 @@ from typing import List, Optional, Union
 
 import httpx
 from fastapi import FastAPI, APIRouter, HTTPException, Header, Depends, Request, Response, Cookie
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel, Field
@@ -664,9 +665,11 @@ def is_unlimited_user(user: Optional[dict]) -> bool:
     return False
 
 
-def _public_user(user: dict) -> dict:
+def _public_user(user: Optional[dict]) -> dict:
     """User object safe for clients: strips the password hash and flags whether a
     password is set (so the UI can offer Set Password for legacy OTP-only users)."""
+    if not user or not isinstance(user, dict):
+        return {}
     u = {k: v for k, v in user.items() if k not in ("_id", "password_hash")}
     u["has_password"] = bool(user.get("password_hash"))
     
@@ -1759,10 +1762,9 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
 
     if updates:
         await db.collection('users').document(user["id"]).set(updates, merge=True)
+        user.update(updates)
         invalidate_user_session_cache(user["id"])
-    _snap = await db.collection('users').document(user["id"]).get()
-    u = _snap.to_dict() if _snap.exists else None
-    return _public_user(u)
+    return _public_user(user)
 
 
 @api.get("/clients/lookup")
@@ -7084,6 +7086,7 @@ _DEFAULT_CORS_ORIGINS = [
 ]
 _CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()] or _DEFAULT_CORS_ORIGINS
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -7092,7 +7095,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.error(f"[Unhandled Exception] {request.method} {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Server encountered an unexpected error. Please retry shortly."},
+    )
 
 
 async def _existing_index_map(collection):

@@ -113,9 +113,27 @@ export async function performSilentRefresh(): Promise<string> {
       signal: controller.signal,
     });
   } catch (e) {
-    // Network error or timeout — DO NOT purge credentials.
-    console.warn("[api] silent refresh network error (preserving session)", e);
-    throw new Error(describeNetworkError(e));
+    // Attempt 1 retry for cold starts / transient blips
+    try {
+      await new Promise((r) => setTimeout(r, 1000));
+      const retryController = new AbortController();
+      const retryTimer = setTimeout(() => retryController.abort(), REQUEST_TIMEOUT_MS);
+      try {
+        res = await fetch(`${BASE}/api/auth/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          credentials: "include",
+          signal: retryController.signal,
+        });
+      } finally {
+        clearTimeout(retryTimer);
+      }
+    } catch (retryErr) {
+      // Network error or timeout — DO NOT purge credentials.
+      console.warn("[api] silent refresh network error (preserving session)", retryErr);
+      throw new Error(describeNetworkError(retryErr));
+    }
   } finally {
     clearTimeout(timer);
   }
@@ -155,7 +173,7 @@ export function describeNetworkError(e: unknown): string {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return "You appear to be offline. Please check your internet connection and try again.";
   }
-  return "Unable to connect to the server. Please check your internet connection or try again shortly.";
+  return "Unable to connect to the server. The service may be temporarily waking up. Please try again in a moment.";
 }
 
 // Maps backend status codes to safe, readable user copy (used when the backend
@@ -250,6 +268,12 @@ async function rawRequest(path: string, method = "GET", body?: any, timeoutMs: n
     });
   } catch (e) {
     console.warn("[api] fetch failed", path, e);
+    // 1-time automatic retry for transient network / cold-start hiccups
+    if (!isRetry) {
+      console.info("[api] Retrying failed request once...", path);
+      await new Promise((r) => setTimeout(r, 1000));
+      return rawRequest(path, method, body, timeoutMs, true);
+    }
     throw new Error(describeNetworkError(e));
   } finally {
     clearTimeout(timer);
