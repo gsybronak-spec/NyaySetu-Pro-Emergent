@@ -26,6 +26,10 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 import jwt
 import bcrypt
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
 from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from cryptography.x509 import load_pem_x509_certificate
 
@@ -51,6 +55,7 @@ from doc_generator import (
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
+load_dotenv(ROOT_DIR / ".env.local")
 
 # Production detection — set ENVIRONMENT=production explicitly when the deployment
 # is declared production. RENDER=true alone does NOT trigger strict mode: the
@@ -445,6 +450,22 @@ class RazorpayVerifyReq(BaseModel):
     payment_id: str = Field(..., max_length=100)
     signature: str = Field(..., max_length=256)
 
+class CreateOrderReq(BaseModel):
+    amount: int = Field(..., description="Amount in paise (minimum 100)")
+    currency: Optional[str] = Field("INR", max_length=10)
+    receipt: Optional[str] = Field(None, max_length=100)
+    notes: Optional[dict] = None
+    plan_id: Optional[str] = Field(None, max_length=50)
+
+class VerifyPaymentReq(BaseModel):
+    order_id: Optional[str] = Field(None, max_length=100)
+    payment_id: Optional[str] = Field(None, max_length=100)
+    signature: Optional[str] = Field(None, max_length=256)
+    razorpay_order_id: Optional[str] = Field(None, max_length=100)
+    razorpay_payment_id: Optional[str] = Field(None, max_length=100)
+    razorpay_signature: Optional[str] = Field(None, max_length=256)
+    plan_id: Optional[str] = Field(None, max_length=50)
+
 class DraftSave(BaseModel):
     template_id: str = Field(..., max_length=50)
     template_version: Optional[int] = None
@@ -571,6 +592,16 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     return user
 
 
+async def get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Optional user dependency — returns None if authorization header is absent or invalid."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        return await get_user(authorization)
+    except HTTPException:
+        return None
+
+
 def hash_password(password: str) -> str:
     """bcrypt-hash a plaintext password. Never stored or logged in plaintext."""
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
@@ -601,7 +632,12 @@ def normalize_email(email: Optional[str]) -> str:
 
 
 OWNER_PHONES = {"7990894898", "9157094532"}
-OWNER_EMAILS = {"rehansolanki956@gmail.com", "gsybronak@gmail.com", "jdjadav24@gmail.com"}
+OWNER_EMAILS = {
+    "rehansolanki956@gmail.com",
+    "gsybronak@gmail.com",
+    "jdjadav2411@gmail.com",
+    "jdjadav24@gmail.com",
+}
 
 
 def is_owner_user(user: Optional[dict]) -> bool:
@@ -3315,17 +3351,34 @@ def _razorpay_enabled() -> bool:
     return bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 
 
-async def _razorpay_create_order(amount_paise: int, receipt: str) -> dict:
+async def _razorpay_create_order(
+    amount_paise: int,
+    receipt: str,
+    currency: str = "INR",
+    notes: Optional[dict] = None,
+) -> dict:
     """Create a Razorpay order. Network call isolated here so tests can stub it."""
+    if amount_paise < 100:
+        raise HTTPException(400, "Amount must be at least 100 paise (1 INR).")
     auth = (RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)
+    payload = {"amount": amount_paise, "currency": currency, "receipt": receipt}
+    if notes:
+        payload["notes"] = notes
     async with httpx.AsyncClient(timeout=15) as http:
         r = await http.post(
             f"{RAZORPAY_API_BASE}/v1/orders",
             auth=auth,
-            json={"amount": amount_paise, "currency": "INR", "receipt": receipt},
+            json=payload,
         )
-    if r.status_code != 200:
-        raise HTTPException(502, "Payment provider error. Please try again.")
+    if r.status_code not in (200, 201):
+        err_msg = "Payment provider error. Please try again."
+        try:
+            err_data = r.json()
+            if "error" in err_data and "description" in err_data["error"]:
+                err_msg = err_data["error"]["description"]
+        except Exception:
+            pass
+        raise HTTPException(502, err_msg)
     data = r.json()
     if not data.get("id"):
         raise HTTPException(502, "Payment provider returned an invalid order.")
@@ -3334,9 +3387,55 @@ async def _razorpay_create_order(amount_paise: int, receipt: str) -> dict:
 
 def _razorpay_verify_signature(order_id: str, payment_id: str, signature: str) -> bool:
     """HMAC-SHA256 over '{order_id}|{payment_id}' using the Razorpay key secret."""
-    payload = f"{order_id}|{payment_id}".encode()
-    expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), payload, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, signature)
+    try:
+        payload = f"{order_id}|{payment_id}".encode()
+        expected = hmac.new(RAZORPAY_KEY_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
+    except Exception:
+        return False
+
+
+@api.post("/create-order")
+async def create_order_endpoint(req: CreateOrderReq, user: Optional[dict] = Depends(get_optional_user)):
+    """Standard Razorpay order creation endpoint.
+    
+    Validates amount >= 100 paise.
+    Calls POST https://api.razorpay.com/v1/orders.
+    Returns: { order_id, amount, currency, key_id }.
+    """
+    if not _razorpay_enabled():
+        raise HTTPException(
+            503,
+            "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
+            "in the environment.",
+        )
+    if req.amount < 100:
+        raise HTTPException(400, "Amount must be at least 100 paise (1 INR).")
+
+    receipt = req.receipt or f"nsp_{uuid.uuid4().hex[:16]}"
+    currency = (req.currency or "INR").upper()
+    rz = await _razorpay_create_order(req.amount, receipt, currency=currency, notes=req.notes)
+
+    if db is not None:
+        order_doc = {
+            "id": rz["id"],
+            "receipt": receipt,
+            "user_id": user["id"] if user else None,
+            "plan_id": req.plan_id,
+            "amount": rz.get("amount", req.amount),
+            "amount_paise": rz.get("amount", req.amount),
+            "currency": currency,
+            "status": "created",
+            "created_at": now().isoformat(),
+        }
+        await db.collection("payment_orders").document(rz["id"]).set(order_doc)
+
+    return {
+        "order_id": rz["id"],
+        "amount": rz.get("amount", req.amount),
+        "currency": currency,
+        "key_id": RAZORPAY_KEY_ID,
+    }
 
 
 @api.post("/payments/razorpay/create-order")
@@ -3469,6 +3568,116 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
     w = _snap[0].to_dict() if _snap else None
     return {"success": True, "already_processed": False, "transaction_id": txn_id,
             "balance": w.get("balance", 0)}
+
+
+@api.post("/verify-payment")
+async def verify_payment_endpoint(req: VerifyPaymentReq, user: Optional[dict] = Depends(get_optional_user)):
+    """Standard Razorpay payment verification endpoint.
+    
+    Verifies HMAC-SHA256 signature generated over '{order_id}|{payment_id}'
+    using RAZORPAY_KEY_SECRET.
+    Returns 200 on success, 400 on signature mismatch or missing params.
+    """
+    if not _razorpay_enabled():
+        raise HTTPException(
+            503,
+            "Payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET "
+            "in the environment.",
+        )
+    
+    order_id = req.razorpay_order_id or req.order_id
+    payment_id = req.razorpay_payment_id or req.payment_id
+    signature = req.razorpay_signature or req.signature
+
+    if not order_id or not payment_id or not signature:
+        raise HTTPException(
+            400,
+            "Missing required parameters: order_id, payment_id, and signature are required.",
+        )
+
+    # HMAC-SHA256 verification
+    if not _razorpay_verify_signature(order_id, payment_id, signature):
+        raise HTTPException(400, "Payment signature verification failed")
+
+    order = None
+    existing = None
+    if db is not None:
+        # Fetch order record
+        _snap = await db.collection("payment_orders").document(order_id).get()
+        order = _snap.to_dict() if _snap.exists else None
+
+        # Idempotency check: see if payment_id was already processed
+        async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", payment_id)).limit(1).stream():
+            existing = _d.to_dict()
+            break
+
+        # Mark payment order as paid
+        await db.collection("payment_orders").document(order_id).set({
+            "status": "paid",
+            "razorpay_payment_id": payment_id,
+            "updated_at": now().isoformat(),
+        }, merge=True)
+
+    current_user_id = user["id"] if user else (order.get("user_id") if order else None)
+    plan_id = req.plan_id or (order.get("plan_id") if order else None)
+    balance = None
+
+    if current_user_id and db is not None:
+        if existing:
+            _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
+            w = _snap_w[0].to_dict() if _snap_w else None
+            balance = (w or {}).get("balance", 0)
+        elif plan_id:
+            plan = await _get_plan(plan_id)
+            if plan and plan.get("active") is not False:
+                wallet_doc = None
+                async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).stream():
+                    wallet_doc = _d
+                    break
+                if wallet_doc:
+                    await wallet_doc.reference.update({
+                        "balance": firestore.Increment(plan["credits"]),
+                        "updated_at": now().isoformat()
+                    })
+                else:
+                    await db.collection("wallets").document(str(uuid.uuid4())).set({
+                        "user_id": current_user_id,
+                        "balance": plan["credits"],
+                        "total_used": 0,
+                        "updated_at": now().isoformat()
+                    })
+                txn_id = str(uuid.uuid4())
+                try:
+                    await db.collection("transactions").document(txn_id).set({
+                        "id": txn_id,
+                        "user_id": current_user_id,
+                        "plan_id": plan["id"],
+                        "plan_name": plan["name"],
+                        "amount": plan["price"],
+                        "credits": plan["credits"],
+                        "status": "success",
+                        "provider": "razorpay",
+                        "razorpay_order_id": order_id,
+                        "razorpay_payment_id": payment_id,
+                        "created_at": now().isoformat(),
+                    })
+                except Exception:
+                    pass
+                _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
+                w = _snap_w[0].to_dict() if _snap_w else None
+                balance = (w or {}).get("balance", 0)
+        else:
+            _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
+            w = _snap_w[0].to_dict() if _snap_w else None
+            balance = (w or {}).get("balance", 0) if w else None
+
+    return {
+        "success": True,
+        "message": "Payment verified successfully",
+        "order_id": order_id,
+        "payment_id": payment_id,
+        "balance": balance,
+    }
 
 
 @api.post("/payments/razorpay/webhook")
@@ -6851,6 +7060,14 @@ async def seed_super_admin():
 
 app.include_router(api)
 app.include_router(admin_api)
+
+@app.post("/create-order")
+async def root_create_order(req: CreateOrderReq, user: Optional[dict] = Depends(get_optional_user)):
+    return await create_order_endpoint(req, user)
+
+@app.post("/verify-payment")
+async def root_verify_payment(req: VerifyPaymentReq, user: Optional[dict] = Depends(get_optional_user)):
+    return await verify_payment_endpoint(req, user)
 # CORS — explicit allowlist, never '*' in production. Env CORS_ORIGINS (comma-
 # separated) overrides the defaults; localhost origins stay available for dev via
 # a regex so local preview servers on any port keep working.

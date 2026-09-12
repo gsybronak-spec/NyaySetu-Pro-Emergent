@@ -35,7 +35,7 @@ function loadRazorpayScript(src: string): Promise<void> {
   });
 }
 
-async function buyWithRazorpay(planId: string): Promise<{ balance: number; total_used: number }> {
+async function buyWithRazorpay(planId: string, user?: any): Promise<{ balance: number; total_used: number }> {
   const order = await api.razorpayCreateOrder(planId);
   let paymentId = "";
   let signature = "";
@@ -49,14 +49,26 @@ async function buyWithRazorpay(planId: string): Promise<{ balance: number; total
         return;
       }
       const rz = new Razorpay({
-        key: order.key_id,
+        key: order.key_id || process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
         amount: order.amount_paise,
-        currency: order.currency,
+        currency: order.currency || "INR",
         order_id: order.order_id,
         name: "NyaySetu Pro",
-        description: order.plan?.name || "",
+        description: order.plan?.name || "Legal Draft Credits",
+        prefill: {
+          name: user?.name_en || user?.name_gu || "",
+          email: user?.email || "",
+          contact: user?.mobile || "",
+        },
+        theme: { color: "#C5A059" },
         handler: (response: any) => resolve(response),
-        modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+        modal: {
+          ondismiss: () => reject(new Error("Payment cancelled")),
+        },
+      });
+      rz.on("payment.failed", (response: any) => {
+        const reason = response?.error?.description || response?.error?.reason || "Payment failed";
+        reject(new Error(reason));
       });
       rz.open();
     });
@@ -65,12 +77,17 @@ async function buyWithRazorpay(planId: string): Promise<{ balance: number; total
   } else {
     const RazorpayCheckout = require('react-native-razorpay').default;
     const payment = await RazorpayCheckout.open({
-      key: order.key_id,
+      key: order.key_id || process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
       amount: order.amount_paise,
-      currency: order.currency,
+      currency: order.currency || "INR",
       name: "NyaySetu Pro",
-      description: order.plan?.name || "",
+      description: order.plan?.name || "Legal Draft Credits",
       order_id: order.order_id,
+      prefill: {
+        name: user?.name_en || user?.name_gu || "",
+        email: user?.email || "",
+        contact: user?.mobile || "",
+      },
       theme: { color: "#C5A059" }
     });
     paymentId = payment.razorpay_payment_id;
@@ -115,7 +132,7 @@ export default function Subscription() {
   const buy = async (id: string) => {
     setBuying(id);
     try {
-      const res = RAZORPAY_ENABLED ? await buyWithRazorpay(id) : await api.purchase(id);
+      const res = RAZORPAY_ENABLED ? await buyWithRazorpay(id, user) : await api.purchase(id);
       setWallet({ balance: res.balance, total_used: wallet.total_used });
       if (typeof window !== "undefined") {
         window.alert(`Payment Successful — Credits added to your wallet. New balance: ${res.balance} templates.`);

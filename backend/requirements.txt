@@ -20,3 +20,4 @@ pypdfium2==5.13.0
 Pillow>=10.0.0
 pytest==9.1.1
 pytest-xdist==3.8.0
+razorpay>=2.0.0

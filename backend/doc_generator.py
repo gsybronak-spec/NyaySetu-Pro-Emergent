@@ -754,9 +754,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
     register_fonts()
     buf = io.BytesIO()
     s = get_doc_settings(settings)
+    pagesize = _resolve_pagesize(s.get("page_size"))
     doc = SimpleDocTemplate(
         buf,
-        pagesize=_resolve_pagesize(s.get("page_size")),
+        pagesize=pagesize,
         topMargin=s["margin_top_cm"] * 28.35,
         bottomMargin=s["margin_bottom_cm"] * 28.35,
         leftMargin=s["margin_left_cm"] * 28.35,

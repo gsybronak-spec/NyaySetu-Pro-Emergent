@@ -90,14 +90,19 @@ export function PlanPurchaseModal({
               return;
             }
             const rz = new Razorpay({
-              key: order.key_id,
+              key: order.key_id || process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
               amount: order.amount_paise,
-              currency: order.currency,
+              currency: order.currency || "INR",
               order_id: order.order_id,
               name: "NyaySetu Pro",
               description: order.plan?.name || plan.name || "",
+              theme: { color: "#C5A059" },
               handler: (response: any) => resolve(response),
               modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+            });
+            rz.on("payment.failed", (response: any) => {
+              const reason = response?.error?.description || response?.error?.reason || "Payment failed";
+              reject(new Error(reason));
             });
             rz.open();
           });
@@ -106,9 +111,9 @@ export function PlanPurchaseModal({
         } else {
           const RazorpayCheckout = require("react-native-razorpay").default;
           const payment = await RazorpayCheckout.open({
-            key: order.key_id,
+            key: order.key_id || process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID,
             amount: order.amount_paise,
-            currency: order.currency,
+            currency: order.currency || "INR",
             name: "NyaySetu Pro",
             description: order.plan?.name || plan.name || "",
             order_id: order.order_id,

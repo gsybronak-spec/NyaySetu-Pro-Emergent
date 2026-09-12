@@ -18,9 +18,13 @@ export default function Root({ children }: PropsWithChildren) {
           content="NyaySetu Pro — The New Era of Advocacy. High-speed legal drafting and court case management platform for advocates in Gujarat and India."
         />
 
-        {/* DNS Preconnect for Google Fonts */}
+        {/* DNS Preconnect for Google Fonts & Razorpay */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link rel="preconnect" href="https://checkout.razorpay.com" />
+
+        {/* Razorpay Standard Checkout */}
+        <script src="https://checkout.razorpay.com/v1/checkout.js" async />
 
         {/* High-priority Preload for LCP Brand Logo */}
         <link rel="preload" as="image" href="/logo.webp" type="image/webp" fetchpriority="high" />
