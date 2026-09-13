@@ -397,7 +397,7 @@ export default function Home() {
           <View style={{ flexDirection: "row", gap: Spacing.md }}>
             {[
               { key: "Civil", icon: "business", color: "#C5A059" },
-              { key: "Criminal", icon: "shield", color: "#7A1C1C" },
+              { key: "Criminal", icon: "shield", color: "#C5A059" },
             ].map((c) => (
               <Pressable
                 key={c.key}
