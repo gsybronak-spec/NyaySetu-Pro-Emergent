@@ -392,7 +392,12 @@ export const api = {
     request("/auth/register", "POST", data),
   login: (identifier: string, password: string, referral_code?: string) =>
     request("/auth/login", "POST", { identifier, password, referral_code }),
-  forgotPassword: (mobile: string) => request("/auth/forgot-password", "POST", { mobile }),
+  forgotPassword: (identifier: string) =>
+    request("/auth/forgot-password", "POST", identifier.includes("@") ? { email: identifier.trim() } : { mobile: identifier.trim() }),
+  forgotPasswordEmail: (email: string) =>
+    request("/auth/forgot-password", "POST", { email: email.trim() }),
+  forgotPasswordMobile: (mobile: string) =>
+    request("/auth/forgot-password", "POST", { mobile: mobile.trim() }),
   resetPassword: (mobile: string, otp: string, new_password: string) =>
     request("/auth/reset-password", "POST", { mobile, otp, new_password }),
   resetPasswordWithFirebase: (id_token: string, new_password: string) =>

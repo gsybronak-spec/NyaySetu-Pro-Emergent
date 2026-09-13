@@ -3,10 +3,12 @@ import {
   ConfirmationResult,
   RecaptchaVerifier,
   User,
+  confirmPasswordReset,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPhoneNumber,
   signOut as fbSignOut,
+  verifyPasswordResetCode,
 } from 'firebase/auth';
 
 import { firebaseConfigured, getFirebaseAuth } from '@/src/firebase/config';
@@ -139,6 +141,28 @@ export async function firebaseSendPasswordReset(email: string): Promise<boolean>
     if (!nativeAuth) return false;
     await nativeAuth().sendPasswordResetEmail(email.trim());
     return true;
+  }
+}
+
+export async function firebaseVerifyPasswordResetCode(code: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    const auth = getFirebaseAuth();
+    if (!auth) return null;
+    return await verifyPasswordResetCode(auth, code);
+  } else {
+    if (!nativeAuth) return null;
+    return await nativeAuth().verifyPasswordResetCode(code);
+  }
+}
+
+export async function firebaseConfirmPasswordReset(code: string, newPassword: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    const auth = getFirebaseAuth();
+    if (!auth) throw new Error('Firebase Auth not available');
+    await confirmPasswordReset(auth, code, newPassword);
+  } else {
+    if (!nativeAuth) throw new Error('Firebase Auth not available');
+    await nativeAuth().confirmPasswordReset(code, newPassword);
   }
 }
 

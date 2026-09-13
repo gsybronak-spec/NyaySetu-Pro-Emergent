@@ -352,3 +352,70 @@ async def test_case_7_session_and_token_invalidation():
     with pytest.raises(HTTPException) as exc_info:
         await server.get_user(authorization=f"Bearer {old_jwt}")
     assert exc_info.value.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_case_8_email_forgot_password_and_generic_response():
+    """Requirement A: Registered and unknown emails receive generic success (no enumeration)."""
+    email = "lawyer@nyaysetu.in"
+    user_id = str(uuid.uuid4())
+    await server.db.collection("users").document(user_id).set({
+        "id": user_id,
+        "email": email,
+        "password_hash": server.hash_password("OldPass123!"),
+        "token_version": 1,
+        "active": True
+    })
+
+    res_reg = await server.forgot_password(server.ForgotPasswordReq(email=email))
+    assert res_reg["success"] is True
+    assert "password reset email has been sent" in res_reg["message"]
+
+    res_unreg = await server.forgot_password(server.ForgotPasswordReq(email="unknown@nyaysetu.in"))
+    assert res_unreg["success"] is True
+    assert res_unreg["message"] == res_reg["message"]
+
+
+@pytest.mark.asyncio
+async def test_case_9_email_password_reset_sync_and_invalidation():
+    """Requirement E: Email reset updates bcrypt hash, invalidates old password and sessions."""
+    email = "advocate.synced@nyaysetu.in"
+    user_id = str(uuid.uuid4())
+    fb_uid = "fb-advocate-sync-uid"
+    await server.db.collection("users").document(user_id).set({
+        "id": user_id,
+        "email": email,
+        "firebase_uid": fb_uid,
+        "password_hash": server.hash_password("OldLawyerPass123!"),
+        "token_version": 2,
+        "active": True
+    })
+
+    old_jwt = server.make_token(user_id, token_version=2)
+
+    # Perform email reset with verified email token
+    token = _make_firebase_token(uid=fb_uid, email=email, phone=None)
+    req = server.ResetPasswordReq(id_token=token, new_password="NewLawyerPass456!")
+    res = await server.reset_password(req)
+    assert res["success"] is True
+
+    # Check token_version was incremented
+    snap = await server.db.collection("users").document(user_id).get()
+    updated = snap.to_dict()
+    assert updated["token_version"] == 3
+    assert server.verify_password("NewLawyerPass456!", updated["password_hash"])
+
+    # Login with new password succeeds
+    login_res = await server.login(server.LoginReq(identifier=email, password="NewLawyerPass456!"))
+    assert "token" in login_res
+
+    # Login with old password fails
+    with pytest.raises(HTTPException) as exc_info:
+        await server.login(server.LoginReq(identifier=email, password="OldLawyerPass123!"))
+    assert exc_info.value.status_code == 401
+
+    # Old JWT session fails
+    with pytest.raises(HTTPException) as exc_jwt:
+        await server.get_user(authorization=f"Bearer {old_jwt}")
+    assert exc_jwt.value.status_code in (401, 403)
+

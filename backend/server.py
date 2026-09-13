@@ -353,13 +353,15 @@ class LoginReq(BaseModel):
     referral_code: Optional[str] = Field(None, max_length=20)
 
 class ForgotPasswordReq(BaseModel):
-    mobile: str = Field(..., max_length=15)
+    mobile: Optional[str] = Field(None, max_length=15)
+    email: Optional[str] = Field(None, max_length=128)
 
 class ResetPasswordReq(BaseModel):
     mobile: Optional[str] = Field(None, max_length=15)
     otp: Optional[str] = Field(None, max_length=10)
     new_password: str = Field(..., min_length=8, max_length=128)
     id_token: Optional[str] = Field(None, max_length=8192)
+    email: Optional[str] = Field(None, max_length=128)
 
 class SetPasswordReq(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
@@ -1156,9 +1158,23 @@ async def login(req: LoginReq, request: Request = None, response: Response = Non
 
 @api.post("/auth/forgot-password")
 async def forgot_password(req: ForgotPasswordReq):
-    """Send a password-reset OTP to the registered mobile. Returns the same message
-    whether or not the account exists (no user enumeration); no OTP is sent for
-    unknown numbers and nothing else happens."""
+    """Send a password-reset notification to registered mobile or email. Returns generic
+    message whether or not the account exists (no user enumeration)."""
+    if req.email:
+        clean_email = normalize_email(req.email)
+        if not clean_email or "@" not in clean_email:
+            raise HTTPException(400, "Please enter a valid email address.")
+        if not rate_limit(f"forgot_email:{clean_email}", 5, 60):
+            raise HTTPException(429, "Too many reset attempts. Please wait before trying again.")
+        _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', clean_email)).limit(1).stream()]
+        existing = _d[0].to_dict() if _d else None
+        if not existing:
+            logger.info(f"[forgot-password] no account for {clean_email} — no reset sent")
+        return {"success": True, "message": "If a matching account exists, a password reset email has been sent."}
+
+    if not req.mobile:
+        raise HTTPException(400, "Please provide a mobile number or email address.")
+
     mobile = req.mobile.strip()
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', mobile)).limit(1).stream()]
     existing = _d[0].to_dict() if _d else None
@@ -1178,18 +1194,19 @@ async def reset_password(req: ResetPasswordReq):
     previously issued JWTs are revoked.
 
     Supports two verification modes:
-    1. Authoritative Firebase Phone Auth (id_token): Cryptographically verified
-       Firebase ID token from phone OTP verification. Strictly checks account identity,
-       distinguishes linked vs unlinked phone numbers to prevent account hijacking,
-       updates authoritative bcrypt hash in Firestore, increments token_version to
-       revoke all active sessions, and safely synchronizes Firebase Auth password if applicable.
+    1. Authoritative Firebase Auth (id_token): Cryptographically verified
+       Firebase ID token from phone OTP or email password reset verification.
+       Strictly checks account identity, distinguishes linked vs unlinked phone
+       numbers to prevent account hijacking, updates authoritative bcrypt hash
+       in Firestore, increments token_version to revoke all active sessions,
+       and safely synchronizes Firebase Auth password if applicable.
     2. Legacy/Dev mock OTP (mobile + otp): Maintained for local test suites / dev mode.
     """
     if len(req.new_password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters.")
 
     # -------------------------------------------------------------
-    # 1. Authoritative Firebase Phone Auth Recovery
+    # 1. Authoritative Firebase Auth Recovery (Phone or Email)
     # -------------------------------------------------------------
     if req.id_token:
         # Rate limit by token hash
@@ -1199,94 +1216,144 @@ async def reset_password(req: ResetPasswordReq):
 
         info = await verify_firebase_id_token(req.id_token)
         phone = info.get("phone")
-        if not phone:
-            raise HTTPException(400, "Firebase token does not contain a verified phone number.")
+        email = info.get("email")
 
-        clean_phone = phone.replace(" ", "")
-        if clean_phone.startswith("+91"):
-            clean_phone = clean_phone[3:]
+        # --- A) Phone OTP Recovery ---
+        if phone:
+            clean_phone = phone.replace(" ", "")
+            if clean_phone.startswith("+91"):
+                clean_phone = clean_phone[3:]
 
-        if len(clean_phone) != 10 or not clean_phone.isdigit():
-            raise HTTPException(400, "Invalid phone number format in verified token.")
+            if len(clean_phone) != 10 or not clean_phone.isdigit():
+                raise HTTPException(400, "Invalid phone number format in verified token.")
 
-        if not rate_limit(f"otp_verify:{clean_phone}", 10, 60):
-            raise HTTPException(429, "Too many attempts. Please try again later.")
+            if not rate_limit(f"otp_verify:{clean_phone}", 10, 60):
+                raise HTTPException(429, "Too many attempts. Please try again later.")
 
-        # Query existing user in Firestore
-        _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_phone)).limit(1).stream()]
-        user = _d[0].to_dict() if _d else None
-        if not user:
-            # Requirement 3 & 5.3: Unknown mobile MUST NOT create an account
-            raise HTTPException(404, "No NyaySetu Pro account found registered with this mobile number.")
+            # Query existing user in Firestore
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('mobile', '==', clean_phone)).limit(1).stream()]
+            user = _d[0].to_dict() if _d else None
+            if not user:
+                # Requirement 3 & 5.3: Unknown mobile MUST NOT create an account
+                raise HTTPException(404, "No NyaySetu Pro account found registered with this mobile number.")
 
-        user["id"] = user.get("id") or _d[0].id
-        if user.get("active") is False:
-            raise HTTPException(403, "Account disabled. Contact support.")
+            user["id"] = user.get("id") or _d[0].id
+            if user.get("active") is False:
+                raise HTTPException(403, "Account disabled. Contact support.")
 
-        existing_fb_uid = user.get("firebase_uid")
-        token_uid = info.get("uid")
+            existing_fb_uid = user.get("firebase_uid")
+            token_uid = info.get("uid")
 
-        # Identity Verification:
-        # Category A: user.firebase_uid == token_uid -> Verified Phone Owner.
-        # Category C: user.firebase_uid is None -> Legacy mobile account, safely link.
-        # Category B: user.firebase_uid != token_uid (e.g. Google user) -> Verify if phone is linked in Firebase Auth!
-        if existing_fb_uid and existing_fb_uid != token_uid:
-            phone_is_linked = False
-            try:
-                from firebase_admin import auth as fb_admin_auth
-                fb_user_record = fb_admin_auth.get_user(existing_fb_uid)
-                if fb_user_record.phone_number:
-                    rec_phone = fb_user_record.phone_number.replace(" ", "")
-                    if rec_phone.startswith("+91"):
-                        rec_phone = rec_phone[3:]
-                    if rec_phone == clean_phone:
-                        phone_is_linked = True
-            except Exception as e:
-                logger.warning(f"[reset-password] could not inspect Firebase Auth record for {existing_fb_uid}: {e}")
-
-            if not phone_is_linked:
-                # Requirement 1B & 4: Unlinked Firestore profile phone must NOT hijack Google/Firebase accounts!
-                raise HTTPException(
-                    403,
-                    "This account is registered via Google or Email sign-in. To reset your password, please use your registered email address."
-                )
-
-        # Update authoritative bcrypt password and increment token_version
-        new_hash = hash_password(req.new_password)
-        new_token_version = int(user.get("token_version", 0)) + 1
-        user_updates = {
-            "password_hash": new_hash,
-            "token_version": new_token_version,
-        }
-        # If legacy user had no firebase_uid, safely link to verified token_uid
-        if not existing_fb_uid and token_uid:
-            user_updates["firebase_uid"] = token_uid
-
-        # Atomic Firestore update
-        await db.collection('users').document(user["id"]).set(user_updates, merge=True)
-
-        # Safely synchronize Firebase Auth password if user has an email or existing Firebase user
-        target_fb_uid = existing_fb_uid or token_uid
-        if target_fb_uid:
-            try:
-                from firebase_admin import auth as fb_admin_auth
-                fb_record = None
+            # Identity Verification:
+            # Category A: user.firebase_uid == token_uid -> Verified Phone Owner.
+            # Category C: user.firebase_uid is None -> Legacy mobile account, safely link.
+            # Category B: user.firebase_uid != token_uid (e.g. Google user) -> Verify if phone is linked in Firebase Auth!
+            if existing_fb_uid and existing_fb_uid != token_uid:
+                phone_is_linked = False
                 try:
-                    fb_record = fb_admin_auth.get_user(target_fb_uid)
-                except Exception:
-                    pass
-                if fb_record and fb_record.email:
-                    fb_admin_auth.update_user(target_fb_uid, password=req.new_password)
-                elif user.get("email"):
+                    from firebase_admin import auth as fb_admin_auth
+                    fb_user_record = fb_admin_auth.get_user(existing_fb_uid)
+                    if fb_user_record.phone_number:
+                        rec_phone = fb_user_record.phone_number.replace(" ", "")
+                        if rec_phone.startswith("+91"):
+                            rec_phone = rec_phone[3:]
+                        if rec_phone == clean_phone:
+                            phone_is_linked = True
+                except Exception as e:
+                    logger.warning(f"[reset-password] could not inspect Firebase Auth record for {existing_fb_uid}: {e}")
+
+                if not phone_is_linked:
+                    # Requirement 1B & 4: Unlinked Firestore profile phone must NOT hijack Google/Firebase accounts!
+                    raise HTTPException(
+                        403,
+                        "This account is registered via Google or Email sign-in. To reset your password, please use your registered email address."
+                    )
+
+            # Update authoritative bcrypt password and increment token_version
+            new_hash = hash_password(req.new_password)
+            new_token_version = int(user.get("token_version", 0)) + 1
+            user_updates = {
+                "password_hash": new_hash,
+                "token_version": new_token_version,
+            }
+            # If legacy user had no firebase_uid, safely link to verified token_uid
+            if not existing_fb_uid and token_uid:
+                user_updates["firebase_uid"] = token_uid
+
+            # Atomic Firestore update
+            await db.collection('users').document(user["id"]).set(user_updates, merge=True)
+
+            # Safely synchronize Firebase Auth password if user has an email or existing Firebase user
+            target_fb_uid = existing_fb_uid or token_uid
+            if target_fb_uid:
+                try:
+                    from firebase_admin import auth as fb_admin_auth
+                    fb_record = None
                     try:
-                        email_fb_user = fb_admin_auth.get_user_by_email(user["email"])
-                        fb_admin_auth.update_user(email_fb_user.uid, password=req.new_password)
+                        fb_record = fb_admin_auth.get_user(target_fb_uid)
                     except Exception:
                         pass
-            except Exception as e:
-                logger.warning(f"[reset-password] Firebase Auth password sync notice: {e}")
+                    if fb_record and fb_record.email:
+                        fb_admin_auth.update_user(target_fb_uid, password=req.new_password)
+                    elif user.get("email"):
+                        try:
+                            email_fb_user = fb_admin_auth.get_user_by_email(user["email"])
+                            fb_admin_auth.update_user(email_fb_user.uid, password=req.new_password)
+                        except Exception:
+                            pass
+                except Exception as e:
+                    logger.warning(f"[reset-password] Firebase Auth password sync notice: {e}")
 
-        return {"success": True, "message": "Password reset successfully. Please login with your new password."}
+            return {"success": True, "message": "Password reset successfully. Please login with your new password."}
+
+        # --- B) Email Recovery ---
+        elif email and info.get("email_verified"):
+            clean_email = normalize_email(email)
+            if not rate_limit(f"reset_email:{clean_email}", 10, 60):
+                raise HTTPException(429, "Too many attempts. Please try again later.")
+
+            _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('email', '==', clean_email)).limit(1).stream()]
+            user = _d[0].to_dict() if _d else None
+            if not user and info.get("uid"):
+                _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('firebase_uid', '==', info["uid"])).limit(1).stream()]
+                user = _d[0].to_dict() if _d else None
+
+            if not user:
+                raise HTTPException(404, "No NyaySetu Pro account found registered with this email address.")
+
+            user["id"] = user.get("id") or _d[0].id
+            if user.get("active") is False:
+                raise HTTPException(403, "Account disabled. Contact support.")
+
+            existing_fb_uid = user.get("firebase_uid")
+            token_uid = info.get("uid")
+
+            # Update authoritative bcrypt password and increment token_version
+            new_hash = hash_password(req.new_password)
+            new_token_version = int(user.get("token_version", 0)) + 1
+            user_updates = {
+                "password_hash": new_hash,
+                "token_version": new_token_version,
+            }
+            if not existing_fb_uid and token_uid:
+                user_updates["firebase_uid"] = token_uid
+
+            # Atomic Firestore update
+            await db.collection('users').document(user["id"]).set(user_updates, merge=True)
+
+            # Safely synchronize Firebase Auth password if user exists in Firebase Auth
+            target_fb_uid = existing_fb_uid or token_uid
+            if target_fb_uid:
+                try:
+                    from firebase_admin import auth as fb_admin_auth
+                    fb_admin_auth.update_user(target_fb_uid, password=req.new_password)
+                except Exception as e:
+                    logger.warning(f"[reset-password] Firebase Auth password sync notice: {e}")
+
+            return {"success": True, "message": "Password reset successfully. Please login with your new password."}
+
+        else:
+            raise HTTPException(400, "Firebase token does not contain a verified phone number or email address.")
 
     # -------------------------------------------------------------
     # 2. Legacy / Dev mock OTP (mobile + otp)
