@@ -396,7 +396,7 @@ export default function Home() {
           <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Categories</Text>
           <View style={{ flexDirection: "row", gap: Spacing.md }}>
             {[
-              { key: "Civil", icon: "business", color: "#0B1B3D" },
+              { key: "Civil", icon: "business", color: "#C5A059" },
               { key: "Criminal", icon: "shield", color: "#7A1C1C" },
             ].map((c) => (
               <Pressable

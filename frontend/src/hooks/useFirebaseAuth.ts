@@ -27,10 +27,47 @@ export { firebaseConfigured };
 let pendingConfirmation: any | null = null;
 let activeVerifier: RecaptchaVerifier | null = null;
 
+function isVerifierValid(verifier: RecaptchaVerifier | null): boolean {
+  if (!verifier) return false;
+  if ((verifier as any).destroyed) return false;
+  const container = (verifier as any).container;
+  if (typeof document !== 'undefined' && container) {
+    if (typeof container === 'string') {
+      const el = document.getElementById(container);
+      if (!el || !document.body.contains(el)) return false;
+    } else if (container instanceof HTMLElement) {
+      if (!document.body.contains(container)) return false;
+    }
+  }
+  return true;
+}
+
+function resolveVerifierElement(
+  verifierElement: HTMLElement | string | null
+): HTMLElement | string | null {
+  if (typeof document === 'undefined') return verifierElement;
+  if (verifierElement && typeof verifierElement !== 'string' && (verifierElement as any).nodeType) {
+    if (document.body.contains(verifierElement as HTMLElement)) {
+      return verifierElement;
+    }
+  }
+  if (typeof verifierElement === 'string') {
+    const el = document.getElementById(verifierElement);
+    if (el && document.body.contains(el)) return el;
+  }
+  const defaultEl = document.getElementById('recaptcha-container');
+  if (defaultEl && document.body.contains(defaultEl)) {
+    return defaultEl;
+  }
+  return verifierElement || 'recaptcha-container';
+}
+
 function clearActiveVerifier() {
   if (Platform.OS === 'web' && activeVerifier) {
     try {
-      activeVerifier.clear();
+      if (!(activeVerifier as any).destroyed) {
+        activeVerifier.clear();
+      }
     } catch {
     }
     activeVerifier = null;
@@ -74,9 +111,22 @@ export function getOrCreateRecaptchaVerifier(
   if (Platform.OS !== 'web') return null;
   const auth = getFirebaseAuth();
   if (!auth) return null;
-  if (activeVerifier) return activeVerifier;
+
+  const target = resolveVerifierElement(verifierElement);
+
+  if (activeVerifier && isVerifierValid(activeVerifier)) {
+    return activeVerifier;
+  }
+
+  clearActiveVerifier();
+  if (typeof target !== 'string' && target instanceof HTMLElement) {
+    try {
+      target.innerHTML = '';
+    } catch {}
+  }
+
   try {
-    const verifier = new RecaptchaVerifier(auth, verifierElement as any, {
+    const verifier = new RecaptchaVerifier(auth, target as any, {
       size: 'invisible',
     });
     activeVerifier = verifier;
@@ -94,18 +144,38 @@ export async function firebaseSendPhoneOtp(
   if (Platform.OS === 'web') {
     const auth = getFirebaseAuth();
     if (!auth) return null;
-    let verifier = activeVerifier;
+
+    let verifier = getOrCreateRecaptchaVerifier(verifierElement);
     if (!verifier) {
-      verifier = new RecaptchaVerifier(auth, verifierElement as any, {
-        size: 'invisible',
-      });
-      activeVerifier = verifier;
+      throw new Error('Could not initialize reCAPTCHA verifier. Please try again.');
     }
+
     try {
       const result = await signInWithPhoneNumber(auth, `+91${mobile10}`, verifier);
       pendingConfirmation = result;
       return result;
-    } catch (e) {
+    } catch (e: any) {
+      const msg = (e?.message || '').toLowerCase();
+      // If error is reCAPTCHA related (e.g. client element removed, expired, destroyed), retry once with fresh verifier
+      if (
+        msg.includes('recaptcha') ||
+        msg.includes('client element has been removed') ||
+        msg.includes('destroyed') ||
+        msg.includes('already rendered')
+      ) {
+        clearActiveVerifier();
+        const retryVerifier = getOrCreateRecaptchaVerifier(verifierElement);
+        if (retryVerifier) {
+          try {
+            const result = await signInWithPhoneNumber(auth, `+91${mobile10}`, retryVerifier);
+            pendingConfirmation = result;
+            return result;
+          } catch (retryErr) {
+            clearActiveVerifier();
+            throw retryErr;
+          }
+        }
+      }
       clearActiveVerifier();
       throw e;
     }

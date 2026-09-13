@@ -236,6 +236,7 @@ export default function ForgotPassword() {
       setOtpSent(true);
     } catch (e: any) {
       const code = e?.code as string | undefined;
+      const msg = (e?.message || "").toLowerCase();
       if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
         setMobileErr("SMS OTP is temporarily unavailable for this region. Please try email reset.");
       } else if (code === "auth/too-many-requests") {
@@ -244,6 +245,12 @@ export default function ForgotPassword() {
         setMobileErr("Enter a valid 10-digit mobile number.");
       } else if (code === "auth/quota-exceeded") {
         setMobileErr("SMS quota exceeded for today. Please use email reset or contact support.");
+      } else if (
+        msg.includes("recaptcha") ||
+        msg.includes("client element has been removed") ||
+        code === "auth/internal-error"
+      ) {
+        setMobileErr("Unable to send OTP right now. Please try again.");
       } else {
         setMobileErr(e?.message || "Could not send OTP. Please try again.");
       }
@@ -276,8 +283,17 @@ export default function ForgotPassword() {
       setMobileCooldown(30);
     } catch (e: any) {
       const code = e?.code as string | undefined;
+      const msg = (e?.message || "").toLowerCase();
       if (code === "auth/too-many-requests") {
         setMobileStepErr("Too many OTP requests. Please wait a minute and try again.");
+      } else if (code === "auth/quota-exceeded") {
+        setMobileStepErr("SMS quota exceeded for today. Please use email reset or contact support.");
+      } else if (
+        msg.includes("recaptcha") ||
+        msg.includes("client element has been removed") ||
+        code === "auth/internal-error"
+      ) {
+        setMobileStepErr("Unable to send OTP right now. Please try again.");
       } else {
         setMobileStepErr(e?.message || "Could not resend OTP. Please try again.");
       }
@@ -408,6 +424,15 @@ export default function ForgotPassword() {
           </View>
 
           <View style={styles.card}>
+            {/* Persistent reCAPTCHA anchor for Mobile Phone Auth on Web */}
+            <View
+              ref={recaptchaAnchorRef as any}
+              nativeID="recaptcha-container"
+              id="recaptcha-container"
+              style={styles.recaptchaAnchor}
+              collapsable={false}
+            />
+
             {/* SUCCESS STATE */}
             {done ? (
               <>
@@ -548,15 +573,12 @@ export default function ForgotPassword() {
                         onChangeText={setMobile}
                         error={mobileErr}
                       />
-                      <View style={{ position: "relative" }}>
-                        <Button
-                          testID="forgot-send-otp-button"
-                          title="Send OTP"
-                          loading={mobileBusy}
-                          onPress={handleSendMobileOtp}
-                        />
-                        <View ref={recaptchaAnchorRef as any} style={styles.recaptchaAnchor} collapsable={false} />
-                      </View>
+                      <Button
+                        testID="forgot-send-otp-button"
+                        title="Send OTP"
+                        loading={mobileBusy}
+                        onPress={handleSendMobileOtp}
+                      />
                     </>
                   ) : (
                     <>
