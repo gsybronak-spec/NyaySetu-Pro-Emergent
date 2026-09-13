@@ -97,6 +97,7 @@ credentials.json
 
 # JRE & Emulators
 jre/
+jre17/
 jre21/
 
 # Generated logs & test artifacts

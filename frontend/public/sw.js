@@ -10,13 +10,15 @@
  * 4. Automatic cache purging of stale caches on activation.
  */
 
-const CACHE_NAME = "nyaysetu-static-v3";
+const CACHE_NAME = "nyaysetu-static-v4";
 const IMMUTABLE_ASSETS = [
   "/icons/favicon-32x32.v2.png",
   "/icons/favicon-16x16.v2.png",
   "/icons/apple-touch-icon.v2.png",
   "/icons/pwa-192x192.v2.png",
   "/icons/pwa-512x512.v2.png",
+  "/icons/pwa-maskable-192x192.v2.png",
+  "/icons/pwa-maskable-512x512.v2.png",
   "/logo.webp",
   "/manifest.json",
   "/robots.txt"

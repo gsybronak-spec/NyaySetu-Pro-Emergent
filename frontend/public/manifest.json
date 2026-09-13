@@ -11,22 +11,28 @@
   "theme_color": "#0B1B3D",
   "icons": [
     {
-      "src": "/icons/pwa-192x192.v2.png",
+      "src": "/icons/pwa-maskable-192x192.v2.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/pwa-512x512.v2.png",
-      "type": "image/png",
-      "sizes": "512x512",
-      "purpose": "any"
+      "purpose": "maskable"
     },
     {
       "src": "/icons/pwa-maskable-512x512.v2.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/pwa-192x192.v2.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/pwa-512x512.v2.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
   "categories": [
