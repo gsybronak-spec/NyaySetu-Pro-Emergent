@@ -162,13 +162,13 @@ export default function Subscription() {
     try {
       const res = RAZORPAY_ENABLED ? await buyWithRazorpay(id, user) : await api.purchase(id);
       setWallet({ balance: res.balance, total_used: wallet.total_used });
-      if (typeof window !== "undefined") {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(`Payment Successful — Credits added to your wallet. New balance: ${res.balance} templates.`);
       } else {
         Alert.alert("Payment Successful", `Credits added to your wallet. New balance: ${res.balance} templates.`);
       }
     } catch (e: any) {
-      if (typeof window !== "undefined") {
+      if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(e?.message || "Payment could not be completed");
       } else {
         Alert.alert("Payment Failed", e?.message || "Payment could not be completed");

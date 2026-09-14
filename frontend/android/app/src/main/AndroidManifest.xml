@@ -27,10 +27,5 @@
         <data android:scheme="nyaysetupro"/>
       </intent-filter>
     </activity>
-    <activity
-      android:name=".CrashReportActivity"
-      android:exported="false"
-      android:process=":crash"
-      android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
   </application>
 </manifest>

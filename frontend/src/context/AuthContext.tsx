@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
 import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
@@ -130,6 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Listen to Firebase Auth state transitions (handles asynchronous Web IndexedDB restore)
   // Defer initialization on web so it doesn't block critical startup path or initial render
   useEffect(() => {
+    if (Platform.OS !== "web") return;
     let unsubscribe: (() => void) | undefined;
     const timer = setTimeout(() => {
       const fbAuth = getFirebaseAuth();
@@ -186,17 +187,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const interval = setInterval(() => syncWallet(true), 60000);
     const onFocus = () => { syncWallet(false); };
-    if (typeof window !== "undefined") {
-      window.addEventListener("focus", onFocus);
-      document.addEventListener("visibilitychange", onFocus);
-    }
-    return () => {
-      clearInterval(interval);
-      if (typeof window !== "undefined") {
-        window.removeEventListener("focus", onFocus);
-        document.removeEventListener("visibilitychange", onFocus);
+
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.addEventListener) {
+        window.addEventListener("focus", onFocus);
       }
-    };
+      if (typeof document !== "undefined" && document.addEventListener) {
+        document.addEventListener("visibilitychange", onFocus);
+      }
+      return () => {
+        clearInterval(interval);
+        if (typeof window !== "undefined" && window.removeEventListener) {
+          window.removeEventListener("focus", onFocus);
+        }
+        if (typeof document !== "undefined" && document.removeEventListener) {
+          document.removeEventListener("visibilitychange", onFocus);
+        }
+      };
+    } else {
+      const sub = AppState.addEventListener("change", (state) => {
+        if (state === "active") onFocus();
+      });
+      return () => {
+        clearInterval(interval);
+        sub.remove();
+      };
+    }
   }, [user?.id]);
 
   // C4: definitive unauthorized callback with Firebase recovery attempt before logout
@@ -224,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Multi-tab synchronization (web): listen for storage events to sync login/logout
   useEffect(() => {
-    if (typeof window === "undefined" || !window.addEventListener) return;
+    if (Platform.OS !== "web" || typeof window === "undefined" || !window.addEventListener) return;
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "nyaysetu_token" || e.key === "nyaysetu_refresh_token") {
         if (!e.newValue) {
