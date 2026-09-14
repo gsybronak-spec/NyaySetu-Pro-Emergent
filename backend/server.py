@@ -110,7 +110,33 @@ def _get_all_seed_templates():
             return [*test_seed_data.TEMPLATES, *test_seed_data_templates_v2.TEMPLATES_V2]
         except Exception:
             pass
-    return [*TEMPLATES, *TEMPLATES_V2]
+    base_seeds = []
+    try:
+        from authoritative_catalog_42 import BASE_TEMPLATES
+        for b in BASE_TEMPLATES:
+            bk = b.get("base_key")
+            if bk:
+                base_seeds.append({
+                    "id": bk,
+                    "slug": bk,
+                    "name_en": b.get("name_en", bk),
+                    "name_gu": b.get("name_gu", bk),
+                    "category": b.get("category", "General"),
+                    "sub_category": b.get("sub_category", ""),
+                    "description": b.get("description", ""),
+                    "tags": b.get("tags", []),
+                    "aliases": b.get("aliases", []),
+                    "fields": b.get("fields", []),
+                    "placeholders": b.get("placeholders", []),
+                    "content_gu": b.get("content_gu", ""),
+                    "content_en": b.get("content_en", ""),
+                    "settings": b.get("settings", {}),
+                    "status": "published",
+                    "source": "seed",
+                })
+    except Exception:
+        pass
+    return [*TEMPLATES, *TEMPLATES_V2, *base_seeds]
 
 # ============================================================
 # DATABASE: Firestore via Firebase Admin SDK
@@ -6577,7 +6603,12 @@ async def admin_list_templates(
     await _ensure_seed_complete()
     deleted_ids = await _get_deleted_template_ids()
     all_seeds = _get_all_seed_templates()
-    seed_map = {t["id"]: t for t in all_seeds if t["id"] not in deleted_ids}
+    seed_map = {t["id"]: t for t in all_seeds if t.get("id") and t["id"] not in deleted_ids}
+    for s in all_seeds:
+        sid = s.get("id", "")
+        base_id = sid.replace("_gu", "").replace("_en", "")
+        if base_id and base_id not in seed_map and base_id not in deleted_ids:
+            seed_map[base_id] = {**s, "id": base_id}
     seed_ids = set(seed_map.keys())
 
     all_db = []
@@ -6590,10 +6621,17 @@ async def admin_list_templates(
                 continue
             doc_data["id"] = tid
             # If doc is a seed template or stub, merge seed definition while preserving existing values
-            if tid in seed_map:
-                base = dict(seed_map[tid])
+            seed_match = seed_map.get(tid) or seed_map.get(tid.replace("_gu", "").replace("_en", ""))
+            if seed_match:
+                base = dict(seed_match)
                 base.update({k: v for k, v in doc_data.items() if v is not None})
                 doc_data = base
+            if not doc_data.get("name_en"):
+                doc_data["name_en"] = tid.replace("_", " ").title()
+            if not doc_data.get("name_gu"):
+                doc_data["name_gu"] = doc_data["name_en"]
+            if not doc_data.get("status"):
+                doc_data["status"] = "published"
             seen_ids.add(tid)
             all_db.append(doc_data)
 
@@ -6779,7 +6817,10 @@ async def admin_get_template(template_id: str, admin=Depends(require_super_admin
         _s = await db.collection('templates').document(template_id).get()
         t = _s.to_dict() if _s.exists else None
 
-    seed = next((s for s in _get_all_seed_templates() if s["id"] == template_id), None)
+    seed = next((s for s in _get_all_seed_templates() if s.get("id") == template_id), None)
+    if not seed:
+        base_cand = template_id.replace("_gu", "").replace("_en", "")
+        seed = next((s for s in _get_all_seed_templates() if s.get("id") == base_cand or s.get("id") == f"{base_cand}_gu"), None)
     if not t:
         if seed:
             t = dict(seed)
@@ -6792,6 +6833,12 @@ async def admin_get_template(template_id: str, admin=Depends(require_super_admin
         t = merged
 
     t["id"] = template_id
+    if not t.get("name_en"):
+        t["name_en"] = template_id.replace("_", " ").title()
+    if not t.get("name_gu"):
+        t["name_gu"] = t["name_en"]
+    if not t.get("status"):
+        t["status"] = "published"
     rev_count = t.get("revision_count") or t.get("version", 1)
     return {
         **t,
