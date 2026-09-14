@@ -49,10 +49,18 @@ export default function Templates() {
     error: string;
   } | null>(null);
 
+  const [orderDragIdx, setOrderDragIdx] = useState<number | null>(null);
+  const [orderDragOverIdx, setOrderDragOverIdx] = useState<number | null>(null);
+
   const handleOpenOrderModal = async () => {
+    const validIds = new Set(templates.map(t => t.id));
+    const initialPairs = validIds.size > 0
+      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
+      : [...ADMIN_TEMPLATE_PAIRS];
+
     setOrderModal({
       open: true,
-      pairs: [...ADMIN_TEMPLATE_PAIRS],
+      pairs: initialPairs,
       loading: true,
       saving: false,
       successMsg: '',
@@ -62,10 +70,47 @@ export default function Templates() {
       const res = await adminApi.getTemplateOrder();
       const order = res?.template_order || [];
       const ordered = getOrderedAdminPairs(order);
-      setOrderModal(prev => prev ? { ...prev, pairs: ordered, loading: false } : null);
+      const filtered = validIds.size > 0
+        ? ordered.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
+        : ordered;
+      setOrderModal(prev => prev ? { ...prev, pairs: filtered, loading: false } : null);
     } catch (err: any) {
       setOrderModal(prev => prev ? { ...prev, loading: false, error: 'Failed to fetch current order: ' + err.message } : null);
     }
+  };
+
+  const handleOrderDragStart = (e: React.DragEvent, index: number) => {
+    setOrderDragIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleOrderDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (orderDragOverIdx !== index) {
+      setOrderDragOverIdx(index);
+    }
+  };
+
+  const handleOrderDragEnd = () => {
+    setOrderDragIdx(null);
+    setOrderDragOverIdx(null);
+  };
+
+  const handleOrderDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (!orderModal || orderDragIdx === null || orderDragIdx === dropIndex) {
+      setOrderDragIdx(null);
+      setOrderDragOverIdx(null);
+      return;
+    }
+    const current = [...orderModal.pairs];
+    const [moved] = current.splice(orderDragIdx, 1);
+    current.splice(dropIndex, 0, moved);
+    setOrderDragIdx(null);
+    setOrderDragOverIdx(null);
+    setOrderModal({ ...orderModal, pairs: current, successMsg: '', error: '' });
   };
 
   const moveOrder = (index: number, direction: 'up' | 'down' | 'top' | 'bottom') => {
@@ -91,7 +136,11 @@ export default function Templates() {
 
   const resetToDefaultOrder = () => {
     if (!orderModal) return;
-    setOrderModal({ ...orderModal, pairs: [...ADMIN_TEMPLATE_PAIRS], successMsg: '', error: '' });
+    const validIds = new Set(templates.map(t => t.id));
+    const defaults = validIds.size > 0
+      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
+      : [...ADMIN_TEMPLATE_PAIRS];
+    setOrderModal({ ...orderModal, pairs: defaults, successMsg: '', error: '' });
   };
 
   const handleSaveOrder = async () => {
@@ -234,10 +283,11 @@ export default function Templates() {
 
   const handleExecuteDelete = async () => {
     if (!deleteModal || deleteModal.confirmText !== 'DELETE') return;
+    const deletedId = deleteModal.template.id;
     setDeleteModal(prev => prev ? { ...prev, loading: true, error: '' } : null);
     try {
-      await adminApi.adminDeleteTemplate(deleteModal.template.id);
-      const deletedId = deleteModal.template.id;
+      await adminApi.adminDeleteTemplate(deletedId);
+      setTemplates(prev => prev.filter(t => t.id !== deletedId));
       setDeleteModal(null);
       loadTemplates();
       alert(`Template '${deletedId}' has been permanently deleted from the catalog.`);
@@ -980,6 +1030,11 @@ export default function Templates() {
                     return (
                       <div
                         key={pair.baseKey}
+                        draggable={!orderModal.saving}
+                        onDragStart={(e) => handleOrderDragStart(e, index)}
+                        onDragOver={(e) => handleOrderDragOver(e, index)}
+                        onDragEnd={handleOrderDragEnd}
+                        onDrop={(e) => handleOrderDrop(e, index)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -987,12 +1042,27 @@ export default function Templates() {
                           padding: '10px 14px',
                           borderRadius: '8px',
                           border: isTop10 ? '1px solid #c5a059' : '1px solid #e5e7eb',
-                          backgroundColor: isTop10 ? '#fffdf7' : '#fafafa',
+                          backgroundColor: orderDragOverIdx === index ? '#f0fdf4' : (isTop10 ? '#fffdf7' : '#fafafa'),
+                          borderTop: orderDragOverIdx === index ? '2px solid #16a34a' : (isTop10 ? '1px solid #c5a059' : '1px solid #e5e7eb'),
+                          opacity: orderDragIdx === index ? 0.35 : 1,
+                          transition: 'background-color 0.15s ease',
                           gap: '12px',
                         }}
                       >
                         {/* Position Number & Destination Badge */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '150px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '170px' }}>
+                          <span
+                            style={{
+                              cursor: 'grab',
+                              userSelect: 'none',
+                              color: '#9ca3af',
+                              fontSize: '1.2rem',
+                              padding: '0 4px',
+                            }}
+                            title="Drag to reorder"
+                          >
+                            ⋮⋮
+                          </span>
                           <span
                             style={{
                               width: '28px',

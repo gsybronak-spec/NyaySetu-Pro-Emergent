@@ -2348,10 +2348,7 @@ _CATALOG_KINDS = {
 
 _CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
 
-_CATALOG_CACHE: dict[str, list] = {
-    kind: [dict(x, active=True) for x in seed_list]
-    for kind, (_, seed_list) in _CATALOG_KINDS.items()
-}
+_CATALOG_CACHE: dict[str, list] = {}
 
 def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
     global _CATALOG_CACHE
@@ -2361,18 +2358,44 @@ def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
         _CATALOG_CACHE.clear()
 
 
+async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
+    """Return set of permanently deleted catalog item / template IDs (tombstones)."""
+    if db is None:
+        return set()
+    try:
+        if kind:
+            docs = [d.to_dict() async for d in db.collection("deleted_catalog_items").where(filter=firestore.FieldFilter("kind", "==", kind)).stream()]
+        else:
+            docs = [d.to_dict() async for d in db.collection("deleted_catalog_items").stream()]
+        return {d["id"] for d in docs if "id" in d}
+    except Exception as e:
+        logger.warning(f"Failed to fetch deleted catalog items: {e}")
+        return set()
+
+
+async def _get_deleted_template_ids() -> set[str]:
+    """Return set of permanently deleted template IDs."""
+    return await _get_deleted_catalog_ids("template")
+
+
 async def _load_catalog(kind: str) -> list:
     """DB catalog entries if the collection has any, else the seed list
     (backward compat for uninitialized databases).
-    Cached in-memory to prevent repeated MongoDB roundtrips on static catalogs."""
+    Cached in-memory to prevent repeated Firestore roundtrips on static catalogs.
+    Filters out tombstones and sorts by sort_order."""
     if kind in _CATALOG_CACHE:
         return _CATALOG_CACHE[kind]
     coll, seed_list = _CATALOG_KINDS[kind]
-    items = [d.to_dict() async for d in db.collection(coll).stream()]
-    if items:
-        _CATALOG_CACHE[kind] = items
-        return items
-    res = [dict(x, active=True) for x in seed_list]
+    deleted_ids = await _get_deleted_catalog_ids(kind)
+    if db is not None:
+        items = [d.to_dict() async for d in db.collection(coll).stream()]
+        items = [i for i in items if i.get("id") not in deleted_ids]
+        if items:
+            items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
+            _CATALOG_CACHE[kind] = items
+            return items
+    res = [dict(x, active=True) for x in seed_list if x.get("id") not in deleted_ids]
+    res.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("en", "")))
     _CATALOG_CACHE[kind] = res
     return res
 
@@ -2776,8 +2799,7 @@ async def _ensure_seed_complete() -> None:
         await seed_templates()
 
 
-_PRE_SEEDED_TEMPLATES = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2]
-_PUBLISHED_TEMPLATES_CACHE: dict = {"data": _PRE_SEEDED_TEMPLATES, "expires_at": time.time() + 300.0}
+_PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
 _PUBLISHED_TEMPLATES_LOCK = threading.Lock()
 _PUBLISHED_TEMPLATES_TTL_SEC = 300.0
 
@@ -2789,7 +2811,7 @@ def invalidate_published_templates_cache():
 async def _get_published_templates() -> list:
     """Return published templates from db.templates ONLY (single source of truth).
     Hides draft, archived, or deleted templates.
-    Cached in-memory with 60s TTL."""
+    Cached in-memory with TTL."""
     if _is_templates_disabled():
         return []
     now_ts = time.time()
@@ -2797,8 +2819,16 @@ async def _get_published_templates() -> list:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             return list(_PUBLISHED_TEMPLATES_CACHE["data"])
 
-    db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
-    db_templates.sort(key=lambda t: t.get("category", ""))
+    deleted_ids = await _get_deleted_template_ids()
+    db_templates = []
+    if db is not None:
+        db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
+        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids]
+    
+    if not db_templates and db is None:
+        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids]
+
+    db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
 
     with _PUBLISHED_TEMPLATES_LOCK:
@@ -4116,6 +4146,8 @@ async def get_catalog_template_order():
             order = []
     if not isinstance(order, list) or len(order) == 0:
         order = _SETTING_DEFAULTS["template_display_order"]
+    deleted_ids = await _get_deleted_template_ids()
+    order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
     return {"template_order": order}
 
 
@@ -4518,6 +4550,13 @@ class CatalogItemReq(BaseModel):
 
 class CatalogStatusReq(BaseModel):
     active: bool = Field(..., description="True to activate, False to deactivate.")
+
+class CatalogReorderReq(BaseModel):
+    order: list[str] = Field(..., description="Ordered list of catalog item IDs")
+
+class TemplateReorderReq(BaseModel):
+    order: Optional[list[str]] = Field(None, description="Ordered list of template IDs")
+    template_order: Optional[list[str]] = Field(None, description="Ordered list of template IDs")
 
 class SettingsUpdateReq(BaseModel):
     value: Union[int, str] = Field(..., description="New value for the setting")
@@ -6147,8 +6186,17 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
             raise HTTPException(409, f"Cannot permanently delete '{item_id}' because it is currently referenced by {ref}. Please mark it as Inactive instead.")
             
         await db.collection(coll).document(item_id).delete()
+        if db is not None:
+            tombstone_id = f"{kind}:{item_id}"
+            await db.collection("deleted_catalog_items").document(tombstone_id).set({
+                "id": item_id,
+                "kind": kind,
+                "deleted_at": now().isoformat(),
+                "deleted_by": admin["id"],
+            })
     else:
         await db.collection(coll).document(item_id).set({"active": False, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
+    _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -6160,6 +6208,26 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
         metadata={"hard": hard},
     )
     return {"success": True, "message": f"Catalog item '{item_id}' {'permanently deleted' if hard else 'deactivated'} successfully"}
+
+
+@admin_api.put("/catalog/{kind}/reorder")
+async def admin_reorder_catalog(kind: str, req: CatalogReorderReq, admin=Depends(require_super_admin)):
+    """Update display order for catalog items."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    coll = _CATALOG_KINDS[kind][0]
+    ts = now().isoformat()
+    if db is not None:
+        for idx, item_id in enumerate(req.order):
+            await db.collection(coll).document(item_id).set({
+                "sort_order": idx,
+                "updated_at": ts,
+                "updated_by": admin["id"]
+            }, merge=True)
+    _invalidate_catalog_cache(kind)
+    await _refresh_catalog_maps()
+    items = await _load_catalog(kind)
+    return {"success": True, "items": [{**i, "active": i.get("active") is not False} for i in items]}
 
 def _validate_setting_value(key: str, value) -> None:
     """Validate a setting value against its schema. Raises HTTPException(422) on invalid."""
@@ -6234,22 +6302,70 @@ async def admin_get_template_order(admin=Depends(get_admin)):
             order = []
     if not isinstance(order, list) or len(order) == 0:
         order = _SETTING_DEFAULTS["template_display_order"]
+    deleted_ids = await _get_deleted_template_ids()
+    order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
     return {"template_order": order}
 
 
 @admin_api.put("/template-order")
 async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_admin)):
-    """Update the authoritative template display order in settings."""
+    """Update the authoritative template display order in settings and persist sort_order on templates."""
     if not isinstance(req.template_order, list):
         raise HTTPException(422, "template_order must be a list of string IDs")
-    await db.collection('settings').document("template_display_order").set({
-        "value": req.template_order,
-        "updated_by": admin["id"],
-        "updated_at": now().isoformat(),
-    })
+    ts = now().isoformat()
+    if db is not None:
+        await db.collection('settings').document("template_display_order").set({
+            "value": req.template_order,
+            "updated_by": admin["id"],
+            "updated_at": ts,
+        })
+        for idx, tid in enumerate(req.template_order):
+            await db.collection("templates").document(tid).set({
+                "sort_order": idx,
+                "updated_at": ts,
+                "updated_by": admin["id"]
+            }, merge=True)
+            if not tid.endswith("_gu") and not tid.endswith("_en"):
+                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
     invalidate_settings_cache("template_display_order")
+    invalidate_published_templates_cache()
     await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
     return {"success": True, "template_order": req.template_order}
+
+
+@admin_api.put("/templates/reorder")
+async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require_super_admin)):
+    """Reorder templates endpoint (supporting drag/drop from admin UI)."""
+    order = req.order if req.order is not None else (req.template_order or [])
+    if not isinstance(order, list):
+        raise HTTPException(422, "order must be a list of string IDs")
+    ts = now().isoformat()
+    if db is not None:
+        await db.collection('settings').document("template_display_order").set({
+            "value": order,
+            "updated_by": admin["id"],
+            "updated_at": ts,
+        })
+        for idx, tid in enumerate(order):
+            await db.collection("templates").document(tid).set({
+                "sort_order": idx,
+                "updated_at": ts,
+                "updated_by": admin["id"]
+            }, merge=True)
+            if not tid.endswith("_gu") and not tid.endswith("_en"):
+                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+    invalidate_settings_cache("template_display_order")
+    invalidate_published_templates_cache()
+    await create_admin_audit_log(
+        admin=admin,
+        action="templates_reorder",
+        entity_type="template",
+        entity_id="catalog_order",
+        metadata={"count": len(order)},
+    )
+    return {"success": True, "template_order": order}
 
 
 
@@ -6349,10 +6465,12 @@ async def admin_list_templates(
     eff_page = page if page is not None else (eff_offset // eff_limit + 1)
 
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
-    sort_field = sort_by if sort_by in ("updated_at", "created_at", "name_en", "name_gu", "version", "category") else "updated_at"
+    sort_field = sort_by if sort_by in ("updated_at", "created_at", "name_en", "name_gu", "version", "category", "sort_order") else "sort_order"
 
+    deleted_ids = await _get_deleted_template_ids()
     all_db = [d.to_dict() async for d in db.collection('templates').stream()]
-    seed_ids = {t["id"] for t in _get_all_seed_templates()}
+    all_db = [t for t in all_db if t.get("id") not in deleted_ids]
+    seed_ids = {t["id"] for t in _get_all_seed_templates() if t["id"] not in deleted_ids}
 
     for t in all_db:
         if t.get("source") not in ("admin_edited", "admin_created") and t["id"] in seed_ids and t.get("status") not in ("draft", "archived"):
@@ -6366,6 +6484,11 @@ async def admin_list_templates(
     if search_term:
         ql = search_term.lower()
         all_db = [t for t in all_db if ql in str(t.get("name_en", "")).lower() or ql in str(t.get("name_gu", "")).lower() or ql in str(t.get("id", "")).lower()]
+
+    if sort_field == "sort_order":
+        all_db.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("name_en", "")), reverse=(sort_direction == -1))
+    else:
+        all_db.sort(key=lambda t: (t.get(sort_field) or ""), reverse=(sort_direction == -1))
 
     total = len(all_db)
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
@@ -6779,6 +6902,26 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
         raise HTTPException(404, "Template not found")
     
     await db.collection('templates').document(template_id).delete()
+    if db is not None:
+        tombstone_id = f"template:{template_id}"
+        await db.collection("deleted_catalog_items").document(tombstone_id).set({
+            "id": template_id,
+            "kind": "template",
+            "deleted_at": now().isoformat(),
+            "deleted_by": admin["id"],
+        })
+        curr_order = await _get_setting("template_display_order")
+        if isinstance(curr_order, list):
+            base_id = template_id.replace("_gu", "").replace("_en", "")
+            filtered_order = [x for x in curr_order if x != template_id and x != base_id]
+            if len(filtered_order) != len(curr_order):
+                await db.collection("settings").document("template_display_order").set({
+                    "value": filtered_order,
+                    "updated_at": now().isoformat(),
+                    "updated_by": admin["id"],
+                }, merge=True)
+                invalidate_settings_cache("template_display_order")
+
     await create_admin_audit_log(
         admin=admin,
         action="template_deleted",
@@ -6788,6 +6931,7 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
         reason="Permanent deletion from template catalog",
     )
     invalidate_published_templates_cache()
+    _invalidate_catalog_cache()
     return {
         "success": True,
         "message": f"Template '{template_id}' permanently deleted from catalog. Historical revisions preserved.",
@@ -7146,7 +7290,11 @@ async def seed_templates(force: bool = False) -> dict:
     inserted = 0
     created_ids = []
     skipped_ids = []
+    deleted_template_ids = await _get_deleted_template_ids()
     for t in all_seeds:
+        if t["id"] in deleted_template_ids:
+            skipped_ids.append(t["id"])
+            continue
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing:
             skipped_ids.append(t["id"])
@@ -7246,15 +7394,19 @@ async def seed_catalogs():
     admin edits and deactivations) are never overwritten. This keeps the
     collection in sync with the canonical seed list even when the DB was
     seeded by an older version with fewer entries (e.g. new districts).
+    Deleted items (tombstones) are NEVER re-seeded.
     """
+    if db is None:
+        return
     ts = now().isoformat()
     for kind, (coll, seed_list) in _CATALOG_KINDS.items():
         existing_ids = {
             d["id"] for d in [d.to_dict() async for d in db.collection(coll).stream()]
         }
+        deleted_ids = await _get_deleted_catalog_ids(kind)
         added = 0
         for item in seed_list:
-            if item["id"] in existing_ids:
+            if item["id"] in existing_ids or item["id"] in deleted_ids:
                 continue
             _doc = {**item, "active": True, "created_at": ts, "updated_at": ts}
             _doc_id = _doc.get("id") or str(uuid.uuid4())

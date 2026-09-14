@@ -370,7 +370,15 @@ export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogica
     }
   });
 
-  const sorted = [...TEMPLATE_LOGICAL_PAIRS].sort((a, b) => {
+  // Filter out any templates that were removed from the authoritative catalog order
+  let pairs = [...TEMPLATE_LOGICAL_PAIRS];
+  if (order.length >= 5) {
+    pairs = pairs.filter(
+      (p) => orderMap.has(p.baseKey) || orderMap.has(p.guId) || orderMap.has(p.enId)
+    );
+  }
+
+  const sorted = pairs.sort((a, b) => {
     const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : 9999;
     const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : 9999;
     return idxA - idxB;

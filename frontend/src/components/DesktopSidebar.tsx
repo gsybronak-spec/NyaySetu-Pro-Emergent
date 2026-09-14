@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
@@ -158,7 +158,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
 
 const styles = StyleSheet.create({
   rail: {
-    position: "fixed",
+    position: (Platform.OS === "web" ? "fixed" : "absolute") as any,
     left: 0,
     top: 0,
     bottom: 0,

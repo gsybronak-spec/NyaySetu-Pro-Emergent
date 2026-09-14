@@ -158,6 +158,9 @@ export default function Catalog() {
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleteError, setDeleteError] = useState('');
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [reorderSaving, setReorderSaving] = useState(false);
 
   const confirmDelete = (item: CatalogItem) => {
     setDeleteItem(item);
@@ -172,13 +175,59 @@ export default function Catalog() {
     setSaving(true);
     try {
       await adminApi.deleteCatalogItem(activeKind.kind, deleteItem.id, true);
+      setItems((prev) => prev.filter((x) => x.id !== deleteItem.id));
       setDeleteOpen(false);
       setDeleteItem(null);
-      load(activeKind);
     } catch (err: any) {
       setDeleteError(err.message || 'Failed to permanently delete item.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIndex) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+    const previousItems = [...items];
+    const newItems = [...items];
+    const [movedItem] = newItems.splice(draggedIdx, 1);
+    newItems.splice(dropIndex, 0, movedItem);
+
+    setItems(newItems);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+    setReorderSaving(true);
+
+    try {
+      await adminApi.reorderCatalog(activeKind.kind, newItems.map((i) => i.id));
+    } catch (err: any) {
+      setError(err.message || 'Failed to save new order');
+      setItems(previousItems);
+    } finally {
+      setReorderSaving(false);
     }
   };
 
@@ -206,8 +255,13 @@ export default function Catalog() {
       </div>
 
       {isSuper && (
-        <div className="plans-toolbar">
-          <button className="btn-primary" onClick={openCreate}>+ Add {activeKind.label.replace(/ \/.*/, '')} Entry</button>
+        <div className="plans-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button className="btn-primary" onClick={openCreate}>+ Add {activeKind.label.replace(/ \/.*/, '')} Entry</button>
+            <span className="plans-hint">
+              {reorderSaving ? 'Saving order...' : 'Drag rows using the ⋮⋮ handle to reorder'}
+            </span>
+          </div>
           <span className="plans-hint">Catalog changes require super admin</span>
         </div>
       )}
@@ -229,6 +283,7 @@ export default function Catalog() {
             <table className="data-table">
               <thead>
                 <tr>
+                  {isSuper && <th style={{ width: '40px', textAlign: 'center' }}>⇅</th>}
                   <th>ID</th>
                   <th>English</th>
                   <th>ગુજરાતી</th>
@@ -240,8 +295,36 @@ export default function Catalog() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
+                {items.map((item, idx) => (
+                  <tr
+                    key={item.id}
+                    draggable={isSuper}
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={(e) => handleDragOver(e, idx)}
+                    onDragEnd={handleDragEnd}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    style={{
+                      opacity: draggedIdx === idx ? 0.35 : 1,
+                      backgroundColor: dragOverIdx === idx ? '#f0fdf4' : undefined,
+                      borderTop: dragOverIdx === idx ? '2px solid #16a34a' : undefined,
+                      transition: 'background-color 0.15s ease',
+                    }}
+                  >
+                    {isSuper && (
+                      <td
+                        style={{
+                          cursor: 'grab',
+                          userSelect: 'none',
+                          textAlign: 'center',
+                          color: '#9ca3af',
+                          fontSize: '1.2rem',
+                          padding: '8px 4px',
+                        }}
+                        title="Drag to reorder"
+                      >
+                        ⋮⋮
+                      </td>
+                    )}
                     <td className="catalog-id">{item.id}</td>
                     <td>{item.en}</td>
                     <td>{item.gu || '—'}</td>
