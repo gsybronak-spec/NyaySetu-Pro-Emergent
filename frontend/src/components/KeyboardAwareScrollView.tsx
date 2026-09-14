@@ -71,6 +71,7 @@ export const KeyboardAwareScrollView = forwardRef<
       // Native (Android & iOS)
       setTimeout(() => {
         if (!inputRef?.current || !internalScrollRef.current) return;
+        if (typeof inputRef.current.measureInWindow !== "function") return;
 
         inputRef.current.measureInWindow(
           (x: number, y: number, width: number, height: number) => {
