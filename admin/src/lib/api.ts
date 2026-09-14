@@ -226,6 +226,7 @@ export const adminApi = {
   createCatalogItem: (kind: string, data: any) => request(`/catalog/${kind}`, 'POST', data),
   updateCatalogItem: (kind: string, id: string, data: any) => request(`/catalog/${kind}/${id}`, 'PUT', data),
   deleteCatalogItem: (kind: string, id: string, hard = false) => request(`/catalog/${kind}/${id}?hard=${hard}`, 'DELETE'),
+  bulkDeleteCatalogItems: (kind: string, ids: string[]) => request(`/catalog/${kind}/bulk-delete`, 'POST', { ids }),
   setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
   reorderCatalog: (kind: string, order: string[]) => request(`/catalog/${kind}/reorder`, 'PUT', { order }),
   listSettings: () => request('/settings'),
@@ -233,4 +234,5 @@ export const adminApi = {
   getTemplateOrder: () => request('/template-order'),
   updateTemplateOrder: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
   reorderTemplates: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
+  bulkDeleteTemplates: (ids: string[]) => request('/templates/bulk-delete', 'POST', { ids }),
 };

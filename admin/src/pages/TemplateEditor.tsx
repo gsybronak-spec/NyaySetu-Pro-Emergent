@@ -111,6 +111,7 @@ export default function TemplateEditor() {
   const contentEnRef = useRef<HTMLTextAreaElement>(null);
   const contentGuRef = useRef<HTMLTextAreaElement>(null);
   const [lastFocused, setLastFocused] = useState<'en'|'gu'>('en');
+  const [selectedFieldIndices, setSelectedFieldIndices] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     if (isEdit) {
@@ -249,8 +250,69 @@ export default function TemplateEditor() {
       return;
     }
     const newFields = template.fields.filter((_: any, i: number) => i !== index);
+    newFields.forEach((f: any, idx: number) => { f.order = idx; });
     handleChange('fields', newFields);
+    setSelectedFieldIndices(prev => {
+      const next = new Set<number>();
+      prev.forEach(i => {
+        if (i < index) next.add(i);
+        else if (i > index) next.add(i - 1);
+      });
+      return next;
+    });
     if (expandedOptionIdx === index) setExpandedOptionIdx(null);
+  };
+
+  const handleToggleSelectField = (index: number) => {
+    setSelectedFieldIndices(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+
+  const handleSelectAllFields = () => {
+    if (selectedFieldIndices.size === template.fields.length) {
+      setSelectedFieldIndices(new Set());
+    } else {
+      setSelectedFieldIndices(new Set(template.fields.map((_: any, idx: number) => idx)));
+    }
+  };
+
+  const handleBulkDeleteFields = () => {
+    if (selectedFieldIndices.size === 0) return;
+    const selectedFields = template.fields.filter((_: any, idx: number) => selectedFieldIndices.has(idx));
+    const usedFields = selectedFields.filter((f: any) =>
+      template.content_en?.includes(`{{${f.key}}}`) || template.content_gu?.includes(`{{${f.key}}}`)
+    );
+
+    let confirmMsg = `Delete ${selectedFieldIndices.size} selected custom fields permanently? This action cannot be undone.`;
+    if (usedFields.length > 0) {
+      const usedKeys = usedFields.map((f: any) => `{{${f.key}}}`).join(', ');
+      confirmMsg += `\n\nWarning: The following fields are used in template content and their references will be removed: ${usedKeys}`;
+    }
+
+    if (!window.confirm(confirmMsg)) return;
+
+    let updatedEn = template.content_en || '';
+    let updatedGu = template.content_gu || '';
+    for (const f of usedFields) {
+      updatedEn = updatedEn.split(`{{${f.key}}}`).join('');
+      updatedGu = updatedGu.split(`{{${f.key}}}`).join('');
+    }
+
+    const remaining = template.fields.filter((_: any, idx: number) => !selectedFieldIndices.has(idx));
+    remaining.forEach((f: any, idx: number) => { f.order = idx; });
+
+    setTemplate((prev: any) => ({
+      ...prev,
+      content_en: updatedEn,
+      content_gu: updatedGu,
+      fields: remaining,
+    }));
+    setSelectedFieldIndices(new Set());
+    setExpandedOptionIdx(null);
   };
 
   const moveField = (index: number, direction: 'up' | 'down') => {
@@ -668,6 +730,37 @@ export default function TemplateEditor() {
               </div>
               {!isLocked && <button className="btn-secondary btn-sm" onClick={addField}>+ Add New Field</button>}
             </div>
+
+            {!isLocked && selectedFieldIndices.size > 0 && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '12px',
+              }}>
+                <strong style={{ color: '#1e40af', fontSize: '0.9rem' }}>
+                  {selectedFieldIndices.size} of {template.fields.length} fields selected
+                </strong>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn-danger btn-sm"
+                    onClick={handleBulkDeleteFields}
+                  >
+                    🗑️ Delete Selected ({selectedFieldIndices.size})
+                  </button>
+                  <button
+                    className="btn-secondary btn-sm"
+                    onClick={() => setSelectedFieldIndices(new Set())}
+                  >
+                    Clear Selection
+                  </button>
+                </div>
+              </div>
+            )}
             
             {template.fields.length === 0 ? (
               <p className="no-data">No custom fields defined yet. Click "+ Add New Field" above.</p>
@@ -676,6 +769,16 @@ export default function TemplateEditor() {
                 <table className="data-table">
                   <thead>
                     <tr>
+                      {!isLocked && (
+                        <th style={{ width: '36px', textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={template.fields.length > 0 && selectedFieldIndices.size === template.fields.length}
+                            onChange={handleSelectAllFields}
+                            title="Select All fields"
+                          />
+                        </th>
+                      )}
                       <th style={{ width: '40px' }}>#</th>
                       <th>Placeholder Key</th>
                       <th>Label (EN)</th>
@@ -689,7 +792,16 @@ export default function TemplateEditor() {
                   <tbody>
                     {template.fields.map((field: TemplateField, idx: number) => (
                       <React.Fragment key={idx}>
-                        <tr>
+                        <tr style={{ backgroundColor: selectedFieldIndices.has(idx) ? '#eff6ff' : undefined }}>
+                          {!isLocked && (
+                            <td style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedFieldIndices.has(idx)}
+                                onChange={() => handleToggleSelectField(idx)}
+                              />
+                            </td>
+                          )}
                           <td><strong>{idx + 1}</strong></td>
                           <td>
                             <input 
@@ -777,7 +889,7 @@ export default function TemplateEditor() {
                         {/* Options Manager Row for select / radio / checkbox */}
                         {expandedOptionIdx === idx && ['select', 'radio', 'checkbox'].includes(field.type) && (
                           <tr>
-                            <td colSpan={8} style={{ backgroundColor: '#fcfcfc', padding: '12px 24px', borderLeft: '4px solid #0B1B3D' }}>
+                            <td colSpan={isLocked ? 8 : 9} style={{ backgroundColor: '#fcfcfc', padding: '12px 24px', borderLeft: '4px solid #0B1B3D' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                 <strong>Options for "{field.label_en || field.key}":</strong>
                                 {!isLocked && <button className="btn-secondary btn-sm" onClick={() => addOption(idx)}>+ Add Option</button>}

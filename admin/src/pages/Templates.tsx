@@ -32,10 +32,15 @@ export default function Templates() {
     category: string;
     fields: any[];
   } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteModal, setDeleteModal] = useState<{
     open: boolean;
     template: any;
-    confirmText: string;
+    loading: boolean;
+    error: string;
+  } | null>(null);
+  const [bulkDeleteModal, setBulkDeleteModal] = useState<{
+    open: boolean;
     loading: boolean;
     error: string;
   } | null>(null);
@@ -168,8 +173,27 @@ export default function Templates() {
   };
 
   useEffect(() => {
+    setSelectedIds(new Set());
     loadTemplates();
   }, [statusFilter, categoryFilter, searchQuery]);
+
+  const handleSelectAll = () => {
+    const allSelected = templates.length > 0 && templates.every(t => selectedIds.has(t.id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(templates.map(t => t.id)));
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleMigrate = async () => {
     if (!window.confirm('Are you sure you want to migrate seed templates into MongoDB? Existing admin edits will be preserved.')) return;
@@ -282,17 +306,46 @@ export default function Templates() {
   };
 
   const handleExecuteDelete = async () => {
-    if (!deleteModal || deleteModal.confirmText !== 'DELETE') return;
+    if (!deleteModal) return;
     const deletedId = deleteModal.template.id;
     setDeleteModal(prev => prev ? { ...prev, loading: true, error: '' } : null);
     try {
       await adminApi.adminDeleteTemplate(deletedId);
       setTemplates(prev => prev.filter(t => t.id !== deletedId));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(deletedId);
+        return next;
+      });
       setDeleteModal(null);
       loadTemplates();
-      alert(`Template '${deletedId}' has been permanently deleted from the catalog.`);
     } catch (err: any) {
       setDeleteModal(prev => prev ? { ...prev, loading: false, error: err.message } : null);
+    }
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleteModal(prev => ({ open: true, loading: true, error: '' }));
+    const idsToDelete = Array.from(selectedIds);
+    try {
+      const res = await adminApi.bulkDeleteTemplates(idsToDelete);
+      const deletedList: string[] = res.deleted_ids || idsToDelete;
+      const deletedSet = new Set<string>(deletedList);
+      setTemplates(prev => prev.filter(t => !deletedSet.has(t.id)));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        deletedSet.forEach((id: string) => next.delete(id));
+        return next;
+      });
+      setBulkDeleteModal(null);
+      if (res.failed_count > 0 && res.failed_ids?.length) {
+        const reasons = res.failed_ids.map((f: any) => `${f.id}: ${f.reason}`).join(', ');
+        alert(`Deleted ${res.deleted_count} templates. ${res.failed_count} templates could not be deleted because: ${reasons}`);
+      }
+      loadTemplates();
+    } catch (err: any) {
+      setBulkDeleteModal({ open: true, loading: false, error: err.message || 'Failed to bulk delete templates.' });
     }
   };
 
@@ -469,100 +522,152 @@ export default function Templates() {
           <button onClick={loadTemplates}>Retry</button>
         </div>
       ) : (
-        <div className="dashboard-table-card">
-          {templates.length === 0 ? (
-            <p className="no-data">No templates found matching your criteria</p>
-          ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name (EN / GU)</th>
-                  <th>Category</th>
-                  <th>Status</th>
-                  <th>Version</th>
-                  <th>Fields</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {templates.map(t => (
-                  <tr key={t.id}>
-                    <td>
-                      <div><strong>{t.name_en}</strong></div>
-                      <div className="text-gu" style={{ fontSize: '0.88rem', color: '#666' }}>{t.name_gu}</div>
-                      <code style={{ fontSize: '0.75rem', color: '#888' }}>{t.id}</code>
-                    </td>
-                    <td>
-                      <span className="category-pill">{t.category}</span>
-                      {t.sub_category && <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>{t.sub_category}</div>}
-                    </td>
-                    <td><StatusBadge status={t.status} /></td>
-                    <td>
-                      <span className="version-badge">v{t.version || 1}</span>
-                      {/* The lock is the published-version lock: only published
-                          templates are immutable (edits go through Clone). A
-                          stray `locked` flag on a draft/seed/archived record is
-                          not a real lock and must not show a lock icon. */}
-                      {t.locked && t.status === 'published' && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: '#888' }}>🔒</span>}
-                    </td>
-                    <td>{t.fields?.length || 0} fields</td>
-                    <td>
-                      <div className="action-buttons">
-                        <button className="action-btn" title="Preview Document" onClick={() => handleOpenPreview(t)}>
-                          👁️ View
-                        </button>
-                        <button className="action-btn text-primary" title="Edit Template" onClick={() => handleEdit(t)}>
-                          ✏️ Edit
-                        </button>
-                        <button className="action-btn" title="Clone Template" onClick={() => handleOpenClone(t)}>
-                          📋 Clone
-                        </button>
-                        <button className="action-btn" title="Version History" onClick={() => handleOpenHistory(t)}>
-                          📜 History
-                        </button>
-                        {t.status === 'draft' && (
-                          <button className="action-btn text-success" title="Publish Draft" onClick={() => handlePublish(t.id)}>
-                            🚀 Publish
-                          </button>
-                        )}
-                        {t.status !== 'archived' && (
-                          <button className="action-btn text-danger" title="Archive Template" onClick={() => handleArchive(t.id)}>
-                            📦 Archive
-                          </button>
-                        )}
-                        {isSuperAdmin && (
-                          <button
-                            className="action-btn text-danger"
-                            title="Permanently Delete Template from Catalog"
-                            style={{ color: '#dc2626', fontWeight: 500 }}
-                            onClick={() => setDeleteModal({
-                              open: true,
-                              template: t,
-                              confirmText: '',
-                              loading: false,
-                              error: '',
-                            })}
-                          >
-                            🗑️ Delete
-                          </button>
-                        )}
-                        {isSuperAdmin && isShadowRow(t) && (
-                          <button
-                            className="action-btn text-danger"
-                            title="Remove the draft/archived record hiding the seed template from the lawyer app"
-                            onClick={() => handleRemoveShadowDraft(t)}
-                          >
-                            🗑️ Remove Shadow Draft
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <>
+          {selectedIds.size > 0 && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              background: '#eff6ff',
+              border: '1px solid #bfdbfe',
+              padding: '12px 20px',
+              borderRadius: '8px',
+              marginBottom: '16px',
+            }}>
+              <div>
+                <strong style={{ color: '#1e40af', fontSize: '1rem' }}>
+                  {selectedIds.size === templates.length ? `All ${selectedIds.size} templates selected` : `${selectedIds.size} templates selected`}
+                </strong>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="btn-danger"
+                  style={{ padding: '6px 14px', fontSize: '0.88rem' }}
+                  onClick={() => setBulkDeleteModal({ open: true, loading: false, error: '' })}
+                  disabled={bulkDeleteModal?.loading}
+                >
+                  🗑️ Delete Selected ({selectedIds.size})
+                </button>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: '6px 14px', fontSize: '0.88rem' }}
+                  onClick={() => setSelectedIds(new Set())}
+                  disabled={bulkDeleteModal?.loading}
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
           )}
-        </div>
+          <div className="dashboard-table-card">
+            {templates.length === 0 ? (
+              <p className="no-data">No templates found matching your criteria</p>
+            ) : (
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    {isSuperAdmin && (
+                      <th style={{ width: '40px', textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={templates.length > 0 && templates.every(t => selectedIds.has(t.id))}
+                          onChange={handleSelectAll}
+                          title="Select All visible templates"
+                        />
+                      </th>
+                    )}
+                    <th>Name (EN / GU)</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Version</th>
+                    <th>Fields</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {templates.map(t => (
+                    <tr key={t.id} style={{ backgroundColor: selectedIds.has(t.id) ? '#eff6ff' : undefined }}>
+                      {isSuperAdmin && (
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(t.id)}
+                            onChange={() => handleToggleSelect(t.id)}
+                          />
+                        </td>
+                      )}
+                      <td>
+                        <div><strong>{t.name_en}</strong></div>
+                        <div className="text-gu" style={{ fontSize: '0.88rem', color: '#666' }}>{t.name_gu}</div>
+                        <code style={{ fontSize: '0.75rem', color: '#888' }}>{t.id}</code>
+                      </td>
+                      <td>
+                        <span className="category-pill">{t.category}</span>
+                        {t.sub_category && <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>{t.sub_category}</div>}
+                      </td>
+                      <td><StatusBadge status={t.status} /></td>
+                      <td>
+                        <span className="version-badge">v{t.version || 1}</span>
+                        {t.locked && t.status === 'published' && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: '#888' }}>🔒</span>}
+                      </td>
+                      <td>{t.fields?.length || 0} fields</td>
+                      <td>
+                        <div className="action-buttons">
+                          <button className="action-btn" title="Preview Document" onClick={() => handleOpenPreview(t)}>
+                            👁️ View
+                          </button>
+                          <button className="action-btn text-primary" title="Edit Template" onClick={() => handleEdit(t)}>
+                            ✏️ Edit
+                          </button>
+                          <button className="action-btn" title="Clone Template" onClick={() => handleOpenClone(t)}>
+                            📋 Clone
+                          </button>
+                          <button className="action-btn" title="Version History" onClick={() => handleOpenHistory(t)}>
+                            📜 History
+                          </button>
+                          {t.status === 'draft' && (
+                            <button className="action-btn text-success" title="Publish Draft" onClick={() => handlePublish(t.id)}>
+                              🚀 Publish
+                            </button>
+                          )}
+                          {t.status !== 'archived' && (
+                            <button className="action-btn text-danger" title="Archive Template" onClick={() => handleArchive(t.id)}>
+                              📦 Archive
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              className="action-btn text-danger"
+                              title="Permanently Delete Template from Catalog"
+                              style={{ color: '#dc2626', fontWeight: 500 }}
+                              onClick={() => setDeleteModal({
+                                open: true,
+                                template: t,
+                                loading: false,
+                                error: '',
+                              })}
+                            >
+                              🗑️ Delete
+                            </button>
+                          )}
+                          {isSuperAdmin && isShadowRow(t) && (
+                            <button
+                              className="action-btn text-danger"
+                              title="Remove the draft/archived record hiding the seed template from the lawyer app"
+                              onClick={() => handleRemoveShadowDraft(t)}
+                            >
+                              🗑️ Remove Shadow Draft
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       )}
 
       {/* Preview Modal */}
@@ -933,7 +1038,7 @@ export default function Templates() {
               )}
 
               <p style={{ fontSize: '0.9rem', color: '#374151', lineHeight: '1.5', margin: '0 0 16px' }}>
-                This will <strong>permanently remove</strong> the template from the active template catalog. Historical revisions and past generated documents will remain intact, but lawyers will no longer be able to create new applications with this template.
+                Delete template <strong>"{deleteModal.template.name_en}"</strong> permanently? This action cannot be undone.
               </p>
 
               <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '12px', marginBottom: '16px', fontSize: '0.85rem' }}>
@@ -944,21 +1049,6 @@ export default function Templates() {
                   <strong>Current Status:</strong> <div><StatusBadge status={deleteModal.template.status} /></div>
                   <strong>Version:</strong> <span>v{deleteModal.template.version || 1}</span>
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151', marginBottom: '6px', display: 'block' }}>
-                  To confirm permanent deletion, type <code style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '2px 6px', borderRadius: '4px', fontWeight: 700 }}>DELETE</code> below:
-                </label>
-                <input
-                  type="text"
-                  placeholder="Type DELETE to confirm"
-                  value={deleteModal.confirmText}
-                  onChange={e => setDeleteModal({ ...deleteModal, confirmText: e.target.value })}
-                  disabled={deleteModal.loading}
-                  style={{ width: '100%', borderColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : undefined }}
-                  autoFocus
-                />
               </div>
             </div>
             <div className="modal-footer">
@@ -972,15 +1062,74 @@ export default function Templates() {
               <button
                 className="btn-danger"
                 style={{
-                  backgroundColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : '#9ca3af',
-                  borderColor: deleteModal.confirmText === 'DELETE' ? '#dc2626' : '#9ca3af',
-                  cursor: deleteModal.confirmText === 'DELETE' ? 'pointer' : 'not-allowed',
+                  backgroundColor: '#dc2626',
+                  borderColor: '#dc2626',
                   color: '#fff',
                 }}
-                disabled={deleteModal.confirmText !== 'DELETE' || deleteModal.loading}
+                disabled={deleteModal.loading}
                 onClick={handleExecuteDelete}
               >
-                {deleteModal.loading ? 'Deleting...' : 'Permanently Delete Template'}
+                {deleteModal.loading ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Templates Modal */}
+      {bulkDeleteModal?.open && (
+        <div className="modal-overlay" onClick={() => { if (!bulkDeleteModal.loading) setBulkDeleteModal(null); }}>
+          <div className="modal-card" onClick={e => e.stopPropagation()} style={{ maxWidth: '540px' }}>
+            <div className="modal-header" style={{ borderBottom: '1px solid #fee2e2' }}>
+              <h3 style={{ color: '#b91c1c', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                ⚠️ Delete {selectedIds.size} Templates Permanently?
+              </h3>
+              <button className="btn-icon" disabled={bulkDeleteModal.loading} onClick={() => setBulkDeleteModal(null)}>✕</button>
+            </div>
+            <div className="modal-body">
+              {bulkDeleteModal.error && (
+                <div className="dashboard-error" style={{ marginBottom: '12px' }}>
+                  <p>{bulkDeleteModal.error}</p>
+                </div>
+              )}
+
+              <p style={{ fontSize: '0.9rem', color: '#374151', lineHeight: '1.5', margin: '0 0 12px' }}>
+                Delete <strong>{selectedIds.size} templates</strong> permanently?
+              </p>
+              <p style={{ color: '#b91c1c', fontWeight: 600, fontSize: '0.85rem', margin: '0 0 12px' }}>
+                This action cannot be undone. All selected templates, their language variants, and display-order entries will be permanently removed.
+              </p>
+
+              <div style={{ maxHeight: '160px', overflowY: 'auto', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', padding: '10px 14px', marginBottom: '16px', fontSize: '0.85rem' }}>
+                {Array.from(selectedIds).map((id) => {
+                  const t = templates.find((x) => x.id === id);
+                  return (
+                    <div key={id} style={{ padding: '3px 0' }}>
+                      • <strong>{t ? t.name_en : id}</strong> {t?.name_gu ? <span className="text-gu">({t.name_gu})</span> : null} <code style={{ fontSize: '0.75rem', color: '#888' }}>[{id}]</code>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="btn-secondary"
+                disabled={bulkDeleteModal.loading}
+                onClick={() => setBulkDeleteModal(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-danger"
+                style={{
+                  backgroundColor: '#dc2626',
+                  borderColor: '#dc2626',
+                  color: '#fff',
+                }}
+                disabled={bulkDeleteModal.loading}
+                onClick={handleExecuteBulkDelete}
+              >
+                {bulkDeleteModal.loading ? 'Deleting...' : `Delete Permanently (${selectedIds.size})`}
               </button>
             </div>
           </div>

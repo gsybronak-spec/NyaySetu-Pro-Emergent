@@ -72,8 +72,16 @@ export default function Catalog() {
 
   useEffect(() => { load(activeKind); }, [activeKind, load]);
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
   const switchKind = (k: KindConfig) => {
     setActiveKind(k);
+    setSelectedIds(new Set());
+    setSearchQuery('');
   };
 
   const openCreate = () => {
@@ -156,7 +164,6 @@ export default function Catalog() {
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<CatalogItem | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
@@ -164,24 +171,92 @@ export default function Catalog() {
 
   const confirmDelete = (item: CatalogItem) => {
     setDeleteItem(item);
-    setDeleteConfirm('');
     setDeleteError('');
     setDeleteOpen(true);
   };
 
   const executeDelete = async () => {
     if (!deleteItem) return;
-    if (deleteConfirm !== 'DELETE') return;
     setSaving(true);
     try {
       await adminApi.deleteCatalogItem(activeKind.kind, deleteItem.id, true);
       setItems((prev) => prev.filter((x) => x.id !== deleteItem.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteItem.id);
+        return next;
+      });
       setDeleteOpen(false);
       setDeleteItem(null);
     } catch (err: any) {
       setDeleteError(err.message || 'Failed to permanently delete item.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const filteredItems = items.filter((item) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      item.id.toLowerCase().includes(q) ||
+      item.en.toLowerCase().includes(q) ||
+      (item.gu && item.gu.toLowerCase().includes(q)) ||
+      (item.cat && item.cat.toLowerCase().includes(q))
+    );
+  });
+
+  const handleSelectAll = () => {
+    const allFilteredSelected = filteredItems.length > 0 && filteredItems.every((i) => selectedIds.has(i.id));
+    if (allFilteredSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredItems.forEach((i) => next.delete(i.id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filteredItems.forEach((i) => next.add(i.id));
+        return next;
+      });
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const executeBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    setBulkDeleteError('');
+    const idsToDelete = Array.from(selectedIds);
+    try {
+      const res = await adminApi.bulkDeleteCatalogItems(activeKind.kind, idsToDelete);
+      const deletedList: string[] = res.deleted_ids || idsToDelete;
+      const deletedSet = new Set<string>(deletedList);
+      setItems((prev) => prev.filter((x) => !deletedSet.has(x.id)));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        deletedSet.forEach((id: string) => next.delete(id));
+        return next;
+      });
+      setBulkDeleteOpen(false);
+      if (res.failed_count > 0 && res.failed_ids?.length) {
+        const reasons = res.failed_ids.map((f: any) => `${f.id}: ${f.reason}`).join(', ');
+        alert(`Deleted ${res.deleted_count} items. ${res.failed_count} items could not be deleted because: ${reasons}`);
+      }
+      load(activeKind);
+    } catch (err: any) {
+      setBulkDeleteError(err.message || 'Failed to bulk delete selected items.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -255,14 +330,64 @@ export default function Catalog() {
       </div>
 
       {isSuper && (
-        <div className="plans-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="plans-toolbar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button className="btn-primary" onClick={openCreate}>+ Add {activeKind.label.replace(/ \/.*/, '')} Entry</button>
             <span className="plans-hint">
               {reorderSaving ? 'Saving order...' : 'Drag rows using the ⋮⋮ handle to reorder'}
             </span>
           </div>
-          <span className="plans-hint">Catalog changes require super admin</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <input
+              type="text"
+              className="form-input"
+              style={{ width: '220px', padding: '6px 12px', fontSize: '0.85rem' }}
+              placeholder={`Search ${activeKind.label}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            <span className="plans-hint">Catalog changes require super admin</span>
+          </div>
+        </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          padding: '10px 16px',
+          borderRadius: '6px',
+          margin: '12px 0'
+        }}>
+          <div>
+            <strong style={{ color: '#1e40af', fontSize: '0.95rem' }}>
+              {selectedIds.size} {activeKind.label} selected
+            </strong>
+            {filteredItems.length !== items.length && (
+              <span style={{ marginLeft: '8px', color: '#6b7280', fontSize: '0.85rem' }}>
+                (filtered from {items.length} total)
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn-small btn-danger"
+              onClick={() => { setBulkDeleteError(''); setBulkDeleteOpen(true); }}
+              disabled={bulkDeleting}
+            >
+              🗑️ Delete Selected ({selectedIds.size})
+            </button>
+            <button
+              className="btn-small btn-plain"
+              onClick={() => setSelectedIds(new Set())}
+              disabled={bulkDeleting}
+            >
+              Clear Selection
+            </button>
+          </div>
         </div>
       )}
 
@@ -277,12 +402,22 @@ export default function Catalog() {
         <div className="dashboard-loading"><div className="spinner"></div><p>Loading {activeKind.label}…</p></div>
       ) : (
         <div className="dashboard-table-card">
-          {items.length === 0 ? (
-            <p className="no-data">No entries in {activeKind.label}</p>
+          {filteredItems.length === 0 ? (
+            <p className="no-data">No entries found matching your criteria</p>
           ) : (
             <table className="data-table">
               <thead>
                 <tr>
+                  {isSuper && (
+                    <th style={{ width: '36px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={filteredItems.length > 0 && filteredItems.every((i) => selectedIds.has(i.id))}
+                        onChange={handleSelectAll}
+                        title="Select all visible"
+                      />
+                    </th>
+                  )}
                   {isSuper && <th style={{ width: '40px', textAlign: 'center' }}>⇅</th>}
                   <th>ID</th>
                   <th>English</th>
@@ -295,7 +430,7 @@ export default function Catalog() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, idx) => (
+                {filteredItems.map((item, idx) => (
                   <tr
                     key={item.id}
                     draggable={isSuper}
@@ -305,11 +440,20 @@ export default function Catalog() {
                     onDrop={(e) => handleDrop(e, idx)}
                     style={{
                       opacity: draggedIdx === idx ? 0.35 : 1,
-                      backgroundColor: dragOverIdx === idx ? '#f0fdf4' : undefined,
+                      backgroundColor: dragOverIdx === idx ? '#f0fdf4' : (selectedIds.has(item.id) ? '#eff6ff' : undefined),
                       borderTop: dragOverIdx === idx ? '2px solid #16a34a' : undefined,
                       transition: 'background-color 0.15s ease',
                     }}
                   >
+                    {isSuper && (
+                      <td style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(item.id)}
+                          onChange={() => handleToggleSelect(item.id)}
+                        />
+                      </td>
+                    )}
                     {isSuper && (
                       <td
                         style={{
@@ -417,11 +561,11 @@ export default function Catalog() {
         <div className="modal-overlay">
           <div className="modal-card modal-card-danger">
             <div className="modal-header">
-              <h3>Permanent Hard Delete</h3>
+              <h3>Delete {activeKind.label.replace(/ \/.*/, '')} Permanently?</h3>
               <button className="modal-close" onClick={() => setDeleteOpen(false)}>✕</button>
             </div>
             <div className="modal-body">
-              <p>You are about to <strong>PERMANENTLY DELETE</strong> this catalog record:</p>
+              <p>Delete <strong>"{deleteItem.en}"</strong> permanently?</p>
               <div style={{ background: '#f5f5f5', padding: '12px', borderRadius: '4px', margin: '16px 0', fontFamily: 'monospace' }}>
                 <div><strong>Type:</strong> {activeKind.label}</div>
                 <div><strong>ID:</strong> {deleteItem.id}</div>
@@ -430,16 +574,8 @@ export default function Catalog() {
                 <div><strong>Status:</strong> {deleteItem.active ? 'Active' : 'Inactive'}</div>
               </div>
               <p style={{ color: '#d32f2f', fontWeight: 600, fontSize: '0.9rem' }}>
-                WARNING: This action cannot be undone. If this record is referenced by any existing cases or applications, deletion will be blocked and you will receive a 409 Conflict error. In that scenario, you must mark it as Inactive instead.
+                This action cannot be undone. If this record is referenced by any existing cases or applications, deletion will be blocked and you will receive a 409 Conflict error.
               </p>
-              <p style={{ marginTop: '16px' }}>Type <strong>DELETE</strong> below to confirm:</p>
-              <input 
-                className="form-input" 
-                value={deleteConfirm} 
-                onChange={e => setDeleteConfirm(e.target.value)} 
-                placeholder="DELETE" 
-                style={{ marginTop: '8px', border: '1px solid #d32f2f' }}
-              />
               {deleteError && (
                 <div style={{ marginTop: '12px', padding: '8px', background: '#ffebee', color: '#c62828', borderRadius: '4px', fontSize: '0.9rem' }}>
                   <strong>Deletion Failed:</strong><br/>{deleteError}
@@ -447,13 +583,57 @@ export default function Catalog() {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn-ghost" onClick={() => setDeleteOpen(false)}>Cancel</button>
+              <button className="btn-ghost" onClick={() => setDeleteOpen(false)} disabled={saving}>Cancel</button>
               <button 
                 className="btn-danger" 
-                disabled={deleteConfirm !== 'DELETE' || saving} 
+                disabled={saving} 
                 onClick={executeDelete}
               >
-                {saving ? 'Deleting...' : 'Permanently Delete'}
+                {saving ? 'Deleting...' : 'Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkDeleteOpen && (
+        <div className="modal-overlay">
+          <div className="modal-card modal-card-danger">
+            <div className="modal-header">
+              <h3>Delete {selectedIds.size} {activeKind.label} Permanently?</h3>
+              <button className="modal-close" onClick={() => setBulkDeleteOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <p>
+                Delete <strong>{selectedIds.size} {activeKind.label}</strong> permanently?
+              </p>
+              <p style={{ color: '#d32f2f', fontWeight: 600, fontSize: '0.9rem', marginTop: '12px' }}>
+                This action cannot be undone. All {selectedIds.size} selected records will be permanently removed from the database.
+              </p>
+              <div style={{ maxHeight: '160px', overflowY: 'auto', background: '#f9fafb', border: '1px solid #e5e7eb', padding: '8px 12px', borderRadius: '4px', margin: '12px 0', fontSize: '0.85rem' }}>
+                {Array.from(selectedIds).map((id) => {
+                  const it = items.find((x) => x.id === id);
+                  return (
+                    <div key={id} style={{ padding: '2px 0' }}>
+                      • <strong>{it ? it.en : id}</strong> <span style={{ color: '#888' }}>({id})</span>
+                    </div>
+                  );
+                })}
+              </div>
+              {bulkDeleteError && (
+                <div style={{ marginTop: '12px', padding: '8px', background: '#ffebee', color: '#c62828', borderRadius: '4px', fontSize: '0.9rem' }}>
+                  <strong>Bulk Deletion Failed:</strong><br/>{bulkDeleteError}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-ghost" onClick={() => setBulkDeleteOpen(false)} disabled={bulkDeleting}>Cancel</button>
+              <button 
+                className="btn-danger" 
+                disabled={bulkDeleting} 
+                onClick={executeBulkDelete}
+              >
+                {bulkDeleting ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>

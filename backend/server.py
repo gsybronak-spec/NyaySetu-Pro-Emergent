@@ -4554,12 +4554,68 @@ class CatalogStatusReq(BaseModel):
 class CatalogReorderReq(BaseModel):
     order: list[str] = Field(..., description="Ordered list of catalog item IDs")
 
+class CatalogBulkDeleteReq(BaseModel):
+    ids: list[str] = Field(..., description="List of catalog item IDs to delete")
+
 class TemplateReorderReq(BaseModel):
     order: Optional[list[str]] = Field(None, description="Ordered list of template IDs")
     template_order: Optional[list[str]] = Field(None, description="Ordered list of template IDs")
 
+class TemplateBulkDeleteReq(BaseModel):
+    ids: list[str] = Field(..., description="List of template IDs to delete")
+
 class SettingsUpdateReq(BaseModel):
     value: Union[int, str] = Field(..., description="New value for the setting")
+
+
+def _sanitize_bulk_ids(raw_ids: list) -> list[str]:
+    """Sanitize, validate, and deduplicate list of string IDs."""
+    if not isinstance(raw_ids, list):
+        return []
+    clean = []
+    seen = set()
+    for item in raw_ids:
+        if not isinstance(item, str):
+            continue
+        trimmed = item.strip()
+        if trimmed and trimmed not in seen and len(trimmed) < 200:
+            seen.add(trimmed)
+            clean.append(trimmed)
+    return clean
+
+
+class FirestoreBatchManager:
+    """Manages Firestore write operations, automatically committing batches before
+    reaching Firestore's 500-operation ceiling (safe ceiling: 400 ops)."""
+    def __init__(self, firestore_db, max_ops: int = 400):
+        self.db = firestore_db
+        self.max_ops = max_ops
+        self.current_batch = firestore_db.batch() if firestore_db is not None else None
+        self.op_count = 0
+        self.total_committed = 0
+
+    async def add_delete(self, doc_ref):
+        if self.db is None or self.current_batch is None:
+            return
+        if self.op_count >= self.max_ops:
+            await self.commit()
+        self.current_batch.delete(doc_ref)
+        self.op_count += 1
+
+    async def add_set(self, doc_ref, data, merge: bool = False):
+        if self.db is None or self.current_batch is None:
+            return
+        if self.op_count >= self.max_ops:
+            await self.commit()
+        self.current_batch.set(doc_ref, data, merge=merge)
+        self.op_count += 1
+
+    async def commit(self):
+        if self.db is not None and self.current_batch is not None and self.op_count > 0:
+            await self.current_batch.commit()
+            self.total_committed += self.op_count
+            self.current_batch = self.db.batch()
+            self.op_count = 0
 
 
 # ============================================================
@@ -6101,6 +6157,88 @@ async def admin_reorder_catalog(kind: str, req: CatalogReorderReq, admin=Depends
     return {"success": True, "items": [{**i, "active": i.get("active") is not False} for i in items]}
 
 
+@admin_api.post("/catalog/{kind}/bulk-delete")
+async def admin_bulk_delete_catalog_items(kind: str, req: CatalogBulkDeleteReq, admin=Depends(require_super_admin)):
+    """Bulk permanently delete catalog items with operation-count based Firestore batching."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, f"Unknown catalog kind '{kind}'")
+
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {"success": True, "deleted_count": 0, "failed_count": 0, "deleted_ids": [], "failed_ids": []}
+
+    coll = _CATALOG_KINDS[kind][0]
+    deleted_ids = []
+    failed_ids = []
+
+    ts = now().isoformat()
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for item_id in clean_ids:
+        ref = ""
+        if db is not None:
+            if kind == "case-types":
+                _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("case_type_id", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing cases"
+            elif kind == "laws":
+                _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("law_id", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing cases"
+            elif kind == "districts":
+                _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("district", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing users"
+                elif [x async for x in db.collection("cases").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing cases"
+                elif [x async for x in db.collection("courts").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing courts"
+                elif [x async for x in db.collection("talukas").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing talukas"
+                elif [x async for x in db.collection("police_stations").where(filter=firestore.FieldFilter("district_id", "==", item_id)).limit(1).stream()]: ref = "existing police stations"
+            elif kind == "talukas":
+                _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter("taluka", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing users"
+                elif [x async for x in db.collection("cases").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing cases"
+                elif [x async for x in db.collection("police_stations").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing police stations"
+                elif [x async for x in db.collection("courts").where(filter=firestore.FieldFilter("taluka_id", "==", item_id)).limit(1).stream()]: ref = "existing courts"
+            elif kind == "courts":
+                _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("court_id", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing cases"
+            elif kind == "police-stations":
+                _d = [x async for x in db.collection('cases').where(filter=firestore.FieldFilter("police_station_id", "==", item_id)).limit(1).stream()]
+                if _d: ref = "existing cases"
+
+        if ref:
+            failed_ids.append({"id": item_id, "reason": f"Referenced by {ref}"})
+            continue
+
+        if db is not None:
+            await batch_mgr.add_delete(db.collection(coll).document(item_id))
+            tombstone_id = f"{kind}:{item_id}"
+            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(tombstone_id), {
+                "id": item_id,
+                "kind": kind,
+                "deleted_at": ts,
+                "deleted_by": admin["id"],
+            })
+        deleted_ids.append(item_id)
+
+    await batch_mgr.commit()
+    _invalidate_catalog_cache(kind)
+    await _refresh_catalog_maps()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="catalog_bulk_delete",
+        entity_type=f"catalog/{kind}",
+        entity_id="bulk",
+        metadata={"deleted_count": len(deleted_ids), "failed_count": len(failed_ids), "deleted_ids": deleted_ids},
+    )
+
+    return {
+        "success": True,
+        "deleted_count": len(deleted_ids),
+        "failed_count": len(failed_ids),
+        "deleted_ids": deleted_ids,
+        "failed_ids": failed_ids,
+    }
+
+
 @admin_api.put("/catalog/{kind}/{item_id}")
 async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq,
                                     admin=Depends(require_super_admin)):
@@ -6427,8 +6565,8 @@ async def admin_list_templates(
     category: Optional[str] = None,
     q: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: str = "updated_at",
-    sort_order: str = "desc",
+    sort_by: str = "sort_order",
+    sort_order: str = "asc",
     format: Optional[str] = None,
     admin=Depends(get_admin),
 ):
@@ -6437,21 +6575,70 @@ async def admin_list_templates(
         return {"templates": [], "items": [], "total": 0, "page": page or 1, "page_size": page_size or 50, "total_pages": 1}
         
     await _ensure_seed_complete()
-    query: dict = {}
+    deleted_ids = await _get_deleted_template_ids()
+    all_seeds = _get_all_seed_templates()
+    seed_map = {t["id"]: t for t in all_seeds if t["id"] not in deleted_ids}
+    seed_ids = set(seed_map.keys())
+
+    all_db = []
+    seen_ids = set()
+    if db is not None:
+        async for d in db.collection('templates').stream():
+            doc_data = d.to_dict() or {}
+            tid = doc_data.get("id") or d.id
+            if not tid or tid in deleted_ids:
+                continue
+            doc_data["id"] = tid
+            # If doc is a seed template or stub, merge seed definition while preserving existing values
+            if tid in seed_map:
+                base = dict(seed_map[tid])
+                base.update({k: v for k, v in doc_data.items() if v is not None})
+                doc_data = base
+            seen_ids.add(tid)
+            all_db.append(doc_data)
+
+    # Include any seed templates not yet materialized in Firestore
+    for tid, s_tpl in seed_map.items():
+        if tid not in seen_ids:
+            all_db.append(dict(s_tpl, status="seed", source="seed"))
+
+    # Set status and source for unedited seed templates
+    for t in all_db:
+        tid = t.get("id", "")
+        if t.get("source") not in ("admin_edited", "admin_created") and tid in seed_ids and t.get("status") not in ("draft", "archived"):
+            t["status"] = t.get("status") or "seed"
+            t["source"] = t.get("source") or "seed"
+
+    search_term = (search or q or "").strip().lower()
     if status and status != "all":
-        query["status"] = status
+        all_db = [t for t in all_db if t.get("status") == status]
     if category and category != "all":
-        query["category"] = {"$regex": f"^{re.escape(category)}$", "$options": "i"}
-    
-    search_term = (search or q or "").strip()
+        all_db = [t for t in all_db if str(t.get("category", "")).lower() == category.lower()]
     if search_term:
-        ql = re.escape(search_term)
-        query["$or"] = [
-            {"name_en": {"$regex": ql, "$options": "i"}},
-            {"name_gu": {"$regex": ql, "$options": "i"}},
-            {"id": {"$regex": ql, "$options": "i"}},
+        all_db = [
+            t for t in all_db
+            if search_term in str(t.get("name_en", "")).lower()
+            or search_term in str(t.get("name_gu", "")).lower()
+            or search_term in str(t.get("id", "")).lower()
         ]
 
+    # Deterministic safe sort
+    sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
+    
+    def _safe_sort_key(t):
+        if sort_by == "sort_order":
+            so = t.get("sort_order")
+            return (so if isinstance(so, (int, float)) else 999999, str(t.get("name_en") or ""))
+        val = t.get(sort_by)
+        if val is None:
+            return ""
+        if isinstance(val, (int, float)):
+            return val
+        return str(val)
+
+    all_db.sort(key=_safe_sort_key, reverse=(sort_direction == -1))
+
+    total = len(all_db)
     is_paginated = (
         format == "paginated"
         or page is not None
@@ -6464,34 +6651,6 @@ async def admin_list_templates(
     eff_limit = min(max(eff_limit, 1), 200)
     eff_offset = offset if offset is not None else ((max(page, 1) - 1) * eff_limit if page is not None else 0)
     eff_page = page if page is not None else (eff_offset // eff_limit + 1)
-
-    sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
-    sort_field = sort_by if sort_by in ("updated_at", "created_at", "name_en", "name_gu", "version", "category", "sort_order") else "sort_order"
-
-    deleted_ids = await _get_deleted_template_ids()
-    all_db = [d.to_dict() async for d in db.collection('templates').stream()]
-    all_db = [t for t in all_db if t.get("id") not in deleted_ids]
-    seed_ids = {t["id"] for t in _get_all_seed_templates() if t["id"] not in deleted_ids}
-
-    for t in all_db:
-        if t.get("source") not in ("admin_edited", "admin_created") and t["id"] in seed_ids and t.get("status") not in ("draft", "archived"):
-            t["status"] = "seed"
-            t["source"] = "seed"
-
-    if status and status != "all":
-        all_db = [t for t in all_db if t.get("status") == status]
-    if category and category != "all":
-        all_db = [t for t in all_db if str(t.get("category", "")).lower() == category.lower()]
-    if search_term:
-        ql = search_term.lower()
-        all_db = [t for t in all_db if ql in str(t.get("name_en", "")).lower() or ql in str(t.get("name_gu", "")).lower() or ql in str(t.get("id", "")).lower()]
-
-    if sort_field == "sort_order":
-        all_db.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("name_en", "")), reverse=(sort_direction == -1))
-    else:
-        all_db.sort(key=lambda t: (t.get(sort_field) or ""), reverse=(sort_direction == -1))
-
-    total = len(all_db)
     total_pages = math.ceil(total / eff_limit) if total > 0 else 1
 
     if is_paginated:
@@ -6499,13 +6658,14 @@ async def admin_list_templates(
     else:
         db_templates = all_db
 
+    # Fast O(1) enrichment (no serial N+1 queries)
     enriched = []
     for t in db_templates:
-        rev_count = len([d async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', t["id"])).stream()])
+        tid = t.get("id", "")
         enriched.append({
             **t,
-            "revision_count": max(rev_count, 1),
-            "is_seed_template": (t.get("source") == "seed" or t["id"] in seed_ids),
+            "revision_count": t.get("revision_count") or t.get("version", 1),
+            "is_seed_template": (t.get("source") == "seed" or tid in seed_ids),
         })
 
     if not is_paginated:
@@ -6523,19 +6683,119 @@ async def admin_list_templates(
     }
 
 
+@admin_api.post("/templates/bulk-delete")
+async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(require_super_admin)):
+    """Bulk permanently delete templates with operation-count based Firestore batching.
+    Safely deletes template document and language variant documents, records tombstones,
+    and prunes template_display_order."""
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {"success": True, "deleted_count": 0, "failed_count": 0, "deleted_ids": [], "failed_ids": []}
+
+    deleted_ids = []
+    failed_ids = []
+    ts = now().isoformat()
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for template_id in clean_ids:
+        if db is not None:
+            # Delete primary document and variant documents
+            await batch_mgr.add_delete(db.collection("templates").document(template_id))
+            await batch_mgr.add_delete(db.collection("templates").document(f"{template_id}_gu"))
+            await batch_mgr.add_delete(db.collection("templates").document(f"{template_id}_en"))
+
+            # Write tombstones
+            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}"), {
+                "id": template_id,
+                "kind": "template",
+                "deleted_at": ts,
+                "deleted_by": admin["id"],
+            })
+            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}_gu"), {
+                "id": f"{template_id}_gu",
+                "kind": "template",
+                "deleted_at": ts,
+                "deleted_by": admin["id"],
+            })
+            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}_en"), {
+                "id": f"{template_id}_en",
+                "kind": "template",
+                "deleted_at": ts,
+                "deleted_by": admin["id"],
+            })
+        deleted_ids.append(template_id)
+
+    # Prune from template_display_order
+    if db is not None and deleted_ids:
+        curr_order = await _get_setting("template_display_order")
+        if isinstance(curr_order, list):
+            del_set = set(deleted_ids)
+            for d in list(del_set):
+                del_set.add(d.replace("_gu", "").replace("_en", ""))
+                del_set.add(f"{d}_gu")
+                del_set.add(f"{d}_en")
+            filtered_order = [x for x in curr_order if x not in del_set]
+            if len(filtered_order) != len(curr_order):
+                await batch_mgr.add_set(db.collection("settings").document("template_display_order"), {
+                    "value": filtered_order,
+                    "updated_at": ts,
+                    "updated_by": admin["id"],
+                }, merge=True)
+
+    await batch_mgr.commit()
+    invalidate_settings_cache("template_display_order")
+    invalidate_published_templates_cache()
+    _invalidate_catalog_cache()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="templates_bulk_delete",
+        entity_type="template",
+        entity_id="bulk",
+        metadata={"deleted_count": len(deleted_ids), "failed_count": len(failed_ids), "deleted_ids": deleted_ids},
+    )
+
+    return {
+        "success": True,
+        "deleted_count": len(deleted_ids),
+        "failed_count": len(failed_ids),
+        "deleted_ids": deleted_ids,
+        "failed_ids": failed_ids,
+    }
+
+
 @admin_api.get("/templates/{template_id}")
 async def admin_get_template(template_id: str, admin=Depends(require_super_admin)):
     """Get full template details from db.templates for admin editing, including revision count."""
     if _is_templates_disabled():
         raise HTTPException(404, "Template not found")
     await _ensure_seed_complete()
-    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
+    deleted_ids = await _get_deleted_template_ids()
+    if template_id in deleted_ids:
+        raise HTTPException(404, "Template not found (deleted)")
+
+    t = None
+    if db is not None:
+        _s = await db.collection('templates').document(template_id).get()
+        t = _s.to_dict() if _s.exists else None
+
+    seed = next((s for s in _get_all_seed_templates() if s["id"] == template_id), None)
     if not t:
-        raise HTTPException(404, "Template not found")
-    rev_count = len([d async for d in db.collection('template_revisions').where(filter=firestore.FieldFilter('template_id', '==', {"template_id": template_id}['template_id'])).stream()])
+        if seed:
+            t = dict(seed)
+        else:
+            raise HTTPException(404, "Template not found")
+    elif seed:
+        # If Firestore doc is missing fields (e.g. stub), merge seed definition
+        merged = dict(seed)
+        merged.update({k: v for k, v in t.items() if v is not None})
+        t = merged
+
+    t["id"] = template_id
+    rev_count = t.get("revision_count") or t.get("version", 1)
     return {
         **t,
-        "revision_count": max(rev_count, 1),
+        "revision_count": rev_count,
         "current_version": t.get("version", 1),
     }
 
@@ -7297,7 +7557,7 @@ async def seed_templates(force: bool = False) -> dict:
             skipped_ids.append(t["id"])
             continue
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
-        if existing:
+        if existing and (existing.get("content_en") or existing.get("content_gu")):
             skipped_ids.append(t["id"])
             continue
         template_doc = {
@@ -7353,6 +7613,11 @@ async def seed_templates(force: bool = False) -> dict:
             "updated_at": ts,
             "published_at": ts,
         }
+        if existing:
+            if existing.get("sort_order") is not None:
+                template_doc["sort_order"] = existing["sort_order"]
+            if existing.get("updated_at"):
+                template_doc["updated_at"] = existing["updated_at"]
         doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
         created_ids.append(t["id"])
         inserted += 1
