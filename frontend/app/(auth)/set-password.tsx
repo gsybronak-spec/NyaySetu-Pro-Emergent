@@ -6,6 +6,7 @@ import { router } from "expo-router";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { api } from "@/src/api/client";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
@@ -54,7 +55,7 @@ export default function SetPassword() {
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: Spacing.xl }} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={{ padding: Spacing.xl }} keyboardShouldPersistTaps="handled">
           {isFirst && (
             <View style={[styles.info, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40" }]}>
               <Ionicons name="information-circle" size={18} color={colors.onBrandTertiary} />
@@ -91,7 +92,7 @@ export default function SetPassword() {
           </Pressable>
 
           <Button testID="set-password-save" title={isFirst ? "Set Password" : "Save Password"} loading={busy} onPress={save} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

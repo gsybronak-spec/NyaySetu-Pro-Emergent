@@ -16,6 +16,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
 
 interface SearchResults {
@@ -27,6 +28,7 @@ export default function Search() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
   const [q, setQ] = useState("");
+  const { keyboardHeight } = useKeyboardHeight();
   const [results, setResults] = useState<SearchResults | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -232,7 +234,7 @@ export default function Search() {
           keyExtractor={() => "root"}
           contentContainerStyle={isDesktop ? { alignItems: "center" } : undefined}
           renderItem={() => (
-            <View style={isDesktop ? { maxWidth: 820, width: "100%", paddingBottom: 120 } : { paddingHorizontal: Spacing.lg, paddingBottom: 120 }}>
+            <View style={isDesktop ? { maxWidth: 820, width: "100%", paddingBottom: 120 } : { paddingHorizontal: Spacing.lg, paddingBottom: 120 + keyboardHeight }}>
               {results.cases.length > 0 && (
                 <>
                   {sectionHeader("Cases", results.cases.length)}

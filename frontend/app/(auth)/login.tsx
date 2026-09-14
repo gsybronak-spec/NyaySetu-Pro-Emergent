@@ -9,13 +9,15 @@ import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { useAuth } from "@/src/context/AuthContext";
 import { useGoogleAuth } from "@/src/hooks/useGoogleAuth";
+import { Radius, Spacing } from "@/src/theme/tokens";
+import { useResponsive } from "@/src/hooks/useResponsive";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import {
   destroyFirebaseRecaptcha,
   firebaseConfigured as fbConfigured,
   firebaseEmailPasswordLogin,
   firebaseSendPhoneOtp,
 } from "@/src/hooks/useFirebaseAuth";
-import { Spacing } from "@/src/theme/tokens";
 
 type Mode = "password" | "otp";
 
@@ -137,7 +139,7 @@ export default function Login() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
             <View style={styles.logo}>
               <Image
@@ -308,7 +310,7 @@ export default function Login() {
 
             <Text style={styles.hint}>By continuing, you agree to our Terms and Privacy Policy.</Text>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
         {/* The invisible Firebase reCAPTCHA widget renders inside the
             empty anchor below (web only). Permanently mounted so switching
             between Password and OTP modes never leaves the anchor unmounted. */}

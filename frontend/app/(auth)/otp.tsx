@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/context/AuthContext";
 import {
   firebaseConfirmPhoneOtp,
@@ -50,7 +51,7 @@ export default function Otp() {
   return (
     <LinearGradient colors={["#061024", "#0B1B3D"]} style={{ flex: 1 }}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.logo}>
             <Image
               source={Platform.OS === "web" ? "/logo.webp" : require("../../assets/images/logo.png")}
@@ -81,7 +82,7 @@ export default function Otp() {
                 the OTP comes from Firebase SMS. */}
             {firebase !== "1" && <Text style={styles.hint}>For testing use OTP: 123456</Text>}
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

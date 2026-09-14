@@ -8,6 +8,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 
 const FILTERS = ["All", "Civil", "Criminal", "Other"];
@@ -33,6 +34,7 @@ export default function Cases() {
   const insets = useSafeAreaInsets();
   const [cases, setCases] = useState<any[]>([]);
   const [q, setQ] = useState("");
+  const { keyboardHeight } = useKeyboardHeight();
   const [filter, setFilter] = useState("All");
   const [showArchived, setShowArchived] = useState(false);
   const [sort, setSort] = useState("updated");
@@ -345,7 +347,8 @@ export default function Cases() {
         maxToRenderPerBatch={8}
         windowSize={5}
         removeClippedSubviews={Platform.OS !== "web"}
-        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ padding: Spacing.lg, paddingTop: Spacing.sm, paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) + (keyboardHeight > 0 ? keyboardHeight : 0) }}
         ItemSeparatorComponent={() => <View style={{ height: Spacing.sm }} />}
         ListEmptyComponent={
           !loading ? (

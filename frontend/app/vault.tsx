@@ -19,6 +19,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { saveDocument } from "@/src/utils/download";
 
@@ -48,6 +49,7 @@ export default function DocumentVault() {
 
   const [activeTab, setActiveTab] = useState<VaultTab>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const { keyboardHeight } = useKeyboardHeight();
   const [documents, setDocuments] = useState<any[]>([]);
   const [drafts, setDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -374,7 +376,8 @@ export default function DocumentVault() {
       ) : (
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={{ padding: Spacing.md, paddingBottom: 100 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: Spacing.md, paddingBottom: 100 + (keyboardHeight > 0 ? keyboardHeight : 0) }}
         >
           {(activeTab === "all" || activeTab === "drafts") && filteredDrafts.length > 0 && (
             <View style={{ marginBottom: Spacing.lg }}>

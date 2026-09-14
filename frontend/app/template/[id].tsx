@@ -23,6 +23,7 @@ import { formatAdvocateName } from "@/src/utils/advocate";
 import { saveDocument } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -780,7 +781,7 @@ export default function TemplateApplication() {
         </View>
 
         {step === "fields" && (
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}
             keyboardShouldPersistTaps="handled"
           >
@@ -1011,7 +1012,7 @@ export default function TemplateApplication() {
               </View>
             ) : null}
             </View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         )}
 
         {step === "preview" && (

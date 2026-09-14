@@ -7,6 +7,7 @@ import { router } from "expo-router";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import {
@@ -151,7 +152,7 @@ export default function Signup() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
       >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
             <View style={styles.logo}>
               <Image
@@ -278,7 +279,7 @@ export default function Signup() {
               </Text>
             </Pressable>
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );

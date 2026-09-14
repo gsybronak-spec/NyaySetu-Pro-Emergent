@@ -18,6 +18,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { Dropdown } from "@/src/components/Dropdown";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -241,7 +242,7 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#061024" }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-        <ScrollView
+        <KeyboardAwareScrollView
           contentContainerStyle={[
             styles.scrollContent,
             isDesktop && styles.desktopContainer,
@@ -530,7 +531,7 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
               />
             )}
           </View>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

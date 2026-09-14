@@ -8,6 +8,7 @@ import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
 import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
+import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
@@ -744,7 +745,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <View style={{ width: 24 }} />
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
           {/* Client Mobile Lookup Header */}
           <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
@@ -1003,7 +1004,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           {form.court_id === "other" && (
             <Field testID="court-custom" label="Enter Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court_custom} onChangeText={(v) => update("court_custom", v)} />
           )}
-        </ScrollView>
+        </KeyboardAwareScrollView>
 
         <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
           <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={handleFormSubmit} />

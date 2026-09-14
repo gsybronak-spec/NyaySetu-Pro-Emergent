@@ -8,6 +8,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
 import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
@@ -21,6 +22,7 @@ export default function Templates() {
   const params = useLocalSearchParams<{ cat?: string }>();
 
   const [q, setQ] = useState("");
+  const { keyboardHeight } = useKeyboardHeight();
   const [debouncedQ, setDebouncedQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -334,10 +336,11 @@ export default function Templates() {
           windowSize={5}
           removeClippedSubviews={Platform.OS !== "web"}
           columnWrapperStyle={styles.mobileColWrapper}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={{
             paddingHorizontal: Spacing.md,
             paddingTop: Spacing.xs,
-            paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl),
+            paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) + (keyboardHeight > 0 ? keyboardHeight : 0),
             gap: Spacing.sm,
           }}
           renderItem={({ item }) => {

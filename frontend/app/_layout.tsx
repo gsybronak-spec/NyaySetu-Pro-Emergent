@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { ThemeProvider } from "@/src/theme/ThemeContext";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { initWebKeyboardManager } from "@/src/utils/webKeyboardManager";
 
 LogBox.ignoreAllLogs(true);
 
@@ -22,6 +23,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded || error) {
       SplashScreen.hideAsync();
+    }
+    if (Platform.OS === "web") {
+      initWebKeyboardManager();
     }
   }, [loaded, error]);
 

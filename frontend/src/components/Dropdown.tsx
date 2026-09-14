@@ -4,6 +4,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 
 export interface Option {
   id: string;
@@ -47,6 +48,7 @@ export function Dropdown({
   const { isDesktop } = useResponsive();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const { keyboardHeight } = useKeyboardHeight();
   const selected = options.find((o) => o.id === value);
 
   const filtered = useMemo(() => {
@@ -108,6 +110,7 @@ export function Dropdown({
           style={[
             styles.backdrop,
             isDesktop && { justifyContent: "center", alignItems: "center", padding: Spacing.xl },
+            !isDesktop && keyboardHeight > 0 && { paddingBottom: keyboardHeight },
           ]}
           onPress={close}
         >
@@ -156,7 +159,7 @@ export function Dropdown({
               </View>
             ) : null}
 
-            <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+            <ScrollView style={{ maxHeight: isDesktop ? 420 : (keyboardHeight > 0 ? 200 : 420) }} keyboardShouldPersistTaps="handled">
               {loading ? (
                 <View style={styles.centerBox}>
                   <ActivityIndicator size="small" color={colors.brandPrimary} />
