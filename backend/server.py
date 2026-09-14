@@ -6081,6 +6081,26 @@ async def admin_create_catalog_item(kind: str, req: CatalogItemReq,
     return {"success": True, "item": {**doc, "active": True}}
 
 
+@admin_api.put("/catalog/{kind}/reorder")
+async def admin_reorder_catalog(kind: str, req: CatalogReorderReq, admin=Depends(require_super_admin)):
+    """Update display order for catalog items."""
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(404, "Unknown catalog kind")
+    coll = _CATALOG_KINDS[kind][0]
+    ts = now().isoformat()
+    if db is not None:
+        for idx, item_id in enumerate(req.order):
+            await db.collection(coll).document(item_id).set({
+                "sort_order": idx,
+                "updated_at": ts,
+                "updated_by": admin["id"]
+            }, merge=True)
+    _invalidate_catalog_cache(kind)
+    await _refresh_catalog_maps()
+    items = await _load_catalog(kind)
+    return {"success": True, "items": [{**i, "active": i.get("active") is not False} for i in items]}
+
+
 @admin_api.put("/catalog/{kind}/{item_id}")
 async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq,
                                     admin=Depends(require_super_admin)):
@@ -6209,25 +6229,6 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
     )
     return {"success": True, "message": f"Catalog item '{item_id}' {'permanently deleted' if hard else 'deactivated'} successfully"}
 
-
-@admin_api.put("/catalog/{kind}/reorder")
-async def admin_reorder_catalog(kind: str, req: CatalogReorderReq, admin=Depends(require_super_admin)):
-    """Update display order for catalog items."""
-    if kind not in _CATALOG_KINDS:
-        raise HTTPException(404, "Unknown catalog kind")
-    coll = _CATALOG_KINDS[kind][0]
-    ts = now().isoformat()
-    if db is not None:
-        for idx, item_id in enumerate(req.order):
-            await db.collection(coll).document(item_id).set({
-                "sort_order": idx,
-                "updated_at": ts,
-                "updated_by": admin["id"]
-            }, merge=True)
-    _invalidate_catalog_cache(kind)
-    await _refresh_catalog_maps()
-    items = await _load_catalog(kind)
-    return {"success": True, "items": [{**i, "active": i.get("active") is not False} for i in items]}
 
 def _validate_setting_value(key: str, value) -> None:
     """Validate a setting value against its schema. Raises HTTPException(422) on invalid."""
