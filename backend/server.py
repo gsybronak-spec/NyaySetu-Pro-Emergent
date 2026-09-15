@@ -2400,8 +2400,18 @@ async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
 
 
 async def _get_deleted_template_ids() -> set[str]:
-    """Return set of permanently deleted template IDs."""
-    return await _get_deleted_catalog_ids("template")
+    """Return set of permanently deleted template IDs, expanding base and variants."""
+    raw_ids = await _get_deleted_catalog_ids("template")
+    expanded = set()
+    for tid in raw_ids:
+        if not tid or not isinstance(tid, str):
+            continue
+        expanded.add(tid)
+        base = tid[:-3] if tid.endswith(("_gu", "_en")) else tid
+        expanded.add(base)
+        expanded.add(f"{base}_gu")
+        expanded.add(f"{base}_en")
+    return expanded
 
 
 async def _load_catalog(kind: str) -> list:
@@ -2849,10 +2859,10 @@ async def _get_published_templates() -> list:
     db_templates = []
     if db is not None:
         db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
-        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids]
+        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
     
     if not db_templates and db is None:
-        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids]
+        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
 
     db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
@@ -2868,12 +2878,19 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     """Get a single published template by ID with fast in-memory caching."""
     if _is_templates_disabled():
         return None
+    deleted_ids = await _get_deleted_template_ids()
+    cand_set = {template_id, f"{template_id}_gu", f"{template_id}_en"}
+    base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
+    cand_set.add(base_cand)
+    if cand_set.intersection(deleted_ids):
+        return None
+
     # Fast path: check in-memory cached published templates first (<0.1ms)
     try:
         all_tpls = await _get_published_templates()
         for cand in (template_id, f"{template_id}_gu", f"{template_id}_en"):
             for tpl in all_tpls:
-                if tpl.get("id") == cand or tpl.get("template_id") == cand:
+                if (tpl.get("id") == cand or tpl.get("template_id") == cand) and tpl.get("id") not in deleted_ids and tpl.get("template_id") not in deleted_ids:
                     return {**tpl, "format_version": tpl.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
     except Exception:
         pass
@@ -2886,7 +2903,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     if not t:
         _snap_en = await db.collection("templates").document(f"{template_id}_en").get()
         t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
-    if t:
+    if t and t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids:
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
     return None
 
@@ -4120,7 +4137,10 @@ async def remove_fav_court(court_id: str, user=Depends(get_user)):
 
 @api.get("/favourites/templates")
 async def get_fav_templates(user=Depends(get_user)):
-    return {"favourite_templates": user.get("favourite_templates") or []}
+    deleted_ids = await _get_deleted_template_ids()
+    favs = user.get("favourite_templates") or []
+    favs = [f for f in favs if f not in deleted_ids and f"{f}_gu" not in deleted_ids and f"{f}_en" not in deleted_ids]
+    return {"favourite_templates": favs}
 
 
 @api.post("/favourites/templates/{template_id}")
@@ -4142,9 +4162,14 @@ async def remove_fav_template(template_id: str, user=Depends(get_user)):
 
 @api.get("/user/template-preferences")
 async def get_template_preferences(user=Depends(get_user)):
+    deleted_ids = await _get_deleted_template_ids()
+    favs = user.get("favourite_templates") or []
+    favs = [f for f in favs if f not in deleted_ids and f"{f}_gu" not in deleted_ids and f"{f}_en" not in deleted_ids]
+    order = user.get("template_order") or []
+    order = [o for o in order if o not in deleted_ids and f"{o}_gu" not in deleted_ids and f"{o}_en" not in deleted_ids]
     return {
-        "favourite_templates": user.get("favourite_templates") or [],
-        "template_order": user.get("template_order") or [],
+        "favourite_templates": favs,
+        "template_order": order,
     }
 
 
@@ -4169,8 +4194,8 @@ async def get_catalog_template_order():
         try:
             order = json.loads(order)
         except Exception:
-            order = []
-    if not isinstance(order, list) or len(order) == 0:
+            order = None
+    if order is None or not isinstance(order, list):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
@@ -6464,8 +6489,8 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         try:
             order = json.loads(order)
         except Exception:
-            order = []
-    if not isinstance(order, list) or len(order) == 0:
+            order = None
+    if order is None or not isinstance(order, list):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
@@ -6736,31 +6761,17 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
     batch_mgr = FirestoreBatchManager(db, max_ops=400)
 
     for template_id in clean_ids:
+        base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
+        target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
         if db is not None:
-            # Delete primary document and variant documents
-            await batch_mgr.add_delete(db.collection("templates").document(template_id))
-            await batch_mgr.add_delete(db.collection("templates").document(f"{template_id}_gu"))
-            await batch_mgr.add_delete(db.collection("templates").document(f"{template_id}_en"))
-
-            # Write tombstones
-            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}"), {
-                "id": template_id,
-                "kind": "template",
-                "deleted_at": ts,
-                "deleted_by": admin["id"],
-            })
-            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}_gu"), {
-                "id": f"{template_id}_gu",
-                "kind": "template",
-                "deleted_at": ts,
-                "deleted_by": admin["id"],
-            })
-            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{template_id}_en"), {
-                "id": f"{template_id}_en",
-                "kind": "template",
-                "deleted_at": ts,
-                "deleted_by": admin["id"],
-            })
+            for tid in target_ids:
+                await batch_mgr.add_delete(db.collection("templates").document(tid))
+                await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{tid}"), {
+                    "id": tid,
+                    "kind": "template",
+                    "deleted_at": ts,
+                    "deleted_by": admin["id"],
+                })
         deleted_ids.append(template_id)
 
     # Prune from template_display_order
@@ -7209,19 +7220,22 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     if not t:
         raise HTTPException(404, "Template not found")
     
-    await db.collection('templates').document(template_id).delete()
+    base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
+    target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
+    for tid in target_ids:
+        await db.collection('templates').document(tid).delete()
+        if db is not None:
+            tombstone_id = f"template:{tid}"
+            await db.collection("deleted_catalog_items").document(tombstone_id).set({
+                "id": tid,
+                "kind": "template",
+                "deleted_at": now().isoformat(),
+                "deleted_by": admin["id"],
+            })
     if db is not None:
-        tombstone_id = f"template:{template_id}"
-        await db.collection("deleted_catalog_items").document(tombstone_id).set({
-            "id": template_id,
-            "kind": "template",
-            "deleted_at": now().isoformat(),
-            "deleted_by": admin["id"],
-        })
         curr_order = await _get_setting("template_display_order")
         if isinstance(curr_order, list):
-            base_id = template_id.replace("_gu", "").replace("_en", "")
-            filtered_order = [x for x in curr_order if x != template_id and x != base_id]
+            filtered_order = [x for x in curr_order if x not in target_ids]
             if len(filtered_order) != len(curr_order):
                 await db.collection("settings").document("template_display_order").set({
                     "value": filtered_order,

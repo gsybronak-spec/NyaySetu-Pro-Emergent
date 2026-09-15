@@ -86,7 +86,7 @@ export function searchTemplatePairs(
     qTokens = allTokens;
   }
 
-  const catalog = Array.isArray(sourcePairs) && sourcePairs.length > 0 ? sourcePairs : TEMPLATE_LOGICAL_PAIRS;
+  const catalog = sourcePairs !== undefined ? sourcePairs : TEMPLATE_LOGICAL_PAIRS;
   const results: SearchMatchedPair[] = [];
 
   for (const pair of catalog) {

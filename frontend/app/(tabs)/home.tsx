@@ -13,7 +13,7 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
-import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 import { NotificationCenter } from "@/src/components/NotificationCenter";
@@ -26,7 +26,10 @@ export default function Home() {
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState(() => ({ balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }));
   const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
-    getOrderedTemplatePairs(catalogCache.peekTemplateOrder()).slice(0, 10)
+    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).slice(0, 10)
+  );
+  const [totalTemplateCount, setTotalTemplateCount] = useState<number>(() =>
+    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).length
   );
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [drafts, setDrafts] = useState<any[]>([]);
@@ -39,17 +42,19 @@ export default function Home() {
 
   const load = useCallback(async () => {
     let failed = false;
-    const [q, w, drs, order] = await Promise.all([
+    const [q, w, drs, tpls, order] = await Promise.all([
       api.quote().catch(() => { failed = true; return null; }),
       api.wallet().catch(() => { failed = true; return null; }),
       api.drafts().catch(() => { failed = true; return []; }),
+      catalogCache.getPublishedTemplates().catch(() => null),
       catalogCache.getTemplateOrder().catch(() => null),
     ]);
     if (q?.quote) setQuote(q.quote);
     if (w && typeof w === "object") setWallet(w);
     setDrafts(Array.isArray(drs) ? drs : []);
-    const ordered = getOrderedTemplatePairs(order);
-    setTemplatePairs(ordered.slice(0, 10));
+    const active = getActiveTemplatePairs(tpls, order);
+    setTemplatePairs(active.slice(0, 10));
+    setTotalTemplateCount(active.length);
     setLoadError(failed);
     // Desktop dashboard only — avoid extra API calls on the mobile home screen.
     if (isDesktop) {
@@ -230,51 +235,63 @@ export default function Home() {
         <View style={styles.desktopSection}>
           <View style={styles.desktopRowBetween}>
             <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
-            <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All (21) / બધા જુઓ</Text>
-            </Pressable>
-          </View>
-          <View style={styles.homeTplGridDesktop}>
-            {templatePairs.map((pair) => (
-              <Pressable
-                key={pair.baseKey}
-                testID={`tpl-card-${pair.baseKey}`}
-                onPress={() => setSelectedPair(pair)}
-                style={({ pressed }) => [
-                  styles.homeTplCardDesktop,
-                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                  pressed && { opacity: 0.88 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
-                    </View>
-                    <Ionicons name="document-text" size={18} color={colors.brandPrimary} />
-                  </View>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
-                    {pair.name_gu}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 3, fontWeight: "500" }} numberOfLines={2}>
-                    {pair.name_en}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                  <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
-                </View>
+            {totalTemplateCount > 0 ? (
+              <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All ({totalTemplateCount}) / બધા જુઓ</Text>
               </Pressable>
-            ))}
+            ) : null}
           </View>
-          <Pressable
-            testID="desktop-see-more-templates"
-            onPress={() => router.push("/(tabs)/templates")}
-            style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
-          >
-            <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ (21)</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFF" />
-          </Pressable>
+          {totalTemplateCount === 0 ? (
+            <View style={{ padding: Spacing.xl, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
+              <Ionicons name="document-text-outline" size={36} color={colors.muted} />
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.sm }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
+              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>No legal templates available currently</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.homeTplGridDesktop}>
+                {templatePairs.map((pair) => (
+                  <Pressable
+                    key={pair.baseKey}
+                    testID={`tpl-card-${pair.baseKey}`}
+                    onPress={() => setSelectedPair(pair)}
+                    style={({ pressed }) => [
+                      styles.homeTplCardDesktop,
+                      { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                      pressed && { opacity: 0.88 },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                          <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
+                        </View>
+                        <Ionicons name="document-text" size={18} color={colors.brandPrimary} />
+                      </View>
+                      <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
+                        {pair.name_gu}
+                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 3, fontWeight: "500" }} numberOfLines={2}>
+                        {pair.name_en}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                      <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                testID="desktop-see-more-templates"
+                onPress={() => router.push("/(tabs)/templates")}
+                style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+              >
+                <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ ({totalTemplateCount})</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              </Pressable>
+            </>
+          )}
         </View>
         <LanguageSelectModal
           visible={selectedPair !== null}
@@ -418,51 +435,63 @@ export default function Home() {
         <View style={styles.section}>
           <View style={styles.rowBetween}>
             <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
-            <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All (21)</Text>
-            </Pressable>
-          </View>
-          <View style={styles.homeTplGrid}>
-            {templatePairs.map((pair) => (
-              <Pressable
-                key={pair.baseKey}
-                testID={`tpl-card-${pair.baseKey}`}
-                onPress={() => setSelectedPair(pair)}
-                style={({ pressed }) => [
-                  styles.homeTplCard,
-                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                  pressed && { opacity: 0.88 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
-                    </View>
-                    <Ionicons name="document-text" size={16} color={colors.brandPrimary} />
-                  </View>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }} numberOfLines={2}>
-                    {pair.name_gu}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "500" }} numberOfLines={2}>
-                    {pair.name_en}
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                  <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
-                </View>
+            {totalTemplateCount > 0 ? (
+              <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All ({totalTemplateCount})</Text>
               </Pressable>
-            ))}
+            ) : null}
           </View>
-          <Pressable
-            testID="home-see-more-templates"
-            onPress={() => router.push("/(tabs)/templates")}
-            style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
-          >
-            <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ (21)</Text>
-            <Ionicons name="arrow-forward" size={18} color="#FFF" />
-          </Pressable>
+          {totalTemplateCount === 0 ? (
+            <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, marginTop: Spacing.sm }}>
+              <Ionicons name="document-text-outline" size={32} color={colors.muted} />
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
+              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No legal templates available currently</Text>
+            </View>
+          ) : (
+            <>
+              <View style={styles.homeTplGrid}>
+                {templatePairs.map((pair) => (
+                  <Pressable
+                    key={pair.baseKey}
+                    testID={`tpl-card-${pair.baseKey}`}
+                    onPress={() => setSelectedPair(pair)}
+                    style={({ pressed }) => [
+                      styles.homeTplCard,
+                      { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                      pressed && { opacity: 0.88 },
+                    ]}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                        <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                          <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+                        </View>
+                        <Ionicons name="document-text" size={16} color={colors.brandPrimary} />
+                      </View>
+                      <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }} numberOfLines={2}>
+                        {pair.name_gu}
+                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "500" }} numberOfLines={2}>
+                        {pair.name_en}
+                      </Text>
+                    </View>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                      <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
+              <Pressable
+                testID="home-see-more-templates"
+                onPress={() => router.push("/(tabs)/templates")}
+                style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+              >
+                <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ ({totalTemplateCount})</Text>
+                <Ionicons name="arrow-forward" size={18} color="#FFF" />
+              </Pressable>
+            </>
+          )}
         </View>
       </ScrollView>
       <LanguageSelectModal

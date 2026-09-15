@@ -11,7 +11,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
-import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 
 export default function CaseDetail() {
@@ -22,10 +22,25 @@ export default function CaseDetail() {
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [publishedTemplates, setPublishedTemplates] = useState<any[] | null>(() => catalogCache.peekPublishedTemplates());
+  const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+
+  useEffect(() => {
+    let active = true;
+    catalogCache.getPublishedTemplates().then((tpls) => {
+      if (active && Array.isArray(tpls)) setPublishedTemplates(tpls);
+    }).catch(() => {});
+    catalogCache.getTemplateOrder().then((order) => {
+      if (active && Array.isArray(order)) setTemplateOrder(order);
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const templatePairs = useMemo(() => {
-    return getOrderedTemplatePairs(catalogCache.peekTemplateOrder());
-  }, []);
+    return getActiveTemplatePairs(publishedTemplates, templateOrder);
+  }, [publishedTemplates, templateOrder]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -232,27 +247,35 @@ export default function CaseDetail() {
                 Choose an application — select language and case data auto-fills.
               </Text>
               <View style={{ gap: Spacing.sm }}>
-                {templatePairs.map((pair) => (
-                  <Pressable
-                    key={pair.baseKey}
-                    testID={`case-tpl-${pair.baseKey}`}
-                    onPress={() => setSelectedPair(pair)}
-                    style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                  >
-                    <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
-                      <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
-                    </View>
-                    <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                      <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                        {pair.name_gu}
-                      </Text>
-                      <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                        {pair.name_en} • {pair.category}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                  </Pressable>
-                ))}
+                {templatePairs.length === 0 ? (
+                  <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
+                    <Ionicons name="document-text-outline" size={28} color={colors.muted} />
+                    <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
+                    <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No applications currently available.</Text>
+                  </View>
+                ) : (
+                  templatePairs.map((pair) => (
+                    <Pressable
+                      key={pair.baseKey}
+                      testID={`case-tpl-${pair.baseKey}`}
+                      onPress={() => setSelectedPair(pair)}
+                      style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    >
+                      <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
+                        <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
+                      </View>
+                      <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                        <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
+                          {pair.name_gu}
+                        </Text>
+                        <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                          {pair.name_en} • {pair.category}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+                    </Pressable>
+                  ))
+                )}
               </View>
             </View>
           </View>
@@ -333,27 +356,35 @@ export default function CaseDetail() {
         <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>Choose an application — select language and case data auto-fills.</Text>
 
         <View style={{ gap: Spacing.sm }}>
-          {templatePairs.map((pair) => (
-            <Pressable
-              key={pair.baseKey}
-              testID={`case-tpl-${pair.baseKey}`}
-              onPress={() => setSelectedPair(pair)}
-              style={[styles.tplRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-            >
-              <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
-                <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
-              </View>
-              <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
-                  {pair.name_gu}
-                </Text>
-                <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                  {pair.name_en} • {pair.category}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </Pressable>
-          ))}
+          {templatePairs.length === 0 ? (
+            <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
+              <Ionicons name="document-text-outline" size={28} color={colors.muted} />
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
+              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No applications currently available.</Text>
+            </View>
+          ) : (
+            templatePairs.map((pair) => (
+              <Pressable
+                key={pair.baseKey}
+                testID={`case-tpl-${pair.baseKey}`}
+                onPress={() => setSelectedPair(pair)}
+                style={[styles.tplRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              >
+                <View style={[styles.tplIcon, { backgroundColor: colors.brandTertiary }]}>
+                  <Ionicons name="document-text" size={18} color={colors.onBrandTertiary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                  <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
+                    {pair.name_gu}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
+                    {pair.name_en} • {pair.category}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+              </Pressable>
+            ))
+          )}
         </View>
 
         {/* Danger zone */}

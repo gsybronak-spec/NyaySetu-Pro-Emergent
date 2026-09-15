@@ -351,14 +351,38 @@ export function resolveTemplateId(idOrBaseKey: string, lang: "gu" | "en" = "gu")
   return raw;
 }
 
+function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null): TemplateLogicalPair[] {
+  if (!Array.isArray(order) || order.length === 0) {
+    return pairs;
+  }
+  const orderMap = new Map<string, number>();
+  order.forEach((key, index) => {
+    if (typeof key === "string" && key.trim()) {
+      const k = key.trim();
+      const base = k.replace(/_(gu|en)$/, "");
+      orderMap.set(k, index);
+      orderMap.set(base, index);
+    }
+  });
+  return [...pairs].sort((a, b) => {
+    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : 9999);
+    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : 9999);
+    return idxA - idxB;
+  });
+}
+
 /**
- * Return the 21 logical template pairs sorted according to an authoritative display order.
- * Accepts an array of baseKeys, guIds, or enIds. Any templates not in the custom order
- * retain their authoritative catalog default position.
+ * Return the logical template pairs filtered and sorted according to an authoritative display order.
+ * - If order is an empty array [], returns [] (all templates deleted/empty).
+ * - If order is an array of IDs, only templates in the order are returned, sorted by that order.
+ * - If order is null or undefined, returns the full default baseline TEMPLATE_LOGICAL_PAIRS.
  */
 export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogicalPair[] {
-  if (!Array.isArray(order) || order.length === 0) {
+  if (order === null || order === undefined) {
     return [...TEMPLATE_LOGICAL_PAIRS];
+  }
+  if (!Array.isArray(order) || order.length === 0) {
+    return [];
   }
   const orderMap = new Map<string, number>();
   order.forEach((key, index) => {
@@ -370,20 +394,89 @@ export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogica
     }
   });
 
-  // Filter out any templates that were removed from the authoritative catalog order
-  let pairs = [...TEMPLATE_LOGICAL_PAIRS];
-  if (order.length >= 5) {
-    pairs = pairs.filter(
-      (p) => orderMap.has(p.baseKey) || orderMap.has(p.guId) || orderMap.has(p.enId)
-    );
-  }
+  const filtered = TEMPLATE_LOGICAL_PAIRS.filter(
+    (p) => orderMap.has(p.baseKey) || orderMap.has(p.guId) || orderMap.has(p.enId)
+  );
 
-  const sorted = pairs.sort((a, b) => {
-    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : 9999;
-    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : 9999;
+  return filtered.sort((a, b) => {
+    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : 9999);
+    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : 9999);
     return idxA - idxB;
   });
+}
 
-  return sorted;
+/**
+ * Return active template pairs based on authoritative server published templates and display order.
+ * 
+ * Rules:
+ * 1. If serverTemplates is provided as an array:
+ *    - If serverTemplates is empty ([]), returns [] (all templates deleted/unpublished).
+ *    - If serverTemplates has items, only templates matching server templates are returned.
+ *      Supports both known TEMPLATE_LOGICAL_PAIRS and dynamically added custom templates.
+ * 2. If serverTemplates is null/undefined (e.g. initial load or network error):
+ *    - Delegates to getOrderedTemplatePairs(order).
+ */
+export function getActiveTemplatePairs(
+  serverTemplates?: any[] | null,
+  order?: string[] | null
+): TemplateLogicalPair[] {
+  if (Array.isArray(serverTemplates)) {
+    if (serverTemplates.length === 0) {
+      return [];
+    }
+
+    const serverIdSet = new Set<string>();
+    for (const t of serverTemplates) {
+      const id = t?.id || t?.template_id;
+      if (typeof id === "string" && id.trim()) {
+        const clean = id.trim();
+        serverIdSet.add(clean);
+        serverIdSet.add(clean.replace(/_(gu|en)$/, ""));
+      }
+    }
+
+    const matchedPairs: TemplateLogicalPair[] = [];
+    const matchedBaseKeys = new Set<string>();
+
+    for (const pair of TEMPLATE_LOGICAL_PAIRS) {
+      if (
+        serverIdSet.has(pair.baseKey) ||
+        serverIdSet.has(pair.guId) ||
+        serverIdSet.has(pair.enId)
+      ) {
+        matchedPairs.push(pair);
+        matchedBaseKeys.add(pair.baseKey);
+      }
+    }
+
+    // Include any custom server templates created by admin not in TEMPLATE_LOGICAL_PAIRS
+    for (const t of serverTemplates) {
+      const id = t?.id || t?.template_id;
+      if (!id || typeof id !== "string") continue;
+      const base = id.trim().replace(/_(gu|en)$/, "");
+      if (!matchedBaseKeys.has(base)) {
+        matchedBaseKeys.add(base);
+        matchedPairs.push({
+          baseKey: base,
+          guId: `${base}_gu`,
+          enId: `${base}_en`,
+          name_gu: t.name_gu || t.name_en || base,
+          name_en: t.name_en || t.name_gu || base,
+          category: t.category || "General",
+          description_gu: t.description_gu || "",
+          description_en: t.description_en || "",
+          keywords_gu: Array.isArray(t.keywords_gu) ? t.keywords_gu : [],
+          keywords_en: Array.isArray(t.keywords_en) ? t.keywords_en : [],
+          transliterations: Array.isArray(t.transliterations) ? t.transliterations : [],
+          aliases: Array.isArray(t.aliases) ? t.aliases : [],
+        });
+      }
+    }
+
+    return sortPairsByOrder(matchedPairs, order);
+  }
+
+  // Fallback when serverTemplates is null/undefined
+  return getOrderedTemplatePairs(order);
 }
 

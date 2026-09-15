@@ -50,12 +50,14 @@ export function subscribeCatalog(key: string, cb: (data: any) => void): () => vo
   };
 }
 
-async function loadFromStorage<T>(key: string): Promise<T | null> {
+async function loadFromStorage<T>(key: string, allowEmpty = false): Promise<T | null> {
   try {
     const val = await storage.get(`${STORAGE_PREFIX}${key}`, null as any);
-    if (val && Array.isArray(val) && val.length > 0) {
-      memoryCache.set(key, val);
-      return val as T;
+    if (val !== null && val !== undefined) {
+      if (allowEmpty || !Array.isArray(val) || val.length > 0) {
+        memoryCache.set(key, val);
+        return val as T;
+      }
     }
   } catch {
     // Ignore storage parse error
@@ -102,23 +104,24 @@ async function fetchCatalogWithSWR<T>(
   cacheKey: string,
   fetcher: () => Promise<T>,
   seedData: T,
-  forceRefresh = false
+  forceRefresh = false,
+  allowEmpty = false
 ): Promise<T> {
   // 1. Check in-memory cache
   if (!forceRefresh && memoryCache.has(cacheKey)) {
     const cached = memoryCache.get(cacheKey);
-    if (cached && (!Array.isArray(cached) || cached.length > 0)) {
+    if (cached !== null && cached !== undefined && (allowEmpty || !Array.isArray(cached) || cached.length > 0)) {
       // Trigger background revalidation without blocking caller
-      triggerBackgroundRevalidate(cacheKey, fetcher);
+      triggerBackgroundRevalidate(cacheKey, fetcher, allowEmpty);
       return cached as T;
     }
   }
 
   // 2. Check local storage cache
   if (!forceRefresh) {
-    const stored = await loadFromStorage<T>(cacheKey);
-    if (stored && (!Array.isArray(stored) || stored.length > 0)) {
-      triggerBackgroundRevalidate(cacheKey, fetcher);
+    const stored = await loadFromStorage<T>(cacheKey, allowEmpty);
+    if (stored !== null && stored !== undefined && (allowEmpty || !Array.isArray(stored) || stored.length > 0)) {
+      triggerBackgroundRevalidate(cacheKey, fetcher, allowEmpty);
       return stored;
     }
   }
@@ -132,17 +135,17 @@ async function fetchCatalogWithSWR<T>(
   const requestPromise = (async () => {
     try {
       const fresh = await fetcher();
-      if (fresh && (!Array.isArray(fresh) || fresh.length > 0)) {
+      if (fresh !== null && fresh !== undefined && (allowEmpty || !Array.isArray(fresh) || fresh.length > 0)) {
         await saveToStorage(cacheKey, fresh);
         return fresh;
       }
-      // If server returned empty array or null, preserve existing cache or seed
-      const fallback = memoryCache.get(cacheKey) || seedData;
+      // If server returned null/undefined (or empty when allowEmpty is false), preserve existing cache or seed
+      const fallback = memoryCache.get(cacheKey) ?? seedData;
       return fallback as T;
     } catch (err) {
       console.warn(`[catalogCache] Failed to fetch ${cacheKey}, preserving cache/seed`, err);
       // On network failure: KEEP memory cache if present, else storage, else seed
-      const fallback = memoryCache.get(cacheKey) || (await loadFromStorage(cacheKey)) || seedData;
+      const fallback = memoryCache.get(cacheKey) ?? (await loadFromStorage(cacheKey, allowEmpty)) ?? seedData;
       return fallback as T;
     } finally {
       inFlightRequests.delete(cacheKey);
@@ -166,12 +169,12 @@ async function fetchCatalogWithSWR<T>(
   return requestPromise;
 }
 
-function triggerBackgroundRevalidate<T>(cacheKey: string, fetcher: () => Promise<T>) {
+function triggerBackgroundRevalidate<T>(cacheKey: string, fetcher: () => Promise<T>, allowEmpty = false) {
   if (inFlightRequests.has(cacheKey)) return;
   const p = (async () => {
     try {
       const fresh = await fetcher();
-      if (fresh && (!Array.isArray(fresh) || fresh.length > 0)) {
+      if (fresh !== null && fresh !== undefined && (allowEmpty || !Array.isArray(fresh) || fresh.length > 0)) {
         await saveToStorage(cacheKey, fresh);
       }
     } catch (e) {
@@ -245,6 +248,23 @@ export const catalogCache = {
     );
   },
 
+  getPublishedTemplates: (forceRefresh = false): Promise<any[]> => {
+    return fetchCatalogWithSWR(
+      "published_templates",
+      async () => {
+        try {
+          const res = await api.templates();
+          return Array.isArray(res) ? res : [];
+        } catch {
+          return null as any;
+        }
+      },
+      null as any,
+      forceRefresh,
+      true
+    );
+  },
+
   getTemplateOrder: (forceRefresh = false): Promise<string[]> => {
     return fetchCatalogWithSWR(
       "template_order",
@@ -253,11 +273,12 @@ export const catalogCache = {
           const res = await api.catalogTemplateOrder();
           return Array.isArray(res?.template_order) ? res.template_order : [];
         } catch {
-          return [];
+          return null as any;
         }
       },
-      [],
-      forceRefresh
+      null as any,
+      forceRefresh,
+      true
     );
   },
 
@@ -272,7 +293,8 @@ export const catalogCache = {
   peekCaseTypes: (): any[] => memoryCache.get("case_types") || SEED_CASE_TYPES,
   peekLaws: (): any[] => memoryCache.get("laws") || SEED_LAWS,
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
-  peekTemplateOrder: (): string[] => memoryCache.get("template_order") || [],
+  peekPublishedTemplates: (): any[] | null => memoryCache.get("published_templates") ?? null,
+  peekTemplateOrder: (): string[] | null => memoryCache.get("template_order") ?? null,
 
   clearCache: () => {
     memoryCache.clear();

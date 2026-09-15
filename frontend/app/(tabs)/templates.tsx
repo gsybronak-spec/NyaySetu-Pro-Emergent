@@ -11,7 +11,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
-import { TemplateLogicalPair, getOrderedTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
@@ -26,6 +26,7 @@ export default function Templates() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [publishedTemplates, setPublishedTemplates] = useState<any[] | null>(() => catalogCache.peekPublishedTemplates());
   const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
 
@@ -37,18 +38,29 @@ export default function Templates() {
     return () => clearTimeout(timer);
   }, [q]);
 
-  // Fetch authoritative template order
+  // Fetch authoritative published templates and template order
   useEffect(() => {
+    let active = true;
+    catalogCache.getPublishedTemplates().then((tpls) => {
+      if (active && Array.isArray(tpls)) {
+        setPublishedTemplates(tpls);
+      }
+    }).catch(() => {});
+
     catalogCache.getTemplateOrder().then((order) => {
-      if (Array.isArray(order) && order.length > 0) {
+      if (active && Array.isArray(order)) {
         setTemplateOrder(order);
       }
     }).catch(() => {});
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const orderedBasePairs = useMemo(() => {
-    return getOrderedTemplatePairs(templateOrder);
-  }, [templateOrder]);
+    return getActiveTemplatePairs(publishedTemplates, templateOrder);
+  }, [publishedTemplates, templateOrder]);
 
   // Load user favorites on mount
   useEffect(() => {
@@ -113,7 +125,11 @@ export default function Templates() {
     return (
       <DesktopPage
         title="Legal Templates"
-        subtitle="21 Authoritative Court Applications — ગુજરાતી & English"
+        subtitle={
+          orderedBasePairs.length === 0
+            ? "0 Authoritative Court Applications"
+            : `${orderedBasePairs.length} Authoritative Court Applications — ગુજરાતી & English`
+        }
         actions={
           <View style={[styles.dSearch, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Ionicons name="search" size={16} color={colors.muted} />
@@ -160,22 +176,38 @@ export default function Templates() {
 
         {matchedPairs.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={48} color={colors.muted} />
-            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>કોઈ સંબંધિત અરજી મળી નથી</Text>
-            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>No related application found</Text>
-            <Text style={[styles.emptyHint, { color: colors.muted }]}>
-              કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+            <Ionicons
+              name={orderedBasePairs.length === 0 ? "document-text-outline" : "search-outline"}
+              size={48}
+              color={colors.muted}
+            />
+            <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
+              {orderedBasePairs.length === 0 ? "કોઈ અરજી ઉપલબ્ધ નથી" : "કોઈ સંબંધિત અરજી મળી નથી"}
             </Text>
-            <Pressable
-              testID="tpl-empty-reset"
-              onPress={() => {
-                setQ("");
-                setCat(null);
-              }}
-              style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
-            >
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
-            </Pressable>
+            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+              {orderedBasePairs.length === 0 ? "No legal templates available" : "No related application found"}
+            </Text>
+            {orderedBasePairs.length === 0 ? (
+              <Text style={[styles.emptyHint, { color: colors.muted }]}>
+                સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી — No applications published currently
+              </Text>
+            ) : (
+              <>
+                <Text style={[styles.emptyHint, { color: colors.muted }]}>
+                  કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+                </Text>
+                <Pressable
+                  testID="tpl-empty-reset"
+                  onPress={() => {
+                    setQ("");
+                    setCat(null);
+                  }}
+                  style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
+                >
+                  <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
+                </Pressable>
+              </>
+            )}
           </View>
         ) : (
           <View style={styles.dGrid}>
@@ -253,7 +285,11 @@ export default function Templates() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Text style={[styles.h1, { color: colors.onSurface }]}>Legal Templates</Text>
-        <Text style={{ color: colors.muted, fontSize: 12 }}>{matchedPairs.length} of 21 applications</Text>
+        <Text style={{ color: colors.muted, fontSize: 12 }}>
+          {orderedBasePairs.length === 0
+            ? "0 applications"
+            : `${matchedPairs.length} of ${orderedBasePairs.length} applications`}
+        </Text>
       </View>
 
       {/* Search Input Bar */}
@@ -308,22 +344,38 @@ export default function Templates() {
       {/* Results List */}
       {matchedPairs.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="search-outline" size={44} color={colors.muted} />
-          <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>કોઈ સંબંધિત અરજી મળી નથી</Text>
-          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>No related application found</Text>
-          <Text style={[styles.emptyHint, { color: colors.muted }]}>
-            કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+          <Ionicons
+            name={orderedBasePairs.length === 0 ? "document-text-outline" : "search-outline"}
+            size={44}
+            color={colors.muted}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
+            {orderedBasePairs.length === 0 ? "કોઈ અરજી ઉપલબ્ધ નથી" : "કોઈ સંબંધિત અરજી મળી નથી"}
           </Text>
-          <Pressable
-            testID="tpl-empty-reset"
-            onPress={() => {
-              setQ("");
-              setCat(null);
-            }}
-            style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
-          >
-            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
-          </Pressable>
+          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
+            {orderedBasePairs.length === 0 ? "No legal templates available" : "No related application found"}
+          </Text>
+          {orderedBasePairs.length === 0 ? (
+            <Text style={[styles.emptyHint, { color: colors.muted }]}>
+              સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી — No applications published currently
+            </Text>
+          ) : (
+            <>
+              <Text style={[styles.emptyHint, { color: colors.muted }]}>
+                કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+              </Text>
+              <Pressable
+                testID="tpl-empty-reset"
+                onPress={() => {
+                  setQ("");
+                  setCat(null);
+                }}
+                style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
+              >
+                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
+              </Pressable>
+            </>
+          )}
         </View>
       ) : (
         <FlatList

@@ -18,6 +18,8 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
+import { getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { catalogCache } from "@/src/services/catalogCache";
 
 interface SearchResults {
   cases: any[];
@@ -45,10 +47,13 @@ export default function Search() {
     setSearching(true);
     setError(null);
     try {
-      const [res, matchedPairs] = await Promise.all([
+      const [res, tpls, order] = await Promise.all([
         api.search(trimmed).catch(() => ({ cases: [] })),
-        Promise.resolve(searchTemplatePairs(trimmed)),
+        catalogCache.getPublishedTemplates().catch(() => null),
+        catalogCache.getTemplateOrder().catch(() => null),
       ]);
+      const activePairs = getActiveTemplatePairs(tpls, order);
+      const matchedPairs = searchTemplatePairs(trimmed, null, undefined, activePairs);
       setResults({
         cases: Array.isArray(res?.cases) ? res.cases : [],
         templatePairs: matchedPairs.slice(0, 10),
