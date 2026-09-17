@@ -1,5 +1,49 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, Component, ErrorInfo, ReactNode } from 'react'
 import { adminApi } from '../lib/api'
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class CaseErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Cases ErrorBoundary caught error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: '32px', textAlign: 'center' }}>
+          <div style={{ backgroundColor: '#fee2e2', border: '1px solid #ef4444', borderRadius: '8px', padding: '24px', maxWidth: '600px', margin: '0 auto', color: '#991b1b' }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px' }}>Something went wrong loading Cases</h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '14px' }}>{this.state.error?.message || 'An unexpected rendering error occurred.'}</p>
+            <button
+              onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+              style={{ padding: '8px 16px', backgroundColor: '#dc2626', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              Reload Cases
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface CaseOwner {
   id: string;
@@ -48,9 +92,9 @@ interface CaseDetail {
   applications: ApplicationRecord[];
 }
 
-const CATEGORIES = ['All', 'Civil', 'Criminal', 'Other'];
+export const CATEGORIES = ['All', 'Civil', 'Criminal', 'Other'];
 
-export default function Cases() {
+function CasesInner() {
   const [items, setItems] = useState<AdminCase[]>([]);
   const [total, setTotal] = useState(0);
   const [q, setQ] = useState('');
@@ -82,7 +126,8 @@ export default function Cases() {
 
   useEffect(() => { load(); }, [load]);
 
-  const openDetail = (id: string) => {
+  const openDetail = (id?: string | null) => {
+    if (!id) return;
     setDetailError('');
     setDetail(null);
     adminApi.getCase(id)
@@ -91,6 +136,7 @@ export default function Cases() {
   };
 
   const toggleArchive = async (c: AdminCase) => {
+    if (!c.id) return;
     setActingId(c.id);
     setActingError('');
     const isArchived = c.status === 'archived';
@@ -103,6 +149,33 @@ export default function Cases() {
       }
     } catch (err: any) {
       setActingError(err.message || `Failed to ${action} case`);
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const deleteCase = async (c: AdminCase) => {
+    if (!c.id) return;
+    const docCount = c.application_count ?? (detail && detail.case.id === c.id ? detail.applications.length : 0);
+    if (docCount > 0) {
+      alert(`Deletion Protected:\n\nThis case has ${docCount} linked document(s). Cases with document history cannot be deleted to preserve legal and audit records.\n\nPlease archive the case instead.`);
+      return;
+    }
+    const label = c.nickname || c.case_number || c.case_type_label || (c.id ? c.id.slice(0, 8) : 'Case');
+    if (!window.confirm(`Are you sure you want to permanently delete case "${label}"?\n\nThis action cannot be undone.`)) {
+      return;
+    }
+    setActingId(c.id);
+    setActingError('');
+    try {
+      await adminApi.deleteCase(c.id);
+      setItems((prev) => prev.filter((x) => x.id !== c.id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      if (detail && detail.case.id === c.id) {
+        setDetail(null);
+      }
+    } catch (err: any) {
+      setActingError(err.message || 'Failed to delete case');
     } finally {
       setActingId(null);
     }
@@ -182,19 +255,22 @@ export default function Cases() {
                   <th>Type</th>
                   <th>Court / District</th>
                   <th>Advocate</th>
+                  <th>Docs</th>
                   <th>Status</th>
                   <th>Updated</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {items.map((c) => {
+                {items.map((c, idx) => {
                   const archived = c.status === 'archived';
+                  const caseId = c.id || `case-${idx}`;
+                  const docCount = c.application_count ?? 0;
                   return (
-                    <tr key={c.id}>
+                    <tr key={caseId}>
                       <td>
-                        <button className="link-btn" onClick={() => openDetail(c.id)}>
-                          {c.nickname || c.case_number || c.case_type_label || c.id.slice(0, 8)}
+                        <button className="link-btn" onClick={() => c.id && openDetail(c.id)}>
+                          {c.nickname || c.case_number || c.case_type_label || (c.id ? c.id.slice(0, 8) : `Case #${idx + 1}`)}
                         </button>
                         {c.case_number && <div className="case-sub">{c.case_number}</div>}
                       </td>
@@ -212,19 +288,43 @@ export default function Cases() {
                       </td>
                       <td>{c.owner?.name || c.owner?.mobile || '—'}</td>
                       <td>
+                        <span className="badge" style={{ backgroundColor: docCount > 0 ? '#e0f2fe' : '#f1f5f9', color: docCount > 0 ? '#0369a1' : '#64748b' }}>
+                          {docCount}
+                        </span>
+                      </td>
+                      <td>
                         <span className={`badge ${archived ? 'badge-disabled' : 'badge-active'}`}>
                           {archived ? 'Archived' : 'Active'}
                         </span>
                       </td>
                       <td>{c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}</td>
                       <td>
-                        <button
-                          className={`btn-small ${archived ? 'btn-success' : 'btn-danger'}`}
-                          disabled={actingId === c.id}
-                          onClick={() => toggleArchive(c)}
-                        >
-                          {actingId === c.id ? '…' : archived ? 'Restore' : 'Archive'}
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <button
+                            className={`btn-small ${archived ? 'btn-success' : 'btn-danger'}`}
+                            disabled={actingId === c.id}
+                            onClick={() => toggleArchive(c)}
+                          >
+                            {actingId === c.id ? '…' : archived ? 'Restore' : 'Archive'}
+                          </button>
+                          <button
+                            className="btn-small"
+                            style={{
+                              backgroundColor: docCount > 0 ? '#f8fafc' : '#fee2e2',
+                              color: docCount > 0 ? '#94a3b8' : '#ef4444',
+                              border: '1px solid',
+                              borderColor: docCount > 0 ? '#e2e8f0' : '#fca5a5',
+                              cursor: docCount > 0 ? 'not-allowed' : 'pointer',
+                              padding: '2px 8px',
+                              fontSize: '11px',
+                            }}
+                            disabled={actingId === c.id || docCount > 0}
+                            title={docCount > 0 ? 'Cannot delete case with generated documents' : 'Permanently delete case'}
+                            onClick={() => deleteCase(c)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -236,12 +336,17 @@ export default function Cases() {
       )}
 
       {detail && (
-        <div className="dashboard-table-card user-detail">
-          <div className="user-detail-header">
-            <h3>{detail.case.nickname || detail.case.case_number || detail.case.case_type_label || 'Case'}</h3>
-            <span className={`badge ${detail.case.status === 'archived' ? 'badge-disabled' : 'badge-active'}`}>
-              {detail.case.status === 'archived' ? 'Archived' : 'Active'}
-            </span>
+        <div className="dashboard-table-card user-detail" style={{ marginTop: '24px' }}>
+          <div className="user-detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h3 style={{ margin: 0 }}>{detail.case.nickname || detail.case.case_number || detail.case.case_type_label || 'Case Detail'}</h3>
+              <span className={`badge ${detail.case.status === 'archived' ? 'badge-disabled' : 'badge-active'}`}>
+                {detail.case.status === 'archived' ? 'Archived' : 'Active'}
+              </span>
+            </div>
+            <button className="btn-small btn-ghost" onClick={() => setDetail(null)} title="Close detail">
+              ✕ Close
+            </button>
           </div>
 
           <div className="user-detail-grid">
@@ -277,8 +382,28 @@ export default function Cases() {
           )}
 
           <div className="user-detail-stats">
-            <div><strong>{detail.case.application_count ?? detail.applications.length}</strong><span>Documents</span></div>
+            <div><strong>{detail.applications.length}</strong><span>Documents</span></div>
           </div>
+
+          {detail.applications.length > 0 && (
+            <div style={{
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fde68a',
+              borderRadius: '6px',
+              padding: '12px 16px',
+              margin: '16px 0',
+              fontSize: '13px',
+              color: '#92400e',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+            }}>
+              <span style={{ fontSize: '18px' }}>⚠️</span>
+              <div>
+                <strong>Deletion Blocked:</strong> This case has <strong>{detail.applications.length}</strong> generated document{detail.applications.length > 1 ? 's' : ''}. Cases with document history cannot be deleted in order to preserve legal and audit records. You can archive the case instead.
+              </div>
+            </div>
+          )}
 
           <h4 className="case-docs-title">Generated Documents</h4>
           {detail.applications.length === 0 ? (
@@ -308,7 +433,7 @@ export default function Cases() {
             </table>
           )}
 
-          <div className="user-detail-actions">
+          <div className="user-detail-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '16px' }}>
             <button
               className={`btn-small ${detail.case.status === 'archived' ? 'btn-success' : 'btn-danger'}`}
               disabled={actingId === detail.case.id}
@@ -316,10 +441,36 @@ export default function Cases() {
             >
               {actingId === detail.case.id ? '…' : detail.case.status === 'archived' ? 'Restore case' : 'Archive case'}
             </button>
+            <button
+              className="btn-small"
+              style={{
+                backgroundColor: detail.applications.length > 0 ? '#f1f5f9' : '#fee2e2',
+                color: detail.applications.length > 0 ? '#94a3b8' : '#991b1b',
+                border: '1px solid',
+                borderColor: detail.applications.length > 0 ? '#cbd5e1' : '#fca5a5',
+                cursor: detail.applications.length > 0 ? 'not-allowed' : 'pointer',
+              }}
+              disabled={actingId === detail.case.id || detail.applications.length > 0}
+              title={detail.applications.length > 0 ? 'Cannot delete case with generated documents' : 'Delete case permanently'}
+              onClick={() => deleteCase(detail.case)}
+            >
+              {actingId === detail.case.id ? '…' : 'Delete Case'}
+            </button>
+            <button className="btn-small btn-ghost" onClick={() => setDetail(null)}>
+              Close
+            </button>
           </div>
         </div>
       )}
       {detailError && <p className="form-error">{detailError}</p>}
     </div>
   )
+}
+
+export default function Cases() {
+  return (
+    <CaseErrorBoundary>
+      <CasesInner />
+    </CaseErrorBoundary>
+  );
 }

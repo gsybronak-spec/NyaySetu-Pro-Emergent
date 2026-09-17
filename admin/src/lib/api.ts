@@ -184,8 +184,8 @@ export const adminApi = {
   adminImportAnalyze: (file_name: string, content_base64: string) =>
     request('/templates/import-word/analyze', 'POST', { file_name, content_base64 }),
   adminImportCreate: (data: any) => request('/templates/import-word', 'POST', data),
-  getCaseForms: () => fetch(`${BASE}/api/catalog/case-forms`).then(r => r.json()),
-  getCaseFormConfig: (id: string) => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json()),
+  getCaseForms: () => request('/case-forms').catch(() => fetch(`${BASE}/api/catalog/case-forms`).then(r => r.json())),
+  getCaseFormConfig: (id: string) => request(`/case-forms/${id}`).catch(() => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json())),
   getCaseTypes: () => fetch(`${BASE}/api/catalog/case-types`).then(r => r.json()),
   adminSaveCaseForm: (id: string, data: any) => request(`/case-forms/${id}`, 'POST', data),
   listUsers: (q?: string, limit = 50, offset = 0) => {
@@ -216,6 +216,7 @@ export const adminApi = {
     return request(`/cases?${p.toString()}`);
   },
   getCase: (id: string) => request(`/cases/${id}`),
+  deleteCase: (id: string) => request(`/cases/${id}`, 'DELETE'),
   archiveCase: (id: string) => request(`/cases/${id}/archive`, 'POST'),
   restoreCase: (id: string) => request(`/cases/${id}/restore`, 'POST'),
   listPlans: () => request('/plans'),
