@@ -2380,13 +2380,33 @@ async def get_template_base_fields():
                 "placeholder_gu": "સામાવાળા પક્ષકારનું પૂરું નામ",
             },
             {
+                "key": "representing_party",
+                "label_en": "Representing Party",
+                "label_gu": "કોના તરફથી રજૂઆત",
+                "type": "role_chips",
+                "required": True,
+                "default": "party",
+                "options": [
+                    {"value": "party", "label_en": "Party 1", "label_gu": "પક્ષકાર ૧"},
+                    {"value": "opposite", "label_en": "Party 2 (Opposite)", "label_gu": "પક્ષકાર ૨ (સામાવાળા)"},
+                ],
+                "mode": "DIRECT_TEMPLATE",
+                "source": "direct_input",
+            },
+            {
                 "key": "advocate_name",
                 "label_en": "Advocate Name",
                 "label_gu": "એડવોકેટનું નામ",
                 "type": "text",
                 "required": True,
                 "autofill_source": "profile",
+                "mode": "DIRECT_TEMPLATE",
+                "source": "advocate_profile",
             },
+        ],
+        "saved_case_base_fields": [
+            {"key": "case_id", "source": "saved_case", "mode": "SAVED_CASE", "required": True},
+            {"key": "date", "source": "template_input", "mode": "SAVED_CASE", "type": "date", "required": True},
         ]
     }
 
@@ -3393,16 +3413,53 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         if ctx.get(k) == "other":
             ctx[k] = ctx.get(f"{k}_other") or ""
 
-    # Signature/pleading role — the side the advocate represents.
-    side = ctx.get("advocate_side")
-    if side == "party":
-        ctx["selected_party_role"] = ctx["party_role"]
-    elif side == "opposite":
-        ctx["selected_party_role"] = ctx["opposite_party_role"]
+    # Auto-populate advocate profile values (language-aware)
+    adv_qual = (user.get("qualification_gu" if language == "gu" else "qualification_en") or user.get("qualification") or "").strip()
+    if not ctx.get("advocate_qualification"):
+        ctx["advocate_qualification"] = adv_qual
+    adv_addr = (user.get("office_address_gu" if language == "gu" else "office_address_en") or user.get("office_address") or user.get("address") or "").strip()
+    if not ctx.get("advocate_address"):
+        ctx["advocate_address"] = adv_addr
+    adv_mob = (user.get("mobile") or user.get("phone") or "").strip()
+    if not ctx.get("advocate_mobile"):
+        ctx["advocate_mobile"] = adv_mob
+    adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("enrollment_no") or "").strip()
+    if not ctx.get("advocate_enrollment_no"):
+        ctx["advocate_enrollment_no"] = adv_bar
+    if not ctx.get("advocate_sanad_no"):
+        ctx["advocate_sanad_no"] = adv_bar
+    if not ctx.get("sanad_number"):
+        ctx["sanad_number"] = adv_bar
+    if not ctx.get("bar_council_no"):
+        ctx["bar_council_no"] = adv_bar
+    if not ctx.get("advocate_logo"):
+        ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
+
+    # Signature/pleading role & derived party info — the side the advocate represents.
+    side = ctx.get("representing_party") or ctx.get("advocate_side") or "party"
+    if side in ("party", "party1", "party_1", "complainant", "plaintiff", "applicant"):
+        ctx["selected_party_role"] = ctx.get("party_role") or ""
+        ctx["selected_party_name"] = ctx.get("party_name") or ""
+        ctx["representing_party"] = "party"
+    elif side in ("opposite", "party2", "party_2", "accused", "defendant", "opponent"):
+        ctx["selected_party_role"] = ctx.get("opposite_party_role") or ""
+        ctx["selected_party_name"] = ctx.get("opposite_party") or ""
+        ctx["representing_party"] = "opposite"
     elif side == "other":
         ctx["selected_party_role"] = ctx.get("advocate_other") or ("ત્રાહિત પક્ષ" if language == "gu" else "Third Party")
+        ctx["selected_party_name"] = ctx.get("advocate_other_name") or ""
+        ctx["representing_party"] = "other"
     else:
-        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("opposite_party_role") or ctx["party_role"]
+        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("party_role") or ""
+        ctx["selected_party_name"] = ctx.get("party_name") or ""
+
+    # Advocate representation line (e.g. "વાદી ના એડવોકેટ" / "Advocate for Plaintiff")
+    if language == "gu":
+        s_role = ctx.get("selected_party_role") or "અરજદાર"
+        ctx["advocate_for_line"] = f"{s_role} ના એડવોકેટ"
+    else:
+        s_role = ctx.get("selected_party_role") or "Applicant"
+        ctx["advocate_for_line"] = f"Advocate for {s_role}"
 
     # Party lines — "<role> <name>" for the case header block (never prints a
     # lone role or a leading space when a name/role is missing).
@@ -3425,9 +3482,17 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["case_or_crime"] = ""
 
-    # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર")
+    # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર") without stray commas
     _tal = (ctx.get("taluka") or "").strip()
-    ctx["taluka_place"] = f"{_tal}, {ctx.get('district') or ''}" if _tal else (ctx.get("district") or "")
+    _dist = (ctx.get("district") or "").strip()
+    if _tal and _dist:
+        ctx["taluka_place"] = f"{_tal}, {_dist}"
+    elif _dist:
+        ctx["taluka_place"] = _dist
+    elif _tal:
+        ctx["taluka_place"] = _tal
+    else:
+        ctx["taluka_place"] = ""
 
     # Date display — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
     # canonical stored value is YYYY-MM-DD. Derived key keeps {{date}} untouched
@@ -4591,6 +4656,12 @@ class TemplateFieldDef(BaseModel):
     default_value: Optional[str] = None
     options: list[FieldOptionDef] = []
     validation: Optional[dict] = None
+    source: Optional[str] = Field(default="template_input", max_length=50)  # saved_case|advocate_profile|direct_input|template_input|auto|derived
+    mode: Optional[str] = Field(default="BOTH", max_length=30)  # SAVED_CASE|DIRECT_TEMPLATE|BOTH
+    placeholder_en: Optional[str] = None
+    placeholder_gu: Optional[str] = None
+    editable: bool = True
+    visible: bool = True
 
 class AdminTemplateCreate(BaseModel):
     id: Optional[str] = Field(None, max_length=50)
@@ -4605,6 +4676,8 @@ class AdminTemplateCreate(BaseModel):
     courts: list[str] = []
     jurisdiction: Optional[str] = Field(None, max_length=200)
     fields: list[TemplateFieldDef] = []
+    saved_case_fields: Optional[list] = None
+    direct_template_fields: Optional[list] = None
     placeholders: Optional[list] = None
     content_en: str = ""
     content_gu: str = ""
@@ -4624,6 +4697,8 @@ class AdminTemplateUpdate(BaseModel):
     courts: Optional[list[str]] = None
     jurisdiction: Optional[str] = Field(None, max_length=200)
     fields: Optional[list[TemplateFieldDef]] = None
+    saved_case_fields: Optional[list] = None
+    direct_template_fields: Optional[list] = None
     placeholders: Optional[list] = None
     content_en: Optional[str] = None
     content_gu: Optional[str] = None
@@ -7068,6 +7143,8 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(require_
         "courts": req.courts,
         "jurisdiction": req.jurisdiction,
         "fields": [f.model_dump() for f in req.fields],
+        "saved_case_fields": req.saved_case_fields,
+        "direct_template_fields": req.direct_template_fields,
         "placeholders": req.placeholders,
         "content_en": normalize_legal_text(req.content_en),
         "content_gu": normalize_legal_text(req.content_gu),
@@ -7218,7 +7295,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         raise HTTPException(403, "Published templates cannot be directly modified. Clone or edit to create a new draft version.")
 
     updates = {}
-    for key in ["name_en", "name_gu", "category", "sub_category", "description", "tags", "aliases", "case_types", "courts", "jurisdiction", "content_en", "content_gu", "settings", "placeholders", "editor_content_en", "editor_content_gu"]:
+    for key in ["name_en", "name_gu", "category", "sub_category", "description", "tags", "aliases", "case_types", "courts", "jurisdiction", "content_en", "content_gu", "settings", "placeholders", "editor_content_en", "editor_content_gu", "saved_case_fields", "direct_template_fields"]:
         val = getattr(req, key, None)
         if val is not None:
             updates[key] = val

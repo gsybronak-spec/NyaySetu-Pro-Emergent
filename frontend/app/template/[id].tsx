@@ -46,6 +46,13 @@ const BASE_FIELD_KEYS = new Set([
   "opposite_party",
   "opposite_party_role",
   "advocate_name",
+  "advocate_qualification",
+  "advocate_address",
+  "advocate_mobile",
+  "advocate_enrollment_no",
+  "advocate_sanad_no",
+  "sanad_number",
+  "bar_council_no",
 ]);
 
 const PARTY_1_ROLES = [
@@ -249,12 +256,21 @@ export default function TemplateApplication() {
         if (me?.court) initialValues["court"] = me.court;
       }
 
-      // Advocate name from profile (language-aware default)
+      // Advocate profile from user (language-aware default)
       const advName = formatAdvocateName(
         (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
         language
       );
       initialValues["advocate_name"] = advName;
+      initialValues["advocate_qualification"] =
+        (language === "gu" ? me?.qualification_gu : me?.qualification_en) || me?.qualification || "";
+      initialValues["advocate_address"] =
+        (language === "gu" ? me?.office_address_gu : me?.office_address_en) || me?.office_address || me?.address || "";
+      initialValues["advocate_mobile"] = me?.mobile || me?.phone || "";
+      initialValues["advocate_enrollment_no"] = me?.bar_council_no || me?.sanad_no || me?.enrollment_no || "";
+      initialValues["sanad_number"] = initialValues["advocate_enrollment_no"];
+      initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
+      initialValues["representing_party"] = initialValues["representing_party"] || "party";
       initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
 
       // Date fields default to today when unset (always editable)
@@ -352,6 +368,18 @@ export default function TemplateApplication() {
     for (const [k, val] of Object.entries(v)) {
       out[k] = isISODate(val) ? formatDateDisplay(val) : val;
     }
+    const rep = out["representing_party"] || out["advocate_side"] || "party";
+    if (rep === "party" || rep === "party1" || rep === "complainant" || rep === "plaintiff" || rep === "applicant") {
+      out["selected_party_role"] = out["party_role"] || "";
+      out["selected_party_name"] = out["party_name"] || "";
+      out["representing_party"] = "party";
+      out["advocate_side"] = "party";
+    } else if (rep === "opposite" || rep === "party2" || rep === "accused" || rep === "defendant" || rep === "opponent") {
+      out["selected_party_role"] = out["opposite_party_role"] || "";
+      out["selected_party_name"] = out["opposite_party"] || "";
+      out["representing_party"] = "opposite";
+      out["advocate_side"] = "opposite";
+    }
     return out;
   };
 
@@ -366,6 +394,7 @@ export default function TemplateApplication() {
     ["case_type", "Case Type", "કેસનો પ્રકાર"],
     ["party_role", "Party 1 Role", "પક્ષકાર ૧ ની ભૂમિકા"],
     ["opposite_party_role", "Party 2 (Opposite) Role", "સામાવાળા પક્ષકારની ભૂમિકા"],
+    ["advocate_name", "Advocate", "એડવોકેટ"],
   ];
 
   const inheritedRows = useMemo(() => {
@@ -387,6 +416,7 @@ export default function TemplateApplication() {
       case_type: caseData.case_type_label,
       party_role: pRoleLabel,
       opposite_party_role: oppRoleLabel,
+      advocate_name: values.advocate_name || formatAdvocateName(language === "gu" ? userProfile?.advocate_name_gu : userProfile?.advocate_name_en, language),
     };
     const rows: { key: string; label: string; value: string }[] = [];
     for (const [key, lEn, lGu] of CASE_OWNED_LABELS) {
@@ -394,14 +424,24 @@ export default function TemplateApplication() {
       if (v) rows.push({ key, label: language === "gu" ? lGu : lEn, value: String(v) });
     }
     return rows;
-  }, [caseData, language, values.party_role, values.opposite_party_role]);
+  }, [caseData, language, values.party_role, values.opposite_party_role, values.advocate_name, userProfile]);
 
   // Separate template application fields into app-specific vs date field
   const templateFields = useMemo(() => template?.fields || [], [template]);
 
   const appSpecificFields = useMemo(() => {
     return templateFields.filter((f: any) => {
-      if (caseId && BASE_FIELD_KEYS.has(f.key)) return false;
+      // In Saved Case mode: hide base case fields, advocate profile fields, and direct-only fields
+      if (caseId) {
+        if (BASE_FIELD_KEYS.has(f.key)) return false;
+        if (f.source === "saved_case" || f.source === "advocate_profile") return false;
+        if (f.mode === "DIRECT_TEMPLATE") return false;
+      } else {
+        // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
+        if (f.mode === "SAVED_CASE") return false;
+        if (BASE_FIELD_KEYS.has(f.key)) return false;
+        if (f.key === "representing_party") return false;
+      }
       if (f.key === "date") return false;
       return true;
     });
@@ -924,6 +964,29 @@ export default function TemplateApplication() {
                   placeholder={language === "gu" ? "સામાવાળા પક્ષકારનું પૂરું નામ" : "Full Name of Opposite Party"}
                   value={values.opposite_party || ""}
                   onChangeText={(v) => update("opposite_party", v)}
+                />
+
+                <RoleChips
+                  label={language === "gu" ? "કોના તરફથી રજૂઆત (Representing Party) *" : "Representing Party *"}
+                  options={[
+                    {
+                      value: "party",
+                      label: language === "gu"
+                        ? (values.party_name ? `${values.party_name} (પક્ષકાર ૧)` : "પક્ષકાર ૧ તરફથી")
+                        : (values.party_name ? `${values.party_name} (Party 1)` : "Party 1 side"),
+                    },
+                    {
+                      value: "opposite",
+                      label: language === "gu"
+                        ? (values.opposite_party ? `${values.opposite_party} (પક્ષકાર ૨)` : "પક્ષકાર ૨ તરફથી")
+                        : (values.opposite_party ? `${values.opposite_party} (Party 2)` : "Party 2 side"),
+                    },
+                  ]}
+                  value={values.representing_party || "party"}
+                  onChange={(v) => {
+                    update("representing_party", v);
+                    update("advocate_side", v);
+                  }}
                 />
 
                 <Field

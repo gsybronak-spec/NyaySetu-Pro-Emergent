@@ -45,6 +45,8 @@ interface TemplateField {
   type: string;
   required: boolean;
   order: number;
+  mode?: string;
+  source?: string;
   default_value?: string;
   options?: FieldOption[];
 }
@@ -126,6 +128,8 @@ export default function TemplateEditor() {
               type: f.type || 'text',
               required: f.required !== false,
               order: f.order !== undefined ? f.order : idx,
+              mode: f.mode || 'BOTH',
+              source: f.source || 'template_input',
               default_value: f.default_value || '',
               options: f.options || [],
             })),
@@ -183,6 +187,8 @@ export default function TemplateEditor() {
       type: 'text',
       required: true,
       order: newIdx,
+      mode: 'BOTH',
+      source: 'template_input',
       options: [],
     };
     setTemplate((prev: any) => ({
@@ -784,6 +790,8 @@ export default function TemplateEditor() {
                       <th>Label (EN)</th>
                       <th>Label (GU)</th>
                       <th>Type</th>
+                      <th>Mode</th>
+                      <th>Source</th>
                       <th>Req</th>
                       <th>Default Value</th>
                       {!isLocked && <th>Actions</th>}
@@ -847,6 +855,40 @@ export default function TemplateEditor() {
                               <option value="checkbox">Checkbox</option>
                             </select>
                           </td>
+                          <td>
+                            <select
+                              className="table-input"
+                              value={field.mode || 'BOTH'}
+                              onChange={e => updateField(idx, 'mode', e.target.value)}
+                              disabled={isLocked}
+                              style={{
+                                fontWeight: '600',
+                                fontSize: '0.8rem',
+                                color: field.mode === 'SAVED_CASE' ? '#047857' : field.mode === 'DIRECT_TEMPLATE' ? '#b45309' : '#1e3a8a',
+                                backgroundColor: field.mode === 'SAVED_CASE' ? '#ecfdf5' : field.mode === 'DIRECT_TEMPLATE' ? '#fffbeb' : '#eff6ff',
+                              }}
+                            >
+                              <option value="BOTH">Both Modes</option>
+                              <option value="SAVED_CASE">Saved Case</option>
+                              <option value="DIRECT_TEMPLATE">Direct Template</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              className="table-input"
+                              value={field.source || 'template_input'}
+                              onChange={e => updateField(idx, 'source', e.target.value)}
+                              disabled={isLocked}
+                              style={{ fontSize: '0.8rem' }}
+                            >
+                              <option value="template_input">Template Input</option>
+                              <option value="saved_case">Saved Case</option>
+                              <option value="advocate_profile">Advocate Profile</option>
+                              <option value="direct_input">Direct Input</option>
+                              <option value="derived">Derived</option>
+                              <option value="auto">Auto</option>
+                            </select>
+                          </td>
                           <td style={{ textAlign: 'center' }}>
                             <input 
                               type="checkbox" 
@@ -889,7 +931,7 @@ export default function TemplateEditor() {
                         {/* Options Manager Row for select / radio / checkbox */}
                         {expandedOptionIdx === idx && ['select', 'radio', 'checkbox'].includes(field.type) && (
                           <tr>
-                            <td colSpan={isLocked ? 8 : 9} style={{ backgroundColor: '#fcfcfc', padding: '12px 24px', borderLeft: '4px solid #0B1B3D' }}>
+                            <td colSpan={isLocked ? 10 : 11} style={{ backgroundColor: '#fcfcfc', padding: '12px 24px', borderLeft: '4px solid #0B1B3D' }}>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                 <strong>Options for "{field.label_en || field.key}":</strong>
                                 {!isLocked && <button className="btn-secondary btn-sm" onClick={() => addOption(idx)}>+ Add Option</button>}

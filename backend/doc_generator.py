@@ -197,19 +197,19 @@ SUPPORTED_FORMAT_VERSIONS = {NYAYSETU_LEGAL_FORMAT_V1}
 MASTER_LEGAL_DOC_SETTINGS = {
     "format_version": NYAYSETU_LEGAL_FORMAT_V1,
     "page_size": "A4",
-    "margin_top_cm": 2.5,
-    "margin_bottom_cm": 2.5,
-    "margin_left_cm": 2.5,
-    "margin_right_cm": 2.5,
-    "gujarati_font": "NotoSansGujarati",  # Primary Gujarati TTFont (bundled)
+    "margin_top_cm": 2.0,
+    "margin_bottom_cm": 2.0,
+    "margin_left_cm": 4.0,
+    "margin_right_cm": 4.0,
+    "gujarati_font": "LohitGujarati",  # Primary Gujarati TTFont (bundled Lohit-Gujarati.ttf)
     "english_font": "Times-Roman",         # Standard High Court Times New Roman family (PDF)
     "english_font_docx": "Times New Roman",
-    "gujarati_font_docx": "Noto Sans Gujarati",
-    "body_size": 12,
-    "heading_size": 13,
+    "gujarati_font_docx": "Lohit Gujarati",
+    "body_size": 13,
+    "heading_size": 15,
     "line_spacing": 18,
     "paragraph_spacing": 6,
-    "first_line_indent_pt": 24.0,          # Fixed 24pt (~0.85cm) first-line paragraph indentation
+    "first_line_indent_pt": 28.35,          # Fixed first-line paragraph indentation (~1 tab, 1cm)
     "alignment": "justify",
 }
 
@@ -499,9 +499,9 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
         # 3. Case Details / Number
         is_case_details = bool(
-            re.search(r"(?:Special\s+Civil\s+Application|Civil\s+Suit|Criminal\s+Case|CMA|MACP|F\.?I\.?R\.?|કેસ|દાવા|અરજી|મુ\.અ\.|ગુ\.ર\.|પરચુરણ|પ\.અ\.|Case|Suit|Application)\s*(?:નં\.|નંબર|No\.|NO\.)", line, re.IGNORECASE)
-            or ("નં." in line and any(k in line for k in ("કેસ", "દાવો", "દાવા", "અરજી", "ગુ.ર.", "મુ.અ.", "F.I.R.", "FIR", "CMA", "MACP")))
-            or ("No." in line and any(k in line for k in ("Case", "Suit", "Application", "CMA", "MACP", "FIR", "Petition")))
+            re.search(r"(?:Special\s+Civil\s+Application|Civil\s+Suit|Criminal\s+Case|CMA|MACP|F\.?I\.?R\.?|કેસ|દાવા|દાવો|સૂટ|સિવિલ|રેગ્યુલર|અરજી|મુ\.અ\.|ગુ\.ર\.|પરચુરણ|પ\.અ\.|Case|Suit|Application)\s*(?:નં\.|નંબર|No\.|NO\.)", line, re.IGNORECASE)
+            or (("નં." in line or "નંબર" in line) and any(k in line for k in ("કેસ", "દાવો", "દાવા", "સૂટ", "સિવિલ", "રેગ્યુલર", "અરજી", "ગુ.ર.", "મુ.અ.", "F.I.R.", "FIR", "CMA", "MACP", "સ્પે.")))
+            or ("No." in line and any(k in line for k in ("Case", "Suit", "Application", "CMA", "MACP", "FIR", "Petition", "Civil", "Criminal", "RCS", "SCS")))
             or line.startswith("{{case_type}}")
             or line.startswith("{{case_or_crime}}")
             or line.startswith("કેસ નં.")
@@ -510,7 +510,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             or line.startswith("ક્રિમિનલ")
         ) and len(line) < 85 and not bool(re.match(r"^(\d+|[૧-૯૦]+)[\.\)]", line))
 
-        # 4. Exact Title or All-Caps / Prominent Title
+        # 4. Exact Title or All-Caps / Prominent Title or Subject / બાબત line
         latin = re.sub(r"[^A-Za-z]", "", line)
         is_upper_en = (
             len(latin) >= 3
@@ -519,8 +519,16 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             and any(w in line for w in _EN_HEADING_WORDS)
             and len(line) < 75
         )
+        is_subject = bool(
+            re.match(r"^(બાબત|વિષય|Subject|SUB)\s*[:\-]", line, re.IGNORECASE)
+            or line.startswith("બાબત")
+            or line.startswith("વિષય")
+            or "બાબત :-" in line
+            or "બાબત :" in line
+        ) and len(line) < 140
         is_title = (
-            (t_en and line == t_en)
+            is_subject
+            or (t_en and line == t_en)
             or (t_gu and line == t_gu)
             or is_upper_en
             or (curr_non_idx == title_idx)
@@ -563,7 +571,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
         if is_court:
             align, bold, indent, section = "center", True, False, "court_header"
         elif is_versus:
-            align, bold, indent, section = "center", True, False, "versus"
+            align, bold, indent, section = "center", False, False, "versus"
         elif is_title:
             align, bold, indent, section = "center", True, False, "title"
         elif is_case_details:
@@ -1144,7 +1152,8 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
         if not text:
             shaped.append([])
             continue
-        size = heading_size if b.get("bold") else body_size
+        sec = b.get("section")
+        size = heading_size if (sec in ("court_header", "title") or b.get("bold")) else body_size
         align = b.get("align", "left")
         is_title = b.get("section") == "title"
         block_indent = para_indent_pt if (b.get("indent") and align in ("justify", "left")) else 0.0
