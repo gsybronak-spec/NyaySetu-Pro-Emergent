@@ -120,9 +120,9 @@ async def get_template(client):
 
 def sample_exhibit_values(**overrides):
     vals = {
-        "court_name": "gen_civil_senior",
         "district": "ગાંધીનગર",
         "taluka": "કલોલ",
+        "court_name": "principal_senior_civil_judge",
         "case_type": "regular_civil_suit",
         "case_number": "૧૨૫/૨૦૨૪",
         "party_1_role": "વાદી",
@@ -132,14 +132,13 @@ def sample_exhibit_values(**overrides):
         "representing_party": "party_1",
         "document_details": "આંક ૩ થી રજૂ કરેલ મૂળ વેચાણ દસ્તાવેજ તથા ઇલેક્ટ્રિક બિલની નકલ",
         "date": "2026-02-15",
-        "place": "કલોલ, ગાંધીનગર",
     }
     vals.update(overrides)
     return vals
 
 
 class TestPoint1To15_TemplateSpecAndFields:
-    """Tests 1 through 15: Registration, Metadata, and 13 Input Fields."""
+    """Tests 1 through 15: Registration, Metadata, and 12 Input Fields."""
 
     @pytest.mark.asyncio
     async def test_01_template_registration_and_metadata(self, client, clean_db):
@@ -152,14 +151,14 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert tpl["category"] == "Civil"
 
     @pytest.mark.asyncio
-    async def test_02_exactly_13_input_fields(self, client, clean_db):
+    async def test_02_exactly_12_input_fields(self, client, clean_db):
         tpl = await get_template(client)
         fields = tpl["fields"]
-        assert len(fields) == 13, f"Expected exactly 13 fields, got {len(fields)}"
+        assert len(fields) == 12, f"Expected exactly 12 fields, got {len(fields)}"
         expected_keys = [
-            "court_name", "district", "taluka", "case_type", "case_number",
+            "district", "taluka", "court_name", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "representing_party", "document_details", "date", "place"
+            "representing_party", "document_details", "date"
         ]
         assert [f["key"] for f in fields] == expected_keys
 
@@ -169,7 +168,9 @@ class TestPoint1To15_TemplateSpecAndFields:
         f = next(x for x in tpl["fields"] if x["key"] == "court_name")
         assert f["type"] == "select"
         assert f["required"] is True
-        assert len(f.get("options", [])) > 0
+        opts = [o["value"] for o in f.get("options", [])]
+        assert "principal_senior_civil_judge" in opts
+        assert "civil_judge_jmfc" in opts
 
     @pytest.mark.asyncio
     async def test_04_field_district(self, client, clean_db):
@@ -206,7 +207,7 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert f["type"] == "radio"
         assert f["required"] is True
         opts = [o["value"] for o in f.get("options", [])]
-        assert "વાદી" in opts or "ફરીયાદી" in opts or "અરજદાર" in opts
+        assert opts == ["વાદી", "અરજદાર", "ફરીયાદી"]
 
     @pytest.mark.asyncio
     async def test_09_field_party_1_name(self, client, clean_db):
@@ -222,7 +223,7 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert f["type"] == "radio"
         assert f["required"] is True
         opts = [o["value"] for o in f.get("options", [])]
-        assert "પ્રતિવાદી" in opts or "સામાવાળા" in opts or "આરોપી" in opts
+        assert opts == ["પ્રતિવાદી", "સામાવાળા", "આરોપી"]
 
     @pytest.mark.asyncio
     async def test_11_field_party_2_name(self, client, clean_db):
@@ -235,7 +236,7 @@ class TestPoint1To15_TemplateSpecAndFields:
     async def test_12_field_representing_party(self, client, clean_db):
         tpl = await get_template(client)
         f = next(x for x in tpl["fields"] if x["key"] == "representing_party")
-        assert f["type"] == "select"
+        assert f["type"] in ("radio", "select")
         assert f["required"] is True
         opts = [o["value"] for o in f.get("options", [])]
         assert "party_1" in opts
@@ -256,11 +257,10 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert f["required"] is True
 
     @pytest.mark.asyncio
-    async def test_15_field_place_optional(self, client, clean_db):
+    async def test_15_field_place_not_in_input_fields(self, client, clean_db):
         tpl = await get_template(client)
-        f = next(x for x in tpl["fields"] if x["key"] == "place")
-        assert f["type"] == "text"
-        assert f["required"] is False
+        keys = [x["key"] for x in tpl["fields"]]
+        assert "place" not in keys, "place MUST NOT be in template.fields; it is derived-only"
 
 
 class TestPoint16To19_PageLayoutAndTypography:
@@ -361,7 +361,7 @@ class TestPoint20To24_ContentAndFormatting:
         # Case A: with Taluka
         r1 = await client.post(f"{API}/applications/preview", json={
             "template_id": TEMPLATE_ID, "language": "gu",
-            "values": sample_exhibit_values(taluka="કલોલ", district="ગાંધીનગર", place=""),
+            "values": sample_exhibit_values(taluka="કલોલ", district="ગાંધીનગર"),
         }, headers=H(token))
         assert r1.status_code == 200
         assert "કલોલ, ગાંધીનગર" in r1.json()["content"]
@@ -369,7 +369,7 @@ class TestPoint20To24_ContentAndFormatting:
         # Case B: without Taluka (taluka is empty string)
         r2 = await client.post(f"{API}/applications/preview", json={
             "template_id": TEMPLATE_ID, "language": "gu",
-            "values": sample_exhibit_values(taluka="", district="ગાંધીનગર", place=""),
+            "values": sample_exhibit_values(taluka="", district="ગાંધીનગર"),
         }, headers=H(token))
         assert r2.status_code == 200
         content2 = r2.json()["content"]

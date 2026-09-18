@@ -3263,6 +3263,22 @@ def format_advocate_name(name: Optional[str] = None, language: str = "en") -> st
         return f"Adv. {n}"
 
 
+_CANONICAL_COURT_LABELS = {
+    "principal_senior_civil_judge": {"en": "Principal Senior Civil Judge", "gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+    "additional_senior_civil_judge_acjm": {"en": "Additional Senior Civil Judge & ACJM", "gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
+    "principal_district_sessions_judge": {"en": "Principal District & Sessions Judge", "gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
+    "chief_judicial_magistrate": {"en": "Chief Judicial Magistrate", "gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
+    "additional_civil_judge_jmfc": {"en": "Additional Civil Judge & JMFC", "gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
+    "civil_judge_jmfc": {"en": "Civil Judge & JMFC", "gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
+    "senior_civil_judge": {"en": "Senior Civil Judge", "gu": "સિનિયર સિવિલ જજ"},
+    "additional_district_judge": {"en": "Additional District Judge", "gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
+    "metropolitan_magistrate": {"en": "Metropolitan Magistrate", "gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
+    "court_of_jmfc": {"en": "Court of JMFC", "gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+    "family_court": {"en": "Family Court", "gu": "ફેમિલી કોર્ટ"},
+    "city_civil_court": {"en": "City Civil Court", "gu": "સિટી સિવિલ કોર્ટ"},
+}
+
+
 async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
     ctx = dict(values or {})
     # Issue 3 & 16: Advocate name strictly controlled by document language.
@@ -3305,7 +3321,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
     court_raw = ctx.get("court_name") or ctx.get("court")
-    if isinstance(court_raw, str) and court_raw in _COURT_MAP:
+    if isinstance(court_raw, str) and court_raw in _CANONICAL_COURT_LABELS:
+        cobj = _CANONICAL_COURT_LABELS[court_raw]
+        court_lbl = cobj["gu"] if language == "gu" else cobj["en"]
+        ctx["court"] = court_lbl
+        ctx["court_name"] = court_lbl
+    elif isinstance(court_raw, str) and court_raw in _COURT_MAP:
         cobj = _COURT_MAP[court_raw]
         court_lbl = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
         ctx["court"] = court_lbl
@@ -3313,6 +3334,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     elif court_raw:
         ctx.setdefault("court", court_raw)
         ctx.setdefault("court_name", court_raw)
+    if ctx.get("court") and not ctx.get("court_name"):
+        ctx["court_name"] = ctx["court"]
+    elif ctx.get("court_name") and not ctx.get("court"):
+        ctx["court"] = ctx["court_name"]
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
         ctx["case_type"] = (ctobj.get("gu") or ctobj.get("en", "")) if language == "gu" else (ctobj.get("en") or ctobj.get("gu", ""))
@@ -3526,9 +3551,9 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["case_or_crime"] = ""
 
-    # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર") without stray commas
-    _tal = (ctx.get("taluka") or "").strip()
-    _dist = (ctx.get("district") or "").strip()
+    # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર") without stray commas or extra spaces
+    _tal = re.sub(r"\s+", " ", (ctx.get("taluka") or "").strip()).strip(" ,")
+    _dist = re.sub(r"\s+", " ", (ctx.get("district") or "").strip()).strip(" ,")
     if _tal and _dist:
         ctx["taluka_place"] = f"{_tal}, {_dist}"
     elif _dist:
@@ -3538,11 +3563,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["taluka_place"] = ""
 
-    # Synchronize place and taluka_place
-    if not (ctx.get("place") or "").strip():
-        ctx["place"] = ctx.get("taluka_place") or ""
-    elif not (ctx.get("taluka_place") or "").strip():
-        ctx["taluka_place"] = ctx.get("place") or ""
+    # Synchronize place and taluka_place (place is derived only)
+    raw_place = (ctx.get("place") or "").strip().strip(" ,")
+    if not raw_place:
+        ctx["place"] = ctx["taluka_place"]
+    else:
+        ctx["place"] = raw_place
+    if not ctx.get("taluka_place"):
+        ctx["taluka_place"] = ctx["place"]
 
     # Date display & formatting — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
     # canonical stored value is YYYY-MM-DD.

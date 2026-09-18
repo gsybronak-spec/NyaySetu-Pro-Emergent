@@ -39,12 +39,18 @@ const BASE_FIELD_KEYS = new Set([
   "district",
   "taluka",
   "court",
+  "court_name",
   "case_type",
   "case_number",
   "party_name",
   "party_role",
   "opposite_party",
   "opposite_party_role",
+  "party_1_name",
+  "party_1_role",
+  "party_2_name",
+  "party_2_role",
+  "place",
   "advocate_name",
   "advocate_qualification",
   "advocate_address",
@@ -226,13 +232,22 @@ export default function TemplateApplication() {
       if (cs) {
         setCaseData(cs);
         // Case data NEVER overrides the explicitly selected document language!
-        if (cs.party_name) initialValues["party_name"] = cs.party_name;
+        if (cs.party_name) {
+          initialValues["party_name"] = cs.party_name;
+          initialValues["party_1_name"] = cs.party_name;
+        }
         if (cs.client_name || cs.party_name) initialValues["client_name"] = cs.client_name || cs.party_name;
-        if (cs.opposite_party) initialValues["opposite_party"] = cs.opposite_party;
+        if (cs.opposite_party) {
+          initialValues["opposite_party"] = cs.opposite_party;
+          initialValues["party_2_name"] = cs.opposite_party;
+        }
         if (cs.case_number) initialValues["case_number"] = cs.case_number;
         if (cs.district_id) initialValues["district"] = cs.district_id;
         if (cs.taluka_id) initialValues["taluka"] = cs.taluka_id;
-        if (cs.court_id) initialValues["court"] = cs.court_id;
+        if (cs.court_id) {
+          initialValues["court"] = cs.court_id;
+          initialValues["court_name"] = cs.court_label || cs.court || cs.court_id;
+        }
         if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
         if (cs.police_station_label) initialValues["police_station"] = cs.police_station_label;
         if (cs.client_mobile) initialValues["client_mobile"] = cs.client_mobile;
@@ -241,7 +256,9 @@ export default function TemplateApplication() {
         if (cs.law_label) initialValues["law"] = cs.law_label;
         if (cs.section_label) initialValues["section"] = cs.section_label;
         initialValues["party_role"] = NORMALIZE_ROLE_MAP[cs.party_role || ""] || "plaintiff";
+        initialValues["party_1_role"] = initialValues["party_role"];
         initialValues["opposite_party_role"] = NORMALIZE_ROLE_MAP[cs.opposite_party_role || ""] || "defendant";
+        initialValues["party_2_role"] = initialValues["opposite_party_role"];
 
         if (cs.custom_fields) {
           for (const [k, v] of Object.entries(cs.custom_fields)) {
@@ -251,9 +268,14 @@ export default function TemplateApplication() {
       } else {
         // No-case default party roles
         initialValues["party_role"] = "plaintiff";
+        initialValues["party_1_role"] = "plaintiff";
         initialValues["opposite_party_role"] = "defendant";
+        initialValues["party_2_role"] = "defendant";
         if (me?.district) initialValues["district"] = me.district;
-        if (me?.court) initialValues["court"] = me.court;
+        if (me?.court) {
+          initialValues["court"] = me.court;
+          initialValues["court_name"] = me.court;
+        }
       }
 
       // Advocate profile from user (language-aware default)
@@ -368,18 +390,49 @@ export default function TemplateApplication() {
     for (const [k, val] of Object.entries(v)) {
       out[k] = isISODate(val) ? formatDateDisplay(val) : val;
     }
-    const rep = out["representing_party"] || out["advocate_side"] || "party";
-    if (rep === "party" || rep === "party1" || rep === "complainant" || rep === "plaintiff" || rep === "applicant") {
-      out["selected_party_role"] = out["party_role"] || "";
-      out["selected_party_name"] = out["party_name"] || "";
-      out["representing_party"] = "party";
+    const rep = out["representing_party"] || out["advocate_side"] || "party_1";
+    if (rep === "party" || rep === "party1" || rep === "party_1" || rep === "complainant" || rep === "plaintiff" || rep === "applicant") {
+      out["selected_party_role"] = out["party_1_role"] || out["party_role"] || "";
+      out["selected_party_name"] = out["party_1_name"] || out["party_name"] || "";
+      out["representing_party"] = "party_1";
       out["advocate_side"] = "party";
-    } else if (rep === "opposite" || rep === "party2" || rep === "accused" || rep === "defendant" || rep === "opponent") {
-      out["selected_party_role"] = out["opposite_party_role"] || "";
-      out["selected_party_name"] = out["opposite_party"] || "";
-      out["representing_party"] = "opposite";
+      out["representing_party_role"] = out["selected_party_role"];
+    } else if (rep === "opposite" || rep === "party2" || rep === "party_2" || rep === "accused" || rep === "defendant" || rep === "opponent") {
+      out["selected_party_role"] = out["party_2_role"] || out["opposite_party_role"] || "";
+      out["selected_party_name"] = out["party_2_name"] || out["opposite_party"] || "";
+      out["representing_party"] = "party_2";
       out["advocate_side"] = "opposite";
+      out["representing_party_role"] = out["selected_party_role"];
     }
+
+    // Bidirectional sync for canonical and legacy keys
+    if (out["court"] && !out["court_name"]) out["court_name"] = out["court"];
+    if (out["court_name"] && !out["court"]) out["court"] = out["court_name"];
+    if (out["party_1_name"] && !out["party_name"]) out["party_name"] = out["party_1_name"];
+    if (out["party_name"] && !out["party_1_name"]) out["party_1_name"] = out["party_name"];
+    if (out["party_2_name"] && !out["opposite_party"]) out["opposite_party"] = out["party_2_name"];
+    if (out["opposite_party"] && !out["party_2_name"]) out["party_2_name"] = out["opposite_party"];
+    if (out["party_1_role"] && !out["party_role"]) out["party_role"] = out["party_1_role"];
+    if (out["party_role"] && !out["party_1_role"]) out["party_1_role"] = out["party_role"];
+    if (out["party_2_role"] && !out["opposite_party_role"]) out["opposite_party_role"] = out["party_2_role"];
+    if (out["opposite_party_role"] && !out["party_2_role"]) out["party_2_role"] = out["opposite_party_role"];
+
+    // Derived place & taluka_place:
+    // If taluka exists: `${taluka}, ${district}`
+    // Otherwise: `${district}`
+    const rawDist = (out["district"] || "").trim().replace(/\s+/g, " ").replace(/^,+|,+$/g, "").trim();
+    const rawTal = (out["taluka"] || "").trim().replace(/\s+/g, " ").replace(/^,+|,+$/g, "").trim();
+    let derivedPlace = "";
+    if (rawTal && rawDist) {
+      derivedPlace = `${rawTal}, ${rawDist}`;
+    } else if (rawDist) {
+      derivedPlace = rawDist;
+    } else if (rawTal) {
+      derivedPlace = rawTal;
+    }
+    out["place"] = derivedPlace;
+    out["taluka_place"] = derivedPlace;
+
     return out;
   };
 
@@ -427,7 +480,50 @@ export default function TemplateApplication() {
   }, [caseData, language, values.party_role, values.opposite_party_role, values.advocate_name, userProfile]);
 
   // Separate template application fields into app-specific vs date field
+  // Separate template application fields into app-specific vs date field
   const templateFields = useMemo(() => template?.fields || [], [template]);
+
+  const hasRepresentingParty = useMemo(() => {
+    return templateFields.some((f: any) => f.key === "representing_party");
+  }, [templateFields]);
+
+  const getParty1RoleLabel = useCallback(() => {
+    const raw = values.party_1_role || values.party_role;
+    if (!raw) return language === "gu" ? "વાદી" : "Plaintiff";
+    const found = PARTY_1_ROLES.find(
+      (r) => r.value === raw || r.label_gu === raw || r.label_en === raw
+    );
+    if (found) return language === "gu" ? found.label_gu : found.label_en;
+    return raw;
+  }, [values.party_1_role, values.party_role, language]);
+
+  const getParty2RoleLabel = useCallback(() => {
+    const raw = values.party_2_role || values.opposite_party_role;
+    if (!raw) return language === "gu" ? "પ્રતિવાદી" : "Defendant";
+    const found = PARTY_2_ROLES.find(
+      (r) => r.value === raw || r.label_gu === raw || r.label_en === raw
+    );
+    if (found) return language === "gu" ? found.label_gu : found.label_en;
+    return raw;
+  }, [values.party_2_role, values.opposite_party_role, language]);
+
+  const representingPartyOptions = useMemo(() => {
+    const p1Role = getParty1RoleLabel();
+    const p2Role = getParty2RoleLabel();
+    const p1Name = (values.party_1_name || values.party_name || caseData?.party_name || "").trim();
+    const p2Name = (values.party_2_name || values.opposite_party || caseData?.opposite_party || "").trim();
+
+    return [
+      {
+        value: "party_1",
+        label: p1Name ? `${p1Role} — ${p1Name}` : p1Role,
+      },
+      {
+        value: "party_2",
+        label: p2Name ? `${p2Role} — ${p2Name}` : p2Role,
+      },
+    ];
+  }, [getParty1RoleLabel, getParty2RoleLabel, values.party_1_name, values.party_name, values.party_2_name, values.opposite_party, caseData]);
 
   const appSpecificFields = useMemo(() => {
     return templateFields.filter((f: any) => {
@@ -440,8 +536,8 @@ export default function TemplateApplication() {
         // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
         if (f.mode === "SAVED_CASE") return false;
         if (BASE_FIELD_KEYS.has(f.key)) return false;
-        if (f.key === "representing_party") return false;
       }
+      if (f.key === "representing_party") return false;
       if (f.key === "date") return false;
       return true;
     });
@@ -464,12 +560,15 @@ export default function TemplateApplication() {
     if (!caseId) {
       // Required base fields in No-Case mode
       if (!values.district) missing.push("district");
-      if (!values.court) missing.push("court");
+      if (!values.court && !values.court_name) missing.push("court");
       if (!values.case_type) missing.push("case_type");
       if (!values.case_number && templateId !== "jamin_bond") missing.push("case_number");
-      if (!values.party_name) missing.push("party_name");
-      if (!values.opposite_party) missing.push("opposite_party");
+      if (!values.party_name && !values.party_1_name) missing.push("party_name");
+      if (!values.opposite_party && !values.party_2_name) missing.push("opposite_party");
       if (!values.advocate_name) missing.push("advocate_name");
+    }
+    if (hasRepresentingParty && !values.representing_party && !values.advocate_side) {
+      missing.push("representing_party");
     }
     for (const f of appSpecificFields) {
       if (f.required && !values[f.key]) {
@@ -480,7 +579,7 @@ export default function TemplateApplication() {
     }
     if (!values.date) missing.push("date");
     return missing;
-  }, [caseId, values, appSpecificFields, templateId]);
+  }, [caseId, values, appSpecificFields, templateId, hasRepresentingParty]);
 
   const genPreview = async () => {
     if (missingRequired.length > 0) {
@@ -898,12 +997,15 @@ export default function TemplateApplication() {
                   testID="field-court"
                   label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
                   placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
-                  value={values.court || null}
+                  value={values.court || values.court_name || null}
                   options={courts.map((c: any) => ({
                     id: c.id,
                     label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
                   }))}
-                  onChange={(v) => update("court", v)}
+                  onChange={(v) => {
+                    update("court", v);
+                    update("court_name", v);
+                  }}
                 />
 
                 <Dropdown
@@ -936,16 +1038,22 @@ export default function TemplateApplication() {
                     value: r.value,
                     label: language === "gu" ? r.label_gu : r.label_en,
                   }))}
-                  value={values.party_role || "plaintiff"}
-                  onChange={(v) => update("party_role", v)}
+                  value={values.party_role || values.party_1_role || "plaintiff"}
+                  onChange={(v) => {
+                    update("party_role", v);
+                    update("party_1_role", v);
+                  }}
                 />
 
                 <Field
                   testID="field-party_name"
                   label={(language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Party 1 Full Name") + " *"}
                   placeholder={language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Full Name of Party 1"}
-                  value={values.party_name || ""}
-                  onChangeText={(v) => update("party_name", v)}
+                  value={values.party_name || values.party_1_name || ""}
+                  onChangeText={(v) => {
+                    update("party_name", v);
+                    update("party_1_name", v);
+                  }}
                 />
 
                 <RoleChips
@@ -954,38 +1062,21 @@ export default function TemplateApplication() {
                     value: r.value,
                     label: language === "gu" ? r.label_gu : r.label_en,
                   }))}
-                  value={values.opposite_party_role || "defendant"}
-                  onChange={(v) => update("opposite_party_role", v)}
+                  value={values.opposite_party_role || values.party_2_role || "defendant"}
+                  onChange={(v) => {
+                    update("opposite_party_role", v);
+                    update("party_2_role", v);
+                  }}
                 />
 
                 <Field
                   testID="field-opposite_party"
                   label={(language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) નું નામ" : "Party 2 (Opposite) Name") + " *"}
                   placeholder={language === "gu" ? "સામાવાળા પક્ષકારનું પૂરું નામ" : "Full Name of Opposite Party"}
-                  value={values.opposite_party || ""}
-                  onChangeText={(v) => update("opposite_party", v)}
-                />
-
-                <RoleChips
-                  label={language === "gu" ? "કોના તરફથી રજૂઆત (Representing Party) *" : "Representing Party *"}
-                  options={[
-                    {
-                      value: "party",
-                      label: language === "gu"
-                        ? (values.party_name ? `${values.party_name} (પક્ષકાર ૧)` : "પક્ષકાર ૧ તરફથી")
-                        : (values.party_name ? `${values.party_name} (Party 1)` : "Party 1 side"),
-                    },
-                    {
-                      value: "opposite",
-                      label: language === "gu"
-                        ? (values.opposite_party ? `${values.opposite_party} (પક્ષકાર ૨)` : "પક્ષકાર ૨ તરફથી")
-                        : (values.opposite_party ? `${values.opposite_party} (Party 2)` : "Party 2 side"),
-                    },
-                  ]}
-                  value={values.representing_party || "party"}
-                  onChange={(v) => {
-                    update("representing_party", v);
-                    update("advocate_side", v);
+                  value={values.opposite_party || values.party_2_name || ""}
+                  onChangeText={(v) => {
+                    update("opposite_party", v);
+                    update("party_2_name", v);
                   }}
                 />
 
@@ -1006,6 +1097,22 @@ export default function TemplateApplication() {
             <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: 4 }}>
               {language === "gu" ? "આ અરજી માટે જરૂરી ચોક્કસ વિગતો" : "Only the fields required specifically for this application."}
             </Text>
+
+            {hasRepresentingParty && (
+              <RoleChips
+                label={(language === "gu" ? "કોના તરફથી રજૂઆત (Representing Party) *" : "Representing Party *")}
+                options={representingPartyOptions}
+                value={
+                  values.representing_party === "party_2" || values.representing_party === "opposite"
+                    ? "party_2"
+                    : "party_1"
+                }
+                onChange={(v) => {
+                  update("representing_party", v);
+                  update("advocate_side", v === "party_2" ? "opposite" : "party");
+                }}
+              />
+            )}
 
             {appSpecificFields.map((f: any) => renderFieldInput(f))}
 
