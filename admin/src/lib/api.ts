@@ -205,20 +205,38 @@ export const adminApi = {
     p.append('offset', String(params?.offset ?? 0));
     return request(`/audit-logs?${p.toString()}`);
   },
-  listCases: (params?: { q?: string; status?: string; category?: string; user_id?: string; limit?: number; offset?: number }) => {
+  listCases: (params?: {
+    q?: string;
+    status?: string;
+    category?: string;
+    user_id?: string;
+    page?: number;
+    page_size?: number;
+    limit?: number;
+    offset?: number;
+  }) => {
     const p = new URLSearchParams();
     if (params?.q) p.append('q', params.q);
     if (params?.status) p.append('status', params.status);
     if (params?.category) p.append('category', params.category);
     if (params?.user_id) p.append('user_id', params.user_id);
-    p.append('limit', String(params?.limit ?? 50));
-    p.append('offset', String(params?.offset ?? 0));
+    if (params?.page !== undefined) p.append('page', String(params.page));
+    if (params?.page_size !== undefined) p.append('page_size', String(params.page_size));
+    if (params?.limit !== undefined) p.append('limit', String(params.limit));
+    if (params?.offset !== undefined) p.append('offset', String(params.offset));
+    else if (params?.page === undefined && params?.limit === undefined) {
+      p.append('limit', '50');
+      p.append('offset', '0');
+    }
     return request(`/cases?${p.toString()}`);
   },
   getCase: (id: string) => request(`/cases/${id}`),
   deleteCase: (id: string) => request(`/cases/${id}`, 'DELETE'),
   archiveCase: (id: string) => request(`/cases/${id}/archive`, 'POST'),
   restoreCase: (id: string) => request(`/cases/${id}/restore`, 'POST'),
+  bulkArchiveCases: (ids: string[]) => request('/cases/bulk-archive', 'POST', { ids }),
+  bulkRestoreCases: (ids: string[]) => request('/cases/bulk-restore', 'POST', { ids }),
+  bulkDeleteCases: (ids: string[]) => request('/cases/bulk-delete', 'POST', { ids }),
   listPlans: () => request('/plans'),
   createPlan: (data: any) => request('/plans', 'POST', data),
   updatePlan: (id: string, data: any) => request(`/plans/${id}`, 'PUT', data),

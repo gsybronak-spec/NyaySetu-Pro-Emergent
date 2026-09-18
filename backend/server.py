@@ -4809,6 +4809,9 @@ class TemplateReorderReq(BaseModel):
 class TemplateBulkDeleteReq(BaseModel):
     ids: list[str] = Field(..., description="List of template IDs to delete")
 
+class CaseBulkActionReq(BaseModel):
+    ids: list[str] = Field(..., description="List of case IDs to process in bulk")
+
 class SettingsUpdateReq(BaseModel):
     value: Union[int, str] = Field(..., description="New value for the setting")
 
@@ -4823,7 +4826,7 @@ def _sanitize_bulk_ids(raw_ids: list) -> list[str]:
         if not isinstance(item, str):
             continue
         trimmed = item.strip()
-        if trimmed and trimmed not in seen and len(trimmed) < 200:
+        if trimmed and trimmed not in seen and len(trimmed) < 200 and not any(ch in trimmed for ch in ('/', '\\')):
             seen.add(trimmed)
             clean.append(trimmed)
     return clean
@@ -6182,6 +6185,160 @@ async def admin_delete_case(case_id: str, admin=Depends(get_admin)):
     await db.collection('cases').document(case_id).delete()
     await create_admin_audit_log(admin=admin, action="case_delete", entity_type="case", entity_id=case_id)
     return {"success": True, "deleted": case_id}
+
+
+@admin_api.post("/cases/bulk-archive")
+async def admin_bulk_archive_cases(req: CaseBulkActionReq, admin=Depends(get_admin)):
+    """Bulk archive cases with FirestoreBatchManager and audit logging."""
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {"success": True, "updated_count": 0, "archived_ids": []}
+
+    ts = now().isoformat()
+    archived_ids = []
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for cid in clean_ids:
+        snap = await db.collection('cases').document(cid).get()
+        if not snap.exists:
+            continue
+        case_data = snap.to_dict() or {}
+        if case_data.get("status") == "archived":
+            archived_ids.append(cid)
+            continue
+        await batch_mgr.add_set(
+            db.collection('cases').document(cid),
+            {"status": "archived", "updated_at": ts},
+            merge=True,
+        )
+        archived_ids.append(cid)
+
+    if archived_ids:
+        await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="case_bulk_archive",
+        entity_type="case",
+        metadata={"count": len(archived_ids), "ids": archived_ids},
+    )
+    return {
+        "success": True,
+        "updated_count": len(archived_ids),
+        "archived_ids": archived_ids,
+    }
+
+
+@admin_api.post("/cases/bulk-restore")
+async def admin_bulk_restore_cases(req: CaseBulkActionReq, admin=Depends(get_admin)):
+    """Bulk restore cases back to active status with FirestoreBatchManager and audit logging."""
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {"success": True, "updated_count": 0, "restored_ids": []}
+
+    ts = now().isoformat()
+    restored_ids = []
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for cid in clean_ids:
+        snap = await db.collection('cases').document(cid).get()
+        if not snap.exists:
+            continue
+        case_data = snap.to_dict() or {}
+        if case_data.get("status") == "active":
+            restored_ids.append(cid)
+            continue
+        await batch_mgr.add_set(
+            db.collection('cases').document(cid),
+            {"status": "active", "updated_at": ts},
+            merge=True,
+        )
+        restored_ids.append(cid)
+
+    if restored_ids:
+        await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="case_bulk_restore",
+        entity_type="case",
+        metadata={"count": len(restored_ids), "ids": restored_ids},
+    )
+    return {
+        "success": True,
+        "updated_count": len(restored_ids),
+        "restored_ids": restored_ids,
+    }
+
+
+@admin_api.post("/cases/bulk-delete")
+async def admin_bulk_delete_cases(req: CaseBulkActionReq, admin=Depends(get_admin)):
+    """Bulk permanently delete cases if and only if they have ZERO dependent applications or drafts.
+    Protected cases are returned in blocked_cases with explanatory reasons."""
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {
+            "success": True,
+            "deleted_count": 0,
+            "blocked_count": 0,
+            "deleted_ids": [],
+            "blocked_cases": [],
+        }
+
+    deleted_ids = []
+    blocked_cases = []
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for cid in clean_ids:
+        snap = await db.collection('cases').document(cid).get()
+        if not snap.exists:
+            continue
+        case_data = snap.to_dict() or {}
+
+        # Check for dependent records in applications and drafts
+        apps = [d.to_dict() async for d in db.collection('applications').where(filter=firestore.FieldFilter('case_id', '==', cid)).limit(5).stream()]
+        drafts = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('case_id', '==', cid)).limit(5).stream()]
+        app_count = max(len(apps), int(case_data.get("application_count") or 0))
+        draft_count = len(drafts)
+
+        if app_count > 0 or draft_count > 0:
+            reasons = []
+            if app_count > 0:
+                reasons.append(f"{app_count} generated application{'s' if app_count > 1 else ''}")
+            if draft_count > 0:
+                reasons.append(f"{draft_count} draft{'s' if draft_count > 1 else ''}")
+            blocked_cases.append({
+                "case_id": cid,
+                "case_number": case_data.get("case_number") or case_data.get("nickname") or cid,
+                "reason": f"Case has {' and '.join(reasons)} linked to it.",
+                "application_count": app_count,
+                "draft_count": draft_count,
+            })
+        else:
+            await batch_mgr.add_delete(db.collection('cases').document(cid))
+            deleted_ids.append(cid)
+
+    if deleted_ids:
+        await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="case_bulk_delete",
+        entity_type="case",
+        metadata={
+            "deleted_count": len(deleted_ids),
+            "blocked_count": len(blocked_cases),
+            "deleted_ids": deleted_ids,
+            "blocked_cases": blocked_cases,
+        },
+    )
+    return {
+        "success": True,
+        "deleted_count": len(deleted_ids),
+        "blocked_count": len(blocked_cases),
+        "deleted_ids": deleted_ids,
+        "blocked_cases": blocked_cases,
+    }
 
 
 # ============================================================

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, Component, ErrorInfo, ReactNode } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react'
 import { adminApi } from '../lib/api'
 
 interface ErrorBoundaryProps {
@@ -101,6 +101,8 @@ function CasesInner() {
   const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('All');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [detail, setDetail] = useState<CaseDetail | null>(null);
@@ -108,13 +110,39 @@ function CasesInner() {
   const [actingId, setActingId] = useState<string | null>(null);
   const [actingError, setActingError] = useState('');
 
-  const load = useCallback((params?: { q?: string; status?: string; category?: string }) => {
+  // Multi-select & Bulk actions state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const headerCheckboxRef = useRef<HTMLInputElement>(null);
+  const [bulkActing, setBulkActing] = useState<'archive' | 'restore' | 'delete' | null>(null);
+  const [bulkDeleteModalOpen, setBulkDeleteModalOpen] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
+  const [bulkActionFeedback, setBulkActionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    blockedCases?: any[];
+  } | null>(null);
+
+  const load = useCallback((params?: {
+    q?: string;
+    status?: string;
+    category?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
     setLoading(true);
     setError('');
+    const targetQ = params?.q !== undefined ? params.q : q;
+    const targetStatus = params?.status !== undefined ? params.status : statusFilter;
+    const targetCategory = params?.category !== undefined ? params.category : categoryFilter;
+    const targetPage = params?.page !== undefined ? params.page : page;
+    const targetPageSize = params?.pageSize !== undefined ? params.pageSize : pageSize;
+
     adminApi.listCases({
-      q: params?.q ?? undefined,
-      status: params?.status ?? statusFilter,
-      category: params?.category !== 'All' ? params?.category : undefined,
+      q: targetQ || undefined,
+      status: targetStatus,
+      category: targetCategory !== 'All' ? targetCategory : undefined,
+      page: targetPage,
+      page_size: targetPageSize,
     })
       .then((res) => {
         setItems(res.items || []);
@@ -122,9 +150,144 @@ function CasesInner() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [statusFilter]);
+  }, [q, statusFilter, categoryFilter, page, pageSize]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Page-isolated visible IDs and selection derivations
+  const visibleIds = useMemo(() => {
+    return items.map((c) => c.id).filter((id): id is string => Boolean(id));
+  }, [items]);
+
+  const isAllVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const isSomeVisibleSelected = visibleIds.some((id) => selectedIds.has(id));
+  const isIndeterminate = isSomeVisibleSelected && !isAllVisibleSelected;
+
+  useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
+
+  const handleToggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (isAllVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelect = (id: string, e?: React.SyntheticEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  // Selected items breakdown for bulk delete safety modal
+  const selectedCases = useMemo(() => {
+    return items.filter((c) => selectedIds.has(c.id));
+  }, [items, selectedIds]);
+
+  const protectedCases = useMemo(() => {
+    return selectedCases.filter((c) => (c.application_count ?? 0) > 0);
+  }, [selectedCases]);
+
+  const eligibleCases = useMemo(() => {
+    return selectedCases.filter((c) => (c.application_count ?? 0) === 0);
+  }, [selectedCases]);
+
+  // Bulk actions operations
+  const handleBulkArchive = async () => {
+    if (selectedIds.size === 0 || bulkActing) return;
+    setBulkActing('archive');
+    setBulkActionFeedback(null);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await adminApi.bulkArchiveCases(ids);
+      setSelectedIds(new Set());
+      setBulkActionFeedback({
+        type: 'success',
+        message: `Successfully archived ${res.updated_count || ids.length} case${(res.updated_count || ids.length) === 1 ? '' : 's'}.`,
+      });
+      load();
+    } catch (err: any) {
+      setBulkActionFeedback({
+        type: 'error',
+        message: err.message || 'Failed to bulk archive cases',
+      });
+    } finally {
+      setBulkActing(null);
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    if (selectedIds.size === 0 || bulkActing) return;
+    setBulkActing('restore');
+    setBulkActionFeedback(null);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await adminApi.bulkRestoreCases(ids);
+      setSelectedIds(new Set());
+      setBulkActionFeedback({
+        type: 'success',
+        message: `Successfully restored ${res.updated_count || ids.length} case${(res.updated_count || ids.length) === 1 ? '' : 's'}.`,
+      });
+      load();
+    } catch (err: any) {
+      setBulkActionFeedback({
+        type: 'error',
+        message: err.message || 'Failed to bulk restore cases',
+      });
+    } finally {
+      setBulkActing(null);
+    }
+  };
+
+  const handleExecuteBulkDelete = async () => {
+    if (selectedIds.size === 0 || bulkActing) return;
+    setBulkActing('delete');
+    setBulkDeleteError('');
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await adminApi.bulkDeleteCases(ids);
+      if (res.blocked_cases && res.blocked_cases.length > 0) {
+        const blockedSet = new Set<string>(res.blocked_cases.map((b: any) => b.case_id));
+        setSelectedIds(blockedSet);
+        setBulkActionFeedback({
+          type: 'error',
+          message: `Permanently deleted ${res.deleted_count || 0} case(s). ${res.blocked_count} case(s) were protected from deletion due to existing document history.`,
+          blockedCases: res.blocked_cases,
+        });
+      } else {
+        setSelectedIds(new Set());
+        setBulkActionFeedback({
+          type: 'success',
+          message: `Successfully deleted ${res.deleted_count || ids.length} case${(res.deleted_count || ids.length) === 1 ? '' : 's'}.`,
+        });
+      }
+      setBulkDeleteModalOpen(false);
+      load();
+    } catch (err: any) {
+      setBulkDeleteError(err.message || 'Failed to bulk delete cases');
+    } finally {
+      setBulkActing(null);
+    }
+  };
 
   const openDetail = (id?: string | null) => {
     if (!id) return;
@@ -170,6 +333,11 @@ function CasesInner() {
     try {
       await adminApi.deleteCase(c.id);
       setItems((prev) => prev.filter((x) => x.id !== c.id));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(c.id!);
+        return next;
+      });
       setTotal((prev) => Math.max(0, prev - 1));
       if (detail && detail.case.id === c.id) {
         setDetail(null);
@@ -181,20 +349,40 @@ function CasesInner() {
     }
   };
 
+  // Safe search & filter operations that clear selection and reset page
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setSelectedIds(new Set());
+    setPage(1);
     setQ(searchInput.trim());
-    load({ q: searchInput.trim(), status: statusFilter, category: categoryFilter });
+    load({ q: searchInput.trim(), status: statusFilter, category: categoryFilter, page: 1 });
   };
 
   const applyStatus = (s: string) => {
+    setSelectedIds(new Set());
+    setPage(1);
     setStatusFilter(s);
-    load({ q, status: s, category: categoryFilter });
+    load({ q, status: s, category: categoryFilter, page: 1 });
   };
 
   const applyCategory = (c: string) => {
+    setSelectedIds(new Set());
+    setPage(1);
     setCategoryFilter(c);
-    load({ q, status: statusFilter, category: c });
+    load({ q, status: statusFilter, category: c, page: 1 });
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setSelectedIds(new Set());
+    setPage(newPage);
+    load({ page: newPage });
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setSelectedIds(new Set());
+    setPageSize(newSize);
+    setPage(1);
+    load({ page: 1, pageSize: newSize });
   };
 
   return (
@@ -232,6 +420,103 @@ function CasesInner() {
         </select>
       </div>
 
+      {bulkActionFeedback && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          backgroundColor: bulkActionFeedback.type === 'success' ? '#f0fdf4' : '#fffbeb',
+          border: `1px solid ${bulkActionFeedback.type === 'success' ? '#bbf7d0' : '#fde68a'}`,
+          color: bulkActionFeedback.type === 'success' ? '#166534' : '#92400e',
+        }}>
+          <div>
+            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span>{bulkActionFeedback.type === 'success' ? '✓' : '⚠️'}</span>
+              <span>{bulkActionFeedback.message}</span>
+            </div>
+            {bulkActionFeedback.blockedCases && bulkActionFeedback.blockedCases.length > 0 && (
+              <ul style={{ margin: '8px 0 0 18px', padding: 0, fontSize: '12px' }}>
+                {bulkActionFeedback.blockedCases.map((b: any) => (
+                  <li key={b.case_id}>
+                    <strong>{b.case_number || b.case_id}</strong>: {b.reason}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <button
+            onClick={() => setBulkActionFeedback(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', color: 'inherit', padding: '0 4px' }}
+            aria-label="Dismiss message"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {selectedIds.size > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          padding: '12px 20px',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          flexWrap: 'wrap',
+          gap: '12px',
+        }}>
+          <div>
+            <strong style={{ color: '#1e40af', fontSize: '1rem' }}>
+              {selectedIds.size} {selectedIds.size === 1 ? 'Case Selected' : 'Cases Selected'}
+            </strong>
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button
+              className="btn-small btn-secondary"
+              style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+              disabled={bulkActing !== null}
+              onClick={handleBulkArchive}
+              title="Archive all selected cases"
+            >
+              {bulkActing === 'archive' ? 'Archiving…' : '📦 Archive Selected'}
+            </button>
+            <button
+              className="btn-small btn-secondary"
+              style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+              disabled={bulkActing !== null}
+              onClick={handleBulkRestore}
+              title="Restore all selected cases to active"
+            >
+              {bulkActing === 'restore' ? 'Restoring…' : '🔄 Restore Selected'}
+            </button>
+            <button
+              className="btn-small btn-danger"
+              style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+              disabled={bulkActing !== null}
+              onClick={() => { setBulkDeleteError(''); setBulkDeleteModalOpen(true); }}
+              title="Delete eligible selected cases permanently"
+            >
+              🗑️ Delete Selected
+            </button>
+            <button
+              className="btn-small btn-ghost"
+              style={{ padding: '6px 14px', fontSize: '0.85rem' }}
+              disabled={bulkActing !== null}
+              onClick={handleClearSelection}
+              title="Deselect all cases"
+            >
+              ✕ Clear Selection
+            </button>
+          </div>
+        </div>
+      )}
+
       {actingError && <p className="form-error">{actingError}</p>}
       {error && (
         <div className="dashboard-error">
@@ -247,90 +532,162 @@ function CasesInner() {
           {items.length === 0 ? (
             <p className="no-data">{q ? `No cases match "${q}"` : 'No cases yet'}</p>
           ) : (
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Case</th>
-                  <th>Client / Party</th>
-                  <th>Type</th>
-                  <th>Court / District</th>
-                  <th>Advocate</th>
-                  <th>Docs</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((c, idx) => {
-                  const archived = c.status === 'archived';
-                  const caseId = c.id || `case-${idx}`;
-                  const docCount = c.application_count ?? 0;
-                  return (
-                    <tr key={caseId}>
-                      <td>
-                        <button className="link-btn" onClick={() => c.id && openDetail(c.id)}>
-                          {c.nickname || c.case_number || c.case_type_label || (c.id ? c.id.slice(0, 8) : `Case #${idx + 1}`)}
-                        </button>
-                        {c.case_number && <div className="case-sub">{c.case_number}</div>}
-                      </td>
-                      <td>
-                        {c.client_name || c.party_name || '—'}
-                        {c.client_mobile && <div className="case-sub">{c.client_mobile}</div>}
-                      </td>
-                      <td>
-                        {c.case_type_label || '—'}
-                        <div className="case-sub">{c.category || ''}</div>
-                      </td>
-                      <td>
-                        {c.court_label || '—'}
-                        {c.district_label && <div className="case-sub">{c.district_label}</div>}
-                      </td>
-                      <td>{c.owner?.name || c.owner?.mobile || '—'}</td>
-                      <td>
-                        <span className="badge" style={{ backgroundColor: docCount > 0 ? '#e0f2fe' : '#f1f5f9', color: docCount > 0 ? '#0369a1' : '#64748b' }}>
-                          {docCount}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`badge ${archived ? 'badge-disabled' : 'badge-active'}`}>
-                          {archived ? 'Archived' : 'Active'}
-                        </span>
-                      </td>
-                      <td>{c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                          <button
-                            className={`btn-small ${archived ? 'btn-success' : 'btn-danger'}`}
-                            disabled={actingId === c.id}
-                            onClick={() => toggleArchive(c)}
-                          >
-                            {actingId === c.id ? '…' : archived ? 'Restore' : 'Archive'}
+            <>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: '44px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        ref={headerCheckboxRef}
+                        checked={isAllVisibleSelected}
+                        onChange={handleToggleSelectAllVisible}
+                        aria-label="Select all visible cases"
+                        title="Select all visible cases on this page"
+                        style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                      />
+                    </th>
+                    <th>Case</th>
+                    <th>Client / Party</th>
+                    <th>Type</th>
+                    <th>Court / District</th>
+                    <th>Advocate</th>
+                    <th>Docs</th>
+                    <th>Status</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((c, idx) => {
+                    const archived = c.status === 'archived';
+                    const caseId = c.id || `case-${idx}`;
+                    const docCount = c.application_count ?? 0;
+                    const isSelected = Boolean(c.id && selectedIds.has(c.id));
+                    return (
+                      <tr key={caseId} style={{ backgroundColor: isSelected ? '#eff6ff' : undefined }}>
+                        <td style={{ textAlign: 'center' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={(e) => c.id && handleToggleSelect(c.id, e)}
+                            aria-label={`Select case ${c.case_number || c.nickname || c.id}`}
+                            style={{ cursor: 'pointer', width: '16px', height: '16px' }}
+                          />
+                        </td>
+                        <td>
+                          <button className="link-btn" onClick={() => c.id && openDetail(c.id)}>
+                            {c.nickname || c.case_number || c.case_type_label || (c.id ? c.id.slice(0, 8) : `Case #${idx + 1}`)}
                           </button>
-                          <button
-                            className="btn-small"
-                            style={{
-                              backgroundColor: docCount > 0 ? '#f8fafc' : '#fee2e2',
-                              color: docCount > 0 ? '#94a3b8' : '#ef4444',
-                              border: '1px solid',
-                              borderColor: docCount > 0 ? '#e2e8f0' : '#fca5a5',
-                              cursor: docCount > 0 ? 'not-allowed' : 'pointer',
-                              padding: '2px 8px',
-                              fontSize: '11px',
-                            }}
-                            disabled={actingId === c.id || docCount > 0}
-                            title={docCount > 0 ? 'Cannot delete case with generated documents' : 'Permanently delete case'}
-                            onClick={() => deleteCase(c)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                          {c.case_number && <div className="case-sub">{c.case_number}</div>}
+                        </td>
+                        <td>
+                          {c.client_name || c.party_name || '—'}
+                          {c.client_mobile && <div className="case-sub">{c.client_mobile}</div>}
+                        </td>
+                        <td>
+                          {c.case_type_label || '—'}
+                          <div className="case-sub">{c.category || ''}</div>
+                        </td>
+                        <td>
+                          {c.court_label || '—'}
+                          {c.district_label && <div className="case-sub">{c.district_label}</div>}
+                        </td>
+                        <td>{c.owner?.name || c.owner?.mobile || '—'}</td>
+                        <td>
+                          <span className="badge" style={{ backgroundColor: docCount > 0 ? '#e0f2fe' : '#f1f5f9', color: docCount > 0 ? '#0369a1' : '#64748b' }}>
+                            {docCount}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`badge ${archived ? 'badge-disabled' : 'badge-active'}`}>
+                            {archived ? 'Archived' : 'Active'}
+                          </span>
+                        </td>
+                        <td>{c.updated_at ? new Date(c.updated_at).toLocaleDateString() : '—'}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              className={`btn-small ${archived ? 'btn-success' : 'btn-danger'}`}
+                              disabled={actingId === c.id}
+                              onClick={() => toggleArchive(c)}
+                            >
+                              {actingId === c.id ? '…' : archived ? 'Restore' : 'Archive'}
+                            </button>
+                            <button
+                              className="btn-small"
+                              style={{
+                                backgroundColor: docCount > 0 ? '#f8fafc' : '#fee2e2',
+                                color: docCount > 0 ? '#94a3b8' : '#ef4444',
+                                border: '1px solid',
+                                borderColor: docCount > 0 ? '#e2e8f0' : '#fca5a5',
+                                cursor: docCount > 0 ? 'not-allowed' : 'pointer',
+                                padding: '2px 8px',
+                                fontSize: '11px',
+                              }}
+                              disabled={actingId === c.id || docCount > 0}
+                              title={docCount > 0 ? 'Cannot delete case with generated documents' : 'Permanently delete case'}
+                              onClick={() => deleteCase(c)}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {total > 0 && (
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 16px',
+                  borderTop: '1px solid #e2e8f0',
+                  flexWrap: 'wrap',
+                  gap: '12px',
+                  fontSize: '13px',
+                  color: '#64748b',
+                }}>
+                  <div>
+                    Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)} of {total} cases
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                      Per page:
+                      <select
+                        value={pageSize}
+                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                        style={{ padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e1', fontSize: '13px', backgroundColor: '#fff' }}
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </label>
+                    <button
+                      className="btn-small btn-ghost"
+                      disabled={page <= 1 || loading}
+                      onClick={() => handlePageChange(page - 1)}
+                      style={{ cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+                    >
+                      ← Previous
+                    </button>
+                    <span style={{ fontWeight: 600 }}>Page {page} of {Math.max(1, Math.ceil(total / pageSize))}</span>
+                    <button
+                      className="btn-small btn-ghost"
+                      disabled={page >= Math.ceil(total / pageSize) || loading}
+                      onClick={() => handlePageChange(page + 1)}
+                      style={{ cursor: page >= Math.ceil(total / pageSize) ? 'not-allowed' : 'pointer' }}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -463,6 +820,174 @@ function CasesInner() {
         </div>
       )}
       {detailError && <p className="form-error">{detailError}</p>}
+
+      {/* Bulk Delete Safety Modal */}
+      {bulkDeleteModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (bulkActing !== 'delete') setBulkDeleteModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '580px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 style={{ margin: 0, color: '#991b1b' }}>
+                Delete {selectedIds.size} Selected Case{selectedIds.size === 1 ? '' : 's'}
+              </h3>
+              <button
+                className="modal-close"
+                disabled={bulkActing === 'delete'}
+                onClick={() => setBulkDeleteModalOpen(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontWeight: 600, color: '#334155', marginBottom: '14px', fontSize: '14px' }}>
+                Delete {selectedIds.size} selected case{selectedIds.size === 1 ? '' : 's'}?{' '}
+                <span style={{ color: '#dc2626' }}>This action cannot be undone.</span>
+              </p>
+
+              {bulkDeleteError && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                }}>
+                  <strong>Error:</strong> {bulkDeleteError}
+                </div>
+              )}
+
+              {protectedCases.length > 0 && (
+                <div style={{
+                  backgroundColor: '#fffbeb',
+                  border: '1px solid #fde68a',
+                  borderRadius: '6px',
+                  padding: '12px 14px',
+                  marginBottom: '14px',
+                  fontSize: '13px',
+                  color: '#92400e',
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>⚠️</span>
+                    <span>PROTECTED / BLOCKED CASES ({protectedCases.length})</span>
+                  </div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '12px', lineHeight: 1.4 }}>
+                    The following cases contain linked applications or drafts. Cases with document history cannot be permanently deleted to preserve legal and audit records:
+                  </p>
+                  <div style={{
+                    maxHeight: '120px',
+                    overflowY: 'auto',
+                    border: '1px solid #fef3c7',
+                    borderRadius: '4px',
+                    padding: '6px 10px',
+                    backgroundColor: '#fff',
+                  }}>
+                    {protectedCases.map((c) => (
+                      <div
+                        key={c.id}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontSize: '12px',
+                          padding: '4px 0',
+                          borderBottom: '1px dashed #f1f5f9',
+                        }}
+                      >
+                        <span style={{ fontWeight: 500, color: '#1e293b' }}>
+                          {c.case_number || c.nickname || c.case_type_label || (c.id ? c.id.slice(0, 8) : 'Case')}
+                        </span>
+                        <span style={{ color: '#b45309', fontWeight: 600, fontSize: '11px' }}>
+                          {c.application_count ?? 1} document(s) linked
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {eligibleCases.length > 0 && (
+                <div style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '6px',
+                  padding: '12px 14px',
+                  marginBottom: '14px',
+                  fontSize: '13px',
+                  color: '#334155',
+                }}>
+                  <div style={{ fontWeight: 700, marginBottom: '6px', color: '#047857' }}>
+                    ✓ ELIGIBLE FOR PERMANENT DELETION ({eligibleCases.length})
+                  </div>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '12px' }}>
+                    These cases have zero linked documents and will be permanently removed from the system:
+                  </p>
+                  <div style={{
+                    maxHeight: '100px',
+                    overflowY: 'auto',
+                    fontSize: '12px',
+                    color: '#64748b',
+                    paddingLeft: '6px',
+                  }}>
+                    {eligibleCases.map((c) => (
+                      <div key={c.id} style={{ padding: '2px 0' }}>
+                        • {c.case_number || c.nickname || c.case_type_label || (c.id ? c.id.slice(0, 8) : 'Case')}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {eligibleCases.length === 0 && (
+                <div style={{
+                  backgroundColor: '#fef2f2',
+                  border: '1px solid #fecaca',
+                  borderRadius: '6px',
+                  padding: '12px 14px',
+                  fontSize: '13px',
+                  color: '#991b1b',
+                  marginBottom: '14px',
+                  lineHeight: 1.4,
+                }}>
+                  <strong>Permanent Deletion Blocked:</strong> All {selectedIds.size} selected case{selectedIds.size === 1 ? '' : 's'} have generated legal documents or drafts. None can be permanently deleted. Please use <strong>Archive Selected</strong> instead to hide them from the active list while preserving records.
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={bulkActing === 'delete'}
+                onClick={() => setBulkDeleteModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={eligibleCases.length === 0 || bulkActing === 'delete'}
+                onClick={handleExecuteBulkDelete}
+              >
+                {bulkActing === 'delete'
+                  ? 'Deleting…'
+                  : `Delete ${eligibleCases.length} Case${eligibleCases.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
