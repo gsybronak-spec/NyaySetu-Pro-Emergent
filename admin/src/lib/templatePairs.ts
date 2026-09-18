@@ -9,6 +9,14 @@ export interface AdminTemplatePair {
 
 export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   {
+    baseKey: 'document_exhibit_application',
+    guId: 'document_exhibit_application',
+    enId: 'document_exhibit_application',
+    name_gu: 'દસ્તાવેજને આંક પાડવા બાબતની અરજી',
+    name_en: 'Application for Marking Documents as Exhibits',
+    category: 'Civil',
+  },
+  {
     baseKey: 'mudat_arji',
     guId: 'mudat_arji_gu',
     enId: 'mudat_arji_en',

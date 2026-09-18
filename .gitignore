@@ -110,3 +110,4 @@ backend/gate_*.json
 backend/fix_targets*.txt
 backend/server_diff.txt
 
+.agents/

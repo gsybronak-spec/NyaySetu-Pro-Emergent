@@ -2925,6 +2925,10 @@ _AUTO_FILL_FIELDS = {
     # Case-level party roles + derived lines (v2 catalog — never user-entered)
     "party_role", "opposite_party_role", "party_line", "opposite_party_line",
     "case_or_crime",
+    # Document exhibit marking application
+    "court_name", "representing_party_role", "representing_party",
+    "party_1_role", "party_1_name", "party_2_role", "party_2_name",
+    "document_details", "place", "date",
 }
 
 def public_template(t: dict) -> dict:
@@ -3300,9 +3304,15 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
-    if isinstance(ctx.get("court"), str) and ctx["court"] in _COURT_MAP:
-        cobj = _COURT_MAP[ctx["court"]]
-        ctx["court"] = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
+    court_raw = ctx.get("court_name") or ctx.get("court")
+    if isinstance(court_raw, str) and court_raw in _COURT_MAP:
+        cobj = _COURT_MAP[court_raw]
+        court_lbl = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
+        ctx["court"] = court_lbl
+        ctx["court_name"] = court_lbl
+    elif court_raw:
+        ctx.setdefault("court", court_raw)
+        ctx.setdefault("court_name", court_raw)
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
         ctx["case_type"] = (ctobj.get("gu") or ctobj.get("en", "")) if language == "gu" else (ctobj.get("en") or ctobj.get("gu", ""))
@@ -3327,6 +3337,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             court_name = case.get("court_custom") or case.get("court") or ""
         ctx.setdefault("court", court_name)
+        ctx.setdefault("court_name", court_name)
         ctx.setdefault("case_number", case.get("case_number") or "")
         # case type
         ct = next((x for x in CASE_TYPES if x["id"] == case.get("case_type_id")), None)
@@ -3335,12 +3346,16 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx.setdefault("case_type", case.get("case_type_custom") or "")
         ctx.setdefault("party_name", case.get("party_name") or "")
+        ctx.setdefault("party_1_name", case.get("party_name") or "")
         ctx.setdefault("opposite_party", case.get("opposite_party") or "")
+        ctx.setdefault("party_2_name", case.get("opposite_party") or "")
         # Party roles (v2 catalog): stored on the Case, inherited by every application.
-        raw_p_role = ctx.get("party_role") or case.get("party_role") or "complainant"
-        raw_opp_role = ctx.get("opposite_party_role") or case.get("opposite_party_role") or "accused"
+        raw_p_role = ctx.get("party_1_role") or ctx.get("party_role") or case.get("party_role") or "complainant"
+        raw_opp_role = ctx.get("party_2_role") or ctx.get("opposite_party_role") or case.get("opposite_party_role") or "accused"
         ctx["party_role"] = resolve_party_role_label(raw_p_role, language)
+        ctx["party_1_role"] = ctx["party_role"]
         ctx["opposite_party_role"] = resolve_party_role_label(raw_opp_role, language)
+        ctx["party_2_role"] = ctx["opposite_party_role"]
         # Police station (label or custom)
         ps_obj = _PS_MAP.get(case.get("police_station_id"))
         if ps_obj:
@@ -3370,10 +3385,13 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
         ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
         ctx.setdefault("court", user.get("court") or "")
+        ctx.setdefault("court_name", user.get("court") or "")
         ctx.setdefault("case_number", "")
         ctx.setdefault("case_type", "")
         ctx.setdefault("party_name", "")
+        ctx.setdefault("party_1_name", "")
         ctx.setdefault("opposite_party", "")
+        ctx.setdefault("party_2_name", "")
         ctx.setdefault("police_station", "")
         raw_p_role = ctx.get("party_role") or "complainant"
         raw_opp_role = ctx.get("opposite_party_role") or "accused"
@@ -3381,6 +3399,28 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["opposite_party_role"] = resolve_party_role_label(raw_opp_role, language)
         if not ctx.get("client_name"):
             ctx["client_name"] = ""
+
+    # Party name bidirectional syncing
+    if ctx.get("party_1_name") and not ctx.get("party_name"):
+        ctx["party_name"] = ctx["party_1_name"]
+    elif ctx.get("party_name") and not ctx.get("party_1_name"):
+        ctx["party_1_name"] = ctx["party_name"]
+
+    if ctx.get("party_2_name") and not ctx.get("opposite_party"):
+        ctx["opposite_party"] = ctx["party_2_name"]
+    elif ctx.get("opposite_party") and not ctx.get("party_2_name"):
+        ctx["party_2_name"] = ctx["opposite_party"]
+
+    # Party 1 & Party 2 role resolving and syncing for exhibit / multipart templates
+    if "party_1_role" in ctx:
+        ctx["party_1_role"] = resolve_party_role_label(ctx["party_1_role"], language)
+    else:
+        ctx["party_1_role"] = ctx.get("applicant_role") or ctx.get("party_role") or ""
+
+    if "party_2_role" in ctx:
+        ctx["party_2_role"] = resolve_party_role_label(ctx["party_2_role"], language)
+    else:
+        ctx["party_2_role"] = ctx.get("opposite_party_role") or ""
 
     # ---- Derived values for the document-return application (never user-entered) ----
     status = ctx.get("case_status")
@@ -3438,20 +3478,24 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Signature/pleading role & derived party info — the side the advocate represents.
     side = ctx.get("representing_party") or ctx.get("advocate_side") or "party"
     if side in ("party", "party1", "party_1", "complainant", "plaintiff", "applicant"):
-        ctx["selected_party_role"] = ctx.get("party_role") or ""
-        ctx["selected_party_name"] = ctx.get("party_name") or ""
+        ctx["selected_party_role"] = ctx.get("party_1_role") or ctx.get("party_role") or ""
+        ctx["selected_party_name"] = ctx.get("party_1_name") or ctx.get("party_name") or ""
         ctx["representing_party"] = "party"
+        ctx["representing_party_role"] = ctx["selected_party_role"]
     elif side in ("opposite", "party2", "party_2", "accused", "defendant", "opponent"):
-        ctx["selected_party_role"] = ctx.get("opposite_party_role") or ""
-        ctx["selected_party_name"] = ctx.get("opposite_party") or ""
+        ctx["selected_party_role"] = ctx.get("party_2_role") or ctx.get("opposite_party_role") or ""
+        ctx["selected_party_name"] = ctx.get("party_2_name") or ctx.get("opposite_party") or ""
         ctx["representing_party"] = "opposite"
+        ctx["representing_party_role"] = ctx["selected_party_role"]
     elif side == "other":
         ctx["selected_party_role"] = ctx.get("advocate_other") or ("ત્રાહિત પક્ષ" if language == "gu" else "Third Party")
         ctx["selected_party_name"] = ctx.get("advocate_other_name") or ""
         ctx["representing_party"] = "other"
+        ctx["representing_party_role"] = ctx["selected_party_role"]
     else:
-        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("party_role") or ""
-        ctx["selected_party_name"] = ctx.get("party_name") or ""
+        ctx["selected_party_role"] = ctx.get("applicant_role") or ctx.get("party_1_role") or ctx.get("party_role") or ""
+        ctx["selected_party_name"] = ctx.get("party_1_name") or ctx.get("party_name") or ""
+        ctx["representing_party_role"] = ctx["selected_party_role"]
 
     # Advocate representation line (e.g. "વાદી ના એડવોકેટ" / "Advocate for Plaintiff")
     if language == "gu":
@@ -3494,18 +3538,27 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["taluka_place"] = ""
 
-    # Date display — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
-    # canonical stored value is YYYY-MM-DD. Derived key keeps {{date}} untouched
-    # for every other template. Legacy DD-MM-YYYY values pass through unchanged.
+    # Synchronize place and taluka_place
+    if not (ctx.get("place") or "").strip():
+        ctx["place"] = ctx.get("taluka_place") or ""
+    elif not (ctx.get("taluka_place") or "").strip():
+        ctx["taluka_place"] = ctx.get("place") or ""
+
+    # Date display & formatting — the source blank is "[__ / __ / 20__]" (DD/MM/YYYY); the
+    # canonical stored value is YYYY-MM-DD.
     _d = ctx.get("date")
     if isinstance(_d, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _d):
-        ctx["date_display"] = f"{_d[8:10]}/{_d[5:7]}/{_d[0:4]}"
+        formatted_date = f"{_d[8:10]}/{_d[5:7]}/{_d[0:4]}"
+        ctx["date"] = formatted_date
+        ctx["date_display"] = formatted_date
     elif _d:
         ctx["date_display"] = _d if isinstance(_d, str) else ""
     else:
         # No date chosen -> today (the system date). Matches the source blank
         # "[__ / __ / 20__]" rendered as DD/MM/YYYY.
-        ctx["date_display"] = now().strftime("%d/%m/%Y")
+        today_date = now().strftime("%d/%m/%Y")
+        ctx["date"] = today_date
+        ctx["date_display"] = today_date
     return ctx
 
 
@@ -3598,7 +3651,12 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
                               (t.get("settings") or {}).get("block_align"))
 
-        tpl_settings = t.get("settings") or {}
+        tpl_settings = dict(t.get("settings") or {})
+        if req.language == "en":
+            if "body_size_en" in tpl_settings:
+                tpl_settings["body_size"] = tpl_settings["body_size_en"]
+            if "heading_size_en" in tpl_settings:
+                tpl_settings["heading_size"] = tpl_settings["heading_size_en"]
         doc_settings = get_doc_settings({
             **tpl_settings,
             "page_size": page_size,

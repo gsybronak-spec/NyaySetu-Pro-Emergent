@@ -554,7 +554,11 @@ POLICE_STATIONS = [
 
 # Templates use placeholder {{field}} for substitution.
 # fields: list of {key, label_en, label_gu, type, required}
-TEMPLATES = []
+try:
+    from test_seed_data import TEMPLATES as _TEST_TEMPLATES
+    TEMPLATES = [t for t in _TEST_TEMPLATES if t.get("id") in ("document_exhibit_application", "document_return_application")]
+except Exception:
+    TEMPLATES = []
 
 PLANS = [
     {"id": "single", "name": "Pay Per Template", "price": 9, "credits": 1, "popular": False, "per_template": 9.0},

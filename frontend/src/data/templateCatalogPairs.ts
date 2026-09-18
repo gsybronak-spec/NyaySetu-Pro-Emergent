@@ -15,6 +15,28 @@ export interface TemplateLogicalPair {
 
 export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
   {
+    baseKey: "document_exhibit_application",
+    guId: "document_exhibit_application",
+    enId: "document_exhibit_application",
+    name_gu: "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
+    name_en: "Application for Marking Documents as Exhibits",
+    category: "Civil",
+    description_gu: "સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને યોગ્ય આંક આપવાનો હુકમ કરવા બાબતની અરજી",
+    description_en: "Application to take documents on record and assign exhibit numbers",
+    keywords_gu: ["આંક", "દસ્તાવેજ", "આંક પાડવા", "પુરાવો", "પ્રદર્શન"],
+    keywords_en: ["exhibit", "marking documents as exhibits", "document exhibit", "assign exhibit", "exhibit marking"],
+    transliterations: ["aank", "aanke padva", "dastavejne aank padva", "exhibit arji"],
+    aliases: [
+      "document exhibit",
+      "marking documents as exhibits",
+      "exhibit marking",
+      "aanke padva",
+      "dastavejne aank padva",
+      "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
+      "આંક પાડવાની અરજી",
+    ],
+  },
+  {
     baseKey: "aanke_padvani_arji",
     guId: "aanke_padvani_arji_gu",
     enId: "aanke_padvani_arji_en",
