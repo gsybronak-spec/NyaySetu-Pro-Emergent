@@ -122,6 +122,19 @@ function CasesInner() {
     blockedCases?: any[];
   } | null>(null);
 
+  // Controlled Test Data Cascade Delete state
+  const [singleCascadeTarget, setSingleCascadeTarget] = useState<{ caseItem: AdminCase; docCount: number } | null>(null);
+  const [singleCascadeConfirmText, setSingleCascadeConfirmText] = useState('');
+  const [singleCascadeConfirmed, setSingleCascadeConfirmed] = useState(false);
+  const [singleCascadeLoading, setSingleCascadeLoading] = useState(false);
+  const [singleCascadeError, setSingleCascadeError] = useState('');
+
+  const [bulkCascadeModalOpen, setBulkCascadeModalOpen] = useState(false);
+  const [bulkCascadeConfirmText, setBulkCascadeConfirmText] = useState('');
+  const [bulkCascadeConfirmed, setBulkCascadeConfirmed] = useState(false);
+  const [bulkCascadeLoading, setBulkCascadeLoading] = useState(false);
+  const [bulkCascadeError, setBulkCascadeError] = useState('');
+
   const load = useCallback((params?: {
     q?: string;
     status?: string;
@@ -211,6 +224,10 @@ function CasesInner() {
     return selectedCases.filter((c) => (c.application_count ?? 0) === 0);
   }, [selectedCases]);
 
+  const totalSelectedDocs = useMemo(() => {
+    return selectedCases.reduce((acc, c) => acc + (c.application_count ?? 0), 0);
+  }, [selectedCases]);
+
   // Bulk actions operations
   const handleBulkArchive = async () => {
     if (selectedIds.size === 0 || bulkActing) return;
@@ -286,6 +303,75 @@ function CasesInner() {
       setBulkDeleteError(err.message || 'Failed to bulk delete cases');
     } finally {
       setBulkActing(null);
+    }
+  };
+
+  const openSingleCascade = (caseItem: AdminCase, docCount?: number) => {
+    const count = docCount !== undefined ? docCount : (caseItem.application_count ?? 0);
+    setSingleCascadeTarget({ caseItem, docCount: count });
+    setSingleCascadeConfirmText('');
+    setSingleCascadeConfirmed(false);
+    setSingleCascadeError('');
+  };
+
+  const handleExecuteSingleCascadeDelete = async () => {
+    if (!singleCascadeTarget || singleCascadeLoading) return;
+    if (singleCascadeConfirmText.trim() !== 'DELETE' || !singleCascadeConfirmed) return;
+    setSingleCascadeLoading(true);
+    setSingleCascadeError('');
+    try {
+      const res = await adminApi.cascadeDeleteCase(singleCascadeTarget.caseItem.id);
+      const caseLabel = singleCascadeTarget.caseItem.nickname || singleCascadeTarget.caseItem.case_number || singleCascadeTarget.caseItem.id;
+      setBulkActionFeedback({
+        type: 'success',
+        message: `Successfully deleted test case "${caseLabel}" along with ${res.deleted_applications_count || 0} linked application(s) and ${res.deleted_drafts_count || 0} draft(s).`,
+      });
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(singleCascadeTarget.caseItem.id);
+        return next;
+      });
+      if (detail && detail.case.id === singleCascadeTarget.caseItem.id) {
+        setDetail(null);
+      }
+      setSingleCascadeTarget(null);
+      load();
+    } catch (err: any) {
+      setSingleCascadeError(err.message || 'Failed to cascade delete test case');
+    } finally {
+      setSingleCascadeLoading(false);
+    }
+  };
+
+  const openBulkCascadeModal = () => {
+    setBulkCascadeConfirmText('');
+    setBulkCascadeConfirmed(false);
+    setBulkCascadeError('');
+    setBulkCascadeModalOpen(true);
+  };
+
+  const handleExecuteBulkCascadeDelete = async () => {
+    if (selectedIds.size === 0 || bulkCascadeLoading) return;
+    if (bulkCascadeConfirmText.trim() !== 'DELETE TEST DATA' || !bulkCascadeConfirmed) return;
+    setBulkCascadeLoading(true);
+    setBulkCascadeError('');
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await adminApi.bulkCascadeDeleteCases(ids);
+      setSelectedIds(new Set());
+      setBulkActionFeedback({
+        type: 'success',
+        message: `Successfully deleted ${res.deleted_cases_count || ids.length} test case(s) along with ${res.deleted_applications_count || 0} linked application(s) and ${res.deleted_drafts_count || 0} draft(s).`,
+      });
+      if (detail && ids.includes(detail.case.id)) {
+        setDetail(null);
+      }
+      setBulkCascadeModalOpen(false);
+      load();
+    } catch (err: any) {
+      setBulkCascadeError(err.message || 'Failed to bulk cascade delete test cases');
+    } finally {
+      setBulkCascadeLoading(false);
     }
   };
 
@@ -498,11 +584,28 @@ function CasesInner() {
             <button
               className="btn-small btn-danger"
               style={{ padding: '6px 14px', fontSize: '0.85rem' }}
-              disabled={bulkActing !== null}
+              disabled={bulkActing !== null || bulkCascadeLoading}
               onClick={() => { setBulkDeleteError(''); setBulkDeleteModalOpen(true); }}
               title="Delete eligible selected cases permanently"
             >
               🗑️ Delete Selected
+            </button>
+            <button
+              className="btn-small"
+              style={{
+                backgroundColor: '#b91c1c',
+                color: '#ffffff',
+                border: '1px solid #991b1b',
+                padding: '6px 14px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              disabled={bulkActing !== null || bulkCascadeLoading}
+              onClick={openBulkCascadeModal}
+              title="Permanently delete selected test cases and all their linked applications and drafts"
+            >
+              ⚠️ Delete Cases + Linked Test Data
             </button>
             <button
               className="btn-small btn-ghost"
@@ -631,6 +734,25 @@ function CasesInner() {
                             >
                               Delete
                             </button>
+                            {docCount > 0 && (
+                              <button
+                                className="btn-small"
+                                style={{
+                                  backgroundColor: '#fff1f2',
+                                  color: '#e11d48',
+                                  border: '1px solid #fecdd3',
+                                  cursor: 'pointer',
+                                  padding: '2px 8px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                }}
+                                disabled={actingId === c.id}
+                                title="Controlled cleanup: Delete this test case and all its linked documents/drafts"
+                                onClick={() => openSingleCascade(c, docCount)}
+                              >
+                                Delete + Test Data
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -813,6 +935,25 @@ function CasesInner() {
             >
               {actingId === detail.case.id ? '…' : 'Delete Case'}
             </button>
+            {detail.applications.length > 0 && (
+              <button
+                className="btn-small"
+                style={{
+                  backgroundColor: '#b91c1c',
+                  color: '#ffffff',
+                  border: '1px solid #991b1b',
+                  cursor: 'pointer',
+                  padding: '4px 12px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                }}
+                disabled={actingId === detail.case.id || singleCascadeLoading}
+                title="Controlled cleanup: Delete this test case and all its linked documents/drafts"
+                onClick={() => openSingleCascade(detail.case, detail.applications.length)}
+              >
+                ⚠️ Delete Case + Linked Test Data
+              </button>
+            )}
             <button className="btn-small btn-ghost" onClick={() => setDetail(null)}>
               Close
             </button>
@@ -983,6 +1124,311 @@ function CasesInner() {
                 {bulkActing === 'delete'
                   ? 'Deleting…'
                   : `Delete ${eligibleCases.length} Case${eligibleCases.length === 1 ? '' : 's'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Single Case Cascade Delete Modal */}
+      {singleCascadeTarget && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (!singleCascadeLoading) setSingleCascadeTarget(null);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '540px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 style={{ margin: 0, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚠️</span>
+                <span>Delete Case + Linked Test Data</span>
+              </h3>
+              <button
+                className="modal-close"
+                disabled={singleCascadeLoading}
+                onClick={() => setSingleCascadeTarget(null)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontWeight: 600, color: '#334155', marginBottom: '14px', fontSize: '14px' }}>
+                You are about to permanently delete this case and all of its linked document history.{' '}
+                <span style={{ color: '#dc2626' }}>This action cannot be undone.</span>
+              </p>
+
+              {singleCascadeError && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                }}>
+                  <strong>Error:</strong> {singleCascadeError}
+                </div>
+              )}
+
+              <div style={{
+                backgroundColor: '#fff1f2',
+                border: '1px solid #fecdd3',
+                borderRadius: '6px',
+                padding: '12px 14px',
+                marginBottom: '16px',
+                fontSize: '13px',
+                color: '#9f1239',
+              }}>
+                <div style={{ fontWeight: 700, marginBottom: '6px' }}>RECORDS TO BE PERMANENTLY REMOVED:</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '4px 8px', fontSize: '12px' }}>
+                  <strong>Case:</strong>
+                  <span>{singleCascadeTarget.caseItem.nickname || singleCascadeTarget.caseItem.case_number || singleCascadeTarget.caseItem.id}</span>
+                  <strong>Category / Type:</strong>
+                  <span>{[singleCascadeTarget.caseItem.category, singleCascadeTarget.caseItem.case_type_label].filter(Boolean).join(' · ') || '—'}</span>
+                  <strong>Advocate:</strong>
+                  <span>{singleCascadeTarget.caseItem.owner?.name || singleCascadeTarget.caseItem.owner?.mobile || '—'}</span>
+                  <strong>Linked Docs:</strong>
+                  <span style={{ fontWeight: 700 }}>{singleCascadeTarget.docCount} generated application(s) &amp; all linked drafts</span>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#1e293b', marginBottom: '6px' }}>
+                  To confirm deletion, please type <strong style={{ color: '#b91c1c' }}>DELETE</strong> in the box below:
+                </label>
+                <input
+                  type="text"
+                  value={singleCascadeConfirmText}
+                  onChange={(e) => setSingleCascadeConfirmText(e.target.value)}
+                  placeholder="Type DELETE"
+                  disabled={singleCascadeLoading}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                padding: '10px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#475569',
+              }}>
+                <input
+                  type="checkbox"
+                  id="confirm-single-cascade-checkbox"
+                  checked={singleCascadeConfirmed}
+                  disabled={singleCascadeLoading}
+                  onChange={(e) => setSingleCascadeConfirmed(e.target.checked)}
+                  style={{ marginTop: '2px', cursor: 'pointer' }}
+                />
+                <label htmlFor="confirm-single-cascade-checkbox" style={{ cursor: 'pointer', lineHeight: 1.4 }}>
+                  I confirm this is a test case and I want to permanently delete this case and all its linked generated documents and drafts.
+                </label>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={singleCascadeLoading}
+                onClick={() => setSingleCascadeTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                style={{
+                  backgroundColor: singleCascadeConfirmText.trim() === 'DELETE' && singleCascadeConfirmed && !singleCascadeLoading ? '#b91c1c' : undefined,
+                }}
+                disabled={singleCascadeConfirmText.trim() !== 'DELETE' || !singleCascadeConfirmed || singleCascadeLoading}
+                onClick={handleExecuteSingleCascadeDelete}
+              >
+                {singleCascadeLoading ? 'Deleting…' : 'Permanently Delete Case + Test Data'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Cases Cascade Delete Modal */}
+      {bulkCascadeModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (!bulkCascadeLoading) setBulkCascadeModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '600px', width: '100%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3 style={{ margin: 0, color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⚠️</span>
+                <span>Delete {selectedIds.size} Cases + Linked Test Data</span>
+              </h3>
+              <button
+                className="modal-close"
+                disabled={bulkCascadeLoading}
+                onClick={() => setBulkCascadeModalOpen(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <p style={{ fontWeight: 600, color: '#334155', marginBottom: '14px', fontSize: '14px' }}>
+                Permanently delete {selectedIds.size} selected test case{selectedIds.size === 1 ? '' : 's'} and all {totalSelectedDocs} linked document(s)?{' '}
+                <span style={{ color: '#dc2626' }}>This action cannot be undone.</span>
+              </p>
+
+              {bulkCascadeError && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                }}>
+                  <strong>Error:</strong> {bulkCascadeError}
+                </div>
+              )}
+
+              <div style={{
+                backgroundColor: '#fff1f2',
+                border: '1px solid #fecdd3',
+                borderRadius: '6px',
+                padding: '12px 14px',
+                marginBottom: '14px',
+                fontSize: '13px',
+                color: '#9f1239',
+              }}>
+                <div style={{ fontWeight: 700, marginBottom: '6px' }}>
+                  TOTAL RECORDS: {selectedIds.size} CASES · {totalSelectedDocs} DOCUMENTS · ALL LINKED DRAFTS
+                </div>
+                <div style={{
+                  maxHeight: '140px',
+                  overflowY: 'auto',
+                  border: '1px solid #ffe4e6',
+                  borderRadius: '4px',
+                  padding: '6px 10px',
+                  backgroundColor: '#fff',
+                }}>
+                  {selectedCases.map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontSize: '12px',
+                        padding: '4px 0',
+                        borderBottom: '1px dashed #fecdd3',
+                      }}
+                    >
+                      <span style={{ fontWeight: 500, color: '#1e293b' }}>
+                        {c.case_number || c.nickname || c.case_type_label || (c.id ? c.id.slice(0, 8) : 'Case')}
+                      </span>
+                      <span style={{ color: '#be123c', fontWeight: 600, fontSize: '11px' }}>
+                        {c.application_count ?? 0} document(s)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#1e293b', marginBottom: '6px' }}>
+                  To confirm bulk cleanup, please type <strong style={{ color: '#b91c1c' }}>DELETE TEST DATA</strong> below:
+                </label>
+                <input
+                  type="text"
+                  value={bulkCascadeConfirmText}
+                  onChange={(e) => setBulkCascadeConfirmText(e.target.value)}
+                  placeholder="Type DELETE TEST DATA"
+                  disabled={bulkCascadeLoading}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                padding: '10px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#475569',
+              }}>
+                <input
+                  type="checkbox"
+                  id="confirm-bulk-cascade-checkbox"
+                  checked={bulkCascadeConfirmed}
+                  disabled={bulkCascadeLoading}
+                  onChange={(e) => setBulkCascadeConfirmed(e.target.checked)}
+                  style={{ marginTop: '2px', cursor: 'pointer' }}
+                />
+                <label htmlFor="confirm-bulk-cascade-checkbox" style={{ cursor: 'pointer', lineHeight: 1.4 }}>
+                  I confirm these are test cases and I want to permanently delete them and all linked test applications/drafts.
+                </label>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={bulkCascadeLoading}
+                onClick={() => setBulkCascadeModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                style={{
+                  backgroundColor: bulkCascadeConfirmText.trim() === 'DELETE TEST DATA' && bulkCascadeConfirmed && !bulkCascadeLoading ? '#b91c1c' : undefined,
+                }}
+                disabled={bulkCascadeConfirmText.trim() !== 'DELETE TEST DATA' || !bulkCascadeConfirmed || bulkCascadeLoading}
+                onClick={handleExecuteBulkCascadeDelete}
+              >
+                {bulkCascadeLoading ? 'Deleting…' : `Permanently Delete ${selectedIds.size} Cases + Test Data`}
               </button>
             </div>
           </div>

@@ -6328,6 +6328,58 @@ async def admin_delete_case(case_id: str, admin=Depends(get_admin)):
     return {"success": True, "deleted": case_id}
 
 
+@admin_api.delete("/cases/{case_id}/cascade")
+async def admin_cascade_delete_case(case_id: str, admin=Depends(get_admin)):
+    """Admin-only controlled cascade cleanup of a test case together with its linked applications and drafts.
+    Safe and transactionally batched. Does not affect any unrelated cases or documents."""
+    doc = await db.collection('cases').document(case_id).get()
+    if not doc.exists:
+        raise HTTPException(404, "Case not found")
+
+    case_data = doc.to_dict() or {}
+
+    # Query all linked applications and drafts
+    apps = [d async for d in db.collection('applications').where(filter=firestore.FieldFilter('case_id', '==', case_id)).stream()]
+    drafts = [d async for d in db.collection('drafts').where(filter=firestore.FieldFilter('case_id', '==', case_id)).stream()]
+
+    app_ids = [d.id for d in apps]
+    draft_ids = [d.id for d in drafts]
+
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+    for app_id in app_ids:
+        await batch_mgr.add_delete(db.collection('applications').document(app_id))
+    for draft_id in draft_ids:
+        await batch_mgr.add_delete(db.collection('drafts').document(draft_id))
+    await batch_mgr.add_delete(db.collection('cases').document(case_id))
+
+    await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="case_cascade_delete",
+        entity_type="case",
+        entity_id=case_id,
+        metadata={
+            "case_id": case_id,
+            "case_number": case_data.get("case_number"),
+            "nickname": case_data.get("nickname"),
+            "category": case_data.get("category"),
+            "deleted_applications_count": len(app_ids),
+            "deleted_drafts_count": len(draft_ids),
+            "deleted_application_ids": app_ids,
+            "deleted_draft_ids": draft_ids,
+        },
+        reason="Admin controlled cascade cleanup of test case and linked data"
+    )
+
+    return {
+        "success": True,
+        "deleted_case_id": case_id,
+        "deleted_applications_count": len(app_ids),
+        "deleted_drafts_count": len(draft_ids),
+    }
+
+
 @admin_api.post("/cases/bulk-archive")
 async def admin_bulk_archive_cases(req: CaseBulkActionReq, admin=Depends(get_admin)):
     """Bulk archive cases with FirestoreBatchManager and audit logging."""
@@ -6479,6 +6531,83 @@ async def admin_bulk_delete_cases(req: CaseBulkActionReq, admin=Depends(get_admi
         "blocked_count": len(blocked_cases),
         "deleted_ids": deleted_ids,
         "blocked_cases": blocked_cases,
+    }
+
+
+@admin_api.post("/cases/bulk-cascade-delete")
+async def admin_bulk_cascade_delete_cases(req: CaseBulkActionReq, admin=Depends(get_admin)):
+    """Admin-only controlled bulk cascade cleanup of multiple test cases together with their linked applications and drafts.
+    Safely batched with FirestoreBatchManager. Deletes ONLY records linked to the provided case IDs."""
+    clean_ids = _sanitize_bulk_ids(req.ids)
+    if not clean_ids:
+        return {
+            "success": True,
+            "deleted_cases_count": 0,
+            "deleted_case_ids": [],
+            "deleted_applications_count": 0,
+            "deleted_drafts_count": 0,
+            "details": [],
+        }
+
+    deleted_case_ids = []
+    total_apps_count = 0
+    total_drafts_count = 0
+    details = []
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+
+    for cid in clean_ids:
+        snap = await db.collection('cases').document(cid).get()
+        if not snap.exists:
+            continue
+        case_data = snap.to_dict() or {}
+
+        # Fetch all linked applications and drafts for this case
+        apps = [d async for d in db.collection('applications').where(filter=firestore.FieldFilter('case_id', '==', cid)).stream()]
+        drafts = [d async for d in db.collection('drafts').where(filter=firestore.FieldFilter('case_id', '==', cid)).stream()]
+
+        app_ids = [d.id for d in apps]
+        draft_ids = [d.id for d in drafts]
+
+        for app_id in app_ids:
+            await batch_mgr.add_delete(db.collection('applications').document(app_id))
+        for draft_id in draft_ids:
+            await batch_mgr.add_delete(db.collection('drafts').document(draft_id))
+        await batch_mgr.add_delete(db.collection('cases').document(cid))
+
+        deleted_case_ids.append(cid)
+        total_apps_count += len(app_ids)
+        total_drafts_count += len(draft_ids)
+        details.append({
+            "case_id": cid,
+            "case_number": case_data.get("case_number") or case_data.get("nickname") or cid,
+            "deleted_applications_count": len(app_ids),
+            "deleted_drafts_count": len(draft_ids),
+        })
+
+    if deleted_case_ids:
+        await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="case_bulk_cascade_delete",
+        entity_type="case",
+        metadata={
+            "deleted_cases_count": len(deleted_case_ids),
+            "deleted_case_ids": deleted_case_ids,
+            "total_deleted_applications": total_apps_count,
+            "total_deleted_drafts": total_drafts_count,
+            "details": details,
+        },
+        reason="Admin controlled bulk cascade cleanup of test cases and linked data"
+    )
+
+    return {
+        "success": True,
+        "deleted_cases_count": len(deleted_case_ids),
+        "deleted_case_ids": deleted_case_ids,
+        "deleted_applications_count": total_apps_count,
+        "deleted_drafts_count": total_drafts_count,
+        "details": details,
     }
 
 
