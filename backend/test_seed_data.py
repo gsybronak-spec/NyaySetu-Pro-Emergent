@@ -2456,6 +2456,7 @@ Advocate for the Applicant
                 {"contains": "Date :", "align": "left"},
                 {"contains": "સ્થળ :", "align": "left"},
                 {"contains": "Place :", "align": "left"},
+                {"contains": "-----------------", "align": "right", "indent": False},
                 {"contains": "---------------------------", "align": "right", "indent": False},
                 {"contains": "ના એડવોકેટ", "align": "right"},
                 {"contains": "'s Advocate", "align": "right"},
@@ -2480,7 +2481,7 @@ Advocate for the Applicant
 તારીખ : {{date}}
 સ્થળ : {{taluka_place}}
 
----------------------------
+-----------------
 {{representing_party_role}} ના એડવોકેટ""",
         "content_en": """BEFORE THE COURT OF THE HON'BLE {{court_name}}
 Place: {{taluka_place}}

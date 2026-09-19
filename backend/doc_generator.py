@@ -545,6 +545,13 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                 or next_line_str.startswith("Advocate")
             )
         )
+        if is_dash_line and is_next_signature:
+            is_gujarati_sig = bool(
+                re.search(r"[\u0a80-\u0aff]", next_line_str)
+                or any(k in next_line_str for k in ("ના એડવોકેટ", "તરફે એડવોકેટ", "તરફે વકીલ", "એડવોકેટ"))
+            )
+            if is_gujarati_sig:
+                line = "-----------------"
         is_date_place = (
             bool(
                 re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
