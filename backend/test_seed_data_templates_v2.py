@@ -81,7 +81,7 @@ Advocate of {{selected_party_role}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
------------------
+----------
 {{selected_party_role}} ના એડવોકેટ
 """,
     },

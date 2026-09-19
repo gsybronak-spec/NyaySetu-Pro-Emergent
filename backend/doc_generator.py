@@ -551,7 +551,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                 or any(k in next_line_str for k in ("ના એડવોકેટ", "તરફે એડવોકેટ", "તરફે વકીલ", "એડવોકેટ"))
             )
             if is_gujarati_sig:
-                line = "-----------------"
+                line = "----------"
         is_date_place = (
             bool(
                 re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)

@@ -2,13 +2,13 @@
 """Unit tests for Gujarati Exhibit Application Signature Line Formatting.
 
 Ensures:
-1. document_exhibit_application in test_seed_data contains strictly 17 dashes in content_gu.
-2. block_align contains 17 dashes right-aligned without indent.
-3. All 6 dynamic Gujarati advocate roles render 17 dashes right-aligned directly above the role text.
-4. build_blocks normalizes any dash line preceding a Gujarati signature to 17 dashes.
+1. document_exhibit_application in test_seed_data contains strictly 10 dashes in content_gu.
+2. block_align contains 10 dashes right-aligned without indent.
+3. All 6 dynamic Gujarati advocate roles render 10 dashes right-aligned directly above the role text.
+4. build_blocks normalizes any dash line (including 17 and 27 dashes) preceding a Gujarati signature to 10 dashes.
 5. English PDF rendering is untouched.
 6. document_return_application has zero regressions.
-7. PDF byte stream directly verifies exact 17-dash line operator and 0 occurrences of 27 dashes.
+7. PDF byte stream directly verifies exact 10-dash line operator and 0 occurrences of 17 or 27 dashes.
 """
 
 import base64
@@ -57,25 +57,26 @@ def extract_pdf_stream_text(pdf_bytes: bytes) -> str:
 
 
 class TestGujaratiExhibitSignature(unittest.TestCase):
-    """Test suite for short proportional 17-dash signature line."""
+    """Test suite for short proportional 10-dash signature line."""
 
     def setUp(self):
         self.tpl = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_exhibit_application"), None)
         self.assertIsNotNone(self.tpl, "document_exhibit_application missing from test_seed_data.TEMPLATES")
 
-    def test_01_seed_template_content_gu_has_17_dashes(self):
-        """1. Verify template definition has 17 dashes and 0 occurrences of 27 dashes."""
+    def test_01_seed_template_content_gu_has_10_dashes(self):
+        """1. Verify template definition has 10 dashes and 0 occurrences of 17 or 27 dashes."""
         content_gu = self.tpl["content_gu"]
-        self.assertIn("-----------------", content_gu)
+        self.assertIn("----------", content_gu)
+        self.assertNotIn("-----------------", content_gu)
         self.assertNotIn("---------------------------", content_gu)
 
-    def test_02_block_align_contains_17_dashes(self):
-        """2. Verify block_align configuration contains 17 dashes rule."""
+    def test_02_block_align_contains_10_dashes(self):
+        """2. Verify block_align configuration contains 10 dashes rule."""
         block_align = (self.tpl.get("settings") or {}).get("block_align", [])
         rules = {r.get("contains"): r for r in block_align if "contains" in r}
-        self.assertIn("-----------------", rules)
-        self.assertEqual(rules["-----------------"]["align"], "right")
-        self.assertFalse(rules["-----------------"].get("indent", True))
+        self.assertIn("----------", rules)
+        self.assertEqual(rules["----------"]["align"], "right")
+        self.assertFalse(rules["----------"].get("indent", True))
 
     def test_03_plaintiff_advocate_signature_blocks(self):
         """3. Verify party_1 'વાદી ના એડવોકેટ' signature blocks."""
@@ -96,7 +97,7 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         blocks = doc_generator.build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], (self.tpl.get("settings") or {}).get("block_align"))
         sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
         self.assertEqual(len(sig_blocks), 2)
-        self.assertEqual(sig_blocks[0]["text"], "-----------------")
+        self.assertEqual(sig_blocks[0]["text"], "----------")
         self.assertEqual(sig_blocks[0]["align"], "right")
         self.assertEqual(sig_blocks[1]["text"], "વાદી ના એડવોકેટ")
         self.assertEqual(sig_blocks[1]["align"], "right")
@@ -129,24 +130,25 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
             blocks = doc_generator.build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], (self.tpl.get("settings") or {}).get("block_align"))
             sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
             self.assertEqual(len(sig_blocks), 2)
-            self.assertEqual(sig_blocks[0]["text"], "-----------------")
+            self.assertEqual(sig_blocks[0]["text"], "----------")
             self.assertEqual(sig_blocks[0]["align"], "right")
             self.assertEqual(sig_blocks[1]["text"], expected_sig)
             self.assertEqual(sig_blocks[1]["align"], "right")
 
-    def test_05_normalizer_resilience_converts_long_dashes_to_17(self):
-        """5. Verify build_blocks normalizes long dashes to 17 dashes for Gujarati signatures."""
-        raw = (
-            "મહેરબાન કોર્ટ સાહેબશ્રી\n\n"
-            "તારીખ : 19/09/2026\n"
-            "સ્થળ : અમદાવાદ\n\n"
-            "---------------------------\n"
-            "વાદી ના એડવોકેટ"
-        )
-        blocks = doc_generator.build_blocks(raw, "Test", "ટેસ્ટ")
-        sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
-        self.assertEqual(sig_blocks[0]["text"], "-----------------")
-        self.assertEqual(sig_blocks[0]["align"], "right")
+    def test_05_normalizer_resilience_converts_legacy_dashes_to_10(self):
+        """5. Verify build_blocks normalizes long 27 and 17 dashes to 10 dashes for Gujarati signatures."""
+        for dash_input in ["---------------------------", "-----------------", "--------------------", "------------"]:
+            raw = (
+                "મહેરબાન કોર્ટ સાહેબશ્રી\n\n"
+                "તારીખ : 19/09/2026\n"
+                "સ્થળ : અમદાવાદ\n\n"
+                f"{dash_input}\n"
+                "વાદી ના એડવોકેટ"
+            )
+            blocks = doc_generator.build_blocks(raw, "Test", "ટેસ્ટ")
+            sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
+            self.assertEqual(sig_blocks[0]["text"], "----------")
+            self.assertEqual(sig_blocks[0]["align"], "right")
 
     def test_06_english_pdf_and_return_application_unaffected(self):
         """6. Verify English PDF and return application are unaffected."""
@@ -195,7 +197,7 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         self.assertTrue(b64_ret)
 
     def test_07_pdf_byte_stream_verification(self):
-        """7. Verify generated PDF byte stream directly for 17 dashes and absence of 27 dashes."""
+        """7. Verify generated PDF byte stream directly for 10 dashes and absence of 17 or 27 dashes."""
         ctx = {
             "court_name": "ચીફ જ્યુડિશિયલ મેજિસ્ટ્રેટ સાહેબશ્રી",
             "taluka_place": "અમદાવાદ",
@@ -221,7 +223,8 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         pdf_bytes = base64.b64decode(b64)
         stream_text = extract_pdf_stream_text(pdf_bytes)
 
-        self.assertIn("(-----------------) Tj", stream_text)
+        self.assertIn("(----------) Tj", stream_text)
+        self.assertNotIn("-----------------", stream_text)
         self.assertNotIn("---------------------------", stream_text)
 
 

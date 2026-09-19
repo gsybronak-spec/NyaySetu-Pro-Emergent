@@ -2991,8 +2991,8 @@ async def _ensure_seed_complete() -> None:
             if snap.exists:
                 cur = snap.to_dict()
                 cur_gu = cur.get("content_gu", "")
-                if "---------------------------" in cur_gu:
-                    updated_gu = cur_gu.replace("---------------------------", "-----------------")
+                if "---------------------------" in cur_gu or "-----------------" in cur_gu:
+                    updated_gu = cur_gu.replace("---------------------------", "----------").replace("-----------------", "----------")
                     await doc_ref.update({"content_gu": updated_gu})
                     invalidate_published_templates_cache()
     except Exception as e:
@@ -3026,8 +3026,8 @@ async def _get_published_templates() -> list:
         db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
         for t in db_templates:
             if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application") and t.get("content_gu"):
-                if "---------------------------" in t["content_gu"]:
-                    t["content_gu"] = t["content_gu"].replace("---------------------------", "-----------------")
+                if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
+                    t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
                     try:
                         asyncio.create_task(db.collection("templates").document(t.get("id", "document_exhibit_application")).update({"content_gu": t["content_gu"]}))
                     except Exception:
@@ -3077,8 +3077,8 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
     if t and t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids:
         if (t.get("id") == "document_exhibit_application" or template_id == "document_exhibit_application") and t.get("content_gu"):
-            if "---------------------------" in t["content_gu"]:
-                t["content_gu"] = t["content_gu"].replace("---------------------------", "-----------------")
+            if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
+                t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
                 if db is not None:
                     try:
                         asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({"content_gu": t["content_gu"]}))
@@ -3152,8 +3152,8 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
     t = _snap.to_dict() if _snap.exists else None
     if t:
         if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application") and t.get("content_gu"):
-            if "---------------------------" in t["content_gu"]:
-                t["content_gu"] = t["content_gu"].replace("---------------------------", "-----------------")
+            if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
+                t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -8168,8 +8168,8 @@ async def seed_templates(force: bool = False) -> dict:
             continue
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing and (existing.get("content_en") or existing.get("content_gu")):
-            if t["id"] == "document_exhibit_application" and existing.get("content_gu") and "---------------------------" in existing.get("content_gu", ""):
-                await db.collection('templates').document(t["id"]).update({"content_gu": existing["content_gu"].replace("---------------------------", "-----------------")})
+            if t["id"] == "document_exhibit_application" and existing.get("content_gu") and ("---------------------------" in existing.get("content_gu", "") or "-----------------" in existing.get("content_gu", "")):
+                await db.collection('templates').document(t["id"]).update({"content_gu": existing["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")})
             skipped_ids.append(t["id"])
             continue
         template_doc = {

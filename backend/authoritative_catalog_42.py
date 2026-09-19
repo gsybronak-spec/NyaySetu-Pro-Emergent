@@ -70,7 +70,7 @@ BASE_TEMPLATES = [
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
------------------
+----------
 {{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
