@@ -42,7 +42,7 @@ DEFAULT_SETTINGS = {
 BASE_TEMPLATES = [
     {
         "base_key": "aanke_padvani_arji",
-        "aliases": ["aanke", "exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક", "આંક પાડવાની અરજી"],
+        "aliases": ["aanke", "exhibit", "document_exhibit_application", "document_exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક", "આંક પાડવાની અરજી"],
         "name_gu": "આંક પાડવાની અરજી",
         "name_en": "Application to Exhibit Document",
         "category": "General",
@@ -61,7 +61,7 @@ BASE_TEMPLATES = [
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
+ બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
 
 સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
@@ -70,7 +70,8 @@ BASE_TEMPLATES = [
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+-----------------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -89,7 +90,8 @@ The said case is pending before this Hon'ble Court. In the said case, {{document
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+-----------------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "certified_report",

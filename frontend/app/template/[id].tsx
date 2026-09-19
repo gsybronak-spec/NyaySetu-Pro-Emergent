@@ -244,8 +244,9 @@ export default function TemplateApplication() {
         if (cs.case_number) initialValues["case_number"] = cs.case_number;
         if (cs.district_id) initialValues["district"] = cs.district_id;
         if (cs.taluka_id) initialValues["taluka"] = cs.taluka_id;
-        if (cs.court_id) {
-          initialValues["court"] = cs.court_id;
+        if (cs.court_id || cs.court || cs.court_label) {
+          const courtVal = cs.court_id || cs.court || cs.court_label;
+          initialValues["court"] = courtVal;
           initialValues["court_name"] = cs.court_label || cs.court || cs.court_id;
         }
         if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
@@ -331,6 +332,7 @@ export default function TemplateApplication() {
 
   // Load talukas & courts when district changes in No-Case mode
   useEffect(() => {
+    const key = values.district ? `courts:${values.district}` : "courts:all";
     if (values.district) {
       catalogCache.getTalukas(values.district).then(setTalukas);
       catalogCache.getCourts(values.district).then(setCourts);
@@ -338,6 +340,13 @@ export default function TemplateApplication() {
       setTalukas([]);
       catalogCache.getCourts(undefined).then(setCourts);
     }
+
+    const unsub = catalogCache.subscribe(key, (freshCourts) => {
+      if (Array.isArray(freshCourts)) {
+        setCourts(freshCourts);
+      }
+    });
+    return () => unsub();
   }, [values.district]);
 
   // Autosave draft when values change with visual feedback
@@ -357,7 +366,14 @@ export default function TemplateApplication() {
     return () => draftTimer.current && clearTimeout(draftTimer.current);
   }, [values, language, loading, templateId, caseId]);
 
-  const update = (k: string, v: any) => setValues((prev) => ({ ...prev, [k]: v }));
+  const update = (k: string, v: any) => {
+    setValues((prev) => {
+      const next = { ...prev, [k]: v };
+      if (k === "court") next["court_name"] = v;
+      if (k === "court_name") next["court"] = v;
+      return next;
+    });
+  };
 
   // When language switches, fetch template for new language seamlessly without full reload
   const handleLanguageChange = (newLang: "en" | "gu") => {
@@ -683,7 +699,28 @@ export default function TemplateApplication() {
       );
     }
 
-    if (f.type === "select") {
+    if (f.type === "select" || f.type === "court_select") {
+      if (f.source === "courts" || f.key === "court" || f.key === "court_name") {
+        return (
+          <Dropdown
+            key={f.key}
+            testID={`field-${f.key}`}
+            label={label}
+            placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
+            value={fvalue || values.court || values.court_name || null}
+            emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
+            options={courts.map((c: any) => ({
+              id: c.id,
+              label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+            }))}
+            onChange={(v) => {
+              update(f.key, v);
+              update("court", v);
+              update("court_name", v);
+            }}
+          />
+        );
+      }
       let rawOpts = f.options || [];
       if (f.source === "case_parties" && caseData) {
         rawOpts = [
@@ -998,6 +1035,7 @@ export default function TemplateApplication() {
                   label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
                   placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
                   value={values.court || values.court_name || null}
+                  emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
                   options={courts.map((c: any) => ({
                     id: c.id,
                     label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
@@ -1202,7 +1240,7 @@ export default function TemplateApplication() {
                   style={[
                     styles.docText,
                     {
-                      textAlign: b.align === "center" ? "center" : "left",
+                      textAlign: b.align === "center" ? "center" : b.align === "right" ? "right" : "left",
                       fontWeight: b.bold ? "700" : "400",
                       fontSize: b.bold ? 15 : 13,
                       marginBottom: b.text ? 6 : 10,

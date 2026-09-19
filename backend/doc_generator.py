@@ -535,15 +535,29 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
         )
 
         # 5. Date & Place
-        is_date_place = bool(
-            re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
-            or (curr_non_idx >= len(nonempty_lines) - 3 and len(line) < 45 and not line.startswith("સદર") and not line.startswith("આથી") and not bool(re.match(r"^(\d+|[૧-૯૦]+)[\.\)]", line)) and any(b.get("section") == "date_place" for b in blocks if b.get("section") != "spacer"))
+        is_dash_line = bool(re.match(r"^[-—–_]{3,}$", line))
+        next_line_str = nonempty_lines[curr_non_idx + 1][1] if curr_non_idx + 1 < len(nonempty_lines) else ""
+        is_next_signature = bool(
+            next_line_str
+            and (
+                re.search(r"(?:Advocate\s+(?:for|of|to)|Advocate|ના\s+એડવોકેટ|તરફે\s+એડવોકેટ|તરફે\s+વકીલ|એડવોકેટ\s+શ્રી|\(સહી\)|સહી\s*[/:]|Sign\s*[/:])$", next_line_str, re.IGNORECASE)
+                or next_line_str.startswith("Advocate for")
+                or next_line_str.startswith("Advocate")
+            )
+        )
+        is_date_place = (
+            bool(
+                re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
+                or (curr_non_idx >= len(nonempty_lines) - 3 and len(line) < 45 and not line.startswith("સદર") and not line.startswith("આથી") and not bool(re.match(r"^(\d+|[૧-૯૦]+)[\.\)]", line)) and any(b.get("section") == "date_place" for b in blocks if b.get("section") != "spacer"))
+            )
+            and not is_dash_line
         )
 
         # 6. Advocate Signature
         is_signature = bool(
             (
-                re.search(r"(?:Advocate\s+(?:for|of|to)|Advocate|ના\s+એડવોકેટ|તરફે\s+એડવોકેટ|તરફે\s+વકીલ|એડવોકેટ\s+શ્રી|\(સહી\)|સહી\s*[/:]|Sign\s*[/:])$", line, re.IGNORECASE)
+                (is_dash_line and is_next_signature)
+                or re.search(r"(?:Advocate\s+(?:for|of|to)|Advocate|ના\s+એડવોકેટ|તરફે\s+એડવોકેટ|તરફે\s+વકીલ|એડવોકેટ\s+શ્રી|\(સહી\)|સહી\s*[/:]|Sign\s*[/:])$", line, re.IGNORECASE)
                 or line.startswith("Advocate for")
                 or line.startswith("Advocate")
             )

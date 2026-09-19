@@ -241,6 +241,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   }, [form.law_id]);
 
   useEffect(() => {
+    const key = form.district_id ? `courts:${form.district_id}` : "courts:all";
     if (form.district_id) {
       catalogCache.getTalukas(form.district_id).then(setTalukas);
       catalogCache.getCourts(form.district_id).then(setCourts);
@@ -250,6 +251,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       catalogCache.getCourts(undefined).then(setCourts);
       api.policeStations(undefined).then((r) => setPoliceStations(r || [])).catch(() => {});
     }
+
+    const unsub = catalogCache.subscribe(key, (freshCourts) => {
+      if (Array.isArray(freshCourts)) {
+        setCourts(freshCourts);
+      }
+    });
+    return () => unsub();
   }, [form.district_id]);
 
   const onDistrictChange = (dId: string) => {
@@ -263,6 +271,19 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   };
 
   const language = form.language;
+  const isCurrentCourtInList = !form.court_id || form.court_id === "other" || courts.some((c) => c.id === form.court_id);
+  const historicalCourtOption = (!isCurrentCourtInList && form.court_id) ? [{
+    id: form.court_id,
+    label: (initial?.court_label || form.court_id) + (language === "gu" ? " (ઐતિહાસિક / સંગ્રહિત)" : " (Historical / Archived)"),
+    sublabel: language === "gu" ? "કેસમાંથી સાચવેલ" : "Preserved from saved case",
+    pinnable: false,
+  }] : [];
+
+  const courtOptions = [
+    ...historicalCourtOption,
+    ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
+    { id: "other", label: language === "gu" ? "અન્ય (જાતે લખો)" : "Other (type manually)", pinnable: false },
+  ];
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const updateCustom = (k: string, v: any) => setCustomValues((prev) => ({ ...prev, [k]: v }));
 
@@ -710,10 +731,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   value={form.court_id}
                   favouriteIds={favCourts}
                   onToggleFavourite={toggleFavCourt}
-                  options={[
-                    ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
-                    { id: "other", label: "Other (type manually)", pinnable: false },
-                  ]}
+                  emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
+                  options={courtOptions}
                   onChange={(v) => update("court_id", v)}
                 />
                 {form.court_id === "other" && (
@@ -995,10 +1014,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             value={form.court_id}
             favouriteIds={favCourts}
             onToggleFavourite={toggleFavCourt}
-            options={[
-              ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
-              { id: "other", label: "Other (type manually)", pinnable: false },
-            ]}
+            emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
+            options={courtOptions}
             onChange={(v) => update("court_id", v)}
           />
           {form.court_id === "other" && (

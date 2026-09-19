@@ -32,7 +32,7 @@ TEMPLATES_V2 = [
         "name_en": "Application to Exhibit Document",
         "name_gu": "દસ્તાવેજને આંકે પાડવાની અરજી",
         "category": "General",
-        "aliases": ["aanke", "exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક"],
+        "aliases": ["aanke", "exhibit", "document_exhibit_application", "document_exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક"],
         "fields": [
             {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
              "options": [
@@ -60,6 +60,7 @@ The said case is pending before this Hon'ble Court. In the said case, {{document
 Date : {{date_display}}
 Place : {{taluka_place}}
 
+-----------------
 Advocate of {{selected_party_role}}
 """,
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
@@ -80,6 +81,7 @@ Advocate of {{selected_party_role}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
+-----------------
 {{selected_party_role}} ના એડવોકેટ
 """,
     },

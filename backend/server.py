@@ -2261,9 +2261,9 @@ async def courts(district_id: Optional[str] = None):
     items = await _load_catalog("courts")
     items = [p for p in items if p.get("active") is not False]
     items = [_catalog_public(p) for p in items]
-    generic = [c for c in items if c["district_id"] == "generic"]
+    generic = [c for c in items if c.get("district_id") == "generic" or not c.get("district_id")]
     if district_id:
-        specific = [c for c in items if c["district_id"] == district_id]
+        specific = [c for c in items if c.get("district_id") == district_id]
         return specific + generic
     return items
 
@@ -2490,6 +2490,7 @@ _LAW_MAP = {l["id"]: l for l in LAWS}
 _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
 _TALUKA_MAP = {t["id"]: t for t in TALUKAS}
 _COURT_MAP = {c["id"]: c for c in [*LEGACY_COURTS, *COURTS]}
+_ACTIVE_COURT_IDS: set[str] = {c["id"] for c in COURTS if c.get("active") is not False}
 _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
 _COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
 
@@ -2557,6 +2558,12 @@ async def _load_catalog(kind: str) -> list:
     if db is not None:
         items = [d.to_dict() async for d in db.collection(coll).stream()]
         items = [i for i in items if i.get("id") not in deleted_ids]
+        if kind == "courts":
+            # Admin Court Catalog is 100% the single source of truth.
+            # When connected to DB, never resurrect seed list if collection is empty.
+            items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
+            _CATALOG_CACHE[kind] = items
+            return items
         if items:
             items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
             _CATALOG_CACHE[kind] = items
@@ -2572,7 +2579,7 @@ async def _refresh_catalog_maps() -> None:
     startup and after every admin catalog mutation so labels, validation and
     document rendering see admin-managed entries immediately."""
     _invalidate_catalog_cache()
-    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP
+    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
     global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
     _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}
     _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
@@ -2582,6 +2589,7 @@ async def _refresh_catalog_maps() -> None:
     _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
     _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
     _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_courts}
+    _ACTIVE_COURT_IDS = {c["id"] for c in _loaded_courts.values() if c.get("active") is not False}
     _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
     _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
     _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
@@ -3318,6 +3326,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         tobj = _TALUKA_MAP[ctx["taluka"]]
         ctx["taluka"] = (tobj.get("gu") or tobj.get("en", "")) if language == "gu" else (tobj.get("en") or tobj.get("gu", ""))
 
+    # Synchronize court and court_name so templates referencing either variable resolve identically
+    if not ctx.get("court") and ctx.get("court_name"):
+        ctx["court"] = ctx["court_name"]
+    if not ctx.get("court_name") and ctx.get("court"):
+        ctx["court_name"] = ctx["court"]
+
     # Same guard for court / case_type raw catalog ids sent as select values
     # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
     court_raw = ctx.get("court_name") or ctx.get("court")
@@ -3409,8 +3423,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
         ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
-        ctx.setdefault("court", user.get("court") or "")
-        ctx.setdefault("court_name", user.get("court") or "")
+        user_court = user.get("court") or ""
+        if user_court in _COURT_MAP:
+            cobj = _COURT_MAP[user_court]
+            user_court = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
+        ctx.setdefault("court", user_court)
+        ctx.setdefault("court_name", user_court)
         ctx.setdefault("case_number", "")
         ctx.setdefault("case_type", "")
         ctx.setdefault("party_name", "")
@@ -3446,6 +3464,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["party_2_role"] = resolve_party_role_label(ctx["party_2_role"], language)
     else:
         ctx["party_2_role"] = ctx.get("opposite_party_role") or ""
+
+    # Ensure both court and court_name are mirrored and non-empty if either was supplied
+    court_final = ctx.get("court") or ctx.get("court_name") or ""
+    ctx["court"] = court_final
+    ctx["court_name"] = court_final
 
     # ---- Derived values for the document-return application (never user-entered) ----
     status = ctx.get("case_status")
@@ -8225,6 +8248,10 @@ async def seed_catalogs():
             d["id"] for d in [d.to_dict() async for d in db.collection(coll).stream()]
         }
         deleted_ids = await _get_deleted_catalog_ids(kind)
+        if kind == "courts" and (existing_ids or deleted_ids):
+            # Admin Court Catalog is 100% the single source of truth.
+            # Do not inject missing static seed courts into an already-managed courts collection.
+            continue
         added = 0
         for item in seed_list:
             if item["id"] in existing_ids or item["id"] in deleted_ids:

@@ -27,6 +27,7 @@ interface Props {
   loading?: boolean;
   error?: string | null;
   onRetry?: () => void;
+  emptyMessage?: string;
 }
 
 export function Dropdown({
@@ -43,6 +44,7 @@ export function Dropdown({
   loading = false,
   error = null,
   onRetry,
+  emptyMessage,
 }: Props) {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
@@ -187,8 +189,11 @@ export function Dropdown({
                 </View>
               ) : filtered.length === 0 ? (
                 <View style={styles.centerBox}>
-                  <Text style={{ color: colors.muted, textAlign: "center", fontSize: 14 }}>
-                    {query.trim() ? "No matches found / કોઈ પરિણામ મળ્યું નથી" : "No options available"}
+                  <Text
+                    testID={testID ? `${testID}-empty-text` : undefined}
+                    style={{ color: colors.muted, textAlign: "center", fontSize: 14 }}
+                  >
+                    {query.trim() ? "No matches found / કોઈ પરિણામ મળ્યું નથી" : (emptyMessage || "No options available")}
                   </Text>
                 </View>
               ) : (

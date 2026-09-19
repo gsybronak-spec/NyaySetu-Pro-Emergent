@@ -16,7 +16,6 @@ import { storage } from "@/src/utils/storage";
 import {
   SEED_DISTRICTS,
   SEED_TALUKAS,
-  SEED_COURTS,
   SEED_CASE_TYPES,
   SEED_LAWS,
   SEED_CASE_FORMS,
@@ -87,12 +86,7 @@ function getSeedFallback(key: string, district_id?: string): any[] {
     return SEED_TALUKAS;
   }
   if (key.startsWith("courts")) {
-    const generic = SEED_COURTS.filter((c: any) => c.district_id === "generic");
-    if (district_id) {
-      const specific = SEED_COURTS.filter((c: any) => c.district_id === district_id);
-      return [...specific, ...generic];
-    }
-    return SEED_COURTS;
+    return [];
   }
   return [];
 }
@@ -204,12 +198,12 @@ export const catalogCache = {
 
   getCourts: (district_id?: string, forceRefresh = false): Promise<any[]> => {
     const key = district_id ? `courts:${district_id}` : "courts:all";
-    const seed = getSeedFallback(key, district_id);
     return fetchCatalogWithSWR(
       key,
       () => api.courts(district_id || undefined),
-      seed,
-      forceRefresh
+      [],
+      forceRefresh,
+      true
     );
   },
 
@@ -289,12 +283,23 @@ export const catalogCache = {
   peekTalukas: (district_id?: string): any[] =>
     memoryCache.get(district_id ? `talukas:${district_id}` : "talukas:all") || getSeedFallback("talukas", district_id),
   peekCourts: (district_id?: string): any[] =>
-    memoryCache.get(district_id ? `courts:${district_id}` : "courts:all") || getSeedFallback("courts", district_id),
+    memoryCache.get(district_id ? `courts:${district_id}` : "courts:all") || [],
   peekCaseTypes: (): any[] => memoryCache.get("case_types") || SEED_CASE_TYPES,
   peekLaws: (): any[] => memoryCache.get("laws") || SEED_LAWS,
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
   peekPublishedTemplates: (): any[] | null => memoryCache.get("published_templates") ?? null,
   peekTemplateOrder: (): string[] | null => memoryCache.get("template_order") ?? null,
+
+  subscribe: subscribeCatalog,
+
+  clearCourtsCache: async () => {
+    for (const k of Array.from(memoryCache.keys())) {
+      if (k.startsWith("courts")) memoryCache.delete(k);
+    }
+    inFlightRequests.clear();
+    await storage.remove(`${STORAGE_PREFIX}courts:all`);
+    notify("courts:all", []);
+  },
 
   clearCache: () => {
     memoryCache.clear();
