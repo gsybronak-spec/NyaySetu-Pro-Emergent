@@ -4953,6 +4953,9 @@ class TemplateBulkDeleteReq(BaseModel):
 class CaseBulkActionReq(BaseModel):
     ids: list[str] = Field(..., description="List of case IDs to process in bulk")
 
+class AdminResetCasesReq(BaseModel):
+    confirm_text: str = Field(..., description="Exact confirmation phrase to confirm full case reset")
+
 class SettingsUpdateReq(BaseModel):
     value: Union[int, str] = Field(..., description="New value for the setting")
 
@@ -6608,6 +6611,70 @@ async def admin_bulk_cascade_delete_cases(req: CaseBulkActionReq, admin=Depends(
         "deleted_applications_count": total_apps_count,
         "deleted_drafts_count": total_drafts_count,
         "details": details,
+    }
+
+
+@admin_api.post("/cases/reset-all-test-data")
+async def admin_clean_reset_all_test_data(req: AdminResetCasesReq, admin=Depends(require_super_admin)):
+    """One-time Super Admin ONLY action to permanently remove ALL existing dummy cases
+    and ONLY records directly linked to cases (applications, drafts).
+    Does NOT touch users, templates, plans, catalog items, settings, or audit logs."""
+    if req.confirm_text.strip() != "DELETE ALL TEST CASES":
+        raise HTTPException(
+            400,
+            "Confirmation text mismatch. You must type 'DELETE ALL TEST CASES' exactly to confirm this action."
+        )
+
+    # 1. Fetch all existing cases
+    cases = [d async for d in db.collection('cases').stream()]
+    case_ids = [d.id for d in cases]
+
+    # 2. Fetch all dependent applications and drafts linked to cases
+    all_apps = [d async for d in db.collection('applications').stream()]
+    all_drafts = [d async for d in db.collection('drafts').stream()]
+
+    target_app_ids = []
+    for d in all_apps:
+        cid = (d.to_dict() or {}).get("case_id")
+        if cid and str(cid).strip():
+            target_app_ids.append(d.id)
+
+    target_draft_ids = []
+    for d in all_drafts:
+        cid = (d.to_dict() or {}).get("case_id")
+        if cid and str(cid).strip():
+            target_draft_ids.append(d.id)
+
+    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+    for app_id in target_app_ids:
+        await batch_mgr.add_delete(db.collection('applications').document(app_id))
+    for draft_id in target_draft_ids:
+        await batch_mgr.add_delete(db.collection('drafts').document(draft_id))
+    for cid in case_ids:
+        await batch_mgr.add_delete(db.collection('cases').document(cid))
+
+    if case_ids or target_app_ids or target_draft_ids:
+        await batch_mgr.commit()
+
+    await create_admin_audit_log(
+        admin=admin,
+        action="cases_clean_reset_all_test_data",
+        entity_type="cases",
+        entity_id="all",
+        metadata={
+            "deleted_cases_count": len(case_ids),
+            "deleted_applications_count": len(target_app_ids),
+            "deleted_drafts_count": len(target_draft_ids),
+            "deleted_case_ids": case_ids,
+        },
+        reason="Super Admin clean reset of all dummy test cases and case-linked data"
+    )
+
+    return {
+        "success": True,
+        "deleted_cases_count": len(case_ids),
+        "deleted_applications_count": len(target_app_ids),
+        "deleted_drafts_count": len(target_draft_ids),
     }
 
 

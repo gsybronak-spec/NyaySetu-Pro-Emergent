@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, Component, ErrorInfo, ReactNode } from 'react'
 import { adminApi } from '../lib/api'
+import { useAdminAuth } from '../lib/auth'
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -134,6 +135,15 @@ function CasesInner() {
   const [bulkCascadeConfirmed, setBulkCascadeConfirmed] = useState(false);
   const [bulkCascadeLoading, setBulkCascadeLoading] = useState(false);
   const [bulkCascadeError, setBulkCascadeError] = useState('');
+
+  // Super Admin Clean Reset All Test Cases state
+  const { admin } = useAdminAuth();
+  const isSuperAdmin = admin?.role === 'super_admin';
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetConfirmed, setResetConfirmed] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
 
   const load = useCallback((params?: {
     q?: string;
@@ -375,6 +385,35 @@ function CasesInner() {
     }
   };
 
+  const openResetAllModal = () => {
+    setResetConfirmText('');
+    setResetConfirmed(false);
+    setResetError('');
+    setResetModalOpen(true);
+  };
+
+  const handleExecuteResetAllTestCases = async () => {
+    if (resetLoading) return;
+    if (resetConfirmText.trim() !== 'DELETE ALL TEST CASES' || !resetConfirmed) return;
+    setResetLoading(true);
+    setResetError('');
+    try {
+      const res = await adminApi.resetAllTestCases('DELETE ALL TEST CASES');
+      setSelectedIds(new Set());
+      setDetail(null);
+      setBulkActionFeedback({
+        type: 'success',
+        message: `Successfully cleaned all dummy cases: deleted ${res.deleted_cases_count || 0} case(s), ${res.deleted_applications_count || 0} linked application(s), and ${res.deleted_drafts_count || 0} draft(s). Cases count is now 0. You can now delete obsolete courts from Admin Catalog.`,
+      });
+      setResetModalOpen(false);
+      load();
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to clean reset test cases');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const openDetail = (id?: string | null) => {
     if (!id) return;
     setDetailError('');
@@ -473,11 +512,38 @@ function CasesInner() {
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
-        <h1>Cases</h1>
-        <p className="dashboard-desc">
-          {total} case{total === 1 ? '' : 's'} across all advocates · archive/restore preserves data
-        </p>
+      <div className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1>Cases</h1>
+          <p className="dashboard-desc">
+            {total} case{total === 1 ? '' : 's'} across all advocates · archive/restore preserves data
+          </p>
+        </div>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            className="btn-small"
+            style={{
+              backgroundColor: '#991b1b',
+              color: '#ffffff',
+              border: 'none',
+              padding: '8px 14px',
+              fontSize: '12px',
+              fontWeight: 700,
+              borderRadius: '6px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+            }}
+            onClick={openResetAllModal}
+            title="Super Admin: Permanently delete all existing dummy cases and linked records"
+          >
+            <span>🚨</span>
+            <span>Delete All Existing Test Cases &amp; Linked Data</span>
+          </button>
+        )}
       </div>
 
       <form className="users-search" onSubmit={submitSearch}>
@@ -1429,6 +1495,156 @@ function CasesInner() {
                 onClick={handleExecuteBulkCascadeDelete}
               >
                 {bulkCascadeLoading ? 'Deleting…' : `Permanently Delete ${selectedIds.size} Cases + Test Data`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Clean Reset Modal */}
+      {resetModalOpen && (
+        <div
+          className="modal-overlay"
+          onClick={() => {
+            if (!resetLoading) setResetModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-card"
+            style={{ maxWidth: '620px', width: '100%', border: '2px solid #b91c1c' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header" style={{ borderBottom: '1px solid #fee2e2', backgroundColor: '#fff5f5' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '20px' }}>🚨</span>
+                <div>
+                  <h3 style={{ margin: 0, color: '#991b1b' }}>
+                    Delete All Existing Test Cases &amp; Linked Data
+                  </h3>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#b91c1c', letterSpacing: '0.5px' }}>
+                    SUPER ADMIN ONLY · PERMANENT CLEANUP
+                  </span>
+                </div>
+              </div>
+              <button
+                className="modal-close"
+                disabled={resetLoading}
+                onClick={() => setResetModalOpen(false)}
+                aria-label="Close modal"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{
+                backgroundColor: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                padding: '12px 16px',
+                marginBottom: '16px',
+                color: '#991b1b',
+                fontSize: '14px',
+                fontWeight: 600,
+                lineHeight: 1.5,
+              }}>
+                ⚠️ This will permanently delete all existing Cases and their linked test data. This cannot be undone.
+              </div>
+
+              {resetError && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #ef4444',
+                  borderRadius: '6px',
+                  padding: '10px 14px',
+                  marginBottom: '14px',
+                  color: '#991b1b',
+                  fontSize: '13px',
+                }}>
+                  <strong>Error:</strong> {resetError}
+                </div>
+              )}
+
+              <div style={{ fontSize: '13px', color: '#334155', lineHeight: 1.5, marginBottom: '16px' }}>
+                <p style={{ margin: '0 0 10px 0' }}>
+                  Use this action to clean all dummy cases before real client data entry:
+                </p>
+                <ul style={{ margin: '0 0 12px 20px', padding: 0 }}>
+                  <li><strong>All existing Cases ({total})</strong> will be permanently removed from the database.</li>
+                  <li><strong>All linked Applications, Drafts, and Document History</strong> for these cases will be permanently removed.</li>
+                  <li><strong>Foreign-Key References Cleared:</strong> Any Court previously blocked from deletion will become eligible for normal deletion in Admin Catalog.</li>
+                  <li><strong style={{ color: '#047857' }}>Preserved Data:</strong> Users, advocate profiles, templates, plans, catalog structure, settings, and audit logs will NOT be deleted.</li>
+                </ul>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#1e293b', marginBottom: '6px' }}>
+                  To confirm execution, please type <strong style={{ color: '#b91c1c' }}>DELETE ALL TEST CASES</strong> in the box below:
+                </label>
+                <input
+                  type="text"
+                  value={resetConfirmText}
+                  onChange={(e) => setResetConfirmText(e.target.value)}
+                  placeholder="Type DELETE ALL TEST CASES"
+                  disabled={resetLoading}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '14px',
+                    boxSizing: 'border-box',
+                    fontFamily: 'monospace',
+                  }}
+                  autoFocus
+                />
+              </div>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '8px',
+                padding: '10px 12px',
+                backgroundColor: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '6px',
+                fontSize: '12px',
+                color: '#475569',
+              }}>
+                <input
+                  type="checkbox"
+                  id="confirm-reset-all-checkbox"
+                  checked={resetConfirmed}
+                  disabled={resetLoading}
+                  onChange={(e) => setResetConfirmed(e.target.checked)}
+                  style={{ marginTop: '2px', cursor: 'pointer' }}
+                />
+                <label htmlFor="confirm-reset-all-checkbox" style={{ cursor: 'pointer', lineHeight: 1.4 }}>
+                  I confirm that all currently existing cases are dummy test cases and I want to permanently delete all cases and their linked test data.
+                </label>
+              </div>
+            </div>
+
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={resetLoading}
+                onClick={() => setResetModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                style={{
+                  backgroundColor: resetConfirmText.trim() === 'DELETE ALL TEST CASES' && resetConfirmed && !resetLoading ? '#991b1b' : undefined,
+                  fontWeight: 700,
+                }}
+                disabled={resetConfirmText.trim() !== 'DELETE ALL TEST CASES' || !resetConfirmed || resetLoading}
+                onClick={handleExecuteResetAllTestCases}
+              >
+                {resetLoading ? 'Cleaning all cases…' : 'Permanently Delete All Test Cases & Linked Data'}
               </button>
             </div>
           </div>

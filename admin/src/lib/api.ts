@@ -239,6 +239,7 @@ export const adminApi = {
   bulkRestoreCases: (ids: string[]) => request('/cases/bulk-restore', 'POST', { ids }),
   bulkDeleteCases: (ids: string[]) => request('/cases/bulk-delete', 'POST', { ids }),
   bulkCascadeDeleteCases: (ids: string[]) => request('/cases/bulk-cascade-delete', 'POST', { ids }),
+  resetAllTestCases: (confirmText: string) => request('/cases/reset-all-test-data', 'POST', { confirm_text: confirmText }),
   listPlans: () => request('/plans'),
   createPlan: (data: any) => request('/plans', 'POST', data),
   updatePlan: (id: string, data: any) => request(`/plans/${id}`, 'PUT', data),

@@ -113,6 +113,11 @@ class MockFirestoreCollection:
     def where(self, filter=None):
         return MockFirestoreQuery(self.store, self.name, filter)
 
+    async def stream(self):
+        coll_data = self.store.setdefault(self.name, {})
+        for doc_id, doc_dict in list(coll_data.items()):
+            yield MockFirestoreDoc(doc_id, doc_dict, exists=True)
+
 
 class MockFirestoreDocRef:
     def __init__(self, store, coll_name, doc_id):
@@ -223,7 +228,7 @@ class TestCaseCascadeDelete(unittest.TestCase):
         self.db_patch.start()
         self.audit_logs = []
 
-        async def _mock_audit_log(admin, action, entity_type, entity_id=None, metadata=None, reason=None):
+        async def _mock_audit_log(admin=None, action=None, entity_type=None, entity_id=None, metadata=None, reason=None, **kwargs):
             self.audit_logs.append({
                 "admin": admin,
                 "action": action,
@@ -231,12 +236,16 @@ class TestCaseCascadeDelete(unittest.TestCase):
                 "entity_id": entity_id,
                 "metadata": metadata or {},
                 "reason": reason,
+                **kwargs,
             })
 
         self.audit_patch = patch.object(server, 'create_admin_audit_log', side_effect=_mock_audit_log)
         self.audit_patch.start()
+        self.filter_patch = patch.object(server.firestore, 'FieldFilter', side_effect=lambda f, op, v: MagicMock(field=f, value=v))
+        self.filter_patch.start()
 
     def tearDown(self):
+        self.filter_patch.stop()
         self.audit_patch.stop()
         self.db_patch.stop()
 
@@ -435,6 +444,149 @@ class TestCaseCascadeDelete(unittest.TestCase):
         self.assertIn("DELETE TEST DATA", cases_code)
         self.assertIn("confirm-single-cascade-checkbox", cases_code)
         self.assertIn("confirm-bulk-cascade-checkbox", cases_code)
+
+    def test_reset_all_test_data_requires_super_admin(self):
+        """Standard admin without super_admin role cannot call reset endpoint."""
+        regular_admin = {
+            "id": "admin_regular_1",
+            "email": "admin@nyaysetu.in",
+            "role": "admin",
+        }
+        req = server.AdminResetCasesReq(confirm_text="DELETE ALL TEST CASES")
+        with patch.object(server, 'require_super_admin', side_effect=server.HTTPException(403, "Super admin access required")):
+            with self.assertRaises(server.HTTPException) as ctx:
+                asyncio.run(server.require_super_admin(None))
+            self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_reset_all_test_data_requires_exact_confirmation_phrase(self):
+        """Mismatched confirmation phrase must be rejected with 400."""
+        req = server.AdminResetCasesReq(confirm_text="WRONG TEXT")
+        with self.assertRaises(server.HTTPException) as ctx:
+            asyncio.run(server.admin_clean_reset_all_test_data(req, admin=self.admin))
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("Confirmation text mismatch", ctx.exception.detail)
+
+    def test_reset_all_test_data_deletes_all_cases_and_linked_data_and_preserves_others(self):
+        """Clean reset permanently purges all cases and case-linked records, leaving users/templates/catalog intact."""
+        self.mock_db.store['cases'] = {
+            'c1': {'id': 'c1', 'case_number': 'CIVIL/1', 'court_id': 'court_test_1'},
+            'c2': {'id': 'c2', 'case_number': 'CRIM/2', 'court_id': 'court_test_2'},
+        }
+        self.mock_db.store['applications'] = {
+            'app_case_1': {'id': 'app_case_1', 'case_id': 'c1', 'title': 'Case App 1'},
+            'app_case_2': {'id': 'app_case_2', 'case_id': 'c2', 'title': 'Case App 2'},
+            'app_direct_3': {'id': 'app_direct_3', 'case_id': None, 'title': 'Direct App (Preserved)'},
+        }
+        self.mock_db.store['drafts'] = {
+            'draft_c1': {'id': 'draft_c1', 'case_id': 'c1'},
+            'draft_direct': {'id': 'draft_direct', 'case_id': None},
+        }
+        # Unrelated collections that MUST NOT be touched
+        self.mock_db.store['users'] = {
+            'u1': {'id': 'u1', 'name': 'Adv. Sharma', 'role': 'lawyer'}
+        }
+        self.mock_db.store['templates'] = {
+            't1': {'id': 'document_exhibit_application', 'title': 'Exhibit Application'}
+        }
+        self.mock_db.store['courts'] = {
+            'court_test_1': {'id': 'court_test_1', 'en': 'Test Court 1', 'active': True}
+        }
+        self.mock_db.store['plans'] = {
+            'plan_pro': {'id': 'plan_pro', 'price': 999}
+        }
+
+        req = server.AdminResetCasesReq(confirm_text="DELETE ALL TEST CASES")
+        res = asyncio.run(server.admin_clean_reset_all_test_data(req, admin=self.admin))
+
+        self.assertTrue(res['success'])
+        self.assertEqual(res['deleted_cases_count'], 2)
+        self.assertEqual(res['deleted_applications_count'], 2)
+        self.assertEqual(res['deleted_drafts_count'], 1)
+
+        # Cases are 0
+        self.assertEqual(len(self.mock_db.store['cases']), 0)
+        self.assertNotIn('c1', self.mock_db.store['cases'])
+        self.assertNotIn('c2', self.mock_db.store['cases'])
+
+        # Case-linked applications and drafts are deleted
+        self.assertNotIn('app_case_1', self.mock_db.store['applications'])
+        self.assertNotIn('app_case_2', self.mock_db.store['applications'])
+        self.assertNotIn('draft_c1', self.mock_db.store['drafts'])
+
+        # Standalone direct applications and drafts without case_id are preserved
+        self.assertIn('app_direct_3', self.mock_db.store['applications'])
+        self.assertIn('draft_direct', self.mock_db.store['drafts'])
+
+        # UNRELATED COLLECTIONS REMAIN 100% UNTOUCHED
+        self.assertIn('u1', self.mock_db.store['users'])
+        self.assertIn('t1', self.mock_db.store['templates'])
+        self.assertIn('court_test_1', self.mock_db.store['courts'])
+        self.assertIn('plan_pro', self.mock_db.store['plans'])
+
+        # Audit log is created
+        self.assertEqual(len(self.audit_logs), 1)
+        audit = self.audit_logs[0]
+        self.assertEqual(audit['action'], 'cases_clean_reset_all_test_data')
+        self.assertEqual(audit['metadata']['deleted_cases_count'], 2)
+        self.assertEqual(audit['metadata']['deleted_applications_count'], 2)
+
+    def test_court_deletion_blocked_before_cleanup_allowed_after_cleanup(self):
+        """Demonstrates the exact user scenario: court deletion fails with 409 while cases exist, and succeeds after case reset."""
+        self.mock_db.store['courts'] = {
+            'court_old_dummy': {'id': 'court_old_dummy', 'en': 'Old Dummy Court', 'active': True}
+        }
+        self.mock_db.store['cases'] = {
+            'c_dummy': {'id': 'c_dummy', 'court_id': 'court_old_dummy'}
+        }
+
+        # 1. Before cleanup: Attempting to hard-delete court_old_dummy fails with 409
+        with patch.object(server.firestore, 'FieldFilter', side_effect=lambda f, op, v: MagicMock(field=f, value=v)):
+            with self.assertRaises(server.HTTPException) as ctx:
+                asyncio.run(server.admin_delete_catalog_item('courts', 'court_old_dummy', hard=True, admin=self.admin))
+            self.assertEqual(ctx.exception.status_code, 409)
+            self.assertIn("referenced by existing cases", str(ctx.exception.detail))
+
+        # Court is still in DB
+        self.assertIn('court_old_dummy', self.mock_db.store['courts'])
+
+        # 2. Perform case reset
+        reset_req = server.AdminResetCasesReq(confirm_text="DELETE ALL TEST CASES")
+        asyncio.run(server.admin_clean_reset_all_test_data(reset_req, admin=self.admin))
+        self.assertEqual(len(self.mock_db.store['cases']), 0)
+
+        # 3. After cleanup: Hard-delete of court_old_dummy succeeds normally!
+        with patch.object(server.firestore, 'FieldFilter', side_effect=lambda f, op, v: MagicMock(field=f, value=v)):
+            del_res = asyncio.run(server.admin_delete_catalog_item('courts', 'court_old_dummy', hard=True, admin=self.admin))
+
+        self.assertTrue(del_res['success'])
+        # Court is now permanently removed from courts collection
+        self.assertNotIn('court_old_dummy', self.mock_db.store['courts'])
+        # Tombstone recorded
+        self.assertIn('courts:court_old_dummy', self.mock_db.store.get('deleted_catalog_items', {}))
+
+    def test_seed_catalogs_never_resurrects_courts(self):
+        """seed_catalogs skips courts when deleted/tombstoned courts exist so deleted courts are never re-seeded."""
+        self.mock_db.store['courts'] = {}
+        self.mock_db.store['deleted_catalog_items'] = {'courts:old_court': {'id': 'old_court', 'kind': 'courts'}}
+        # Run seed_catalogs
+        asyncio.run(server.seed_catalogs())
+        # courts collection remains strictly empty, no static seed injected
+        self.assertEqual(len(self.mock_db.store['courts']), 0)
+
+    def test_frontend_super_admin_reset_contract(self):
+        """Verify frontend api client and React page code contain super admin clean reset bindings."""
+        api_path = ROOT_DIR / 'admin' / 'src' / 'lib' / 'api.ts'
+        cases_page_path = ROOT_DIR / 'admin' / 'src' / 'pages' / 'Cases.tsx'
+
+        api_code = api_path.read_text(encoding='utf-8')
+        self.assertIn("resetAllTestCases", api_code)
+        self.assertIn("/cases/reset-all-test-data", api_code)
+
+        cases_code = cases_page_path.read_text(encoding='utf-8')
+        self.assertIn("Delete All Existing Test Cases", cases_code)
+        self.assertIn("DELETE ALL TEST CASES", cases_code)
+        self.assertIn("confirm-reset-all-checkbox", cases_code)
+        self.assertIn("isSuperAdmin", cases_code)
 
 
 if __name__ == '__main__':
