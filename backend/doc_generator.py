@@ -334,7 +334,76 @@ def register_fonts():
         except Exception:
             pass
 
+    # 4. Latin serif fallbacks (Liberation Serif / DejaVu Serif on Linux)
+    for lib_reg, lib_bold, name in [
+        ("/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
+         "/usr/share/fonts/truetype/liberation/LiberationSerif-Bold.ttf",
+         "LiberationSerif"),
+        ("/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
+         "DejaVuSerif"),
+    ]:
+        p_reg = Path(lib_reg)
+        p_bold = Path(lib_bold)
+        if p_reg.exists() and name not in pdfmetrics.getRegisteredFontNames():
+            try:
+                pdfmetrics.registerFont(TTFont(name, str(p_reg)))
+                pdfmetrics.registerFont(TTFont(f"{name}-Bold", str(p_bold if p_bold.exists() else p_reg)))
+            except Exception:
+                pass
+
     _fonts_registered = True
+
+
+def _resolve_latin_fallback_font(bold: bool = False) -> str:
+    """Resolve a suitable Latin fallback font for mixed-script Gujarati rendering.
+    
+    Prefers:
+    1. Times New Roman (bundled or registered TTF)
+    2. Liberation Serif / DejaVu Serif (system TTF if registered)
+    3. Times-Roman / Times-Bold (standard PDF Type 1 font, always safely available in ReportLab)
+    """
+    registered = pdfmetrics.getRegisteredFontNames()
+    if bold:
+        for f in ("TimesNewRoman-Bold", "LiberationSerif-Bold", "DejaVuSerif-Bold"):
+            if f in registered:
+                return f
+        return "Times-Bold"
+    else:
+        for f in ("TimesNewRoman", "LiberationSerif", "DejaVuSerif"):
+            if f in registered:
+                return f
+        return "Times-Roman"
+
+
+def _apply_latin_fallback_markup(text: str, latin_font: str = "Times-Roman") -> str:
+    """Wrap sequences of Latin characters in <font name="..."> markup for ReportLab.
+    
+    Lohit Gujarati lacks Latin letters (A-Z, a-z), resulting in missing-glyph boxes
+    (□□□□) when English names or text appear in Gujarati documents. Wrapping Latin
+    runs in font tags instructs ReportLab to switch to the Latin fallback font
+    while preserving Lohit Gujarati for all Gujarati characters, conjuncts, matras,
+    numbers, and punctuation.
+    """
+    if not text or not re.search(r"[A-Za-z]", text):
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    safe = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    entity_pattern = re.compile(r"(&[a-zA-Z0-9#]+;)")
+    tokens = entity_pattern.split(safe)
+    latin_run = re.compile(r"([A-Za-z]+(?:['\.\-][A-Za-z0-9]+)*(?:\s+[A-Za-z0-9]+(?:['\.\-][A-Za-z0-9]+)*)*)")
+    out = []
+    for tok in tokens:
+        if entity_pattern.match(tok):
+            out.append(tok)
+        else:
+            def _repl(m):
+                chunk = m.group(1)
+                if re.search(r"[A-Za-z]", chunk):
+                    return f'<font name="{latin_font}">{chunk}</font>'
+                return chunk
+            out.append(latin_run.sub(_repl, tok))
+    return "".join(out)
+
 
 
 # ---- Legal section keywords and markers (NYAYSETU_LEGAL_FORMAT_V1) ----
@@ -673,7 +742,7 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
     if language == "gu":
         fam = _gujarati_font_family(s.get("gujarati_font"))
         guj_b64 = _font_base64(fam)
-        font_family = f"'{fam}', sans-serif"
+        font_family = f"'{fam}', 'Times New Roman', 'Liberation Serif', 'DejaVu Serif', serif"
     else:
         fam = None
         guj_b64 = ""
@@ -808,6 +877,8 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
 
     para_space = s.get("paragraph_spacing", 6)
     para_indent = float(s.get("first_line_indent_pt", 24.0))
+    latin_fallback_normal = _resolve_latin_fallback_font(bold=False)
+    latin_fallback_bold = _resolve_latin_fallback_font(bold=True)
     story = []
     from reportlab.platypus import PageBreak as RLPageBreak, Table as RLTable, TableStyle as RLTableStyle
     from reportlab.lib import colors
@@ -829,7 +900,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
             for row in b.get("rows", []):
                 table_row = []
                 for cell in row:
-                    safe = cell.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                    if language == "gu":
+                        safe = _apply_latin_fallback_markup(cell.strip(), latin_font=latin_fallback_normal)
+                    else:
+                        safe = cell.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                     style = ParagraphStyle(
                         "p",
                         fontName=font_normal,
@@ -857,7 +931,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
                 ]))
                 story.append(t)
             continue
-        safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        if language == "gu":
+            safe = _apply_latin_fallback_markup(b["text"], latin_font=latin_fallback_bold if b["bold"] else latin_fallback_normal)
+        else:
+            safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         if b.get("section") == "title":
             safe = f"<u>{safe}</u>"
         f_size = s["heading_size"] if b["bold"] else body_sz
@@ -969,13 +1046,55 @@ def _assign_glyph_texts(word: str, infos, hb_font, upem: int):
     return texts
 
 
-def _shape_hb_word(hb_font, upem, word: str, size_pt: float):
+def _shape_hb_word(hb_font, upem, word: str, size_pt: float, latin_font: str = "Times-Roman"):
     """Shape one word -> list of {gid, adv_pt, xoff_pt, yoff_pt, text} using HarfBuzz.
 
     `text` is the original substring each glyph represents — used to rebuild
     correct ToUnicode extraction for conjunct ligatures (selectable PDF text).
+    If the word contains Latin characters, segments them into fallback font runs
+    so Lohit Gujarati's lack of Latin glyphs does not cause missing-glyph boxes.
     """
     import uharfbuzz as hb
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    if re.search(r"[A-Za-z]", word):
+        chunks = [c for c in re.split(r"([A-Za-z]+(?:['\.\-][A-Za-z0-9]+)*)", word) if c]
+        out = []
+        for chunk in chunks:
+            if re.search(r"[A-Za-z]", chunk):
+                try:
+                    adv = stringWidth(chunk, latin_font, size_pt)
+                except Exception:
+                    adv = len(chunk) * (size_pt * 0.5)
+                out.append({
+                    "gid": None,
+                    "adv": adv,
+                    "xoff": 0.0,
+                    "yoff": 0.0,
+                    "text": chunk,
+                    "is_latin": True,
+                    "font": latin_font,
+                })
+            else:
+                buf = hb.Buffer()
+                buf.add_str(chunk)
+                buf.guess_segment_properties()
+                hb.shape(hb_font, buf)
+                scale = size_pt / float(upem)
+                infos = buf.glyph_infos
+                positions = buf.glyph_positions
+                texts = _assign_glyph_texts(chunk, infos, hb_font, upem)
+                for i, (info, pos) in enumerate(zip(infos, positions)):
+                    out.append({
+                        "gid": info.codepoint,
+                        "adv": pos.x_advance * scale,
+                        "xoff": pos.x_offset * scale,
+                        "yoff": pos.y_offset * scale,
+                        "text": texts[i],
+                        "is_latin": False,
+                    })
+        return out
+
     buf = hb.Buffer()
     buf.add_str(word)
     buf.guess_segment_properties()
@@ -992,18 +1111,19 @@ def _shape_hb_word(hb_font, upem, word: str, size_pt: float):
             "xoff": pos.x_offset * scale,
             "yoff": pos.y_offset * scale,  # HarfBuzz y-up == ReportLab canvas y-up
             "text": texts[i],
+            "is_latin": False,
         })
     return out
 
 
-def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float, indent_pt: float = 0.0):
+def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float, indent_pt: float = 0.0, latin_font: str = "Times-Roman"):
     """Shape + wrap a paragraph into lines of shaped words with optional first-line indent.
 
     Returns ([{words: [[glyph...], [glyph...]], width: pt, text: str, is_last: bool, indent: float}], space_adv)
     """
     space_adv = 0.0
     try:
-        space_adv = _shape_hb_word(hb_font, upem, " ", size_pt)[0]["adv"]
+        space_adv = _shape_hb_word(hb_font, upem, " ", size_pt, latin_font=latin_font)[0]["adv"]
     except Exception:
         space_adv = size_pt * 0.28
     words = text.split(" ")
@@ -1015,7 +1135,7 @@ def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float
     cur_max_width = max(max_width_pt - (indent_pt if line_idx == 0 else 0.0), 50.0)
 
     for raw in words:
-        w = _shape_hb_word(hb_font, upem, raw, size_pt) if raw else []
+        w = _shape_hb_word(hb_font, upem, raw, size_pt, latin_font=latin_font) if raw else []
         ww = sum(g["adv"] for g in w)
         if cur_words and cur_width + space_adv + ww > cur_max_width:
             lines.append({
@@ -1150,6 +1270,9 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     page_w, page_h = pagesize
     max_width = page_w - margin_l - margin_r
 
+    latin_normal = _resolve_latin_fallback_font(bold=False)
+    latin_bold = _resolve_latin_fallback_font(bold=True)
+
     # Shape every word up front so the font subset covers all used glyphs.
     shaped = []  # per block: list of lines {words:[{gid,adv,xoff,yoff}], width, is_last, indent}, size, align, space_adv, is_title
     used_gids = set()
@@ -1165,11 +1288,12 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                 row_shaped = []
                 for cell in row:
                     cell_text = cell.strip()
-                    lines, space_adv = _wrap_hb_lines(hb_font, upem, cell_text, body_size, col_width - 10)
+                    lines, space_adv = _wrap_hb_lines(hb_font, upem, cell_text, body_size, col_width - 10, latin_font=latin_normal)
                     for ln in lines:
                         for w in ln["words"]:
                             for g in w:
-                                used_gids.add(g["gid"])
+                                if g.get("gid") is not None:
+                                    used_gids.add(g["gid"])
                     row_shaped.append((lines, space_adv))
                 table_shaped.append(row_shaped)
             shaped.append({"type": "table", "rows": table_shaped, "cols": cols, "col_width": col_width})
@@ -1184,12 +1308,14 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
         align = b.get("align", "left")
         is_title = b.get("section") == "title"
         block_indent = para_indent_pt if (b.get("indent") and align in ("justify", "left")) else 0.0
-        lines, space_adv = _wrap_hb_lines(hb_font, upem, text, size, max_width, indent_pt=block_indent)
+        cur_latin = latin_bold if (b.get("bold") or sec in ("court_header", "title")) else latin_normal
+        lines, space_adv = _wrap_hb_lines(hb_font, upem, text, size, max_width, indent_pt=block_indent, latin_font=cur_latin)
         for ln in lines:
             for w in ln["words"]:
                 for g in w:
-                    used_gids.add(g["gid"])
-        shaped.append((lines, size, align, space_adv, is_title, sec))
+                    if g.get("gid") is not None:
+                        used_gids.add(g["gid"])
+        shaped.append((lines, size, align, space_adv, is_title, sec, cur_latin))
 
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1225,8 +1351,13 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                                     c._code.append(f"/Span<</ActualText <FEFF{ln['text'].encode('utf-16-be').hex().upper()}> >> BDC")
                                 for wi, w in enumerate(ln["words"]):
                                     for g in w:
-                                        ch = chr(gid_to_pua[g["gid"]])
-                                        c.drawString(x_pos + g["xoff"], cell_y + g["yoff"], ch)
+                                        if g.get("is_latin"):
+                                            c.setFont(g.get("font", latin_normal), body_size)
+                                            c.drawString(x_pos + g["xoff"], cell_y + g["yoff"], g["text"])
+                                            c.setFont(font_name, body_size)
+                                        else:
+                                            ch = chr(gid_to_pua[g["gid"]])
+                                            c.drawString(x_pos + g["xoff"], cell_y + g["yoff"], ch)
                                         x_pos += g["adv"]
                                     if wi < len(ln["words"]) - 1:
                                         x_pos += cell_space_adv
@@ -1245,6 +1376,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                 continue
             lines, size, align, space_adv, is_title, *rest = entry
             sec = rest[0] if rest else ("court_header" if is_title else "body")
+            block_latin_font = rest[1] if len(rest) > 1 else (latin_bold if (is_title or sec == "court_header") else latin_normal)
             block_ls = max(round(body_size * 1.5, 1), raw_ls) if sec == "body" else line_spacing
             c.setFont(font_name, size)
             for ln in lines:
@@ -1270,8 +1402,13 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                 x_pos = x
                 for wi, w in enumerate(ln["words"]):
                     for g in w:
-                        ch = chr(gid_to_pua[g["gid"]])
-                        c.drawString(x_pos + g["xoff"], y + g["yoff"], ch)
+                        if g.get("is_latin"):
+                            c.setFont(g.get("font", block_latin_font), size)
+                            c.drawString(x_pos + g["xoff"], y + g["yoff"], g["text"])
+                            c.setFont(font_name, size)
+                        else:
+                            ch = chr(gid_to_pua[g["gid"]])
+                            c.drawString(x_pos + g["xoff"], y + g["yoff"], ch)
                         x_pos += g["adv"]
                     if wi < len(ln["words"]) - 1:
                         x_pos += space_adv + extra
