@@ -207,7 +207,7 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert f["type"] == "radio"
         assert f["required"] is True
         opts = [o["value"] for o in f.get("options", [])]
-        assert opts == ["વાદી", "અરજદાર", "ફરીયાદી"]
+        assert opts == ["ફરીયાદી", "અરજદાર", "વાદી"]
 
     @pytest.mark.asyncio
     async def test_09_field_party_1_name(self, client, clean_db):
@@ -223,7 +223,7 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert f["type"] == "radio"
         assert f["required"] is True
         opts = [o["value"] for o in f.get("options", [])]
-        assert opts == ["પ્રતિવાદી", "સામાવાળા", "આરોપી"]
+        assert opts == ["આરોપી", "સામાવાળા", "પ્રતિવાદી"]
 
     @pytest.mark.asyncio
     async def test_11_field_party_2_name(self, client, clean_db):
@@ -238,6 +238,7 @@ class TestPoint1To15_TemplateSpecAndFields:
         f = next(x for x in tpl["fields"] if x["key"] == "representing_party")
         assert f["type"] in ("radio", "select")
         assert f["required"] is True
+        assert f["label_gu"] == "કોના તરફે એડવોકેટ"
         opts = [o["value"] for o in f.get("options", [])]
         assert "party_1" in opts
         assert "party_2" in opts

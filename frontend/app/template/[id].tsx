@@ -62,15 +62,15 @@ const BASE_FIELD_KEYS = new Set([
 ]);
 
 const PARTY_1_ROLES = [
-  { value: "plaintiff", label_en: "Plaintiff", label_gu: "વાદી" },
+  { value: "complainant", label_en: "Complainant", label_gu: "ફરીયાદી" },
   { value: "applicant", label_en: "Applicant", label_gu: "અરજદાર" },
-  { value: "complainant", label_en: "Complainant", label_gu: "ફરિયાદી" },
+  { value: "plaintiff", label_en: "Plaintiff", label_gu: "વાદી" },
 ];
 
 const PARTY_2_ROLES = [
-  { value: "defendant", label_en: "Defendant", label_gu: "પ્રતિવાદી" },
-  { value: "opponent", label_en: "Opponent / Respondent", label_gu: "સામાવાળા" },
   { value: "accused", label_en: "Accused", label_gu: "આરોપી" },
+  { value: "opponent", label_en: "Opponent / Respondent", label_gu: "સામાવાળા" },
+  { value: "defendant", label_en: "Defendant", label_gu: "પ્રતિવાદી" },
 ];
 
 const NORMALIZE_ROLE_MAP: Record<string, string> = {
@@ -268,10 +268,10 @@ export default function TemplateApplication() {
         }
       } else {
         // No-case default party roles
-        initialValues["party_role"] = "plaintiff";
-        initialValues["party_1_role"] = "plaintiff";
-        initialValues["opposite_party_role"] = "defendant";
-        initialValues["party_2_role"] = "defendant";
+        initialValues["party_role"] = "complainant";
+        initialValues["party_1_role"] = "complainant";
+        initialValues["opposite_party_role"] = "accused";
+        initialValues["party_2_role"] = "accused";
         if (me?.district) initialValues["district"] = me.district;
         if (me?.court) {
           initialValues["court"] = me.court;
@@ -547,14 +547,18 @@ export default function TemplateApplication() {
     return [
       {
         value: "party_1",
-        label: p1Name ? `${p1Role} — ${p1Name}` : p1Role,
+        label: language === "gu"
+          ? (p1Name ? `${p1Role} તરફે — ${p1Name}` : `${p1Role} તરફે`)
+          : (p1Name ? `${p1Role} side — ${p1Name}` : `${p1Role} side`),
       },
       {
         value: "party_2",
-        label: p2Name ? `${p2Role} — ${p2Name}` : p2Role,
+        label: language === "gu"
+          ? (p2Name ? `${p2Role} તરફે — ${p2Name}` : `${p2Role} તરફે`)
+          : (p2Name ? `${p2Role} side — ${p2Name}` : `${p2Role} side`),
       },
     ];
-  }, [getParty1RoleLabel, getParty2RoleLabel, values.party_1_name, values.party_name, values.party_2_name, values.opposite_party, caseData]);
+  }, [getParty1RoleLabel, getParty2RoleLabel, values.party_1_name, values.party_name, values.party_2_name, values.opposite_party, caseData, language]);
 
   const appSpecificFields = useMemo(() => {
     return templateFields.filter((f: any) => {
@@ -1086,12 +1090,12 @@ export default function TemplateApplication() {
                 />
 
                 <RoleChips
-                  label={language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
+                  label={language === "gu" ? "પક્ષકાર-૧ની ભૂમિકા" : "Party 1 Role"}
                   options={PARTY_1_ROLES.map((r) => ({
                     value: r.value,
                     label: language === "gu" ? r.label_gu : r.label_en,
                   }))}
-                  value={values.party_role || values.party_1_role || "plaintiff"}
+                  value={values.party_role || values.party_1_role || "complainant"}
                   onChange={(v) => {
                     update("party_role", v);
                     update("party_1_role", v);
@@ -1100,8 +1104,8 @@ export default function TemplateApplication() {
 
                 <Field
                   testID="field-party_name"
-                  label={(language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Party 1 Full Name") + " *"}
-                  placeholder={language === "gu" ? "પક્ષકાર ૧ નું પૂરું નામ" : "Full Name of Party 1"}
+                  label={(language === "gu" ? "પક્ષકાર - ૧ નું નામ" : "Party 1 Name") + " *"}
+                  placeholder={language === "gu" ? "પક્ષકાર-૧નું પૂરું નામ" : "Full Name of Party 1"}
                   value={values.party_name || values.party_1_name || ""}
                   onChangeText={(v) => {
                     update("party_name", v);
@@ -1110,12 +1114,12 @@ export default function TemplateApplication() {
                 />
 
                 <RoleChips
-                  label={language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
+                  label={language === "gu" ? "પક્ષકાર-૨ની ભૂમિકા" : "Party 2 Role"}
                   options={PARTY_2_ROLES.map((r) => ({
                     value: r.value,
                     label: language === "gu" ? r.label_gu : r.label_en,
                   }))}
-                  value={values.opposite_party_role || values.party_2_role || "defendant"}
+                  value={values.opposite_party_role || values.party_2_role || "accused"}
                   onChange={(v) => {
                     update("opposite_party_role", v);
                     update("party_2_role", v);
@@ -1124,8 +1128,8 @@ export default function TemplateApplication() {
 
                 <Field
                   testID="field-opposite_party"
-                  label={(language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) નું નામ" : "Party 2 (Opposite) Name") + " *"}
-                  placeholder={language === "gu" ? "સામાવાળા પક્ષકારનું પૂરું નામ" : "Full Name of Opposite Party"}
+                  label={(language === "gu" ? "પક્ષકાર - ૨ નું નામ" : "Party 2 Name") + " *"}
+                  placeholder={language === "gu" ? "પક્ષકાર-૨નું પૂરું નામ" : "Full Name of Party 2"}
                   value={values.opposite_party || values.party_2_name || ""}
                   onChangeText={(v) => {
                     update("opposite_party", v);
@@ -1153,7 +1157,7 @@ export default function TemplateApplication() {
 
             {hasRepresentingParty && (
               <RoleChips
-                label={(language === "gu" ? "કોના તરફથી રજૂઆત (Representing Party) *" : "Representing Party *")}
+                label={(language === "gu" ? "કોના તરફે એડવોકેટ *" : "Advocate For *")}
                 options={representingPartyOptions}
                 value={
                   values.representing_party === "party_2" || values.representing_party === "opposite"

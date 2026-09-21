@@ -3020,6 +3020,9 @@ async def _ensure_seed_complete() -> None:
                     if (cur.get("settings") or {}).get("line_spacing") != 19.5:
                         update_dict["settings"] = ex_seed["settings"]
                         needs_update = True
+                    if cur.get("fields") != ex_seed.get("fields"):
+                        update_dict["fields"] = ex_seed["fields"]
+                        needs_update = True
                     if needs_update:
                         await doc_ref.update(update_dict)
                         invalidate_published_templates_cache()
@@ -3066,12 +3069,16 @@ async def _get_published_templates() -> list:
                     if (t.get("settings") or {}).get("line_spacing") != 19.5:
                         t["settings"] = ex_seed["settings"]
                         needs_update = True
+                    if t.get("fields") != ex_seed.get("fields"):
+                        t["fields"] = ex_seed["fields"]
+                        needs_update = True
                     if needs_update and db is not None:
                         try:
                             asyncio.create_task(db.collection("templates").document(t.get("id", "document_exhibit_application")).update({
                                 "content_gu": t["content_gu"],
                                 "content_en": t["content_en"],
                                 "settings": t["settings"],
+                                "fields": t["fields"],
                             }))
                         except Exception:
                             pass
@@ -3132,12 +3139,16 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                 if (t.get("settings") or {}).get("line_spacing") != 19.5:
                     t["settings"] = ex_seed["settings"]
                     needs_update = True
+                if t.get("fields") != ex_seed.get("fields"):
+                    t["fields"] = ex_seed["fields"]
+                    needs_update = True
                 if needs_update and db is not None:
                     try:
                         asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
                             "content_gu": t["content_gu"],
                             "content_en": t["content_en"],
                             "settings": t["settings"],
+                            "fields": t["fields"],
                         }))
                     except Exception:
                         pass
@@ -3305,7 +3316,7 @@ ROLE_MAP = {
     "defendant": {"gu": "પ્રતિવાદી", "en": "Defendant"},
     "applicant": {"gu": "અરજદાર", "en": "Applicant"},
     "opponent": {"gu": "સામાવાળા", "en": "Opponent"},
-    "complainant": {"gu": "ફરિયાદી", "en": "Complainant"},
+    "complainant": {"gu": "ફરીયાદી", "en": "Complainant"},
     "accused": {"gu": "આરોપી", "en": "Accused"},
 }
 
@@ -3339,7 +3350,7 @@ _ROLE_CANONICAL_LOOKUP = {
 def resolve_party_role_label(role: Optional[str], language: str = "gu") -> str:
     """Resolve a canonical or legacy role string into the appropriate language label."""
     if not role:
-        return "ફરિયાદી" if language == "gu" else "Complainant"
+        return "ફરીયાદી" if language == "gu" else "Complainant"
     r_str = str(role).strip()
     r_lower = r_str.lower()
     canonical = _ROLE_CANONICAL_LOOKUP.get(r_lower) or _ROLE_CANONICAL_LOOKUP.get(r_str)
@@ -8536,6 +8547,7 @@ async def seed_templates(force: bool = False) -> dict:
                     "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in existing.get("content_gu", "")
                     or existing.get("content_en") != ex_seed["content_en"]
                     or (existing.get("settings") or {}).get("line_spacing") != 19.5
+                    or existing.get("fields") != ex_seed.get("fields")
                     or "---------------------------" in existing.get("content_gu", "")
                     or "-----------------" in existing.get("content_gu", "")
                 ):
@@ -8543,6 +8555,7 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_gu": ex_seed["content_gu"],
                         "content_en": ex_seed["content_en"],
                         "settings": ex_seed["settings"],
+                        "fields": ex_seed["fields"],
                     })
             skipped_ids.append(t["id"])
             continue
