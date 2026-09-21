@@ -2983,6 +2983,17 @@ def public_template(t: dict) -> dict:
     return res
 
 
+def _get_canonical_exhibit_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "document_exhibit_application"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "document_exhibit_application"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -2996,7 +3007,7 @@ async def _ensure_seed_complete() -> None:
             if snap.exists:
                 cur = snap.to_dict()
                 cur_gu = cur.get("content_gu", "")
-                ex_seed = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_exhibit_application"), None)
+                ex_seed = _get_canonical_exhibit_template()
                 if ex_seed:
                     needs_update = False
                     update_dict = {}
@@ -3043,7 +3054,7 @@ async def _get_published_templates() -> list:
         db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
         for t in db_templates:
             if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application"):
-                ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+                ex_seed = _get_canonical_exhibit_template()
                 if ex_seed:
                     needs_update = False
                     if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
@@ -3109,7 +3120,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
     if t and t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids:
         if (t.get("id") == "document_exhibit_application" or template_id == "document_exhibit_application"):
-            ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+            ex_seed = _get_canonical_exhibit_template()
             if ex_seed:
                 needs_update = False
                 if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
@@ -3198,7 +3209,7 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
     t = _snap.to_dict() if _snap.exists else None
     if t:
         if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application"):
-            ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+            ex_seed = _get_canonical_exhibit_template()
             if ex_seed:
                 if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
                     t["content_gu"] = ex_seed["content_gu"]
@@ -8520,7 +8531,7 @@ async def seed_templates(force: bool = False) -> dict:
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing and (existing.get("content_en") or existing.get("content_gu")):
             if t["id"] == "document_exhibit_application":
-                ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+                ex_seed = _get_canonical_exhibit_template()
                 if ex_seed and (
                     "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in existing.get("content_gu", "")
                     or existing.get("content_en") != ex_seed["content_en"]
