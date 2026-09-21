@@ -151,14 +151,14 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert tpl["category"] == "Civil"
 
     @pytest.mark.asyncio
-    async def test_02_exactly_12_input_fields(self, client, clean_db):
+    async def test_02_exactly_11_input_fields(self, client, clean_db):
         tpl = await get_template(client)
         fields = tpl["fields"]
-        assert len(fields) == 12, f"Expected exactly 12 fields, got {len(fields)}"
+        assert len(fields) == 11, f"Expected exactly 11 fields, got {len(fields)}"
         expected_keys = [
             "district", "taluka", "court_name", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "representing_party", "document_details", "date"
+            "representing_party", "date"
         ]
         assert [f["key"] for f in fields] == expected_keys
 
@@ -244,11 +244,9 @@ class TestPoint1To15_TemplateSpecAndFields:
         assert "party_2" in opts
 
     @pytest.mark.asyncio
-    async def test_13_field_document_details(self, client, clean_db):
+    async def test_13_no_field_document_details(self, client, clean_db):
         tpl = await get_template(client)
-        f = next(x for x in tpl["fields"] if x["key"] == "document_details")
-        assert f["type"] == "textarea"
-        assert f["required"] is True
+        assert not any(x["key"] == "document_details" for x in tpl["fields"])
 
     @pytest.mark.asyncio
     async def test_14_field_date(self, client, clean_db):

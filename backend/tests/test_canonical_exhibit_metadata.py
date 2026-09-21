@@ -87,15 +87,19 @@ class TestCanonicalExhibitMetadata(unittest.TestCase):
         self.tpl = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_exhibit_application"), None)
         self.assertIsNotNone(self.tpl, "document_exhibit_application missing from test_seed_data")
 
-    def test_12_field_architecture(self):
+    def test_11_field_architecture(self):
         fields = self.tpl["fields"]
-        self.assertEqual(len(fields), 12)
+        self.assertEqual(len(fields), 11)
         expected_keys = [
             "district", "taluka", "court_name", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "representing_party", "document_details", "date"
+            "representing_party", "date"
         ]
         self.assertEqual([f["key"] for f in fields], expected_keys)
+
+    def test_no_document_details_field(self):
+        keys = [f["key"] for f in self.tpl["fields"]]
+        self.assertNotIn("document_details", keys)
 
     def test_party_1_role_canonical_order(self):
         f = next(f for f in self.tpl["fields"] if f["key"] == "party_1_role")

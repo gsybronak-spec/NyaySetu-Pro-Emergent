@@ -2941,7 +2941,7 @@ _AUTO_FILL_FIELDS = {
     # Document exhibit marking application
     "court_name", "representing_party_role", "representing_party",
     "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-    "document_details", "place", "date",
+    "place", "date",
 }
 
 def public_template(t: dict) -> dict:
@@ -3228,6 +3228,8 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["content_en"] = ex_seed["content_en"]
                 if (t.get("settings") or {}).get("line_spacing") != 19.5:
                     t["settings"] = ex_seed["settings"]
+                if t.get("fields") != ex_seed.get("fields"):
+                    t["fields"] = ex_seed["fields"]
         return {
             **t,
             "id": t.get("id") or t_id,

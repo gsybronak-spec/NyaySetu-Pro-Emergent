@@ -2410,14 +2410,6 @@ Advocate for the Applicant
                     {"value": "party_2", "label_en": "Accused / Opponent / Defendant side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફે"},
                 ],
             },
-            {
-                "key": "document_details",
-                "label_en": "Document / Exhibit Details",
-                "label_gu": "ક્યા દસ્તાવેજને આંક પાડવાના તે માટેનું બોક્ષ",
-                "type": "textarea",
-                "required": True,
-                "placeholder": "દા.ત. આંક 3 થી રજુ કરેલા દસ્તાવેજો / દસ્તાવેજોની યાદી",
-            },
             {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
         ],
         "settings": {
