@@ -233,9 +233,10 @@ def get_doc_settings(overrides: dict = None) -> dict:
                     ls_val = float(v)
                     # If <= 3.0, it was supplied as a line-height multiplier (e.g. 1.15 or 1.5).
                     # Indian court filing standards require baseline-to-baseline leading in points.
-                    # Standard 1.5x line spacing for 12-13pt legal text is 18pt.
+                    # Standard 1.5x line spacing for 12-13pt legal text is 18-19.5pt.
                     if ls_val <= 3.0:
-                        settings["line_spacing"] = 18.0
+                        bs = float(settings.get("body_size", 13))
+                        settings["line_spacing"] = round(bs * ls_val, 1)
                     else:
                         settings["line_spacing"] = max(14.0, ls_val)
                 except (TypeError, ValueError):
@@ -858,7 +859,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
         if b.get("section") == "title":
             safe = f"<u>{safe}</u>"
         f_size = s["heading_size"] if b["bold"] else body_sz
-        lead = max(raw_ls + (2 if b["bold"] else 0), f_size * 1.25, 16.0)
+        if b.get("section") == "body":
+            lead = max(round(body_sz * 1.5, 1), raw_ls)
+        else:
+            lead = max(min(raw_ls, 18.0) + (2 if b["bold"] else 0), f_size * 1.25, 16.0)
         style = ParagraphStyle(
             "p",
             fontName=font_bold if b["bold"] else font_normal,
@@ -1183,7 +1187,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
             for w in ln["words"]:
                 for g in w:
                     used_gids.add(g["gid"])
-        shaped.append((lines, size, align, space_adv, is_title))
+        shaped.append((lines, size, align, space_adv, is_title, sec))
 
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1237,7 +1241,9 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                     c.showPage()
                     y = page_h - margin_t
                 continue
-            lines, size, align, space_adv, is_title = entry
+            lines, size, align, space_adv, is_title, *rest = entry
+            sec = rest[0] if rest else ("court_header" if is_title else "body")
+            block_ls = max(round(body_size * 1.5, 1), raw_ls) if sec == "body" else line_spacing
             c.setFont(font_name, size)
             for ln in lines:
                 width = ln["width"]
@@ -1275,7 +1281,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                     ux = margin_l + (max_width - width) / 2.0 if align == "center" else x
                     c.line(ux, y - 2.5, ux + width, y - 2.5)
 
-                y -= line_spacing
+                y -= block_ls
                 if y < margin_b:
                     c.showPage()
                     c.setFont(font_name, size)

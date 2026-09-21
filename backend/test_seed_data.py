@@ -2434,7 +2434,8 @@ Advocate for the Applicant
             "heading_size": 15,
             "body_size_en": 14,
             "heading_size_en": 16,
-            "line_spacing": 18.0,
+            "line_spacing": 19.5,
+            "line_spacing_en": 21.0,
             "paragraph_spacing": 6.0,
             "first_line_indent_pt": 28.35,
             "block_align": [
@@ -2446,6 +2447,7 @@ Advocate for the Applicant
                 {"contains": " No. :", "align": "right"},
                 {"contains": "વિરુદ્ધ", "align": "center"},
                 {"contains": "VERSUS", "align": "center"},
+                {"contains": "બાબત :- દસ્તાવેજને આંક પાડવા બાબત...", "align": "center", "bold": True},
                 {"contains": "બાબત :- દસ્તાવેજને આંક પાડવા બાબત ...", "align": "center", "bold": True},
                 {"contains": "Subject: Regarding marking the document(s) as exhibit(s)...", "align": "center", "bold": True},
                 {"contains": "સદર કામમાં અમો", "align": "justify", "indent": True},
@@ -2473,11 +2475,11 @@ Advocate for the Applicant
 વિરુદ્ધ
 {{party_2_role}} :- {{party_2_name}}
 
-બાબત :- દસ્તાવેજને આંક પાડવા બાબત ...
+બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
 
 સદર કામમાં અમો {{representing_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{document_details}} ખુબ જ મહત્વ ધરાવે છે અને કેસના યોગ્ય નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોય, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને યોગ્ય આંક આપવાનો હુકમ કરવા મહેરબાની કરશો જી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં અમો {{representing_party_role}}એ દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ રજુ કરેલ છે કે જેને જુબાનીમાં રીફર કરેલ છે અને કેસના ન્યાયિક નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોઈ, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને આંક આપી પુરાવામાં વંચાણે લેવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 સ્થળ : {{taluka_place}}
@@ -2497,12 +2499,12 @@ Subject: Regarding marking the document(s) as exhibit(s)...
 
 In the above matter, I/We, the Advocate for the {{representing_party_role}}, most respectfully submit before this Hon'ble Court that...
 
-The above case is pending before this Hon'ble Court. In the said case, {{document_details}} is/are of material importance and necessary for the proper adjudication of the case. Further, as it is in the interest of justice to take the said document(s) on record as evidence, it is therefore most respectfully prayed that this Hon'ble Court may be pleased to take the said document(s) on record and assign appropriate exhibit number(s).
+The above case is pending before this Hon'ble Court. In the said case, we, the {{representing_party_role}}, have produced original document(s) vide documentary evidence list which has/have been referred to in the deposition and is/are necessary for the judicial decision of the case. Further, as it is in the interest of justice to take the said document(s) on record as evidence, it is therefore most respectfully prayed that this Hon'ble Court may be pleased to take the said document(s) on record, assign exhibit number(s) to the same and read them in evidence.
 
 Date : {{date}}
 Place : {{taluka_place}}
 
----------------------------
+----------
 {{representing_party_role}}'s Advocate""",
     },
 ]

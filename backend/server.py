@@ -2996,10 +2996,22 @@ async def _ensure_seed_complete() -> None:
             if snap.exists:
                 cur = snap.to_dict()
                 cur_gu = cur.get("content_gu", "")
-                if "---------------------------" in cur_gu or "-----------------" in cur_gu:
-                    updated_gu = cur_gu.replace("---------------------------", "----------").replace("-----------------", "----------")
-                    await doc_ref.update({"content_gu": updated_gu})
-                    invalidate_published_templates_cache()
+                ex_seed = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_exhibit_application"), None)
+                if ex_seed:
+                    needs_update = False
+                    update_dict = {}
+                    if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in cur_gu or "---------------------------" in cur_gu or "-----------------" in cur_gu:
+                        update_dict["content_gu"] = ex_seed["content_gu"]
+                        needs_update = True
+                    if cur.get("content_en") != ex_seed["content_en"]:
+                        update_dict["content_en"] = ex_seed["content_en"]
+                        needs_update = True
+                    if (cur.get("settings") or {}).get("line_spacing") != 19.5:
+                        update_dict["settings"] = ex_seed["settings"]
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal document_exhibit_application in db: {e}")
 
@@ -3030,13 +3042,28 @@ async def _get_published_templates() -> list:
         db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
         db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
         for t in db_templates:
-            if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application") and t.get("content_gu"):
-                if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
-                    t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
-                    try:
-                        asyncio.create_task(db.collection("templates").document(t.get("id", "document_exhibit_application")).update({"content_gu": t["content_gu"]}))
-                    except Exception:
-                        pass
+            if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application"):
+                ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+                if ex_seed:
+                    needs_update = False
+                    if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                        t["content_gu"] = ex_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != ex_seed["content_en"]:
+                        t["content_en"] = ex_seed["content_en"]
+                        needs_update = True
+                    if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                        t["settings"] = ex_seed["settings"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "document_exhibit_application")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                            }))
+                        except Exception:
+                            pass
     
     if not db_templates and db is None:
         db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
@@ -3081,12 +3108,26 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         _snap_en = await db.collection("templates").document(f"{template_id}_en").get()
         t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
     if t and t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids:
-        if (t.get("id") == "document_exhibit_application" or template_id == "document_exhibit_application") and t.get("content_gu"):
-            if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
-                t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
-                if db is not None:
+        if (t.get("id") == "document_exhibit_application" or template_id == "document_exhibit_application"):
+            ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+            if ex_seed:
+                needs_update = False
+                if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                    t["content_gu"] = ex_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != ex_seed["content_en"]:
+                    t["content_en"] = ex_seed["content_en"]
+                    needs_update = True
+                if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                    t["settings"] = ex_seed["settings"]
+                    needs_update = True
+                if needs_update and db is not None:
                     try:
-                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({"content_gu": t["content_gu"]}))
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                        }))
                     except Exception:
                         pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
@@ -3156,9 +3197,15 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
     _snap = await db.collection("templates").document(t_id).get()
     t = _snap.to_dict() if _snap.exists else None
     if t:
-        if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application") and t.get("content_gu"):
-            if "---------------------------" in t["content_gu"] or "-----------------" in t["content_gu"]:
-                t["content_gu"] = t["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")
+        if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application"):
+            ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+            if ex_seed:
+                if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                    t["content_gu"] = ex_seed["content_gu"]
+                if t.get("content_en") != ex_seed["content_en"]:
+                    t["content_en"] = ex_seed["content_en"]
+                if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                    t["settings"] = ex_seed["settings"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -3846,6 +3893,8 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
                 tpl_settings["body_size"] = tpl_settings["body_size_en"]
             if "heading_size_en" in tpl_settings:
                 tpl_settings["heading_size"] = tpl_settings["heading_size_en"]
+            if "line_spacing_en" in tpl_settings:
+                tpl_settings["line_spacing"] = tpl_settings["line_spacing_en"]
         doc_settings = get_doc_settings({
             **tpl_settings,
             "page_size": page_size,
@@ -8470,8 +8519,20 @@ async def seed_templates(force: bool = False) -> dict:
             continue
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing and (existing.get("content_en") or existing.get("content_gu")):
-            if t["id"] == "document_exhibit_application" and existing.get("content_gu") and ("---------------------------" in existing.get("content_gu", "") or "-----------------" in existing.get("content_gu", "")):
-                await db.collection('templates').document(t["id"]).update({"content_gu": existing["content_gu"].replace("---------------------------", "----------").replace("-----------------", "----------")})
+            if t["id"] == "document_exhibit_application":
+                ex_seed = next((x for x in test_seed_data.TEMPLATES if x["id"] == "document_exhibit_application"), None)
+                if ex_seed and (
+                    "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in existing.get("content_gu", "")
+                    or existing.get("content_en") != ex_seed["content_en"]
+                    or (existing.get("settings") or {}).get("line_spacing") != 19.5
+                    or "---------------------------" in existing.get("content_gu", "")
+                    or "-----------------" in existing.get("content_gu", "")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": ex_seed["content_gu"],
+                        "content_en": ex_seed["content_en"],
+                        "settings": ex_seed["settings"],
+                    })
             skipped_ids.append(t["id"])
             continue
         template_doc = {

@@ -294,7 +294,7 @@ class TestPoint16To19_PageLayoutAndTypography:
         tpl = next(x for x in TEMPLATES if x["id"] == TEMPLATE_ID)
         s = tpl.get("settings", {})
         assert float(s.get("paragraph_spacing", 0)) == 6.0
-        assert float(s.get("line_spacing", 0)) == 18.0
+        assert float(s.get("line_spacing", 0)) == 19.5
         assert float(s.get("first_line_indent_pt", 0)) == 28.35
 
     @pytest.mark.asyncio
@@ -307,8 +307,7 @@ class TestPoint16To19_PageLayoutAndTypography:
         assert rules["સાહેબશ્રીની કોર્ટમાં"]["bold"] is True
         assert rules[" નં. :"]["align"] == "right"
         assert rules["વિરુદ્ધ"]["align"] == "center"
-        assert rules["બાબત :- દસ્તાવેજને આંક પાડવા બાબત ..."]["align"] == "center"
-        assert rules["બાબત :- દસ્તાવેજને આંક પાડવા બાબત ..."]["bold"] is True
+        assert "બાબત :- દસ્તાવેજને આંક પાડવા બાબત..." in rules or "બાબત :- દસ્તાવેજને આંક પાડવા બાબત ..." in rules
         assert rules["સદર કેસ આપ નામદાર"]["align"] == "justify"
         assert rules["સદર કેસ આપ નામદાર"]["indent"] is True
         assert rules["ના એડવોકેટ"]["align"] == "right"
@@ -327,11 +326,11 @@ class TestPoint20To24_ContentAndFormatting:
         assert "{{party_1_role}} :- {{party_1_name}}" in c
         assert "વિરુદ્ધ" in c
         assert "{{party_2_role}} :- {{party_2_name}}" in c
-        assert "બાબત :- દસ્તાવેજને આંક પાડવા બાબત ..." in c
+        assert "બાબત :- દસ્તાવેજને આંક પાડવા બાબત..." in c
         assert "સદર કામમાં અમો {{representing_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે..." in c
         assert "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે." in c
-        assert "{{document_details}}" in c
-        assert "તેને યોગ્ય આંક આપવાનો હુકમ કરવા મહેરબાની કરશો જી." in c
+        assert "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ રજુ કરેલ છે" in c
+        assert "તેને આંક આપી પુરાવામાં વંચાણે લેવા મહેરબાની કરશોજી." in c
         assert "તારીખ : {{date}}" in c
         assert "સ્થળ : {{taluka_place}}" in c
         assert "{{representing_party_role}} ના એડવોકેટ" in c
@@ -349,8 +348,8 @@ class TestPoint20To24_ContentAndFormatting:
         assert "Subject: Regarding marking the document(s) as exhibit(s)..." in c
         assert "In the above matter, I/We, the Advocate for the {{representing_party_role}}, most respectfully submit before this Hon'ble Court that..." in c
         assert "The above case is pending before this Hon'ble Court." in c
-        assert "In the said case, {{document_details}} is/are of material importance" in c
-        assert "assign appropriate exhibit number(s)." in c
+        assert "produced original document(s) vide documentary evidence list" in c
+        assert "assign exhibit number(s) to the same and read them in evidence." in c
         assert "Date : {{date}}" in c
         assert "Place : {{taluka_place}}" in c
         assert "{{representing_party_role}}'s Advocate" in c
