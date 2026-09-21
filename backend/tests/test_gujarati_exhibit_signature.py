@@ -70,6 +70,15 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         self.assertNotIn("-----------------", content_gu)
         self.assertNotIn("---------------------------", content_gu)
 
+    def test_01b_seed_template_content_en_has_20_dashes(self):
+        """1b. Verify template definition has exactly 20 dashes in content_en."""
+        content_en = self.tpl["content_en"]
+        self.assertIn("--------------------", content_en)
+        self.assertNotIn("---------------------------", content_en)
+        m = re.search(r"\n(-+)\n\{\{representing_party_role\}\}'s Advocate", content_en)
+        self.assertIsNotNone(m)
+        self.assertEqual(len(m.group(1)), 20)
+
     def test_02_block_align_contains_10_dashes(self):
         """2. Verify block_align configuration contains 10 dashes rule."""
         block_align = (self.tpl.get("settings") or {}).get("block_align", [])
@@ -168,6 +177,10 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         }
         rendered_en = doc_generator.render_template(self.tpl["content_en"], ctx_en)
         blocks_en = doc_generator.build_blocks(rendered_en, self.tpl["name_en"], self.tpl["name_gu"])
+        sig_blocks_en = [b for b in blocks_en if b.get("section") == "advocate_signature"]
+        self.assertEqual(sig_blocks_en[0]["text"], "--------------------")
+        self.assertEqual(len(sig_blocks_en[0]["text"]), 20)
+        self.assertEqual(sig_blocks_en[0]["align"], "right")
         settings_en = doc_generator.get_doc_settings({})
         b64_en = doc_generator._generate_pdf_reportlab_inner(blocks_en, "en", settings_en)
         self.assertTrue(b64_en)
@@ -227,6 +240,36 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
         self.assertNotIn("-----------------", stream_text)
         self.assertNotIn("---------------------------", stream_text)
 
+    def test_08_pdf_byte_stream_verification_english(self):
+        """8. Verify generated English PDF byte stream directly for 20 dashes and absence of 21 dashes."""
+        ctx_en = {
+            "court_name": "ADDITIONAL CIVIL JUDGE",
+            "taluka_place": "AHMEDABAD",
+            "case_type": "SPECIAL CIVIL SUIT",
+            "case_number": "123/2026",
+            "party_1_role": "PLAINTIFF",
+            "party_1_name": "RAMESHBHAI PATEL",
+            "party_2_role": "DEFENDANT",
+            "party_2_name": "SURESHBHAI SHAH",
+            "representing_party_role": "Plaintiff",
+            "date": "21/09/2026",
+        }
+        rendered = doc_generator.render_template(self.tpl["content_en"], ctx_en)
+        blocks = doc_generator.build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], (self.tpl.get("settings") or {}).get("block_align"))
+        settings = doc_generator.get_doc_settings({
+            **(self.tpl.get("settings") or {}),
+            "template_id": self.tpl["id"],
+            "raw_content": rendered,
+            "ctx": ctx_en,
+        })
+        b64 = doc_generator._generate_pdf_reportlab_inner(blocks, "en", settings)
+        pdf_bytes = base64.b64decode(b64)
+        stream_text = extract_pdf_stream_text(pdf_bytes)
+
+        self.assertIn("(--------------------) Tj", stream_text)
+        self.assertNotIn("---------------------", stream_text)
+
 
 if __name__ == "__main__":
     unittest.main()
+

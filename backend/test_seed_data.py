@@ -2451,6 +2451,7 @@ Advocate for the Applicant
                 {"contains": "સ્થળ :", "align": "left"},
                 {"contains": "Place :", "align": "left"},
                 {"contains": "----------", "align": "right", "indent": False},
+                {"contains": "--------------------", "align": "right", "indent": False},
                 {"contains": "-----------------", "align": "right", "indent": False},
                 {"contains": "---------------------------", "align": "right", "indent": False},
                 {"contains": "ના એડવોકેટ", "align": "right"},
@@ -2496,7 +2497,7 @@ The above case is pending before this Hon'ble Court. In the said case, we, the {
 Date : {{date}}
 Place : {{taluka_place}}
 
-----------
+--------------------
 {{representing_party_role}}'s Advocate""",
     },
 ]

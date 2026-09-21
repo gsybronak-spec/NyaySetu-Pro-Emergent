@@ -553,6 +553,8 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             )
             if is_gujarati_sig:
                 line = "----------"
+            elif any(k in (title_en or "").lower() for k in ("exhibit", "marking documents")):
+                line = "--------------------"
         is_date_place = (
             bool(
                 re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
