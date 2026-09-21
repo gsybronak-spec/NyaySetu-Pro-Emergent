@@ -2563,6 +2563,9 @@ async def _load_catalog(kind: str) -> list:
             # When connected to DB, never resurrect seed list if collection is empty.
             items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
             _CATALOG_CACHE[kind] = items
+            for c in items:
+                if isinstance(c, dict) and c.get("id"):
+                    _COURT_MAP[c["id"]] = c
             return items
         if items:
             items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
@@ -2620,6 +2623,8 @@ def enrich_case(c: dict) -> dict:
     dist = district_map.get(c.get("district_id"))
     tal = taluka_map.get(c.get("taluka_id"))
     court = court_map.get(c.get("court_id"))
+    if not court and _CATALOG_CACHE.get("courts"):
+        court = next((item for item in _CATALOG_CACHE["courts"] if item.get("id") == c.get("court_id")), None)
     ps = ps_map.get(c.get("police_station_id"))
     section = None
     if law and c.get("section_id"):
@@ -3319,6 +3324,122 @@ _CANONICAL_COURT_LABELS = {
 }
 
 
+async def resolve_court_label(raw_court: Optional[str], language: str, case: Optional[dict] = None) -> str:
+    """Authoritatively resolves court references to language-specific Admin Court Catalog labels.
+    - Admin Court Catalog is the 100% single source of truth.
+    - Gujarati document -> Gujarati catalog label
+    - English document -> English catalog label
+    - Internal court IDs NEVER appear in user-facing documents when a catalog entry exists.
+    - Preserves custom/historical court names if not in catalog.
+    """
+    lang = "gu" if language == "gu" else "en"
+
+    # 1. Fetch catalog entries from Admin Court Catalog
+    catalog_courts = await _load_catalog("courts")
+
+    # 2. Collect candidate values to inspect
+    candidates: list[str] = []
+    if raw_court and str(raw_court).strip():
+        candidates.append(str(raw_court).strip())
+    if case:
+        cid = case.get("court_id")
+        if cid and str(cid).strip() and str(cid).strip() not in candidates:
+            candidates.append(str(cid).strip())
+        clbl = case.get("court_label")
+        if clbl and str(clbl).strip() and str(clbl).strip() not in candidates:
+            candidates.append(str(clbl).strip())
+        craw = case.get("court")
+        if craw and str(craw).strip() and str(craw).strip() not in candidates:
+            candidates.append(str(craw).strip())
+
+    # Build bidirectional lookup index from Admin Court Catalog
+    court_by_id: dict[str, tuple[str, str]] = {}
+    court_by_en: dict[str, tuple[str, str]] = {}
+    court_by_gu: dict[str, tuple[str, str]] = {}
+
+    def _index_court_item(c_entry: dict):
+        if not isinstance(c_entry, dict):
+            return
+        cid = str(c_entry.get("id") or "").strip()
+        c_en = str(c_entry.get("en") or "").strip()
+        c_gu = str(c_entry.get("gu") or "").strip()
+        if cid:
+            court_by_id[cid] = (c_en, c_gu)
+            court_by_id[cid.lower()] = (c_en, c_gu)
+        if c_en:
+            court_by_en[c_en.lower()] = (c_en, c_gu)
+        if c_gu:
+            court_by_gu[c_gu] = (c_en, c_gu)
+
+    # 1. Index Admin Court Catalog items (highest authority)
+    for c in catalog_courts:
+        _index_court_item(c)
+
+    # 2. Index legacy court map and canonical labels for historical backwards compatibility
+    for c in _COURT_MAP.values():
+        if isinstance(c, dict):
+            _index_court_item(c)
+
+    for c_id, c_data in _CANONICAL_COURT_LABELS.items():
+        if isinstance(c_data, dict):
+            _index_court_item({"id": c_id, "en": c_data.get("en", ""), "gu": c_data.get("gu", "")})
+
+    # Search candidates across indices
+    for cand in candidates:
+        if cand == "other":
+            continue
+        # Direct ID match
+        if cand in court_by_id or cand.lower() in court_by_id:
+            c_en, c_gu = court_by_id.get(cand) or court_by_id.get(cand.lower())
+            resolved = c_gu if lang == "gu" else c_en
+            if resolved:
+                return resolved
+
+        # Match by English label (translates to Gujarati if lang == "gu")
+        if cand.lower() in court_by_en:
+            c_en, c_gu = court_by_en[cand.lower()]
+            resolved = c_gu if lang == "gu" else c_en
+            if resolved:
+                return resolved
+
+        # Match by Gujarati label (translates to English if lang == "en")
+        if cand in court_by_gu:
+            c_en, c_gu = court_by_gu[cand]
+            resolved = c_gu if lang == "gu" else c_en
+            if resolved:
+                return resolved
+
+    # Fallback to direct Firestore document lookup if newly added in DB and not yet cached
+    if db is not None:
+        for cand in candidates:
+            if cand == "other":
+                continue
+            try:
+                doc_snap = await db.collection("courts").document(cand).get()
+                if doc_snap.exists:
+                    c_data = doc_snap.to_dict() or {}
+                    en_lbl = str(c_data.get("en") or "").strip()
+                    gu_lbl = str(c_data.get("gu") or "").strip()
+                    _invalidate_catalog_cache("courts")
+                    resolved = gu_lbl if lang == "gu" else en_lbl
+                    if resolved:
+                        return resolved
+            except Exception:
+                pass
+
+    # Custom court handling for "other" or non-catalog inputs
+    if case:
+        if case.get("court_custom"):
+            return str(case.get("court_custom")).strip()
+        if case.get("court"):
+            return str(case.get("court")).strip()
+
+    if raw_court and str(raw_court).strip() and str(raw_court).strip() != "other":
+        return str(raw_court).strip()
+
+    return ""
+
+
 async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
     ctx = dict(values or {})
     # Issue 3 & 16: Advocate name strictly controlled by document language.
@@ -3358,32 +3479,15 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         tobj = _TALUKA_MAP[ctx["taluka"]]
         ctx["taluka"] = (tobj.get("gu") or tobj.get("en", "")) if language == "gu" else (tobj.get("en") or tobj.get("gu", ""))
 
-    # Synchronize court and court_name so templates referencing either variable resolve identically
-    if not ctx.get("court") and ctx.get("court_name"):
-        ctx["court"] = ctx["court_name"]
-    if not ctx.get("court_name") and ctx.get("court"):
-        ctx["court_name"] = ctx["court"]
-
-    # Same guard for court / case_type raw catalog ids sent as select values
-    # so documents never print raw catalog ids (e.g. "gen_jmfc", "civil_suit").
-    court_raw = ctx.get("court_name") or ctx.get("court")
-    if isinstance(court_raw, str) and court_raw in _CANONICAL_COURT_LABELS:
-        cobj = _CANONICAL_COURT_LABELS[court_raw]
-        court_lbl = cobj["gu"] if language == "gu" else cobj["en"]
-        ctx["court"] = court_lbl
-        ctx["court_name"] = court_lbl
-    elif isinstance(court_raw, str) and court_raw in _COURT_MAP:
-        cobj = _COURT_MAP[court_raw]
-        court_lbl = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
-        ctx["court"] = court_lbl
-        ctx["court_name"] = court_lbl
-    elif court_raw:
-        ctx.setdefault("court", court_raw)
-        ctx.setdefault("court_name", court_raw)
-    if ctx.get("court") and not ctx.get("court_name"):
-        ctx["court_name"] = ctx["court"]
-    elif ctx.get("court_name") and not ctx.get("court"):
-        ctx["court"] = ctx["court_name"]
+    # Synchronize and authoritatively resolve court and court_name from Admin Court Catalog
+    initial_court_raw = ctx.get("court_name") or ctx.get("court")
+    resolved_court = await resolve_court_label(initial_court_raw, language, case=case)
+    if resolved_court:
+        ctx["court"] = resolved_court
+        ctx["court_name"] = resolved_court
+    elif initial_court_raw:
+        ctx["court"] = initial_court_raw
+        ctx["court_name"] = initial_court_raw
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
         ctx["case_type"] = (ctobj.get("gu") or ctobj.get("en", "")) if language == "gu" else (ctobj.get("en") or ctobj.get("gu", ""))
@@ -3402,13 +3506,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             taluka_name = case.get("taluka") or ""
         ctx.setdefault("taluka", taluka_name)
-        court_obj = _COURT_MAP.get(case.get("court_id"))
-        if court_obj:
-            court_name = (court_obj.get("gu") or court_obj.get("en", "")) if language == "gu" else (court_obj.get("en") or court_obj.get("gu", ""))
-        else:
-            court_name = case.get("court_custom") or case.get("court") or ""
-        ctx.setdefault("court", court_name)
-        ctx.setdefault("court_name", court_name)
+        case_court = await resolve_court_label(case.get("court_id") or case.get("court_custom") or case.get("court"), language, case=case)
+        if case_court:
+            ctx["court"] = case_court
+            ctx["court_name"] = case_court
         ctx.setdefault("case_number", case.get("case_number") or "")
         # case type
         ct = next((x for x in CASE_TYPES if x["id"] == case.get("case_type_id")), None)
@@ -3456,11 +3557,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
         ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
         user_court = user.get("court") or ""
-        if user_court in _COURT_MAP:
-            cobj = _COURT_MAP[user_court]
-            user_court = (cobj.get("gu") or cobj.get("en", "")) if language == "gu" else (cobj.get("en") or cobj.get("gu", ""))
-        ctx.setdefault("court", user_court)
-        ctx.setdefault("court_name", user_court)
+        if user_court:
+            resolved_user_court = await resolve_court_label(user_court, language, case=None)
+            ctx.setdefault("court", resolved_user_court or user_court)
+            ctx.setdefault("court_name", resolved_user_court or user_court)
         ctx.setdefault("case_number", "")
         ctx.setdefault("case_type", "")
         ctx.setdefault("party_name", "")
@@ -3497,10 +3597,16 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["party_2_role"] = ctx.get("opposite_party_role") or ""
 
-    # Ensure both court and court_name are mirrored and non-empty if either was supplied
+    # Ensure both court and court_name are authoritatively resolved and mirrored
+    # Guarantees that no intermediate step or raw ID can leak into user-facing output
     court_final = ctx.get("court") or ctx.get("court_name") or ""
-    ctx["court"] = court_final
-    ctx["court_name"] = court_final
+    final_resolved_court = await resolve_court_label(court_final, language, case=case)
+    if final_resolved_court:
+        ctx["court"] = final_resolved_court
+        ctx["court_name"] = final_resolved_court
+    else:
+        ctx["court"] = court_final
+        ctx["court_name"] = court_final
 
     # ---- Derived values for the document-return application (never user-entered) ----
     status = ctx.get("case_status")
@@ -8704,6 +8810,7 @@ async def create_indexes():
     if is_seeded:
         logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding/migration bypassed.")
         await seed_super_admin()
+        await _refresh_catalog_maps()
     else:
         # First-time / uninitialized database setup only
         logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")

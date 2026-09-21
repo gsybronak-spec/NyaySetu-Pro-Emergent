@@ -421,9 +421,19 @@ export default function TemplateApplication() {
       out["representing_party_role"] = out["selected_party_role"];
     }
 
-    // Bidirectional sync for canonical and legacy keys
-    if (out["court"] && !out["court_name"]) out["court_name"] = out["court"];
-    if (out["court_name"] && !out["court"]) out["court"] = out["court_name"];
+    // Bidirectional sync and localized resolution for court and court_name
+    const rawCourt = out["court"] || out["court_name"];
+    if (rawCourt) {
+      const cMatch = Array.isArray(courts) ? courts.find((c: any) => c.id === rawCourt || c.en === rawCourt || c.gu === rawCourt) : null;
+      if (cMatch) {
+        const localizedCourt = language === "gu" ? cMatch.gu : cMatch.en;
+        out["court"] = localizedCourt;
+        out["court_name"] = localizedCourt;
+      } else {
+        out["court"] = rawCourt;
+        out["court_name"] = rawCourt;
+      }
+    }
     if (out["party_1_name"] && !out["party_name"]) out["party_name"] = out["party_1_name"];
     if (out["party_name"] && !out["party_1_name"]) out["party_1_name"] = out["party_name"];
     if (out["party_2_name"] && !out["opposite_party"]) out["opposite_party"] = out["party_2_name"];
@@ -475,11 +485,16 @@ export default function TemplateApplication() {
       ? (PARTY_2_ROLES.find((r) => r.value === values.opposite_party_role)?.label_gu || caseData.opposite_party_role)
       : (PARTY_2_ROLES.find((r) => r.value === values.opposite_party_role)?.label_en || caseData.opposite_party_role);
 
+    const courtFromCatalog = Array.isArray(courts) ? courts.find((c: any) => c.id === caseData.court_id) : null;
+    const resolvedCourt = courtFromCatalog
+      ? (language === "gu" ? courtFromCatalog.gu : courtFromCatalog.en)
+      : (caseData.court_label || caseData.court || caseData.court_custom);
+
     const src: Record<string, string | undefined> = {
       case_number: caseData.case_number,
       party_name: caseData.party_name,
       opposite_party: caseData.opposite_party,
-      court: caseData.court_label || caseData.court,
+      court: resolvedCourt,
       district: caseData.district_label || caseData.district_id,
       taluka: caseData.taluka_label,
       case_type: caseData.case_type_label,
