@@ -444,21 +444,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         if (val) finalCustom[df.key] = val;
       }
     }
-    // 2. Enforce required admin-configured fields.
-    const missing = dynamicFields.filter((df) => df.required && (finalCustom[df.key] === undefined || String(finalCustom[df.key]).trim() === ""));
-    if (missing.length > 0) {
-      const names = missing.map((m) => (form.language === "gu" ? m.label_gu || m.label_en : m.label_en)).join(", ");
-      const errorMsg =
-        language === "gu"
-          ? `કૃપા કરીને જરૂરી વિગતો ભરો: ${names}`
-          : `Please fill the required field(s): ${names}`;
-      setFormError(errorMsg);
-      showAlert(
-        language === "gu" ? "વિગત ખૂટે છે" : "Missing Information",
-        errorMsg
-      );
-      return;
-    }
+    // 2. Dynamic admin fields are master/draft data (ZERO mandatory-field blocking on Case Create/Edit).
+    // Required fields are enforced downstream at Document/Template Generation time.
     // 3. Flat client fields (D3). client_name/client_district are derived and
     //    stored on the case (the API accepts them; they are not form state).
     const d = districts.find((x) => x.id === form.district_id);
@@ -763,6 +750,11 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 {allDynamicFields.length > 0 && (
                   <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
                     <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
+                    <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
+                      {language === "gu"
+                        ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
+                        : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
+                    </Text>
                     {allDynamicFields.map((df) => renderDynamicField(df))}
                   </View>
                 )}
@@ -1003,6 +995,11 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           {allDynamicFields.length > 0 && (
             <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
               <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
+              <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
+                {language === "gu"
+                  ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
+                  : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
+              </Text>
               {allDynamicFields.map((df) => renderDynamicField(df))}
             </View>
           )}

@@ -3911,6 +3911,42 @@ def _validate_template_settings(settings: Optional[dict]) -> None:
         return
     _validate_page_size(settings.get("page_size"))
 
+
+def validate_template_requirements(t: dict, ctx: dict, language: str = "en") -> None:
+    """Enforce required fields defined by the specific template being generated.
+    Case-level fields that are not required by this specific template do NOT block.
+    """
+    fields = t.get("fields") or []
+    missing = []
+    for f in fields:
+        if not f.get("required"):
+            continue
+        dep = f.get("depends_on")
+        if dep and ctx.get(dep) != f.get("show_when"):
+            continue
+        key = f.get("key")
+        if not key:
+            continue
+        # Handling advocate_side / representing_party mapping
+        if key == "advocate_side" and (ctx.get("advocate_side") or ctx.get("representing_party") or ctx.get("selected_party_role")):
+            continue
+        if key == "date" and (ctx.get("date") or ctx.get("date_display") or ctx.get("today")):
+            continue
+        if key == "case_number" and t.get("id") == "jamin_bond" and ctx.get("crime_reg_number"):
+            continue
+        val = ctx.get(key)
+        if val is None or str(val).strip() == "":
+            lbl = (f.get("label_gu") if language == "gu" else f.get("label_en")) or f.get("label_en") or key
+            missing.append(lbl)
+    if missing:
+        msg = (
+            f"Missing required field(s) for this document: {', '.join(missing)}"
+            if language != "gu"
+            else f"આ દસ્તાવેજ માટે જરૂરી વિગત ખૂટે છે: {', '.join(missing)}"
+        )
+        raise HTTPException(400, msg)
+
+
 @api.post("/applications/preview")
 async def preview_application(req: GenerateReq, user=Depends(get_user)):
     validate_values_size(req.values)
@@ -3930,6 +3966,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
         _snap = await db.collection("cases").document(req.case_id).get()
         case = _snap.to_dict() if _snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language)
+    validate_template_requirements(t, ctx, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
     blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
@@ -3956,6 +3993,13 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
     _validate_page_size(page_size)
 
+    case = None
+    if req.case_id:
+        _case_snap = await db.collection("cases").document(req.case_id).get()
+        case = _case_snap.to_dict() if _case_snap.exists else None
+    ctx = await build_render_context(user, case, req.values, req.language)
+    validate_template_requirements(t, ctx, req.language)
+
     # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.
     # Regular users consume exactly 1 credit for final downloads.
     unlimited = is_unlimited_user(user)
@@ -3979,11 +4023,6 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     app_id = str(uuid.uuid4())
     gen_meta = {}
     try:
-        case = None
-        if req.case_id:
-            _case_snap = await db.collection("cases").document(req.case_id).get()
-            case = _case_snap.to_dict() if _case_snap.exists else None
-        ctx = await build_render_context(user, case, req.values, req.language)
         tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
         rendered = render_template(tpl, ctx)
         blocks = build_blocks(rendered, t["name_en"], t["name_gu"],

@@ -259,12 +259,18 @@ export default function TemplateApplication() {
           initialValues["court_source"] = "catalog";
         }
         if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
-        if (cs.police_station_label) initialValues["police_station"] = cs.police_station_label;
+        const ps = cs.police_station_label || cs.police_station || cs.police_station_custom || (cs.custom_fields && cs.custom_fields["police_station"]);
+        if (ps) initialValues["police_station"] = ps;
+        const fir = cs.fir_number || (cs.custom_fields && cs.custom_fields["fir_number"]);
+        if (fir) initialValues["fir_number"] = fir;
         if (cs.client_mobile) initialValues["client_mobile"] = cs.client_mobile;
         if (cs.client_email) initialValues["client_email"] = cs.client_email;
         if (cs.client_address) initialValues["client_address"] = cs.client_address;
         if (cs.law_label) initialValues["law"] = cs.law_label;
-        if (cs.section_label) initialValues["section"] = cs.section_label;
+        const secVal = cs.section_label || cs.section || cs.sections || (cs.custom_fields && cs.custom_fields["sections"]);
+        if (secVal) initialValues["section"] = secVal;
+        const ioVal = cs.investigating_officer || (cs.custom_fields && cs.custom_fields["investigating_officer"]);
+        if (ioVal) initialValues["investigating_officer"] = ioVal;
         initialValues["party_role"] = NORMALIZE_ROLE_MAP[cs.party_role || ""] || "plaintiff";
         initialValues["party_1_role"] = initialValues["party_role"];
         initialValues["opposite_party_role"] = NORMALIZE_ROLE_MAP[cs.opposite_party_role || ""] || "defendant";
