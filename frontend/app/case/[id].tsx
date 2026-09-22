@@ -16,6 +16,7 @@ import { catalogCache } from "@/src/services/catalogCache";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
+  const { isDesktop } = useResponsive();
   const { id, _refresh } = useLocalSearchParams<{ id: string; _refresh?: string }>();
   const [c, setC] = useState<any>(null);
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
