@@ -2671,32 +2671,39 @@ _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
 MAX_TEMPLATE_VALUES_TOTAL = 100_000  # max total chars in template values dict
 
 
-def validate_case_refs(data: dict):
+def validate_case_refs(data: dict, existing: Optional[dict] = None):
     """Validate catalog reference IDs. Raises HTTPException on invalid."""
     cid = data.get("case_type_id")
     if cid and cid != "other" and cid not in _VALID_CASE_TYPE_IDS:
-        raise HTTPException(400, f"Invalid case_type_id: {cid}")
+        if not (existing and existing.get("case_type_id") == cid):
+            raise HTTPException(400, f"Invalid case_type_id: {cid}")
     lid = data.get("law_id")
     if lid and lid != "other_law" and lid not in _VALID_LAW_IDS:
-        raise HTTPException(400, f"Invalid law_id: {lid}")
+        if not (existing and existing.get("law_id") == lid):
+            raise HTTPException(400, f"Invalid law_id: {lid}")
     did = data.get("district_id")
     if did and did not in _VALID_DISTRICT_IDS:
-        raise HTTPException(400, f"Invalid district_id: {did}")
+        if not (existing and existing.get("district_id") == did):
+            raise HTTPException(400, f"Invalid district_id: {did}")
     tid = data.get("taluka_id")
     if tid and tid != "other" and tid not in _VALID_TALUKA_IDS:
-        raise HTTPException(400, f"Invalid taluka_id: {tid}")
+        if not (existing and existing.get("taluka_id") == tid):
+            raise HTTPException(400, f"Invalid taluka_id: {tid}")
     if tid and tid != "other" and did and _TALUKA_MAP.get(tid, {}).get("district_id") not in (None, did):
-        raise HTTPException(400, f"Taluka {tid} does not belong to district {did}")
+        if not (existing and existing.get("taluka_id") == tid and existing.get("district_id") == did):
+            raise HTTPException(400, f"Taluka {tid} does not belong to district {did}")
     court = data.get("court_id")
     court_source = data.get("court_source")
     if court_source == "custom" or court == "other":
         if not (data.get("custom_court_name_gu") or data.get("custom_court_name_en") or data.get("court_custom") or data.get("court")):
             raise HTTPException(400, "custom court name is required when court is 'other' or custom")
     elif court and court not in _VALID_COURT_IDS:
-        raise HTTPException(400, f"Invalid court_id: {court}")
+        if not (existing and existing.get("court_id") == court):
+            raise HTTPException(400, f"Invalid court_id: {court}")
     psid = data.get("police_station_id")
     if psid and psid != "other" and psid not in _VALID_PS_IDS:
-        raise HTTPException(400, f"Invalid police_station_id: {psid}")
+        if not (existing and existing.get("police_station_id") == psid):
+            raise HTTPException(400, f"Invalid police_station_id: {psid}")
     if psid == "other" and not (data.get("police_station_custom") or data.get("police_station")):
         raise HTTPException(400, "police_station_custom is required when police_station_id is 'other'")
 
@@ -2902,7 +2909,7 @@ async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
         updates["court_custom"] = None
 
     merged_payload = {**existing, **updates}
-    validate_case_refs(merged_payload)
+    validate_case_refs(merged_payload, existing=existing)
 
     # custom_fields: merge into existing so admin-configured values are never lost.
     if "custom_fields" in updates and updates["custom_fields"] is not None:

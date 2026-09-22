@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { router } from "expo-router";
 
 import { CaseForm, CaseFormValues } from "@/src/components/CaseForm";
@@ -13,9 +13,18 @@ export default function NewCase() {
     try {
       await api.createCase(values);
       router.replace("/(tabs)/cases");
-      setTimeout(() => Alert.alert("Success", "Case created successfully."), 300);
+      setTimeout(() => {
+        if (Platform.OS !== "web") {
+          Alert.alert("Success", "Case created successfully.");
+        }
+      }, 300);
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      const msg = e?.message || "Failed to create case";
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(`Error: ${msg}`);
+      } else {
+        Alert.alert("Error", msg);
+      }
     } finally {
       setSaving(false);
     }

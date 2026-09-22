@@ -264,6 +264,79 @@ class TestRequirement2CaseEditPersistence(unittest.TestCase):
         self.assertIsNone(merged["custom_court_name_gu"])
         self.assertIsNone(merged["custom_court_name_en"])
 
+    def test_historical_court_ref_preserved_on_update(self):
+        existing = {
+            "id": "c_hist",
+            "court_source": "catalog",
+            "court_id": "archived_court_1995",
+            "party_name": "Original Party",
+        }
+        updates = {
+            "party_name": "Updated Party",
+            "court_id": "archived_court_1995",
+            "court_source": "catalog",
+        }
+        merged = {**existing, **updates}
+        # Calling validate_case_refs with existing=existing should pass
+        try:
+            server.validate_case_refs(merged, existing=existing)
+        except Exception as e:
+            self.fail(f"validate_case_refs raised unexpected exception: {e}")
+
+    def test_invalid_court_ref_rejected_for_new_change(self):
+        existing = {
+            "id": "c_hist",
+            "court_source": "catalog",
+            "court_id": "principal_district_judge",
+        }
+        updates = {
+            "court_id": "completely_invalid_random_court_id",
+            "court_source": "catalog",
+        }
+        merged = {**existing, **updates}
+        with self.assertRaises(server.HTTPException) as ctx:
+            server.validate_case_refs(merged, existing=existing)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_legacy_saved_case_fallback_resolution(self):
+        # Emulate how frontend/app/case/edit/[id].tsx resolves legacy single-string court
+        legacy_case_en = {
+            "id": "c_legacy_en",
+            "language": "en",
+            "court_id": None,
+            "court_source": None,
+            "court": "Court of Principal Senior Civil Judge, Ahmedabad",
+            "court_custom": None,
+            "custom_court_name_gu": None,
+            "custom_court_name_en": None,
+        }
+        is_custom = legacy_case_en.get("court_source") == "custom" or (
+            not legacy_case_en.get("court_id") and (
+                legacy_case_en.get("custom_court_name_gu") or
+                legacy_case_en.get("custom_court_name_en") or
+                legacy_case_en.get("court_custom") or
+                legacy_case_en.get("court")
+            )
+        )
+        fallback = legacy_case_en.get("court_custom") or legacy_case_en.get("court") or ""
+        form_initial = {
+            "court_id": "other" if is_custom else (legacy_case_en.get("court_id") or None),
+            "court_source": "custom" if is_custom else "catalog",
+            "custom_court_name_gu": legacy_case_en.get("custom_court_name_gu") or fallback,
+            "custom_court_name_en": legacy_case_en.get("custom_court_name_en") or fallback,
+            "court_custom": fallback,
+        }
+        self.assertTrue(is_custom)
+        self.assertEqual(form_initial["court_id"], "other")
+        self.assertEqual(form_initial["court_source"], "custom")
+        # Critical fix check: neither field is empty!
+        self.assertEqual(form_initial["custom_court_name_gu"], "Court of Principal Senior Civil Judge, Ahmedabad")
+        self.assertEqual(form_initial["custom_court_name_en"], "Court of Principal Senior Civil Judge, Ahmedabad")
+        # Validate that submitting this form does not trigger missing court name
+        gu_trim = (form_initial["custom_court_name_gu"] or "").strip()
+        en_trim = (form_initial["custom_court_name_en"] or "").strip()
+        self.assertTrue(bool(gu_trim and en_trim))
+
 
 class TestExhibitApplicationIntegrity(unittest.TestCase):
     def test_signature_dashes(self):

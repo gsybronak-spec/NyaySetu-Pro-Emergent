@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import { CaseForm, CaseFormValues } from "@/src/components/CaseForm";
@@ -15,6 +15,7 @@ export default function EditCase() {
   useEffect(() => {
     api.getCase(String(id)).then((c) => {
       const isCustomCourt = c.court_source === "custom" || (!c.court_id && (c.custom_court_name_gu || c.custom_court_name_en || c.court_custom || c.court));
+      const fallbackCourtName = c.court_custom || c.court || "";
       setInitial({
         language: c.language || "en",
         nickname: c.nickname || "",
@@ -32,9 +33,10 @@ export default function EditCase() {
         opposite_party_role: c.opposite_party_role || "",
         court_id: isCustomCourt ? "other" : (c.court_id || null),
         court_source: isCustomCourt ? "custom" : "catalog",
-        custom_court_name_gu: c.custom_court_name_gu || (c.language === "gu" ? (c.court_custom || c.court || "") : ""),
-        custom_court_name_en: c.custom_court_name_en || (c.language !== "gu" ? (c.court_custom || c.court || "") : (c.court_custom || "")),
-        court_custom: c.court_custom || c.court || "",
+        custom_court_name_gu: c.custom_court_name_gu || fallbackCourtName,
+        custom_court_name_en: c.custom_court_name_en || fallbackCourtName,
+        court_custom: fallbackCourtName,
+        court_label: c.court_label || fallbackCourtName,
         district_id: c.district_id || null,
         taluka_id: c.taluka_id || null,
         police_station_id: c.police_station_id || null,
@@ -45,7 +47,14 @@ export default function EditCase() {
         client_email: c.client_email || "",
         client_address: c.client_address || "",
       });
-    }).catch((e) => Alert.alert("Error", e.message));
+    }).catch((e) => {
+      const msg = e?.message || "Failed to load case";
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(`Error: ${msg}`);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    });
   }, [id]);
 
   const save = async (values: CaseFormValues) => {
@@ -54,9 +63,18 @@ export default function EditCase() {
     try {
       await api.updateCase(String(id), values);
       router.replace({ pathname: "/case/[id]", params: { id: String(id), _refresh: String(Date.now()) } });
-      setTimeout(() => Alert.alert("Saved", "Case updated successfully."), 300);
+      setTimeout(() => {
+        if (Platform.OS !== "web") {
+          Alert.alert("Saved", "Case updated successfully.");
+        }
+      }, 300);
     } catch (e: any) {
-      Alert.alert("Error", e.message);
+      const msg = e?.message || "Failed to update case";
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.alert(`Error: ${msg}`);
+      } else {
+        Alert.alert("Error", msg);
+      }
     } finally {
       setSaving(false);
     }

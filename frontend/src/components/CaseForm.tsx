@@ -35,6 +35,7 @@ export interface CaseFormValues {
   court_source?: "catalog" | "custom";
   custom_court_name_gu?: string;
   custom_court_name_en?: string;
+  court_label?: string;
   district_id: string | null;
   taluka_id: string | null;
   police_station_id: string | null;
@@ -45,6 +46,14 @@ export interface CaseFormValues {
   client_mobile: string;
   client_email: string;
   client_address: string;
+}
+
+function showAlert(title: string, message: string) {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    window.alert(`${title}: ${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
 }
 
 const DEFAULTS: CaseFormValues = {
@@ -216,6 +225,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   // Dynamic Case Form Configuration from Admin API
   const [dynamicFields, setDynamicFields] = useState<any[]>([]);
   const [customValues, setCustomValues] = useState<Record<string, any>>(initial?.custom_fields || {});
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     catalogCache.getCaseTypes().then(setCaseTypes);
@@ -313,8 +323,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     }
   };
 
-  const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
-  const updateCustom = (k: string, v: any) => setCustomValues((prev) => ({ ...prev, [k]: v }));
+  const update = (k: keyof CaseFormValues, v: any) => {
+    if (formError) setFormError(null);
+    setForm((f) => ({ ...f, [k]: v }));
+  };
+  const updateCustom = (k: string, v: any) => {
+    if (formError) setFormError(null);
+    setCustomValues((prev) => ({ ...prev, [k]: v }));
+  };
 
   const handleMobileLookup = async () => {
     if (!searchMobile || searchMobile.trim().length < 10) {
@@ -397,6 +413,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
   const handleFormSubmit = () => {
     if (saving) return;
+    setFormError(null);
 
     // Court validation when other/custom selected
     const isCustomCourt = form.court_id === "other" || form.court_source === "custom";
@@ -404,11 +421,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       const guTrim = (form.custom_court_name_gu || "").trim();
       const enTrim = (form.custom_court_name_en || "").trim();
       if (!guTrim || !enTrim) {
-        Alert.alert(
-          language === "gu" ? "વિગત ખૂટે છે" : "Missing Information",
+        const errorMsg =
           language === "gu"
             ? "કૃપા કરીને અન્ય કોર્ટ માટે ગુજરાતી અને અંગ્રેજી બંને કોર્ટનું નામ દાખલ કરો."
-            : "Please provide both Gujarati and English Court Name for Other court."
+            : "Please provide both Gujarati and English Court Name for Other court.";
+        setFormError(errorMsg);
+        showAlert(
+          language === "gu" ? "વિગત ખૂટે છે" : "Missing Information",
+          errorMsg
         );
         return;
       }
@@ -428,7 +448,15 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     const missing = dynamicFields.filter((df) => df.required && (finalCustom[df.key] === undefined || String(finalCustom[df.key]).trim() === ""));
     if (missing.length > 0) {
       const names = missing.map((m) => (form.language === "gu" ? m.label_gu || m.label_en : m.label_en)).join(", ");
-      Alert.alert("Missing Information", `Please fill the required field(s): ${names}`);
+      const errorMsg =
+        language === "gu"
+          ? `કૃપા કરીને જરૂરી વિગતો ભરો: ${names}`
+          : `Please fill the required field(s): ${names}`;
+      setFormError(errorMsg);
+      showAlert(
+        language === "gu" ? "વિગત ખૂટે છે" : "Missing Information",
+        errorMsg
+      );
       return;
     }
     // 3. Flat client fields (D3). client_name/client_district are derived and
@@ -565,7 +593,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           </View>
 
           <ScrollView
-            contentContainerStyle={{ alignItems: "center", padding: Spacing.xl, paddingBottom: 140 }}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ alignItems: "center", padding: Spacing.xl, paddingBottom: 160 }}
             keyboardShouldPersistTaps="handled"
           >
             <View style={{ maxWidth: 1100, width: "100%", flexDirection: "row", gap: Spacing.xxl, alignItems: "flex-start" }}>
@@ -814,6 +843,12 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
             <View style={{ maxWidth: 1100, width: "100%", alignSelf: "center" }}>
+              {formError ? (
+                <View style={[styles.errorBanner, { backgroundColor: "#fee2e2", borderColor: "#ef4444" }]}>
+                  <Ionicons name="alert-circle" size={18} color="#991b1b" />
+                  <Text style={styles.errorBannerText}>{formError}</Text>
+                </View>
+              ) : null}
               <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={handleFormSubmit} />
             </View>
           </View>
@@ -834,7 +869,11 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <View style={{ width: 24 }} />
         </View>
 
-        <KeyboardAwareScrollView contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 120 }} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 160 }}
+          keyboardShouldPersistTaps="handled"
+        >
           {/* Client Mobile Lookup Header */}
           <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
@@ -1109,6 +1148,12 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         </KeyboardAwareScrollView>
 
         <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
+          {formError ? (
+            <View style={[styles.errorBanner, { backgroundColor: "#fee2e2", borderColor: "#ef4444" }]}>
+              <Ionicons name="alert-circle" size={18} color="#991b1b" />
+              <Text style={styles.errorBannerText}>{formError}</Text>
+            </View>
+          ) : null}
           <Button testID="save-case-btn" title={submitLabel} loading={saving} onPress={handleFormSubmit} />
         </View>
       </KeyboardAvoidingView>
@@ -1145,5 +1190,29 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
   },
-  footer: { position: "absolute", bottom: 0, left: 0, right: 0, padding: Spacing.lg, borderTopWidth: StyleSheet.hairlineWidth },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
+    padding: Spacing.sm,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    marginBottom: Spacing.sm,
+  },
+  errorBannerText: {
+    color: "#991b1b",
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
+  footer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: Spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    zIndex: 100,
+    elevation: 5,
+  },
 });
