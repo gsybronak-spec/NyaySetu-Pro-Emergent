@@ -61,6 +61,10 @@ export default function Cases() {
     }
   }, []);
 
+  useEffect(() => {
+    load(q, filter, showArchived, sort);
+  }, [load, q, filter, showArchived, sort]);
+
   useFocusEffect(useCallback(() => { load(q, filter, showArchived, sort); }, [load, q, filter, showArchived, sort]));
 
   // ------------------------- DESKTOP -------------------------

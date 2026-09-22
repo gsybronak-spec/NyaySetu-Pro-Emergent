@@ -426,6 +426,9 @@ class CaseCreate(BaseModel):
     court: Optional[str] = Field(None, max_length=200)
     court_id: Optional[str] = Field(None, max_length=50)
     court_custom: Optional[str] = Field(None, max_length=200)
+    court_source: Optional[str] = Field(None, max_length=20)  # "catalog" | "custom"
+    custom_court_name_gu: Optional[str] = Field(None, max_length=500)
+    custom_court_name_en: Optional[str] = Field(None, max_length=500)
     district_id: Optional[str] = Field(None, max_length=50)
     taluka_id: Optional[str] = Field(None, max_length=50)
     police_station: Optional[str] = Field(None, max_length=200)
@@ -2642,6 +2645,8 @@ def enrich_case(c: dict) -> dict:
     c["taluka_label"] = (tal.get("gu") if lang == "gu" else tal.get("en")) if tal else None
     if court:
         c["court_label"] = court.get("gu") if lang == "gu" else court.get("en")
+    elif c.get("court_source") == "custom" or c.get("custom_court_name_gu") or c.get("custom_court_name_en"):
+        c["court_label"] = (c.get("custom_court_name_gu") if lang == "gu" else c.get("custom_court_name_en")) or c.get("custom_court_name_en") or c.get("custom_court_name_gu") or c.get("court_custom") or c.get("court") or None
     else:
         c["court_label"] = c.get("court_custom") or c.get("court") or None
     if ps:
@@ -2683,10 +2688,12 @@ def validate_case_refs(data: dict):
     if tid and tid != "other" and did and _TALUKA_MAP.get(tid, {}).get("district_id") not in (None, did):
         raise HTTPException(400, f"Taluka {tid} does not belong to district {did}")
     court = data.get("court_id")
-    if court and court != "other" and court not in _VALID_COURT_IDS:
+    court_source = data.get("court_source")
+    if court_source == "custom" or court == "other":
+        if not (data.get("custom_court_name_gu") or data.get("custom_court_name_en") or data.get("court_custom") or data.get("court")):
+            raise HTTPException(400, "custom court name is required when court is 'other' or custom")
+    elif court and court not in _VALID_COURT_IDS:
         raise HTTPException(400, f"Invalid court_id: {court}")
-    if court == "other" and not (data.get("court_custom") or data.get("court")):
-        raise HTTPException(400, "court_custom is required when court_id is 'other'")
     psid = data.get("police_station_id")
     if psid and psid != "other" and psid not in _VALID_PS_IDS:
         raise HTTPException(400, f"Invalid police_station_id: {psid}")
@@ -2792,6 +2799,19 @@ async def resolve_custom_autofill(case_type_id: Optional[str], custom_fields: Op
 @api.post("/cases")
 async def create_case(req: CaseCreate, user=Depends(get_user)):
     payload = req.model_dump()
+    # Court custom vs catalog handling
+    if payload.get("court_source") == "custom" or payload.get("court_id") in ("other", None):
+        if payload.get("custom_court_name_gu") or payload.get("custom_court_name_en") or payload.get("court_custom"):
+            payload["court_source"] = "custom"
+            payload["court_id"] = None
+            payload["court_custom"] = payload.get("custom_court_name_en") or payload.get("custom_court_name_gu") or payload.get("court_custom")
+            payload["court"] = payload.get("custom_court_name_gu") if payload.get("language") == "gu" else payload.get("custom_court_name_en")
+    elif payload.get("court_id"):
+        payload["court_source"] = "catalog"
+        payload["custom_court_name_gu"] = None
+        payload["custom_court_name_en"] = None
+        payload["court_custom"] = None
+
     validate_case_refs(payload)
     validate_custom_fields(payload.get("custom_fields"))
     client_ctx = client_ctx_from(payload)
@@ -2861,29 +2881,44 @@ async def get_case(case_id: str, user=Depends(get_user)):
 
 @api.put("/cases/{case_id}")
 async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
-    updates = {k: v for k, v in req.model_dump().items() if v is not None}
-    validate_case_refs(updates)
     _snap = await db.collection("cases").document(case_id).get()
     existing = _snap.to_dict() if _snap.exists else None
     if not existing or existing.get("user_id") != user["id"]:
         raise HTTPException(404, "Case not found")
+
+    updates = req.model_dump(exclude_unset=True)
+
+    # Court custom vs catalog handling
+    if updates.get("court_source") == "custom" or updates.get("court_id") == "other" or (updates.get("court_id") is None and (updates.get("custom_court_name_gu") or updates.get("custom_court_name_en"))):
+        updates["court_source"] = "custom"
+        updates["court_id"] = None
+        updates["court_custom"] = updates.get("custom_court_name_en") or updates.get("custom_court_name_gu") or updates.get("court_custom") or existing.get("court_custom")
+        lang = updates.get("language") or existing.get("language") or "en"
+        updates["court"] = updates.get("custom_court_name_gu") if lang == "gu" else updates.get("custom_court_name_en")
+    elif updates.get("court_source") == "catalog" or (updates.get("court_id") and updates.get("court_id") != "other"):
+        updates["court_source"] = "catalog"
+        updates["custom_court_name_gu"] = None
+        updates["custom_court_name_en"] = None
+        updates["court_custom"] = None
+
+    merged_payload = {**existing, **updates}
+    validate_case_refs(merged_payload)
+
     # custom_fields: merge into existing so admin-configured values are never lost.
-    if "custom_fields" in updates:
+    if "custom_fields" in updates and updates["custom_fields"] is not None:
         validate_custom_fields(updates["custom_fields"])
         merged_custom = dict(existing.get("custom_fields") or {})
         merged_custom.update(updates["custom_fields"] or {})
         case_type_id = updates.get("case_type_id") or existing.get("case_type_id")
-        merged_payload = {**existing, **updates}
         updates["custom_fields"] = await resolve_custom_autofill(
             case_type_id, merged_custom, client_ctx_from(merged_payload)
         )
+
     # Flat client fields: default client_name to the primary party name (D3).
     if "party_name" in updates and not updates.get("client_name"):
         updates["client_name"] = updates["party_name"]
+
     updates["updated_at"] = now().isoformat()
-    doc = await db.collection("cases").document(case_id).get()
-    if not doc.exists:
-        raise HTTPException(404, "Case not found")
     await db.collection("cases").document(case_id).set(updates, merge=True)
     _snap = await db.collection("cases").document(case_id).get()
     c = _snap.to_dict() if _snap.exists else None
@@ -3500,13 +3535,23 @@ async def resolve_court_label(raw_court: Optional[str], language: str, case: Opt
 
     # Custom court handling for "other" or non-catalog inputs
     if case:
+        if case.get("court_source") == "custom" or case.get("custom_court_name_gu") or case.get("custom_court_name_en"):
+            custom_lbl = (case.get("custom_court_name_gu") if lang == "gu" else case.get("custom_court_name_en")) or case.get("custom_court_name_en") or case.get("custom_court_name_gu") or case.get("court_custom") or case.get("court")
+            if custom_lbl:
+                return str(custom_lbl).strip()
         if case.get("court_custom"):
             return str(case.get("court_custom")).strip()
         if case.get("court"):
             return str(case.get("court")).strip()
 
     if raw_court and str(raw_court).strip() and str(raw_court).strip() != "other":
-        return str(raw_court).strip()
+        raw_str = str(raw_court).strip()
+        if raw_str in _VALID_COURT_IDS:
+            c_info = _COURT_MAP.get(raw_str) or {}
+            lbl = c_info.get(lang) or c_info.get("en" if lang == "gu" else "gu")
+            if lbl:
+                return str(lbl).strip()
+        return raw_str
 
     return ""
 
@@ -3551,14 +3596,20 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["taluka"] = (tobj.get("gu") or tobj.get("en", "")) if language == "gu" else (tobj.get("en") or tobj.get("gu", ""))
 
     # Synchronize and authoritatively resolve court and court_name from Admin Court Catalog
-    initial_court_raw = ctx.get("court_name") or ctx.get("court")
-    resolved_court = await resolve_court_label(initial_court_raw, language, case=case)
-    if resolved_court:
-        ctx["court"] = resolved_court
-        ctx["court_name"] = resolved_court
-    elif initial_court_raw:
-        ctx["court"] = initial_court_raw
-        ctx["court_name"] = initial_court_raw
+    if ctx.get("court_source") == "custom" or (ctx.get("court_id") in (None, "", "other") and (ctx.get("custom_court_name_gu") or ctx.get("custom_court_name_en"))):
+        custom_court = (ctx.get("custom_court_name_gu") if language == "gu" else ctx.get("custom_court_name_en")) or ctx.get("custom_court_name_en") or ctx.get("custom_court_name_gu")
+        if custom_court:
+            ctx["court"] = custom_court
+            ctx["court_name"] = custom_court
+    else:
+        initial_court_raw = ctx.get("court_name") or ctx.get("court")
+        resolved_court = await resolve_court_label(initial_court_raw, language, case=case)
+        if resolved_court:
+            ctx["court"] = resolved_court
+            ctx["court_name"] = resolved_court
+        elif initial_court_raw and initial_court_raw != "other":
+            ctx["court"] = initial_court_raw
+            ctx["court_name"] = initial_court_raw
     if isinstance(ctx.get("case_type"), str) and ctx["case_type"] in _CASE_TYPE_MAP:
         ctobj = _CASE_TYPE_MAP[ctx["case_type"]]
         ctx["case_type"] = (ctobj.get("gu") or ctobj.get("en", "")) if language == "gu" else (ctobj.get("en") or ctobj.get("gu", ""))
@@ -3577,7 +3628,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             taluka_name = case.get("taluka") or ""
         ctx.setdefault("taluka", taluka_name)
-        case_court = await resolve_court_label(case.get("court_id") or case.get("court_custom") or case.get("court"), language, case=case)
+        if case.get("court_source") == "custom" or case.get("custom_court_name_gu") or case.get("custom_court_name_en"):
+            case_court = (case.get("custom_court_name_gu") if language == "gu" else case.get("custom_court_name_en")) or case.get("custom_court_name_en") or case.get("custom_court_name_gu") or case.get("court_custom") or case.get("court")
+        else:
+            case_court = await resolve_court_label(case.get("court_id") or case.get("court_custom") or case.get("court"), language, case=case)
         if case_court:
             ctx["court"] = case_court
             ctx["court_name"] = case_court
@@ -3671,13 +3725,30 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Ensure both court and court_name are authoritatively resolved and mirrored
     # Guarantees that no intermediate step or raw ID can leak into user-facing output
     court_final = ctx.get("court") or ctx.get("court_name") or ""
-    final_resolved_court = await resolve_court_label(court_final, language, case=case)
-    if final_resolved_court:
-        ctx["court"] = final_resolved_court
-        ctx["court_name"] = final_resolved_court
+    if ctx.get("court_source") == "custom" or (ctx.get("court_id") in (None, "", "other") and (ctx.get("custom_court_name_gu") or ctx.get("custom_court_name_en"))):
+        custom_court = (ctx.get("custom_court_name_gu") if language == "gu" else ctx.get("custom_court_name_en")) or ctx.get("custom_court_name_gu") or ctx.get("custom_court_name_en")
+        if custom_court:
+            ctx["court"] = custom_court
+            ctx["court_name"] = custom_court
     else:
-        ctx["court"] = court_final
-        ctx["court_name"] = court_final
+        final_resolved_court = await resolve_court_label(court_final, language, case=case)
+        if final_resolved_court:
+            ctx["court"] = final_resolved_court
+            ctx["court_name"] = final_resolved_court
+        elif court_final == "other":
+            ctx["court"] = ""
+            ctx["court_name"] = ""
+        else:
+            ctx["court"] = court_final
+            ctx["court_name"] = court_final
+    # Extra check: if ctx["court"] is raw ID in _VALID_COURT_IDS, resolve label
+    for court_key in ("court", "court_name"):
+        c_val = str(ctx.get(court_key) or "").strip()
+        if c_val in _VALID_COURT_IDS:
+            c_info = _COURT_MAP.get(c_val) or {}
+            lbl = c_info.get(language if language in ("gu", "en") else "gu") or c_info.get("gu") or c_info.get("en")
+            if lbl:
+                ctx[court_key] = str(lbl).strip()
 
     # ---- Derived values for the document-return application (never user-entered) ----
     status = ctx.get("case_status")

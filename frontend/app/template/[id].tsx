@@ -244,10 +244,19 @@ export default function TemplateApplication() {
         if (cs.case_number) initialValues["case_number"] = cs.case_number;
         if (cs.district_id) initialValues["district"] = cs.district_id;
         if (cs.taluka_id) initialValues["taluka"] = cs.taluka_id;
-        if (cs.court_id || cs.court || cs.court_label) {
+        if (cs.court_source === "custom" || (!cs.court_id && (cs.custom_court_name_gu || cs.custom_court_name_en || cs.court_custom))) {
+          initialValues["court_source"] = "custom";
+          initialValues["court_id"] = null;
+          initialValues["custom_court_name_gu"] = cs.custom_court_name_gu || "";
+          initialValues["custom_court_name_en"] = cs.custom_court_name_en || cs.court_custom || "";
+          const resolved = (language === "gu" ? cs.custom_court_name_gu : cs.custom_court_name_en) || cs.court_label || cs.court || cs.court_custom || "";
+          initialValues["court"] = resolved;
+          initialValues["court_name"] = resolved;
+        } else if (cs.court_id || cs.court || cs.court_label) {
           const courtVal = cs.court_id || cs.court || cs.court_label;
           initialValues["court"] = courtVal;
           initialValues["court_name"] = cs.court_label || cs.court || cs.court_id;
+          initialValues["court_source"] = "catalog";
         }
         if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
         if (cs.police_station_label) initialValues["police_station"] = cs.police_station_label;
@@ -422,16 +431,29 @@ export default function TemplateApplication() {
     }
 
     // Bidirectional sync and localized resolution for court and court_name
-    const rawCourt = out["court"] || out["court_name"];
-    if (rawCourt) {
-      const cMatch = Array.isArray(courts) ? courts.find((c: any) => c.id === rawCourt || c.en === rawCourt || c.gu === rawCourt) : null;
-      if (cMatch) {
-        const localizedCourt = language === "gu" ? cMatch.gu : cMatch.en;
-        out["court"] = localizedCourt;
-        out["court_name"] = localizedCourt;
-      } else {
-        out["court"] = rawCourt;
-        out["court_name"] = rawCourt;
+    const isCustomCourt = out["court_source"] === "custom" || out["court"] === "other" || out["court_name"] === "other" || values.court_source === "custom" || values.court === "other" || values.court_name === "other";
+    if (isCustomCourt) {
+      const customCourt = (language === "gu" ? values.custom_court_name_gu : values.custom_court_name_en) || values.custom_court_name_gu || values.custom_court_name_en || "";
+      out["court_source"] = "custom";
+      out["court_id"] = null;
+      out["custom_court_name_gu"] = values.custom_court_name_gu;
+      out["custom_court_name_en"] = values.custom_court_name_en;
+      out["court"] = customCourt;
+      out["court_name"] = customCourt;
+    } else {
+      const rawCourt = out["court"] || out["court_name"];
+      if (rawCourt) {
+        const cMatch = Array.isArray(courts) ? courts.find((c: any) => c.id === rawCourt || c.en === rawCourt || c.gu === rawCourt) : null;
+        if (cMatch) {
+          const localizedCourt = language === "gu" ? cMatch.gu : cMatch.en;
+          out["court"] = localizedCourt;
+          out["court_name"] = localizedCourt;
+          out["court_id"] = cMatch.id;
+          out["court_source"] = "catalog";
+        } else {
+          out["court"] = rawCourt;
+          out["court_name"] = rawCourt;
+        }
       }
     }
     if (out["party_1_name"] && !out["party_name"]) out["party_name"] = out["party_1_name"];
@@ -488,7 +510,9 @@ export default function TemplateApplication() {
     const courtFromCatalog = Array.isArray(courts) ? courts.find((c: any) => c.id === caseData.court_id) : null;
     const resolvedCourt = courtFromCatalog
       ? (language === "gu" ? courtFromCatalog.gu : courtFromCatalog.en)
-      : (caseData.court_label || caseData.court || caseData.court_custom);
+      : (caseData.court_source === "custom"
+        ? (language === "gu" ? (caseData.custom_court_name_gu || caseData.court_label || caseData.court_custom) : (caseData.custom_court_name_en || caseData.court_label || caseData.court_custom))
+        : (caseData.court_label || caseData.court || caseData.court_custom));
 
     const src: Record<string, string | undefined> = {
       case_number: caseData.case_number,
@@ -595,7 +619,12 @@ export default function TemplateApplication() {
     if (!caseId) {
       // Required base fields in No-Case mode
       if (!values.district) missing.push("district");
-      if (!values.court && !values.court_name) missing.push("court");
+      if (!values.court && !values.court_name) {
+        missing.push("court");
+      } else if (values.court === "other" || values.court_name === "other" || values.court_source === "custom") {
+        if (!values.custom_court_name_gu?.trim()) missing.push("custom_court_name_gu");
+        if (!values.custom_court_name_en?.trim()) missing.push("custom_court_name_en");
+      }
       if (!values.case_type) missing.push("case_type");
       if (!values.case_number && templateId !== "jamin_bond") missing.push("case_number");
       if (!values.party_name && !values.party_1_name) missing.push("party_name");
@@ -720,24 +749,57 @@ export default function TemplateApplication() {
 
     if (f.type === "select" || f.type === "court_select") {
       if (f.source === "courts" || f.key === "court" || f.key === "court_name") {
+        const isOther = fvalue === "other" || values.court === "other" || values.court_name === "other" || values.court_source === "custom";
         return (
-          <Dropdown
-            key={f.key}
-            testID={`field-${f.key}`}
-            label={label}
-            placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
-            value={fvalue || values.court || values.court_name || null}
-            emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
-            options={courts.map((c: any) => ({
-              id: c.id,
-              label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
-            }))}
-            onChange={(v) => {
-              update(f.key, v);
-              update("court", v);
-              update("court_name", v);
-            }}
-          />
+          <View key={f.key}>
+            <Dropdown
+              testID={`field-${f.key}`}
+              label={label}
+              placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
+              value={isOther ? "other" : (fvalue || values.court || values.court_name || null)}
+              emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
+              options={[
+                ...courts.map((c: any) => ({
+                  id: c.id,
+                  label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+                })),
+                { id: "other", label: "Other / અન્ય કોર્ટ" },
+              ]}
+              onChange={(v) => {
+                if (v === "other") {
+                  update(f.key, "other");
+                  update("court", "other");
+                  update("court_name", "other");
+                  update("court_source", "custom");
+                } else {
+                  update(f.key, v);
+                  update("court", v);
+                  update("court_name", v);
+                  update("court_source", "catalog");
+                  update("custom_court_name_gu", "");
+                  update("custom_court_name_en", "");
+                }
+              }}
+            />
+            {isOther && (
+              <View style={{ gap: Spacing.sm, marginTop: Spacing.xs, marginBottom: Spacing.md }}>
+                <Field
+                  testID="field-custom_court_name_gu"
+                  label={(language === "gu" ? "કોર્ટનું નામ (ગુજરાતીમાં)" : "Gujarati Court Name") + " *"}
+                  placeholder="દા.ત. મહે. પ્રિન્સિપાલ સિવિલ જજ સાહેબશ્રીની કોર્ટ"
+                  value={values.custom_court_name_gu || ""}
+                  onChangeText={(v) => update("custom_court_name_gu", v)}
+                />
+                <Field
+                  testID="field-custom_court_name_en"
+                  label={(language === "gu" ? "કોર્ટનું નામ (અંગ્રેજીમાં)" : "English Court Name") + " *"}
+                  placeholder="e.g. In the Court of Ld. Principal Civil Judge"
+                  value={values.custom_court_name_en || ""}
+                  onChangeText={(v) => update("custom_court_name_en", v)}
+                />
+              </View>
+            )}
+          </View>
         );
       }
       let rawOpts = f.options || [];
@@ -1049,21 +1111,58 @@ export default function TemplateApplication() {
                   onChange={(v) => update("taluka", v)}
                 />
 
-                <Dropdown
-                  testID="field-court"
-                  label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
-                  placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
-                  value={values.court || values.court_name || null}
-                  emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
-                  options={courts.map((c: any) => ({
-                    id: c.id,
-                    label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
-                  }))}
-                  onChange={(v) => {
-                    update("court", v);
-                    update("court_name", v);
-                  }}
-                />
+                {(() => {
+                  const isOther = values.court === "other" || values.court_name === "other" || values.court_source === "custom";
+                  return (
+                    <View>
+                      <Dropdown
+                        testID="field-court"
+                        label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
+                        placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
+                        value={isOther ? "other" : (values.court || values.court_name || null)}
+                        emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
+                        options={[
+                          ...courts.map((c: any) => ({
+                            id: c.id,
+                            label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+                          })),
+                          { id: "other", label: "Other / અન્ય કોર્ટ" },
+                        ]}
+                        onChange={(v) => {
+                          if (v === "other") {
+                            update("court", "other");
+                            update("court_name", "other");
+                            update("court_source", "custom");
+                          } else {
+                            update("court", v);
+                            update("court_name", v);
+                            update("court_source", "catalog");
+                            update("custom_court_name_gu", "");
+                            update("custom_court_name_en", "");
+                          }
+                        }}
+                      />
+                      {isOther && (
+                        <View style={{ gap: Spacing.sm, marginTop: Spacing.xs, marginBottom: Spacing.md }}>
+                          <Field
+                            testID="field-custom_court_name_gu"
+                            label={(language === "gu" ? "કોર્ટનું નામ (ગુજરાતીમાં)" : "Gujarati Court Name") + " *"}
+                            placeholder="દા.ત. મહે. પ્રિન્સિપાલ સિવિલ જજ સાહેબશ્રીની કોર્ટ"
+                            value={values.custom_court_name_gu || ""}
+                            onChangeText={(v) => update("custom_court_name_gu", v)}
+                          />
+                          <Field
+                            testID="field-custom_court_name_en"
+                            label={(language === "gu" ? "કોર્ટનું નામ (અંગ્રેજીમાં)" : "English Court Name") + " *"}
+                            placeholder="e.g. In the Court of Ld. Principal Civil Judge"
+                            value={values.custom_court_name_en || ""}
+                            onChangeText={(v) => update("custom_court_name_en", v)}
+                          />
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
 
                 <Dropdown
                   testID="field-case_type"

@@ -453,6 +453,8 @@ export const api = {
   updateCase: async (id: string, data: any) => {
     const res = await request(`/cases/${id}`, "PUT", data);
     invalidateApiCache("/cases");
+    const token = await getToken();
+    apiGetCache.set(`/cases/${id}::${token || "anon"}`, { data: res, timestamp: Date.now() });
     return res;
   },
   archiveCase: async (id: string) => {

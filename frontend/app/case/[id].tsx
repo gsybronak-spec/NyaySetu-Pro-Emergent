@@ -16,8 +16,7 @@ import { catalogCache } from "@/src/services/catalogCache";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
-  const { isDesktop } = useResponsive();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, _refresh } = useLocalSearchParams<{ id: string; _refresh?: string }>();
   const [c, setC] = useState<any>(null);
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
@@ -65,6 +64,10 @@ export default function CaseDetail() {
       setError(e?.message || "Could not load this case.");
     }
   }, [id]);
+
+  useEffect(() => {
+    load();
+  }, [load, id, _refresh]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -152,8 +155,12 @@ export default function CaseDetail() {
     ["Client Mobile", c.client_mobile],
     ["Client Email", c.client_email],
     ["Client Address", c.client_address],
-    ["Opposite Party", c.opposite_party],
-    ["Court", c.court_label || c.court],
+    [
+      "Court",
+      (c.court_source === "custom"
+        ? (c.language === "gu" ? c.custom_court_name_gu : c.custom_court_name_en) || c.custom_court_name_gu || c.custom_court_name_en
+        : null) || c.court_label || c.court,
+    ],
     ["District", c.district_label],
     ["Taluka", c.taluka_label],
     ["Police Station", c.police_station_label || c.police_station],

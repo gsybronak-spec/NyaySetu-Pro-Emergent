@@ -14,6 +14,7 @@ export default function EditCase() {
 
   useEffect(() => {
     api.getCase(String(id)).then((c) => {
+      const isCustomCourt = c.court_source === "custom" || (!c.court_id && (c.custom_court_name_gu || c.custom_court_name_en || c.court_custom || c.court));
       setInitial({
         language: c.language || "en",
         nickname: c.nickname || "",
@@ -27,9 +28,15 @@ export default function EditCase() {
         complaint_custom: c.complaint_custom || "",
         party_name: c.party_name || "",
         opposite_party: c.opposite_party || "",
-        court_id: c.court_id || null,
+        party_role: c.party_role || "",
+        opposite_party_role: c.opposite_party_role || "",
+        court_id: isCustomCourt ? "other" : (c.court_id || null),
+        court_source: isCustomCourt ? "custom" : "catalog",
+        custom_court_name_gu: c.custom_court_name_gu || (c.language === "gu" ? (c.court_custom || c.court || "") : ""),
+        custom_court_name_en: c.custom_court_name_en || (c.language !== "gu" ? (c.court_custom || c.court || "") : (c.court_custom || "")),
         court_custom: c.court_custom || c.court || "",
         district_id: c.district_id || null,
+        taluka_id: c.taluka_id || null,
         police_station_id: c.police_station_id || null,
         police_station_custom: c.police_station_custom || c.police_station || "",
         notes: c.notes || "",
@@ -42,10 +49,11 @@ export default function EditCase() {
   }, [id]);
 
   const save = async (values: CaseFormValues) => {
+    if (saving) return;
     setSaving(true);
     try {
       await api.updateCase(String(id), values);
-      router.replace({ pathname: "/case/[id]", params: { id: String(id) } });
+      router.replace({ pathname: "/case/[id]", params: { id: String(id), _refresh: String(Date.now()) } });
       setTimeout(() => Alert.alert("Saved", "Case updated successfully."), 300);
     } catch (e: any) {
       Alert.alert("Error", e.message);

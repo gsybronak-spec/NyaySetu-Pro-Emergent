@@ -32,6 +32,9 @@ export interface CaseFormValues {
   opposite_party_role: string;
   court_id: string | null;
   court_custom: string;
+  court_source?: "catalog" | "custom";
+  custom_court_name_gu?: string;
+  custom_court_name_en?: string;
   district_id: string | null;
   taluka_id: string | null;
   police_station_id: string | null;
@@ -61,6 +64,9 @@ const DEFAULTS: CaseFormValues = {
   opposite_party_role: "",
   court_id: null,
   court_custom: "",
+  court_source: "catalog",
+  custom_court_name_gu: "",
+  custom_court_name_en: "",
   district_id: null,
   taluka_id: null,
   police_station_id: null,
@@ -266,7 +272,10 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       district_id: dId,
       taluka_id: null,
       court_id: null,
+      court_source: "catalog",
       court_custom: "",
+      custom_court_name_gu: "",
+      custom_court_name_en: "",
     }));
   };
 
@@ -282,8 +291,28 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const courtOptions = [
     ...historicalCourtOption,
     ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
-    { id: "other", label: language === "gu" ? "અન્ય (જાતે લખો)" : "Other (type manually)", pinnable: false },
+    { id: "other", label: "Other / અન્ય કોર્ટ", sublabel: language === "gu" ? "અન્ય કોર્ટ દાખલ કરો" : "Enter custom court name", pinnable: false },
   ];
+
+  const onCourtChange = (v: string | null) => {
+    if (v === "other") {
+      setForm((f) => ({
+        ...f,
+        court_id: "other",
+        court_source: "custom",
+      }));
+    } else {
+      setForm((f) => ({
+        ...f,
+        court_id: v,
+        court_source: "catalog",
+        custom_court_name_gu: "",
+        custom_court_name_en: "",
+        court_custom: "",
+      }));
+    }
+  };
+
   const update = (k: keyof CaseFormValues, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const updateCustom = (k: string, v: any) => setCustomValues((prev) => ({ ...prev, [k]: v }));
 
@@ -367,6 +396,24 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const allDynamicFields = useMemo(() => [...dynamicFields, ...orphanCustomFields], [dynamicFields, orphanCustomFields]);
 
   const handleFormSubmit = () => {
+    if (saving) return;
+
+    // Court validation when other/custom selected
+    const isCustomCourt = form.court_id === "other" || form.court_source === "custom";
+    if (isCustomCourt) {
+      const guTrim = (form.custom_court_name_gu || "").trim();
+      const enTrim = (form.custom_court_name_en || "").trim();
+      if (!guTrim || !enTrim) {
+        Alert.alert(
+          language === "gu" ? "વિગત ખૂટે છે" : "Missing Information",
+          language === "gu"
+            ? "કૃપા કરીને અન્ય કોર્ટ માટે ગુજરાતી અને અંગ્રેજી બંને કોર્ટનું નામ દાખલ કરો."
+            : "Please provide both Gujarati and English Court Name for Other court."
+        );
+        return;
+      }
+    }
+
     // 1. Resolve autofill_map against client context for any empty mapped fields (D1).
     const ctx = buildClientContext(form, districts);
     const finalCustom: Record<string, any> = { ...customValues };
@@ -387,13 +434,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     // 3. Flat client fields (D3). client_name/client_district are derived and
     //    stored on the case (the API accepts them; they are not form state).
     const d = districts.find((x) => x.id === form.district_id);
-    const payload: CaseFormValues & { client_name?: string; client_district?: string } = {
+    const payload: any = {
       ...form,
+      court_id: isCustomCourt ? null : form.court_id,
+      court_source: isCustomCourt ? "custom" : "catalog",
+      custom_court_name_gu: isCustomCourt ? form.custom_court_name_gu?.trim() : null,
+      custom_court_name_en: isCustomCourt ? form.custom_court_name_en?.trim() : null,
+      court_custom: isCustomCourt ? (form.custom_court_name_en?.trim() || form.custom_court_name_gu?.trim()) : null,
+      court: isCustomCourt
+        ? (form.language === "gu" ? form.custom_court_name_gu?.trim() : form.custom_court_name_en?.trim())
+        : undefined,
       client_name: form.party_name || undefined,
       client_district: (form.language === "gu" ? d?.gu : d?.en) || d?.en || undefined,
       custom_fields: finalCustom,
     };
-    onSubmit(payload as CaseFormValues);
+    onSubmit(payload);
   };
 
   const renderDynamicField = (df: any) => {
@@ -733,10 +788,25 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   onToggleFavourite={toggleFavCourt}
                   emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
                   options={courtOptions}
-                  onChange={(v) => update("court_id", v)}
+                  onChange={onCourtChange}
                 />
-                {form.court_id === "other" && (
-                  <Field testID="court-custom" label="Enter Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court_custom} onChangeText={(v) => update("court_custom", v)} />
+                {(form.court_id === "other" || form.court_source === "custom") && (
+                  <View style={{ gap: Spacing.sm, marginTop: Spacing.xs, marginBottom: Spacing.md }}>
+                    <Field
+                      testID="custom-court-name-gu"
+                      label={(language === "gu" ? "કોર્ટનું નામ (ગુજરાતીમાં)" : "Gujarati Court Name") + " *"}
+                      placeholder="દા.ત. મહે. પ્રિન્સિપાલ સિવિલ જજ સાહેબશ્રીની કોર્ટ"
+                      value={form.custom_court_name_gu || ""}
+                      onChangeText={(v) => update("custom_court_name_gu", v)}
+                    />
+                    <Field
+                      testID="custom-court-name-en"
+                      label={(language === "gu" ? "કોર્ટનું નામ (અંગ્રેજીમાં)" : "English Court Name") + " *"}
+                      placeholder="e.g. In the Court of Ld. Principal Civil Judge"
+                      value={form.custom_court_name_en || ""}
+                      onChangeText={(v) => update("custom_court_name_en", v)}
+                    />
+                  </View>
                 )}
               </View>
             </View>
@@ -1016,10 +1086,25 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             onToggleFavourite={toggleFavCourt}
             emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
             options={courtOptions}
-            onChange={(v) => update("court_id", v)}
+            onChange={onCourtChange}
           />
-          {form.court_id === "other" && (
-            <Field testID="court-custom" label="Enter Court" placeholder="e.g. Ld. Metropolitan Magistrate" value={form.court_custom} onChangeText={(v) => update("court_custom", v)} />
+          {(form.court_id === "other" || form.court_source === "custom") && (
+            <View style={{ gap: Spacing.sm, marginTop: Spacing.xs, marginBottom: Spacing.md }}>
+              <Field
+                testID="custom-court-name-gu"
+                label={(language === "gu" ? "કોર્ટનું નામ (ગુજરાતીમાં)" : "Gujarati Court Name") + " *"}
+                placeholder="દા.ત. મહે. પ્રિન્સિપાલ સિવિલ જજ સાહેબશ્રીની કોર્ટ"
+                value={form.custom_court_name_gu || ""}
+                onChangeText={(v) => update("custom_court_name_gu", v)}
+              />
+              <Field
+                testID="custom-court-name-en"
+                label={(language === "gu" ? "કોર્ટનું નામ (અંગ્રેજીમાં)" : "English Court Name") + " *"}
+                placeholder="e.g. In the Court of Ld. Principal Civil Judge"
+                value={form.custom_court_name_en || ""}
+                onChangeText={(v) => update("custom_court_name_en", v)}
+              />
+            </View>
           )}
         </KeyboardAwareScrollView>
 
