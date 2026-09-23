@@ -77,9 +77,13 @@ def _unique_subset_tag():
         finally:
             restore()
 
-from docx import Document
-from docx.shared import Cm, Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+try:
+    from docx import Document
+    from docx.shared import Cm, Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+except ImportError:
+    Document = None
+    Cm = Pt = WD_ALIGN_PARAGRAPH = None
 
 # ---- ODT (OpenDocument) namespace map ----
 ODT_NS = {
@@ -516,21 +520,74 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
     nonempty = 0
     in_table = False
     table_rows = []
+    table_row_meta = []
+    table_meta = {}
 
     for raw in raw_lines:
         line = raw.strip()
         
-        if line == "[TABLE_START]":
+        if line == "[TABLE_START]" or line.startswith("[TABLE_START"):
             in_table = True
             table_rows = []
+            table_row_meta = []
+            table_meta = {}
+            cols_m = re.search(r'cols="([^"]+)"', line)
+            if cols_m:
+                table_meta["cols"] = [float(x.strip()) for x in cols_m.group(1).split(",")]
+            align_m = re.search(r'align="([^"]+)"', line)
+            if align_m:
+                table_meta["align"] = [x.strip() for x in align_m.group(1).split(",")]
             continue
         if in_table:
             if line == "[TABLE_END]":
-                blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "table", "rows": table_rows})
+                blocks.append({
+                    "text": "",
+                    "align": "left",
+                    "bold": False,
+                    "indent": False,
+                    "section": "table",
+                    "rows": table_rows,
+                    "row_meta": table_row_meta,
+                    "meta": table_meta,
+                })
                 in_table = False
             else:
                 if line:
-                    table_rows.append([cell.strip() for cell in line.split(" | ")])
+                    is_header = False
+                    row_line = line
+                    if row_line.startswith("[HEADER]"):
+                        is_header = True
+                        row_line = row_line[len("[HEADER]"):].strip()
+                    raw_cells = [c.strip() for c in row_line.split(" | ")]
+                    clean_cells = []
+                    cell_aligns = []
+                    cell_bolds = []
+                    for c_text in raw_cells:
+                        c_align = None
+                        c_bold = is_header
+                        if c_text.startswith("[RIGHT]"):
+                            c_align = "right"
+                            c_text = c_text[7:].strip()
+                        elif c_text.startswith("[CENTER]"):
+                            c_align = "center"
+                            c_text = c_text[8:].strip()
+                        elif c_text.startswith("[LEFT]"):
+                            c_align = "left"
+                            c_text = c_text[6:].strip()
+                        if c_text.startswith("[BOLD]"):
+                            c_bold = True
+                            c_text = c_text[6:].strip()
+                            if c_text.endswith("[/BOLD]"):
+                                c_text = c_text[:-7].strip()
+                        clean_cells.append(c_text)
+                        cell_aligns.append(c_align)
+                        cell_bolds.append(c_bold)
+                    table_rows.append(clean_cells)
+                    table_row_meta.append({
+                        "is_header": is_header,
+                        "align": cell_aligns,
+                        "bold": cell_bolds,
+                    })
             continue
 
         if line == "--- PAGE BREAK ---":
@@ -897,38 +954,101 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
 
         if b.get("section") == "table":
             table_data = []
-            for row in b.get("rows", []):
+            row_meta = b.get("row_meta", [])
+            meta = b.get("meta", {})
+            cols_spec = meta.get("cols")
+            default_aligns = meta.get("align", [])
+            raw_rows = b.get("rows", [])
+            if not raw_rows:
+                continue
+
+            if cols_spec:
+                num_cols = len(cols_spec)
+            else:
+                num_cols = max((len(r) for r in raw_rows), default=1)
+
+            page_w = pagesize[0]
+            margin_l = s["margin_left_cm"] * 28.35
+            margin_r = s["margin_right_cm"] * 28.35
+            max_width = page_w - margin_l - margin_r
+
+            if cols_spec:
+                total_w = sum(cols_spec)
+                col_widths = [(w / total_w) * max_width for w in cols_spec]
+            else:
+                col_widths = [max_width / max(1, num_cols)] * num_cols
+
+            span_commands = []
+            for r_idx, row in enumerate(raw_rows):
                 table_row = []
-                for cell in row:
+                r_m = row_meta[r_idx] if r_idx < len(row_meta) else {}
+                is_hdr = r_m.get("is_header", False)
+                is_span = (len(row) == 1 and num_cols > 1)
+
+                if is_span:
+                    cell_text = row[0].strip()
+                    c_align_str = (r_m.get("align", [None])[0] or 
+                                   (default_aligns[0] if default_aligns else "right"))
+                    c_align = 2 if c_align_str == "right" else (1 if c_align_str == "center" else 0)
+                    c_bold = r_m.get("bold", [False])[0] or is_hdr
+                    c_font = font_bold if c_bold else font_normal
                     if language == "gu":
-                        safe = _apply_latin_fallback_markup(cell.strip(), latin_font=latin_fallback_normal)
+                        safe = _apply_latin_fallback_markup(cell_text, latin_font=latin_fallback_bold if c_bold else latin_fallback_normal)
                     else:
-                        safe = cell.strip().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        safe = cell_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                     style = ParagraphStyle(
-                        "p",
-                        fontName=font_normal,
+                        f"p_tbl_{r_idx}_0",
+                        fontName=c_font,
                         fontSize=body_sz,
                         leading=max(raw_ls, body_sz * 1.25, 16.0),
-                        alignment=0, # Left
+                        alignment=c_align,
                     )
                     table_row.append(Paragraph(safe, style))
+                    for c_pad in range(1, num_cols):
+                        table_row.append(Paragraph("", style))
+                    span_commands.append(('SPAN', (0, r_idx), (num_cols - 1, r_idx)))
+                else:
+                    for c_idx, cell in enumerate(row):
+                        cell_text = cell.strip()
+                        c_align_str = None
+                        if r_m.get("align") and c_idx < len(r_m["align"]):
+                            c_align_str = r_m["align"][c_idx]
+                        if not c_align_str and c_idx < len(default_aligns):
+                            c_align_str = default_aligns[c_idx]
+                        if is_hdr and not c_align_str:
+                            c_align_str = "center"
+                        c_align = 2 if c_align_str == "right" else (1 if c_align_str == "center" else 0)
+                        c_bold = False
+                        if r_m.get("bold") and c_idx < len(r_m["bold"]):
+                            c_bold = r_m["bold"][c_idx]
+                        if is_hdr:
+                            c_bold = True
+                        c_font = font_bold if c_bold else font_normal
+                        if language == "gu":
+                            safe = _apply_latin_fallback_markup(cell_text, latin_font=latin_fallback_bold if c_bold else latin_fallback_normal)
+                        else:
+                            safe = cell_text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        style = ParagraphStyle(
+                            f"p_tbl_{r_idx}_{c_idx}",
+                            fontName=c_font,
+                            fontSize=body_sz,
+                            leading=max(raw_ls, body_sz * 1.25, 16.0),
+                            alignment=c_align,
+                        )
+                        table_row.append(Paragraph(safe, style))
+                    while len(table_row) < num_cols:
+                        table_row.append(Paragraph("", style))
                 table_data.append(table_row)
-            
+
             if table_data:
-                # equally distribute width
-                cols = len(table_data[0])
-                page_w = pagesize[0]
-                margin_l = s["margin_left_cm"] * 28.35
-                margin_r = s["margin_right_cm"] * 28.35
-                max_width = page_w - margin_l - margin_r
-                col_width = max_width / max(1, cols)
-                
-                t = RLTable(table_data, colWidths=[col_width]*cols)
-                t.setStyle(RLTableStyle([
-                    ('INNERGRID', (0,0), (-1,-1), 0.25, colors.black),
-                    ('BOX', (0,0), (-1,-1), 0.25, colors.black),
+                t = RLTable(table_data, colWidths=col_widths)
+                t_style = [
+                    ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
+                    ('BOX', (0,0), (-1,-1), 0.5, colors.black),
                     ('VALIGN', (0,0), (-1,-1), 'TOP'),
-                ]))
+                ]
+                t_style.extend(span_commands)
+                t.setStyle(RLTableStyle(t_style))
                 story.append(t)
             continue
         if language == "gu":
@@ -1282,21 +1402,68 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
             continue
         if b.get("section") == "table":
             table_shaped = []
-            cols = len(b.get("rows", [[]])[0]) if b.get("rows") else 1
-            col_width = max_width / max(1, cols)
-            for row in b.get("rows", []):
+            row_meta = b.get("row_meta", [])
+            meta = b.get("meta", {})
+            cols_spec = meta.get("cols")
+            default_aligns = meta.get("align", [])
+            raw_rows = b.get("rows", [])
+            if not raw_rows:
+                shaped.append({"type": "table", "rows": [], "num_cols": 1, "col_widths": [max_width]})
+                continue
+
+            if cols_spec:
+                num_cols = len(cols_spec)
+                total_w = sum(cols_spec)
+                col_widths = [(w / total_w) * max_width for w in cols_spec]
+            else:
+                num_cols = max((len(r) for r in raw_rows), default=1)
+                col_widths = [max_width / max(1, num_cols)] * num_cols
+
+            for r_idx, row in enumerate(raw_rows):
+                r_m = row_meta[r_idx] if r_idx < len(row_meta) else {}
+                is_hdr = r_m.get("is_header", False)
                 row_shaped = []
-                for cell in row:
+                is_span = (len(row) == 1 and num_cols > 1)
+
+                for c_idx, cell in enumerate(row):
                     cell_text = cell.strip()
-                    lines, space_adv = _wrap_hb_lines(hb_font, upem, cell_text, body_size, col_width - 10, latin_font=latin_normal)
+                    c_w = max_width if is_span else (col_widths[c_idx] if c_idx < len(col_widths) else col_widths[-1])
+                    c_align_str = None
+                    if r_m.get("align") and c_idx < len(r_m["align"]):
+                        c_align_str = r_m["align"][c_idx]
+                    if not c_align_str and is_span and default_aligns:
+                        c_align_str = default_aligns[0]
+                    elif not c_align_str and c_idx < len(default_aligns):
+                        c_align_str = default_aligns[c_idx]
+                    if is_hdr and not c_align_str:
+                        c_align_str = "center"
+                    if not c_align_str:
+                        c_align_str = "left"
+
+                    c_bold = False
+                    if r_m.get("bold") and c_idx < len(r_m["bold"]):
+                        c_bold = r_m["bold"][c_idx]
+                    if is_hdr:
+                        c_bold = True
+                    c_latin = latin_bold if c_bold else latin_normal
+
+                    lines, space_adv = _wrap_hb_lines(hb_font, upem, cell_text, body_size, c_w - 10, latin_font=c_latin)
                     for ln in lines:
                         for w in ln["words"]:
                             for g in w:
                                 if g.get("gid") is not None:
                                     used_gids.add(g["gid"])
-                    row_shaped.append((lines, space_adv))
+                    row_shaped.append({
+                        "lines": lines,
+                        "space_adv": space_adv,
+                        "width": c_w,
+                        "align": c_align_str,
+                        "bold": c_bold,
+                        "latin": c_latin,
+                        "is_span": is_span,
+                    })
                 table_shaped.append(row_shaped)
-            shaped.append({"type": "table", "rows": table_shaped, "cols": cols, "col_width": col_width})
+            shaped.append({"type": "table", "rows": table_shaped, "num_cols": num_cols, "col_widths": col_widths})
             continue
 
         text = (b.get("text") or "").strip()
@@ -1330,29 +1497,44 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                     y = page_h - margin_t
                     continue
                 elif entry.get("type") == "table":
-                    col_width = entry["col_width"]
+                    col_widths = entry["col_widths"]
                     c.setFont(font_name, body_size)
+                    c.setLineWidth(0.5)
                     for row_shaped in entry["rows"]:
-                        max_lines = max((len(cell_lines) for cell_lines, _ in row_shaped), default=1)
+                        max_lines = max((len(cell_data["lines"]) for cell_data in row_shaped), default=1)
                         row_height = max_lines * (body_size * 1.5) + 10
                         if y - row_height < margin_b:
                             c.showPage()
                             c.setFont(font_name, body_size)
+                            c.setLineWidth(0.5)
                             y = page_h - margin_t
                         
-                        for c_idx, (cell_lines, cell_space_adv) in enumerate(row_shaped):
-                            cell_x = margin_l + c_idx * col_width
-                            c.rect(cell_x, y - row_height, col_width, row_height)
+                        curr_x = margin_l
+                        for c_idx, cell_data in enumerate(row_shaped):
+                            cell_w = cell_data["width"]
+                            cell_lines = cell_data["lines"]
+                            cell_space_adv = cell_data["space_adv"]
+                            cell_align = cell_data["align"]
+                            cell_latin = cell_data["latin"]
+                            
+                            c.rect(curr_x, y - row_height, cell_w, row_height)
                             
                             cell_y = y - 5 - body_size
                             for ln in cell_lines:
-                                x_pos = cell_x + 5
+                                line_w = ln["width"]
+                                if cell_align == "right":
+                                    x_pos = curr_x + cell_w - 5 - line_w
+                                elif cell_align == "center":
+                                    x_pos = curr_x + (cell_w - line_w) / 2.0
+                                else:
+                                    x_pos = curr_x + 5
+                                    
                                 if ln.get("text"):
                                     c._code.append(f"/Span<</ActualText <FEFF{ln['text'].encode('utf-16-be').hex().upper()}> >> BDC")
                                 for wi, w in enumerate(ln["words"]):
                                     for g in w:
                                         if g.get("is_latin"):
-                                            c.setFont(g.get("font", latin_normal), body_size)
+                                            c.setFont(g.get("font", cell_latin), body_size)
                                             c.drawString(x_pos + g["xoff"], cell_y + g["yoff"], g["text"])
                                             c.setFont(font_name, body_size)
                                         else:
@@ -1364,6 +1546,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                                 if ln.get("text"):
                                     c._code.append("EMC")
                                 cell_y -= (body_size * 1.5)
+                            curr_x += cell_w
                         y -= row_height
                     continue
 
@@ -1756,10 +1939,17 @@ def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = N
             with _unique_subset_tag():
                 return _generate_pdf_hb_inner(blocks, language, settings)
         except Exception:
-            return generate_pdf_playwright(blocks, language, settings), {
-                "engine": "chromium",
-                "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
-            }
+            try:
+                with _unique_subset_tag():
+                    return _generate_pdf_reportlab_inner(blocks, language, settings), {
+                        "engine": "reportlab",
+                        "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
+                    }
+            except Exception:
+                return generate_pdf_playwright(blocks, language, settings), {
+                    "engine": "chromium",
+                    "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
+                }
     try:
         with _unique_subset_tag():
             return _generate_pdf_reportlab_inner(blocks, language, settings), {
@@ -1927,16 +2117,32 @@ def generate_odt(blocks: list, language: str = "en", settings: dict = None) -> s
             table_data = b.get("rows", [])
             if not table_data:
                 continue
-            cols = len(table_data[0]) if table_data else 1
+            meta = b.get("meta", {})
+            cols_spec = meta.get("cols")
+            num_cols = len(cols_spec) if cols_spec else max((len(r) for r in table_data), default=1)
+            row_meta = b.get("row_meta", [])
             table_xml = ['<table:table>']
-            table_xml.append(f'<table:table-column table:number-columns-repeated="{cols}"/>')
-            for row in table_data:
+            table_xml.append(f'<table:table-column table:number-columns-repeated="{num_cols}"/>')
+            for r_idx, row in enumerate(table_data):
+                r_m = row_meta[r_idx] if r_idx < len(row_meta) else {}
                 table_xml.append('<table:table-row>')
-                for cell in row:
-                    table_xml.append('<table:table-cell>')
-                    sid = style_id_for("left", False, False, False)
-                    table_xml.append(f'<text:p text:style-name="{sid}">{escape(cell.strip())}</text:p>')
+                if len(row) == 1 and num_cols > 1:
+                    align_str = (r_m.get("align", [None])[0] or "right")
+                    sid = style_id_for(align_str, False, False, False)
+                    table_xml.append(f'<table:table-cell table:number-columns-spanned="{num_cols}">')
+                    table_xml.append(f'<text:p text:style-name="{sid}">{escape(row[0].strip())}</text:p>')
                     table_xml.append('</table:table-cell>')
+                else:
+                    for c_idx, cell in enumerate(row):
+                        c_align = r_m.get("align", [None])[c_idx] if r_m.get("align") and c_idx < len(r_m["align"]) else "left"
+                        c_bold = r_m.get("bold", [False])[c_idx] if r_m.get("bold") and c_idx < len(r_m["bold"]) else False
+                        if r_m.get("is_header"):
+                            c_align = "center"
+                            c_bold = True
+                        sid = style_id_for(c_align or "left", c_bold, False, False)
+                        table_xml.append('<table:table-cell>')
+                        table_xml.append(f'<text:p text:style-name="{sid}">{escape(cell.strip())}</text:p>')
+                        table_xml.append('</table:table-cell>')
                 table_xml.append('</table:table-row>')
             table_xml.append('</table:table>')
             body_parts.append(''.join(table_xml))
@@ -2049,16 +2255,44 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
             table_data = b.get("rows", [])
             if not table_data:
                 continue
-            table = doc.add_table(rows=len(table_data), cols=len(table_data[0]))
+            meta = b.get("meta", {})
+            cols_spec = meta.get("cols")
+            num_cols = len(cols_spec) if cols_spec else max((len(r) for r in table_data), default=1)
+            row_meta = b.get("row_meta", [])
+            table = doc.add_table(rows=len(table_data), cols=num_cols)
             table.style = 'Table Grid'
             for r_idx, row in enumerate(table_data):
-                for c_idx, cell_text in enumerate(row):
-                    cell = table.cell(r_idx, c_idx)
-                    cell.text = cell_text
-                    for paragraph in cell.paragraphs:
-                        for r in paragraph.runs:
-                            r.font.name = font_name
-                            r.font.size = Pt(s["body_size"])
+                r_m = row_meta[r_idx] if r_idx < len(row_meta) else {}
+                if len(row) == 1 and num_cols > 1:
+                    a = table.cell(r_idx, 0)
+                    b_cell = table.cell(r_idx, num_cols - 1)
+                    merged = a.merge(b_cell)
+                    merged.text = row[0]
+                    p = merged.paragraphs[0]
+                    align_str = (r_m.get("align", [None])[0] or "right")
+                    if align_str == "right":
+                        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    elif align_str == "center":
+                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    else:
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                    for r in p.runs:
+                        r.font.name = font_name
+                        r.font.size = Pt(s["body_size"])
+                else:
+                    for c_idx, cell_text in enumerate(row):
+                        if c_idx < num_cols:
+                            cell = table.cell(r_idx, c_idx)
+                            cell.text = cell_text
+                            p = cell.paragraphs[0]
+                            c_align = r_m.get("align", [None])[c_idx] if r_m.get("align") and c_idx < len(r_m["align"]) else None
+                            if c_align == "right":
+                                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                            elif c_align == "center" or r_m.get("is_header"):
+                                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            for r in p.runs:
+                                r.font.name = font_name
+                                r.font.size = Pt(s["body_size"])
             continue
         if b.get("section") == "spacer" or not b.get("text"):
             p = doc.add_paragraph("")

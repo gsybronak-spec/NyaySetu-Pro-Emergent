@@ -3036,6 +3036,17 @@ def _get_canonical_exhibit_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "document_exhibit_application"), None)
 
 
+def _get_canonical_certified_copy_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "certified_copy_application"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "certified_copy_application"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3068,8 +3079,43 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_cc = db.collection("templates").document("certified_copy_application")
+            snap_cc = await doc_ref_cc.get()
+            cc_seed = _get_canonical_certified_copy_template()
+            if cc_seed:
+                if not snap_cc.exists:
+                    await doc_ref_cc.set({
+                        **cc_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_cc = snap_cc.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_cc.get("content_gu") != cc_seed["content_gu"]:
+                        update_dict["content_gu"] = cc_seed["content_gu"]
+                        needs_update = True
+                    if cur_cc.get("content_en") != cc_seed["content_en"]:
+                        update_dict["content_en"] = cc_seed["content_en"]
+                        needs_update = True
+                    if cur_cc.get("settings") != cc_seed["settings"]:
+                        update_dict["settings"] = cc_seed["settings"]
+                        needs_update = True
+                    if cur_cc.get("fields") != cc_seed.get("fields"):
+                        update_dict["fields"] = cc_seed["fields"]
+                        needs_update = True
+                    if cur_cc.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_cc.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
-        logger.warning(f"Could not heal document_exhibit_application in db: {e}")
+        logger.warning(f"Could not heal templates in db: {e}")
 
 
 _PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
@@ -3124,6 +3170,48 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application"):
+                cc_seed = _get_canonical_certified_copy_template()
+                if cc_seed:
+                    needs_update = False
+                    if t.get("content_gu") != cc_seed["content_gu"]:
+                        t["content_gu"] = cc_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != cc_seed["content_en"]:
+                        t["content_en"] = cc_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != cc_seed["settings"]:
+                        t["settings"] = cc_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != cc_seed.get("fields"):
+                        t["fields"] = cc_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "certified_copy_application")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
+
+        found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
+        if not found_cc and "certified_copy_application" not in deleted_ids:
+            cc_seed = _get_canonical_certified_copy_template()
+            if cc_seed:
+                db_templates.append(dict(cc_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("certified_copy_application").set({
+                            **cc_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
     
     if not db_templates and db is None:
         db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
@@ -3194,7 +3282,39 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "certified_copy_application" or template_id == "certified_copy_application"):
+            cc_seed = _get_canonical_certified_copy_template()
+            if cc_seed:
+                needs_update = False
+                if t.get("content_gu") != cc_seed["content_gu"]:
+                    t["content_gu"] = cc_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != cc_seed["content_en"]:
+                    t["content_en"] = cc_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != cc_seed["settings"]:
+                    t["settings"] = cc_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != cc_seed.get("fields"):
+                    t["fields"] = cc_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
+        cc_seed = _get_canonical_certified_copy_template()
+        if cc_seed and "certified_copy_application" not in deleted_ids:
+            return {**cc_seed, "format_version": cc_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
     return None
 
 
@@ -3272,6 +3392,17 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["settings"] = ex_seed["settings"]
                 if t.get("fields") != ex_seed.get("fields"):
                     t["fields"] = ex_seed["fields"]
+        if (t.get("id") == "certified_copy_application" or t_id == "certified_copy_application"):
+            cc_seed = _get_canonical_certified_copy_template()
+            if cc_seed:
+                if t.get("content_gu") != cc_seed["content_gu"]:
+                    t["content_gu"] = cc_seed["content_gu"]
+                if t.get("content_en") != cc_seed["content_en"]:
+                    t["content_en"] = cc_seed["content_en"]
+                if t.get("settings") != cc_seed["settings"]:
+                    t["settings"] = cc_seed["settings"]
+                if t.get("fields") != cc_seed.get("fields"):
+                    t["fields"] = cc_seed["fields"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -3897,6 +4028,26 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         today_date = now().strftime("%d/%m/%Y")
         ctx["date"] = today_date
         ctx["date_display"] = today_date
+
+    # Format case_date if YYYY-MM-DD
+    _cd = ctx.get("case_date")
+    if isinstance(_cd, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _cd):
+        ctx["case_date"] = f"{_cd[8:10]}/{_cd[5:7]}/{_cd[0:4]}"
+
+    # Map case_date_type between Gujarati and English
+    cdt = ctx.get("case_date_type")
+    if cdt:
+        if language == "en":
+            if cdt in ("મુદ્દત તારીખ", "next_hearing_date", "Next Hearing Date"):
+                ctx["case_date_type"] = "Next Hearing Date"
+            elif cdt in ("ફેંસલ તારીખ", "disposal_date", "Disposal Date"):
+                ctx["case_date_type"] = "Disposal Date"
+        else:
+            if cdt in ("Next Hearing Date", "next_hearing_date", "મુદ્દત તારીખ"):
+                ctx["case_date_type"] = "મુદ્દત તારીખ"
+            elif cdt in ("Disposal Date", "disposal_date", "ફેંસલ તારીખ"):
+                ctx["case_date_type"] = "ફેંસલ તારીખ"
+
     return ctx
 
 
@@ -8675,6 +8826,20 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_en": ex_seed["content_en"],
                         "settings": ex_seed["settings"],
                         "fields": ex_seed["fields"],
+                    })
+            if t["id"] == "certified_copy_application":
+                cc_seed = _get_canonical_certified_copy_template()
+                if cc_seed and (
+                    existing.get("content_gu") != cc_seed["content_gu"]
+                    or existing.get("content_en") != cc_seed["content_en"]
+                    or existing.get("settings") != cc_seed["settings"]
+                    or existing.get("fields") != cc_seed.get("fields")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": cc_seed["content_gu"],
+                        "content_en": cc_seed["content_en"],
+                        "settings": cc_seed["settings"],
+                        "fields": cc_seed["fields"],
                     })
             skipped_ids.append(t["id"])
             continue

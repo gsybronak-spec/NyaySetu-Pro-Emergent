@@ -2500,6 +2500,352 @@ Place : {{taluka_place}}
 --------------------
 {{representing_party_role}}'s Advocate""",
     },
+    {
+        "id": "certified_copy_application",
+        "name_en": "Application for Obtaining Certified Copy",
+        "name_gu": "પ્રમાણિત નકલ મેળવવા બાબત",
+        "category": "General",
+        "aliases": [
+            "certified copy",
+            "certified copy application",
+            "pramanit nakal",
+            "pramanit nakal melavva babat",
+            "પ્રમાણિત નકલ મેળવવા બાબત",
+            "પ્રમાણિત નકલ",
+            "નકલ અરજી",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટનું નામ",
+                "type": "select",
+                "required": True,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "additional_senior_civil_judge_acjm", "label_en": "Additional Senior Civil Judge & ACJM", "label_gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
+                    {"value": "principal_district_sessions_judge", "label_en": "Principal District & Sessions Judge", "label_gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
+                    {"value": "additional_civil_judge_jmfc", "label_en": "Additional Civil Judge & JMFC", "label_gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
+                    {"value": "civil_judge_jmfc", "label_en": "Civil Judge & JMFC", "label_gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
+                    {"value": "senior_civil_judge", "label_en": "Senior Civil Judge", "label_gu": "સિનિયર સિવિલ જજ"},
+                    {"value": "additional_district_judge", "label_en": "Additional District Judge", "label_gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
+                    {"value": "metropolitan_magistrate", "label_en": "Metropolitan Magistrate", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
+                    {"value": "court_of_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": True,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "અમદાવાદ શહેર", "label_en": "Ahmedabad City", "label_gu": "અમદાવાદ શહેર", "district_id": "ahmedabad"},
+                    {"value": "બાવળા", "label_en": "Bavla", "label_gu": "બાવળા", "district_id": "ahmedabad"},
+                    {"value": "દાસક્રોઈ", "label_en": "Daskroi", "label_gu": "દાસક્રોઈ", "district_id": "ahmedabad"},
+                    {"value": "ગાંધીનગર", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર", "district_id": "gandhinagar"},
+                    {"value": "કલોલ", "label_en": "Kalol", "label_gu": "કલોલ", "district_id": "gandhinagar"},
+                    {"value": "માણસા", "label_en": "Mansa", "label_gu": "માણસા", "district_id": "gandhinagar"},
+                    {"value": "દહેગામ", "label_en": "Dehgam", "label_gu": "દહેગામ", "district_id": "gandhinagar"},
+                ],
+            },
+            {
+                "key": "court_officer_detail",
+                "label_en": "Court Officer / Judge Details",
+                "label_gu": "કયા સાહેબની કોર્ટનો કેસ છે તેની વિગત",
+                "type": "text",
+                "required": True,
+                "placeholder": "કયા સાહેબની કોર્ટ નો કેસ છે તેની વિગત",
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": True,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "civil_suit", "label_en": "Civil Suit", "label_gu": "સિવિલ સૂટ"},
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર સિવિલ સૂટ"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ સિવિલ સૂટ"},
+                    {"value": "commercial_suit", "label_en": "Commercial Suit", "label_gu": "કોમર્શિયલ સૂટ"},
+                    {"value": "civil_appeal", "label_en": "Civil Appeal", "label_gu": "સિવિલ અપીલ"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "criminal_complaint", "label_en": "Criminal Complaint", "label_gu": "ક્રિમિનલ ફરિયાદ"},
+                    {"value": "bail_application", "label_en": "Bail Application", "label_gu": "જામીન અરજી"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": True,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "case_date_type",
+                "label_en": "Case Date Type",
+                "label_gu": "તારીખ પ્રકાર",
+                "type": "radio",
+                "required": True,
+                "options": [
+                    {"value": "મુદ્દત તારીખ", "label_en": "Next Hearing Date", "label_gu": "મુદ્દત તારીખ"},
+                    {"value": "ફેંસલ તારીખ", "label_en": "Disposal Date", "label_gu": "ફેંસલ તારીખ"},
+                ],
+            },
+            {
+                "key": "case_date",
+                "label_en": "Case Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": True,
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "case_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "case_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "case_opposite_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Respondent / Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "case_opposite_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "document_details",
+                "label_en": "Particulars of Requested Documents",
+                "label_gu": "માંગેલ દસ્તાવેજ ની વિગત",
+                "type": "textarea",
+                "required": True,
+                "placeholder": "જેમ કે આંક - ૧,૫,૭, તથા પાસપોર્ટની અરજી તથા તે લગત થયેલ હુકમ",
+            },
+            {
+                "key": "number_of_copies",
+                "label_en": "Number of Copies",
+                "label_gu": "કુલ નંગ",
+                "type": "number",
+                "required": True,
+                "placeholder": "દા.ત. ૨",
+            },
+            {
+                "key": "recipient_name",
+                "label_en": "Recipient / Person Authorized to Receive Copy",
+                "label_gu": "દસ્તાવેજ કોને આપવાનો તેની વિગત (નામ)",
+                "type": "text",
+                "required": True,
+                "placeholder": "કોઈ અલગ વ્યક્તિનુ નામ",
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": True,
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "સ્થળ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Name",
+                "label_gu": "એડવોકેટનું નામ",
+                "type": "text",
+                "required": True,
+                "placeholder": "એડવોકેટનું નામ",
+            },
+            {
+                "key": "mobile_number",
+                "label_en": "Mobile Number",
+                "label_gu": "મોબાઈલ નંબર",
+                "type": "text",
+                "required": True,
+                "placeholder": "મોબાઈલ નંબર",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True},
+                {"contains": "IN THE COURT OF", "align": "center", "bold": True},
+                {"contains": "મુકામ :-", "align": "center"},
+                {"contains": "AT:", "align": "center"},
+                {"contains": "Place:", "align": "center"},
+                {"contains": "વિરુદ્ધ", "align": "center"},
+                {"contains": "VERSUS", "align": "center"},
+                {"contains": "બાબત : પ્રમાણિત નકલ મેળવવા બાબત", "align": "center", "bold": True},
+                {"contains": "Subject: Application for Obtaining Certified Copy", "align": "center", "bold": True},
+                {"contains": "અમો નીચે સહી કરનાર એડવોકેટની", "align": "justify", "indent": True},
+                {"contains": "સદર કેસમાંથી અમોને", "align": "justify", "indent": True},
+                {"contains": "સદર નકલ અમો નીચે સહી કરનારને", "align": "justify", "indent": True},
+                {"contains": "We, the undersigned Advocate", "align": "justify", "indent": True},
+                {"contains": "From the aforesaid case", "align": "justify", "indent": True},
+                {"contains": "The said copies may please be delivered", "align": "justify", "indent": True},
+                {"contains": "તારીખ :", "align": "left"},
+                {"contains": "Date:", "align": "left"},
+                {"contains": "સ્થળ :", "align": "left"},
+                {"contains": "Place:", "align": "left"},
+                {"contains": "-------------------", "align": "right", "indent": False},
+                {"contains": "------------------", "align": "right", "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+મુકામ :- {{place}}
+
+[TABLE_START cols="58.4,41.6" align="right,left"]
+[RIGHT]{{court_officer_detail}}
+[RIGHT]{{case_type}} નં. : | {{case_number}}
+[RIGHT]{{case_date_type}} :- | {{case_date}}
+[TABLE_END]
+
+{{party_1_role}} :- {{party_1_name}}
+વિરુદ્ધ
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત : પ્રમાણિત નકલ મેળવવા બાબત ...
+
+અમો નીચે સહી કરનાર એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....
+
+સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી.
+
+[TABLE_START cols="64.6,35.4" align="left,center"]
+[HEADER] માંગેલ દસ્તાવેજ ની વિગત | કુલ નંગ
+{{document_details}} | {{number_of_copies}}
+[TABLE_END]
+
+સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{recipient_name}} ને આપશોજી. જે નકલ માટે ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+-------------------
+{{advocate_name}}
+{{mobile_number}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court}},
+AT: {{place}}
+
+[TABLE_START cols="58.4,41.6" align="right,left"]
+[RIGHT]{{court_officer_detail}}
+[RIGHT]{{case_type}} No. : | {{case_number}}
+[RIGHT]{{case_date_type}} :- | {{case_date}}
+[TABLE_END]
+
+{{party_1_role}} :- {{party_1_name}}
+VERSUS
+{{party_2_role}} :- {{party_2_name}}
+
+Subject: Application for Obtaining Certified Copy...
+
+We, the undersigned Advocate, respectfully submit before this Hon'ble Court that...
+
+From the aforesaid case, we require certified copies duly signed and sealed of the documents mentioned hereinbelow for the purpose of study and judicial proceedings. It is therefore respectfully prayed that this Hon'ble Court may be pleased to issue the signed and sealed certified copies expeditiously.
+
+[TABLE_START cols="64.6,35.4" align="left,center"]
+[HEADER] Particulars of Requested Documents | Total Copies
+{{document_details}} | {{number_of_copies}}
+[TABLE_END]
+
+The said copies may please be delivered to the undersigned or on our behalf to {{recipient_name}}. For the said copies, an amount of Rs. ____________ has been deposited towards deposit.
+
+Date: {{date}}
+Place: {{place}}
+
+-------------------
+{{advocate_name}}
+{{mobile_number}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

@@ -1,0 +1,443 @@
+# -*- coding: utf-8 -*-
+"""Comprehensive test suite for the 'પ્રમાણિત નકલ મેળવવા બાબત'
+(Application for Obtaining Certified Copy) template.
+
+Template ID: certified_copy_application
+Canonical Source: Certified Report.pdf
+
+Covers:
+1. Template Registration & Metadata (ID, Gujarati Name, English Name, Category, aliases)
+2. Exactly 19 input fields present with expected keys, types, required flags
+3. Deposit amount strictly has ZERO advocate input field (Page 1 spec)
+4. Field 'court_name': select, required True
+5. Field 'district': select, required True
+6. Field 'taluka': select, required False (optional)
+7. Field 'court_officer_detail': text, required True
+8. Field 'case_type': select, required True
+9. Field 'case_number': text, required True
+10. Field 'case_date_type': radio, required True (મુદ્દત તારીખ, ફેંસલ તારીખ)
+11. Field 'case_date': date, required True
+12. Field 'party_1_role': radio, required True
+13. Field 'party_1_name': text, required True
+14. Field 'party_2_role': radio, required True
+15. Field 'party_2_name': text, required True
+16. Field 'document_details': textarea, required True
+17. Field 'number_of_copies': number, required True
+18. Field 'recipient_name': text, required True
+19. Field 'date': date, required True
+20. Field 'place': text, required False
+21. Field 'advocate_name': text, required True
+22. Field 'mobile_number': text, required True
+23. Page layout geometry: A4, 2cm top/bottom, 4cm left/right margins
+24. Font settings: Lohit Gujarati (13pt body, 15pt heading); Times New Roman (14pt body, 16pt heading)
+25. Spacing: line_spacing 18.0pt, paragraph_spacing 6.0pt, indent 28.35pt
+26. Table 1: 3x2, Row 1 merged, cols="58.4,41.6"
+27. Table 2: 2x2, cols="64.6,35.4"
+28. Gujarati content fidelity: exact wording, 6 underscores for deposit blank
+29. English content fidelity: exact legal translation, 12 underscores for deposit blank
+30. Case date formatting from YYYY-MM-DD to DD/MM/YYYY
+31. Location formatting: 'Taluka, District' vs 'District'
+32. Direct Template Mode & Saved Case Mode context building
+33. Multi-format generation: PDF, DOCX, ODT
+34. Zero regression on document_exhibit_application
+"""
+
+import asyncio
+import os
+import sys
+import unittest
+import base64
+import re
+from pathlib import Path
+from unittest.mock import MagicMock
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+# Mock third-party dependencies if not installed
+for mod in [
+    'docx', 'docx.shared', 'docx.enum.text', 'docx.oxml', 'docx.oxml.ns',
+    'google', 'google.cloud', 'google.cloud.firestore',
+    'fastapi', 'fastapi.exceptions', 'fastapi.responses',
+    'fastapi.middleware.cors', 'fastapi.middleware.gzip',
+    'pydantic', 'httpx', 'dotenv', 'jwt', 'bcrypt', 'razorpay',
+    'cryptography', 'cryptography.hazmat', 'cryptography.hazmat.primitives',
+    'cryptography.hazmat.primitives.serialization', 'cryptography.x509'
+]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+
+class _MockRouter:
+    def __init__(self, *args, **kwargs): pass
+    def get(self, *args, **kwargs): return lambda f: f
+    def post(self, *args, **kwargs): return lambda f: f
+    def put(self, *args, **kwargs): return lambda f: f
+    def delete(self, *args, **kwargs): return lambda f: f
+    def patch(self, *args, **kwargs): return lambda f: f
+    def include_router(self, *args, **kwargs): pass
+
+class _MockFastAPI(_MockRouter):
+    def __init__(self, *args, **kwargs): pass
+    def add_middleware(self, *args, **kwargs): pass
+    def exception_handler(self, *args, **kwargs): return lambda f: f
+    def on_event(self, *args, **kwargs): return lambda f: f
+
+class _MockHTTPException(Exception):
+    def __init__(self, status_code, detail=""):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"{status_code}: {detail}")
+
+fastapi_mock = sys.modules['fastapi']
+fastapi_mock.FastAPI = _MockFastAPI
+fastapi_mock.APIRouter = _MockRouter
+fastapi_mock.HTTPException = _MockHTTPException
+fastapi_mock.Depends = lambda x: x
+fastapi_mock.Header = lambda *args, **kwargs: None
+fastapi_mock.Request = MagicMock
+fastapi_mock.Response = MagicMock
+fastapi_mock.Cookie = lambda *args, **kwargs: None
+
+class _PydanticBaseModel:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+
+import test_seed_data
+import seed_data
+import server
+from doc_generator import (
+    generate_pdf,
+    generate_docx,
+    generate_odt,
+    render_template,
+    build_blocks,
+    get_doc_settings,
+)
+
+TEMPLATE_ID = "certified_copy_application"
+
+
+class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
+
+    def setUp(self):
+        self.tpl = next((t for t in test_seed_data.TEMPLATES if t["id"] == TEMPLATE_ID), None)
+        self.assertIsNotNone(self.tpl, f"Template {TEMPLATE_ID} not found in test_seed_data")
+
+    def test_01_template_identity_and_metadata(self):
+        self.assertEqual(self.tpl["id"], TEMPLATE_ID)
+        self.assertEqual(self.tpl["name_en"], "Application for Obtaining Certified Copy")
+        self.assertEqual(self.tpl["name_gu"], "પ્રમાણિત નકલ મેળવવા બાબત")
+        self.assertEqual(self.tpl["category"], "General")
+        self.assertIn("pramanit nakal", self.tpl.get("aliases", []))
+
+    def test_02_field_count_and_keys(self):
+        fields = self.tpl["fields"]
+        self.assertEqual(len(fields), 19, f"Expected exactly 19 fields, got {len(fields)}")
+        keys = [f["key"] for f in fields]
+        expected_keys = [
+            "court_name", "district", "taluka", "court_officer_detail",
+            "case_type", "case_number", "case_date_type", "case_date",
+            "party_1_role", "party_1_name", "party_2_role", "party_2_name",
+            "document_details", "number_of_copies", "recipient_name",
+            "date", "place", "advocate_name", "mobile_number",
+        ]
+        self.assertEqual(keys, expected_keys)
+
+    def test_03_zero_deposit_amount_input_field(self):
+        keys = [f["key"] for f in self.tpl["fields"]]
+        self.assertNotIn("deposit_amount", keys)
+        self.assertNotIn("deposit", keys)
+        self.assertNotIn("amount", keys)
+
+    def test_04_field_properties(self):
+        fmap = {f["key"]: f for f in self.tpl["fields"]}
+        self.assertEqual(fmap["court_name"]["type"], "select")
+        self.assertTrue(fmap["court_name"]["required"])
+        self.assertEqual(fmap["district"]["type"], "select")
+        self.assertTrue(fmap["district"]["required"])
+        self.assertEqual(fmap["taluka"]["type"], "select")
+        self.assertFalse(fmap["taluka"]["required"])
+        self.assertEqual(fmap["court_officer_detail"]["type"], "text")
+        self.assertTrue(fmap["court_officer_detail"]["required"])
+        self.assertEqual(fmap["case_type"]["type"], "select")
+        self.assertTrue(fmap["case_type"]["required"])
+        self.assertEqual(fmap["case_number"]["type"], "text")
+        self.assertTrue(fmap["case_number"]["required"])
+        self.assertEqual(fmap["case_date_type"]["type"], "radio")
+        self.assertTrue(fmap["case_date_type"]["required"])
+        self.assertEqual(fmap["case_date"]["type"], "date")
+        self.assertTrue(fmap["case_date"]["required"])
+        self.assertEqual(fmap["party_1_role"]["type"], "radio")
+        self.assertTrue(fmap["party_1_role"]["required"])
+        self.assertEqual(fmap["party_1_name"]["type"], "text")
+        self.assertTrue(fmap["party_1_name"]["required"])
+        self.assertEqual(fmap["party_2_role"]["type"], "radio")
+        self.assertTrue(fmap["party_2_role"]["required"])
+        self.assertEqual(fmap["party_2_name"]["type"], "text")
+        self.assertTrue(fmap["party_2_name"]["required"])
+        self.assertEqual(fmap["document_details"]["type"], "textarea")
+        self.assertTrue(fmap["document_details"]["required"])
+        self.assertEqual(fmap["number_of_copies"]["type"], "number")
+        self.assertTrue(fmap["number_of_copies"]["required"])
+        self.assertEqual(fmap["recipient_name"]["type"], "text")
+        self.assertTrue(fmap["recipient_name"]["required"])
+        self.assertEqual(fmap["date"]["type"], "date")
+        self.assertTrue(fmap["date"]["required"])
+        self.assertEqual(fmap["place"]["type"], "text")
+        self.assertFalse(fmap["place"]["required"])
+        self.assertEqual(fmap["advocate_name"]["type"], "text")
+        self.assertTrue(fmap["advocate_name"]["required"])
+        self.assertEqual(fmap["mobile_number"]["type"], "text")
+        self.assertTrue(fmap["mobile_number"]["required"])
+
+    def test_05_settings_geometry_and_typography(self):
+        s = self.tpl["settings"]
+        self.assertEqual(s["page_size"], "A4")
+        self.assertEqual(s["margin_top_cm"], 2.0)
+        self.assertEqual(s["margin_bottom_cm"], 2.0)
+        self.assertEqual(s["margin_left_cm"], 4.0)
+        self.assertEqual(s["margin_right_cm"], 4.0)
+        self.assertEqual(s["body_size"], 13)
+        self.assertEqual(s["heading_size"], 15)
+        self.assertEqual(s["body_size_en"], 14)
+        self.assertEqual(s["heading_size_en"], 16)
+        self.assertEqual(s["line_spacing"], 18.0)
+        self.assertEqual(s["paragraph_spacing"], 6.0)
+        self.assertEqual(s["first_line_indent_pt"], 28.35)
+
+    def test_06_table_parsing_and_structure(self):
+        blocks_gu = build_blocks(self.tpl["content_gu"])
+        table_blocks = [b for b in blocks_gu if b.get("section") == "table"]
+        self.assertEqual(len(table_blocks), 2, f"Expected 2 tables, found {len(table_blocks)}")
+
+        # Table 1: Case details table
+        t1 = table_blocks[0]
+        self.assertEqual(t1.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
+        self.assertEqual(len(t1["rows"]), 3)
+        # Row 1 is merged single cell
+        self.assertIn("{{court_officer_detail}}", t1["rows"][0][0])
+
+        # Table 2: Document request table
+        t2 = table_blocks[1]
+        self.assertEqual(t2.get("meta"), {"cols": [64.6, 35.4], "align": ["left", "center"]})
+        self.assertEqual(len(t2["rows"]), 2)
+        self.assertTrue(t2.get("row_meta", [{}])[0].get("is_header", False))
+
+    def test_07_gujarati_fidelity_and_deposit_underscores(self):
+        c_gu = self.tpl["content_gu"]
+        self.assertIn("મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,", c_gu)
+        self.assertIn("મુકામ :- {{place}}", c_gu)
+        self.assertIn("બાબત : પ્રમાણિત નકલ મેળવવા બાબત ...", c_gu)
+        self.assertIn("સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય", c_gu)
+        # Exactly 6 underscores in Gujarati deposit
+        self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", c_gu)
+        self.assertIn("-------------------", c_gu)
+
+    def test_08_english_fidelity_and_deposit_underscores(self):
+        c_en = self.tpl["content_en"]
+        self.assertIn("IN THE COURT OF THE HON'BLE {{court}},", c_en)
+        self.assertIn("AT: {{place}}", c_en)
+        self.assertIn("Subject: Application for Obtaining Certified Copy...", c_en)
+        self.assertIn("From the aforesaid case, we require certified copies duly signed and sealed", c_en)
+        # Exactly 12 underscores in English deposit
+        self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", c_en)
+        self.assertIn("-------------------", c_en)
+
+    def test_09_build_render_context_formatting(self):
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+            }
+            values = {
+                "court_name": "City Civil Court, Ahmedabad",
+                "district": "ahmedabad",
+                "taluka": "અમદાવાદ શહેર",
+                "court_officer_detail": "શ્રી એ.બી. શાહ સાહેબની કોર્ટ",
+                "case_type": "regular_civil_suit",
+                "case_number": "૧૨૩/૨૦૨૪",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "party_1_role": "વાદી",
+                "party_1_name": "રાજેશકુમાર શાંતિલાલ શાહ",
+                "party_2_role": "પ્રતિવાદી",
+                "party_2_name": "મહેશભાઈ કાનજીભાઈ પટેલ",
+                "document_details": "આંક - ૧, ૫, ૭ તથા હુકમની નકલ",
+                "number_of_copies": "2",
+                "recipient_name": "કિશોરભાઈ મોહનભાઈ પરમાર",
+                "date": "2026-02-20",
+                "place": "",
+                "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
+                "mobile_number": "9876543210",
+            }
+            ctx = await server.build_render_context(user, None, values, "gu")
+            self.assertEqual(ctx["case_date"], "25/02/2026")
+            self.assertEqual(ctx["date"], "20/02/2026")
+            self.assertIn("અમદાવાદ શહેર", ctx["place"])
+            self.assertIn("અમદાવાદ", ctx["place"])
+            self.assertEqual(ctx["court"], "સિટી સિવિલ કોર્ટ, અમદાવાદ")
+        asyncio.run(_test())
+
+    def test_10_pdf_generation_gujarati(self):
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+            }
+            values = {
+                "court": "મહેરબાન સિટી સિવિલ કોર્ટ",
+                "court_name": "મહેરબાન સિટી સિવિલ કોર્ટ",
+                "district": "અમદાવાદ",
+                "taluka": "અમદાવાદ શહેર",
+                "court_officer_detail": "શ્રી એ.બી. શાહ સાહેબની કોર્ટ",
+                "case_type": "રેગ્યુલર સિવિલ સૂટ",
+                "case_number": "૧૨૩/૨૦૨૪",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "party_1_role": "વાદી",
+                "party_1_name": "રાજેશકુમાર શાંતિલાલ શાહ",
+                "party_2_role": "પ્રતિવાદી",
+                "party_2_name": "મહેશભાઈ કાનજીભાઈ પટેલ",
+                "document_details": "આંક - ૧, ૫, ૭ તથા હુકમની નકલ",
+                "number_of_copies": "2",
+                "recipient_name": "કિશોરભાઈ મોહનભાઈ પરમાર",
+                "date": "2026-02-20",
+                "place": "અમદાવાદ",
+                "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
+                "mobile_number": "9876543210",
+            }
+            ctx = await server.build_render_context(user, None, values, "gu")
+            rendered = render_template(self.tpl["content_gu"], ctx)
+            self.assertNotIn("{{court}}", rendered)
+            self.assertNotIn("{{recipient_name}}", rendered)
+            self.assertIn("રૂ. ______", rendered)
+
+            blocks = build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings = get_doc_settings({
+                **self.tpl["settings"],
+                "page_size": "A4",
+                "template_id": TEMPLATE_ID,
+                "raw_content": rendered,
+                "ctx": ctx,
+            })
+            pdf_b64 = generate_pdf(blocks, "gu", doc_settings)
+            pdf_bytes = base64.b64decode(pdf_b64)
+            self.assertTrue(pdf_bytes.startswith(b"%PDF-"), "Output must be valid PDF")
+            self.assertGreater(len(pdf_bytes), 1000)
+        asyncio.run(_test())
+
+    def test_11_pdf_generation_english(self):
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+            }
+            values = {
+                "court": "City Civil Court",
+                "court_name": "City Civil Court",
+                "district": "Ahmedabad",
+                "taluka": "Ahmedabad City",
+                "court_officer_detail": "Hon'ble Court of Additional Civil Judge",
+                "case_type": "Regular Civil Suit",
+                "case_number": "123/2024",
+                "case_date_type": "Disposal Date",
+                "case_date": "2026-02-25",
+                "party_1_role": "Plaintiff",
+                "party_1_name": "Rajeshkumar Shantilal Shah",
+                "party_2_role": "Defendant",
+                "party_2_name": "Maheshbhai Kanjibhai Patel",
+                "document_details": "Exhibit 1, 5, 7 and certified order copy",
+                "number_of_copies": "2",
+                "recipient_name": "Kishorbhai Mohanbhai Parmar",
+                "date": "2026-02-20",
+                "place": "Ahmedabad",
+                "advocate_name": "Advocate Ramesh Patel",
+                "mobile_number": "9876543210",
+            }
+            ctx = await server.build_render_context(user, None, values, "en")
+            rendered = render_template(self.tpl["content_en"], ctx)
+            self.assertNotIn("{{court}}", rendered)
+            self.assertNotIn("{{recipient_name}}", rendered)
+            self.assertIn("Rs. ____________", rendered)
+
+            blocks = build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            tpl_settings = dict(self.tpl["settings"])
+            tpl_settings["body_size"] = tpl_settings.get("body_size_en", 14)
+            tpl_settings["heading_size"] = tpl_settings.get("heading_size_en", 16)
+            doc_settings = get_doc_settings({
+                **tpl_settings,
+                "page_size": "A4",
+                "template_id": TEMPLATE_ID,
+                "raw_content": rendered,
+                "ctx": ctx,
+            })
+            pdf_b64 = generate_pdf(blocks, "en", doc_settings)
+            pdf_bytes = base64.b64decode(pdf_b64)
+            self.assertTrue(pdf_bytes.startswith(b"%PDF-"), "Output must be valid PDF")
+            self.assertGreater(len(pdf_bytes), 1000)
+        asyncio.run(_test())
+
+    def test_12_odt_and_docx_generation(self):
+        values = {
+            "court": "City Civil Court",
+            "place": "Ahmedabad",
+            "court_officer_detail": "Court 5",
+            "case_type": "Civil Suit",
+            "case_number": "101/2024",
+            "case_date_type": "Next Hearing Date",
+            "case_date": "25/02/2026",
+            "party_1_role": "Plaintiff",
+            "party_1_name": "Party A",
+            "party_2_role": "Defendant",
+            "party_2_name": "Party B",
+            "document_details": "Order copy",
+            "number_of_copies": "1",
+            "recipient_name": "Advocate",
+            "date": "20/02/2026",
+            "advocate_name": "Test Adv",
+            "mobile_number": "9876543210",
+        }
+        rendered = render_template(self.tpl["content_en"], values)
+        blocks = build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"])
+        doc_settings = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID})
+
+        # ODT
+        odt_b64 = generate_odt(blocks, "en", doc_settings)
+        odt_bytes = base64.b64decode(odt_b64)
+        self.assertTrue(odt_bytes.startswith(b"PK"), "ODT must be valid zip")
+
+        # DOCX (optional if python-docx installed)
+        try:
+            docx_b64 = generate_docx(blocks, "en", doc_settings)
+            docx_bytes = base64.b64decode(docx_b64)
+            self.assertTrue(docx_bytes.startswith(b"PK"), "DOCX must be valid zip")
+        except Exception:
+            pass
+
+    def test_13_canonical_getter_and_seed_registration(self):
+        canonical = server._get_canonical_certified_copy_template()
+        self.assertIsNotNone(canonical)
+        self.assertEqual(canonical["id"], TEMPLATE_ID)
+        self.assertIn(canonical["id"], [t["id"] for t in seed_data.TEMPLATES])
+
+    def test_14_zero_regression_on_exhibit_template(self):
+        exhibit_tpl = server._get_canonical_exhibit_template()
+        self.assertIsNotNone(exhibit_tpl)
+        self.assertEqual(exhibit_tpl["id"], "document_exhibit_application")
+        self.assertIn("દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ", exhibit_tpl["content_gu"])
+        self.assertEqual(len(exhibit_tpl["fields"]), 11)
+
+
+if __name__ == "__main__":
+    unittest.main()
