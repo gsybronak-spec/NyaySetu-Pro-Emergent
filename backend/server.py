@@ -2497,6 +2497,116 @@ _ACTIVE_COURT_IDS: set[str] = {c["id"] for c in COURTS if c.get("active") is not
 _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
 _COMPLAINT_LABELS = {"private": "Private Complaint", "police": "Police Complaint", "other": "Other"}
 
+_LOCATION_LOOKUP: dict[str, dict[str, str]] = {}
+
+
+def _build_location_lookup() -> None:
+    """Build bidirectional case-insensitive location lookup table from districts, talukas, and known aliases."""
+    global _LOCATION_LOOKUP
+    mapping: dict[str, dict[str, str]] = {}
+
+    def _register(val_key: str, en_name: str, gu_name: str) -> None:
+        rec = {"en": en_name, "gu": gu_name}
+        k = val_key.strip()
+        if k:
+            mapping[k] = rec
+            mapping[k.lower()] = rec
+
+    # Seed districts
+    for d in DISTRICTS:
+        did = str(d.get("id") or "").strip()
+        den = str(d.get("en") or "").strip()
+        dgu = str(d.get("gu") or "").strip()
+        _register(did, den, dgu)
+        _register(den, den, dgu)
+        _register(dgu, den, dgu)
+
+    # Seed talukas
+    for t in TALUKAS:
+        tid = str(t.get("id") or "").strip()
+        ten = str(t.get("en") or "").strip()
+        tgu = str(t.get("gu") or "").strip()
+        _register(tid, ten, tgu)
+        _register(ten, ten, tgu)
+        _register(tgu, ten, tgu)
+
+    # Dynamic catalog districts & talukas if loaded
+    for d in _DISTRICT_MAP.values():
+        did = str(d.get("id") or "").strip()
+        den = str(d.get("en") or "").strip()
+        dgu = str(d.get("gu") or "").strip()
+        _register(did, den, dgu)
+        _register(den, den, dgu)
+        _register(dgu, den, dgu)
+
+    for t in _TALUKA_MAP.values():
+        tid = str(t.get("id") or "").strip()
+        ten = str(t.get("en") or "").strip()
+        tgu = str(t.get("gu") or "").strip()
+        _register(tid, ten, tgu)
+        _register(ten, ten, tgu)
+        _register(tgu, ten, tgu)
+
+    # Common aliases & variations used across Gujarati templates
+    extra_pairs = [
+        ("અમદાવાદ શહેર", "Ahmedabad City", "અમદાવાદ શહેર"),
+        ("દાસક્રોઈ", "Daskroi", "દાસક્રોઈ"),
+        ("દસ્ક્રોઇ", "Daskroi", "દસ્ક્રોઇ"),
+        ("કલોલ", "Kalol", "કલોલ"),
+        ("માણસા", "Mansa", "માણસા"),
+        ("દહેગામ", "Dehgam", "દહેગામ"),
+        ("બાવળા", "Bavla", "બાવળા"),
+    ]
+    for tid, ten, tgu in extra_pairs:
+        _register(tid, ten, tgu)
+        _register(ten, ten, tgu)
+        _register(tgu, ten, tgu)
+
+    _LOCATION_LOOKUP = mapping
+
+
+def localize_location(value: Optional[str], lang: str = "gu") -> str:
+    """Language-aware location display resolver for district, taluka, and place.
+
+    Guarantees:
+      - Raw database/catalog IDs (e.g. 'gandhinagar') are NEVER printed in documents.
+      - In Gujarati documents, always returns the official Gujarati script (e.g. 'ગાંધીનગર', 'અમદાવાદ').
+      - In English documents, always returns proper English Title Case (e.g. 'Gandhinagar', 'Ahmedabad').
+      - Handles multi-part locations such as 'કલોલ, ગાંધીનગર' or 'Kalol, Gandhinagar'.
+      - Centralized for all templates and documents.
+    """
+    if not value or not str(value).strip():
+        return ""
+    val_str = str(value).strip()
+    if not _LOCATION_LOOKUP:
+        _build_location_lookup()
+
+    def _resolve_single(tok: str) -> str:
+        t_clean = tok.strip()
+        if not t_clean:
+            return ""
+        rec = _LOCATION_LOOKUP.get(t_clean) or _LOCATION_LOOKUP.get(t_clean.lower())
+        if rec:
+            if lang == "gu":
+                return rec.get("gu") or rec.get("en") or t_clean
+            else:
+                return rec.get("en") or rec.get("gu") or t_clean.title()
+        # Fallback for unrecognized values
+        if lang == "en":
+            return t_clean.title()
+        return t_clean
+
+    if "," in val_str:
+        tokens = [p.strip() for p in val_str.split(",")]
+        resolved = [_resolve_single(t) for t in tokens if t.strip()]
+        return ", ".join(resolved)
+
+    return _resolve_single(val_str)
+
+
+# Initialize lookup on module load
+_build_location_lookup()
+
 # entity kind -> (collection name, seed list)
 _CATALOG_KINDS = {
     "case-types": ("case_types", CASE_TYPES),
@@ -2603,6 +2713,7 @@ async def _refresh_catalog_maps() -> None:
     _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
     _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
     _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
+    _build_location_lookup()
 
 
 def _catalog_public(item: dict) -> dict:
@@ -2641,8 +2752,8 @@ def enrich_case(c: dict) -> dict:
         c["case_type_label"] = c.get("case_type_custom") or None
     c["law_label"] = (law.get("gu") if lang == "gu" else law.get("en")) if law else (c.get("law_custom") or None)
     c["section_label"] = section.get("label") if section else None
-    c["district_label"] = (dist.get("gu") if lang == "gu" else dist.get("en")) if dist else None
-    c["taluka_label"] = (tal.get("gu") if lang == "gu" else tal.get("en")) if tal else None
+    c["district_label"] = (localize_location(dist.get("id") if dist else c.get("district_id"), lang) if (dist or c.get("district_id")) else None)
+    c["taluka_label"] = (localize_location(tal.get("id") if tal else c.get("taluka_id"), lang) if (tal or c.get("taluka_id")) else None)
     if court:
         c["court_label"] = court.get("gu") if lang == "gu" else court.get("en")
     elif c.get("court_source") == "custom" or c.get("custom_court_name_gu") or c.get("custom_court_name_en"):
@@ -3723,15 +3834,13 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
     # Guard: if a client sent a raw district id (e.g. "ahmedabad") instead of a
     # label, resolve it here so documents never print raw catalog ids.
-    if isinstance(ctx.get("district"), str) and ctx["district"] in _DISTRICT_MAP:
-        d = _DISTRICT_MAP[ctx["district"]]
-        ctx["district"] = (d.get("gu") or d.get("en", "")) if language == "gu" else (d.get("en") or d.get("gu", ""))
+    if isinstance(ctx.get("district"), str) and ctx["district"]:
+        ctx["district"] = localize_location(ctx["district"], language)
 
     # Same guard for taluka raw catalog ids sent as select values (optional —
     # empty stays empty, never prints "None" / "null" / raw ids).
-    if isinstance(ctx.get("taluka"), str) and ctx["taluka"] in _TALUKA_MAP:
-        tobj = _TALUKA_MAP[ctx["taluka"]]
-        ctx["taluka"] = (tobj.get("gu") or tobj.get("en", "")) if language == "gu" else (tobj.get("en") or tobj.get("gu", ""))
+    if isinstance(ctx.get("taluka"), str) and ctx["taluka"]:
+        ctx["taluka"] = localize_location(ctx["taluka"], language)
 
     # Synchronize and authoritatively resolve court and court_name from Admin Court Catalog
     if ctx.get("court_source") == "custom" or (ctx.get("court_id") in (None, "", "other") and (ctx.get("custom_court_name_gu") or ctx.get("custom_court_name_en"))):
@@ -3754,17 +3863,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
     if case:
         did = case.get("district_id") or user.get("district")
-        d = next((x for x in DISTRICTS if x["id"] == did), None)
-        if d:
-            district_name = (d.get("gu") or d.get("en", "")) if language == "gu" else (d.get("en") or d.get("gu", ""))
-        else:
-            district_name = ""
+        district_name = localize_location(did, language) if did else ""
         ctx.setdefault("district", district_name or case.get("district_id") or "")
-        taluka_obj = _TALUKA_MAP.get(case.get("taluka_id"))
-        if taluka_obj:
-            taluka_name = (taluka_obj.get("gu") or taluka_obj.get("en", "")) if language == "gu" else (taluka_obj.get("en") or taluka_obj.get("gu", ""))
-        else:
-            taluka_name = case.get("taluka") or ""
+        taluka_val = case.get("taluka_id") or case.get("taluka") or ""
+        taluka_name = localize_location(taluka_val, language) if taluka_val else ""
         ctx.setdefault("taluka", taluka_name)
         if case.get("court_source") == "custom" or case.get("custom_court_name_gu") or case.get("custom_court_name_en"):
             case_court = (case.get("custom_court_name_gu") if language == "gu" else case.get("custom_court_name_en")) or case.get("custom_court_name_en") or case.get("custom_court_name_gu") or case.get("court_custom") or case.get("court")
@@ -3817,8 +3919,8 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             if k not in ctx and v not in (None, ""):
                 ctx[k] = str(v)
     else:
-        d = next((x for x in DISTRICTS if x["id"] == user.get("district")), None)
-        ctx.setdefault("district", (d["gu"] if language == "gu" else d["en"]) if d else (user.get("district") or ""))
+        u_dist = user.get("district") or ""
+        ctx.setdefault("district", localize_location(u_dist, language) if u_dist else "")
         user_court = user.get("court") or ""
         if user_court:
             resolved_user_court = await resolve_court_label(user_court, language, case=None)
@@ -3992,9 +4094,19 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["case_or_crime"] = ""
 
+    # Strip whitespace on party roles and names to guarantee strict "ROLE :- NAME" format
+    for pk in ("party_1_role", "party_1_name", "party_2_role", "party_2_name", "party_role", "opposite_party_role", "party_name", "opposite_party"):
+        if pk in ctx and isinstance(ctx[pk], str):
+            ctx[pk] = ctx[pk].strip()
+
     # Taluka/district line — taluka first when present (e.g. "કલોલ, ગાંધીનગર") without stray commas or extra spaces
-    _tal = re.sub(r"\s+", " ", (ctx.get("taluka") or "").strip()).strip(" ,")
-    _dist = re.sub(r"\s+", " ", (ctx.get("district") or "").strip()).strip(" ,")
+    _tal = localize_location(ctx.get("taluka"), language).strip(" ,")
+    _dist = localize_location(ctx.get("district"), language).strip(" ,")
+    if _tal:
+        ctx["taluka"] = _tal
+    if _dist:
+        ctx["district"] = _dist
+
     if _tal and _dist:
         ctx["taluka_place"] = f"{_tal}, {_dist}"
     elif _dist:
@@ -4004,12 +4116,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["taluka_place"] = ""
 
-    # Synchronize place and taluka_place (place is derived only)
+    # Synchronize place and taluka_place (place is localized according to document language)
     raw_place = (ctx.get("place") or "").strip().strip(" ,")
     if not raw_place:
         ctx["place"] = ctx["taluka_place"]
     else:
-        ctx["place"] = raw_place
+        ctx["place"] = localize_location(raw_place, language)
     if not ctx.get("taluka_place"):
         ctx["taluka_place"] = ctx["place"]
 

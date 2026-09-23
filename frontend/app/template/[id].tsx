@@ -170,7 +170,7 @@ export default function TemplateApplication() {
   const [values, setValues] = useState<Record<string, any>>({});
   const [step, setStep] = useState<Step>("fields");
   const [preview, setPreview] = useState("");
-  const [blocks, setBlocks] = useState<{ text: string; align: string; bold: boolean }[]>([]);
+  const [blocks, setBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1357,23 +1357,116 @@ export default function TemplateApplication() {
               ]}
               testID="preview-doc"
             >
-              {blocks.map((b, i) => (
-                <Text
-                  key={i}
-                  selectable
-                  style={[
-                    styles.docText,
-                    {
-                      textAlign: b.align === "center" ? "center" : b.align === "right" ? "right" : "left",
-                      fontWeight: b.bold ? "700" : "400",
-                      fontSize: b.bold ? 15 : 13,
-                      marginBottom: b.text ? 6 : 10,
-                    },
-                  ]}
-                >
-                  {b.text || " "}
-                </Text>
-              ))}
+              {blocks.map((b, i) => {
+                if (b.section === "table" && Array.isArray(b.rows) && b.rows.length > 0) {
+                  const metaCols = b.meta?.cols || [];
+                  const totalColWidth = metaCols.reduce((acc: number, val: number) => acc + val, 0) || 100;
+                  const defaultAligns = b.meta?.align || [];
+
+                  return (
+                    <View
+                      key={i}
+                      testID={`preview-table-${i}`}
+                      style={[
+                        styles.previewTable,
+                        { borderColor: "#000000" },
+                      ]}
+                    >
+                      {b.rows.map((row: string[], rIdx: number) => {
+                        const rMeta = b.row_meta?.[rIdx] || {};
+                        const isHeader = !!rMeta.is_header;
+                        const isSpan = (row.length === 1 && metaCols.length > 1);
+
+                        return (
+                          <View
+                            key={rIdx}
+                            style={[
+                              styles.previewTableRow,
+                              isHeader && { backgroundColor: "#F3F4F6" },
+                            ]}
+                          >
+                            {row.map((cellText: string, cIdx: number) => {
+                              const cellAlign = (rMeta.align?.[cIdx] || defaultAligns[cIdx] || (isSpan ? (defaultAligns[0] || "right") : "left")) as ("left" | "right" | "center");
+                              const cellBold = isHeader || !!rMeta.bold?.[cIdx];
+
+                              let colWidthPercent = "100%";
+                              if (!isSpan && metaCols.length > cIdx) {
+                                colWidthPercent = `${(metaCols[cIdx] / totalColWidth) * 100}%`;
+                              } else if (!isSpan && metaCols.length === 0 && row.length > 0) {
+                                colWidthPercent = `${100 / row.length}%`;
+                              }
+
+                              return (
+                                <View
+                                  key={cIdx}
+                                  testID={`preview-table-cell-${rIdx}-${cIdx}`}
+                                  style={[
+                                    styles.previewTableCell,
+                                    {
+                                      width: colWidthPercent as any,
+                                      borderColor: "#000000",
+                                      alignItems: cellAlign === "right" ? "flex-end" : cellAlign === "center" ? "center" : "flex-start",
+                                      justifyContent: "center",
+                                    },
+                                  ]}
+                                >
+                                  <Text
+                                    selectable
+                                    style={[
+                                      styles.docText,
+                                      {
+                                        textAlign: cellAlign,
+                                        fontWeight: cellBold ? "700" : "400",
+                                        fontSize: 13,
+                                        color: "#111111",
+                                        lineHeight: 20,
+                                      },
+                                    ]}
+                                  >
+                                    {cellText || " "}
+                                  </Text>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                }
+
+                if (b.section === "page_break") {
+                  return (
+                    <View
+                      key={i}
+                      style={{
+                        borderBottomWidth: 1,
+                        borderBottomColor: "#D1D5DB",
+                        borderStyle: "dashed",
+                        marginVertical: 14,
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <Text
+                    key={i}
+                    selectable
+                    style={[
+                      styles.docText,
+                      {
+                        textAlign: b.align === "center" ? "center" : b.align === "right" ? "right" : "left",
+                        fontWeight: b.bold ? "700" : "400",
+                        fontSize: b.bold ? 15 : 13,
+                        marginBottom: b.text ? 6 : 10,
+                      },
+                    ]}
+                  >
+                    {b.text || " "}
+                  </Text>
+                );
+              })}
             </View>
             <Pressable
               testID="edit-btn"
@@ -1635,4 +1728,20 @@ const styles = StyleSheet.create({
   },
   dSummaryLabel: { color: "#6B7280", fontSize: 12, fontWeight: "600", flex: 1 },
   dSummaryValue: { color: "#0B1B3D", fontSize: 13, fontWeight: "700", maxWidth: "60%" },
+  previewTable: {
+    borderTopWidth: 1,
+    borderLeftWidth: 1,
+    marginVertical: 10,
+    width: "100%",
+  },
+  previewTableRow: {
+    flexDirection: "row",
+    width: "100%",
+  },
+  previewTableCell: {
+    borderRightWidth: 1,
+    borderBottomWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
 });

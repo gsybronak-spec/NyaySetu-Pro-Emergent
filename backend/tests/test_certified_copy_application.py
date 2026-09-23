@@ -236,7 +236,8 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય", c_gu)
         # Exactly 6 underscores in Gujarati deposit
         self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", c_gu)
-        self.assertIn("-------------------", c_gu)
+        # Exactly 10 dashes in Gujarati signature line
+        self.assertIn("----------\n{{advocate_name}}", c_gu)
 
     def test_08_english_fidelity_and_deposit_underscores(self):
         c_en = self.tpl["content_en"]
@@ -246,7 +247,8 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("From the aforesaid case, we require certified copies duly signed and sealed", c_en)
         # Exactly 12 underscores in English deposit
         self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", c_en)
-        self.assertIn("-------------------", c_en)
+        # Exactly 20 dashes in English signature line
+        self.assertIn("--------------------\n{{advocate_name}}", c_en)
 
     def test_09_build_render_context_formatting(self):
         async def _test():
@@ -438,6 +440,12 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ", exhibit_tpl["content_gu"])
         self.assertEqual(len(exhibit_tpl["fields"]), 11)
 
+    def test_14b_zero_regression_on_return_template(self):
+        return_tpl = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_return_application"), None)
+        self.assertIsNotNone(return_tpl)
+        self.assertIn("દસ્તાવેજ પરત મેળવવાની અરજી", return_tpl["content_gu"])
+        self.assertEqual(len(return_tpl["fields"]), 14)
+
     def test_15_signature_and_date_place_alignments_gu_and_en(self):
         """Verify Date & Place are left-aligned and signature block (dash line, advocate name, mobile) is right-aligned."""
         # Test Gujarati
@@ -467,10 +475,11 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertEqual(date_block_gu["align"], "left")
         self.assertEqual(place_block_gu["align"], "left")
 
-        sig_dash_gu = next(b for b in blocks_gu if "-------------------" in b.get("text", ""))
+        sig_dash_gu = next(b for b in blocks_gu if "----------" in b.get("text", ""))
         adv_name_gu = next(b for b in blocks_gu if "એડવોકેટ રમેશભાઈ પટેલ" in b.get("text", ""))
         mobile_gu = next(b for b in blocks_gu if "9876543210" in b.get("text", ""))
         self.assertEqual(sig_dash_gu["align"], "right")
+        self.assertEqual(len(sig_dash_gu["text"]), 10)
         self.assertEqual(adv_name_gu["align"], "right")
         self.assertEqual(mobile_gu["align"], "right")
 
@@ -501,12 +510,234 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertEqual(date_block_en["align"], "left")
         self.assertEqual(place_block_en["align"], "left")
 
-        sig_dash_en = next(b for b in blocks_en if "-------------------" in b.get("text", ""))
+        sig_dash_en = next(b for b in blocks_en if "--------------------" in b.get("text", ""))
         adv_name_en = next(b for b in blocks_en if "Advocate Ramesh Patel" in b.get("text", ""))
         mobile_en = next(b for b in blocks_en if "9876543210" in b.get("text", ""))
         self.assertEqual(sig_dash_en["align"], "right")
+        self.assertEqual(len(sig_dash_en["text"]), 20)
         self.assertEqual(adv_name_en["align"], "right")
         self.assertEqual(mobile_en["align"], "right")
+
+    def test_16_location_localization_gu_and_en(self):
+        async def _test():
+            user = {"name": "Test Advocate", "district": "gandhinagar"}
+            
+            # Gujarati document with raw district IDs
+            for raw_dist, expected_gu in [
+                ("gandhinagar", "ગાંધીનગર"),
+                ("ahmedabad", "અમદાવાદ"),
+                ("rajkot", "રાજકોટ"),
+                ("vadodara", "વડોદરા"),
+            ]:
+                ctx_gu = await server.build_render_context(user, None, {
+                    "district": raw_dist,
+                    "court_name": "Civil Court",
+                    "party_1_role": "વાદી",
+                    "party_1_name": "A",
+                    "party_2_role": "પ્રતિવાદી",
+                    "party_2_name": "B",
+                    "court_officer_detail": "Court",
+                    "case_type": "civil_suit",
+                    "case_number": "1/2026",
+                    "case_date_type": "મુદ્દત તારીખ",
+                    "case_date": "2026-02-25",
+                    "document_details": "Doc",
+                    "number_of_copies": "1",
+                    "recipient_name": "Rec",
+                    "date": "2026-02-20",
+                    "advocate_name": "Adv",
+                    "mobile_number": "9999999999",
+                }, "gu")
+                self.assertEqual(ctx_gu["district"], expected_gu)
+                self.assertEqual(ctx_gu["place"], expected_gu)
+                rendered = render_template(self.tpl["content_gu"], ctx_gu)
+                self.assertIn(f"મુકામ :- {expected_gu}", rendered)
+                self.assertNotIn(raw_dist, rendered)
+
+            # English document with raw district IDs
+            for raw_dist, expected_en in [
+                ("gandhinagar", "Gandhinagar"),
+                ("ahmedabad", "Ahmedabad"),
+                ("rajkot", "Rajkot"),
+                ("vadodara", "Vadodara"),
+            ]:
+                ctx_en = await server.build_render_context(user, None, {
+                    "district": raw_dist,
+                    "court_name": "Civil Court",
+                    "party_1_role": "Plaintiff",
+                    "party_1_name": "A",
+                    "party_2_role": "Defendant",
+                    "party_2_name": "B",
+                    "court_officer_detail": "Court",
+                    "case_type": "civil_suit",
+                    "case_number": "1/2026",
+                    "case_date_type": "Next Hearing Date",
+                    "case_date": "2026-02-25",
+                    "document_details": "Doc",
+                    "number_of_copies": "1",
+                    "recipient_name": "Rec",
+                    "date": "2026-02-20",
+                    "advocate_name": "Adv",
+                    "mobile_number": "9999999999",
+                }, "en")
+                self.assertEqual(ctx_en["district"], expected_en)
+                self.assertEqual(ctx_en["place"], expected_en)
+                rendered = render_template(self.tpl["content_en"], ctx_en)
+                self.assertIn(f"AT: {expected_en}", rendered)
+                self.assertNotIn(raw_dist, rendered)
+
+            # Taluka + District localization
+            ctx_combo_gu = await server.build_render_context(user, None, {
+                "district": "gandhinagar",
+                "taluka": "કલોલ",
+                "court_name": "Civil Court",
+                "party_1_role": "વાદી",
+                "party_1_name": "A",
+                "party_2_role": "પ્રતિવાદી",
+                "party_2_name": "B",
+                "court_officer_detail": "Court",
+                "case_type": "civil_suit",
+                "case_number": "1/2026",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "document_details": "Doc",
+                "number_of_copies": "1",
+                "recipient_name": "Rec",
+                "date": "2026-02-20",
+                "advocate_name": "Adv",
+                "mobile_number": "9999999999",
+            }, "gu")
+            self.assertEqual(ctx_combo_gu["place"], "કલોલ, ગાંધીનગર")
+
+            ctx_combo_en = await server.build_render_context(user, None, {
+                "district": "gandhinagar",
+                "taluka": "kalol",
+                "court_name": "Civil Court",
+                "party_1_role": "Plaintiff",
+                "party_1_name": "A",
+                "party_2_role": "Defendant",
+                "party_2_name": "B",
+                "court_officer_detail": "Court",
+                "case_type": "civil_suit",
+                "case_number": "1/2026",
+                "case_date_type": "Next Hearing Date",
+                "case_date": "2026-02-25",
+                "document_details": "Doc",
+                "number_of_copies": "1",
+                "recipient_name": "Rec",
+                "date": "2026-02-20",
+                "advocate_name": "Adv",
+                "mobile_number": "9999999999",
+            }, "en")
+            self.assertEqual(ctx_combo_en["place"], "Kalol, Gandhinagar")
+
+        asyncio.run(_test())
+
+    def test_17_party_role_and_name_spacing(self):
+        async def _test():
+            user = {"name": "Test Advocate"}
+            # Party spacing with accidental extra whitespace
+            values_gu = {
+                "court_name": "Civil Court",
+                "district": "gandhinagar",
+                "party_1_role": "વાદી  ",
+                "party_1_name": "  રાજેશકુમાર શાહ  ",
+                "party_2_role": "  પ્રતિવાદી",
+                "party_2_name": "મહેશભાઈ પટેલ  ",
+                "court_officer_detail": "Court",
+                "case_type": "civil_suit",
+                "case_number": "1/2026",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "document_details": "Doc",
+                "number_of_copies": "1",
+                "recipient_name": "Rec",
+                "date": "2026-02-20",
+                "advocate_name": "Adv",
+                "mobile_number": "9999999999",
+            }
+            ctx_gu = await server.build_render_context(user, None, values_gu, "gu")
+            rendered_gu = render_template(self.tpl["content_gu"], ctx_gu)
+            blocks_gu = build_blocks(rendered_gu, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            
+            p1_block = next(b for b in blocks_gu if "રાજેશકુમાર શાહ" in b.get("text", ""))
+            p2_block = next(b for b in blocks_gu if "મહેશભાઈ પટેલ" in b.get("text", ""))
+            self.assertEqual(p1_block["text"], "વાદી :- રાજેશકુમાર શાહ")
+            self.assertEqual(p2_block["text"], "પ્રતિવાદી :- મહેશભાઈ પટેલ")
+            self.assertNotIn("  :-", p1_block["text"])
+            self.assertNotIn(":-  ", p1_block["text"])
+
+            # English party spacing
+            values_en = {
+                "court_name": "Civil Court",
+                "district": "gandhinagar",
+                "party_1_role": "Plaintiff  ",
+                "party_1_name": "  John Doe  ",
+                "party_2_role": "  Defendant",
+                "party_2_name": "Jane Smith  ",
+                "court_officer_detail": "Court",
+                "case_type": "civil_suit",
+                "case_number": "1/2026",
+                "case_date_type": "Next Hearing Date",
+                "case_date": "2026-02-25",
+                "document_details": "Doc",
+                "number_of_copies": "1",
+                "recipient_name": "Rec",
+                "date": "2026-02-20",
+                "advocate_name": "Adv",
+                "mobile_number": "9999999999",
+            }
+            ctx_en = await server.build_render_context(user, None, values_en, "en")
+            rendered_en = render_template(self.tpl["content_en"], ctx_en)
+            blocks_en = build_blocks(rendered_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            
+            p1_block_en = next(b for b in blocks_en if "John Doe" in b.get("text", ""))
+            p2_block_en = next(b for b in blocks_en if "Jane Smith" in b.get("text", ""))
+            self.assertEqual(p1_block_en["text"], "Plaintiff :- John Doe")
+            self.assertEqual(p2_block_en["text"], "Defendant :- Jane Smith")
+
+        asyncio.run(_test())
+
+    def test_18_signature_dash_counts_and_right_alignment(self):
+        # Gujarati signature line is strictly 10 dashes and right aligned
+        rendered_gu = render_template(self.tpl["content_gu"], {
+            "court": "કોર્ટ", "place": "ગાંધીનગર", "court_officer_detail": "કોર્ટ",
+            "case_type": "દાવો", "case_number": "1/2026", "case_date_type": "મુદ્દત તારીખ",
+            "case_date": "25/02/2026", "party_1_role": "વાદી", "party_1_name": "A",
+            "party_2_role": "પ્રતિવાદી", "party_2_name": "B", "document_details": "નકલ",
+            "number_of_copies": "1", "recipient_name": "C", "date": "20/02/2026",
+            "advocate_name": "રમેશભાઈ પટેલ", "mobile_number": "9876543210",
+        })
+        blocks_gu = build_blocks(rendered_gu, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+        sig_gu = next(b for b in blocks_gu if b.get("text", "").startswith("----------"))
+        self.assertEqual(sig_gu["text"], "----------")
+        self.assertEqual(len(sig_gu["text"]), 10)
+        self.assertEqual(sig_gu["align"], "right")
+
+        adv_gu = next(b for b in blocks_gu if "રમેશભાઈ પટેલ" in b.get("text", ""))
+        mob_gu = next(b for b in blocks_gu if "9876543210" in b.get("text", ""))
+        self.assertEqual(adv_gu["align"], "right")
+        self.assertEqual(mob_gu["align"], "right")
+
+        # English signature line is strictly 20 dashes and right aligned
+        rendered_en = render_template(self.tpl["content_en"], {
+            "court": "Court", "place": "Gandhinagar", "court_officer_detail": "Court",
+            "case_type": "Suit", "case_number": "1/2026", "case_date_type": "Next Hearing Date",
+            "case_date": "25/02/2026", "party_1_role": "Plaintiff", "party_1_name": "A",
+            "party_2_role": "Defendant", "party_2_name": "B", "document_details": "Copy",
+            "number_of_copies": "1", "recipient_name": "C", "date": "20/02/2026",
+            "advocate_name": "Ramesh Patel", "mobile_number": "9876543210",
+        })
+        blocks_en = build_blocks(rendered_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+        sig_en = next(b for b in blocks_en if b.get("text", "").startswith("--------------------"))
+        self.assertEqual(sig_en["text"], "--------------------")
+        self.assertEqual(len(sig_en["text"]), 20)
+        self.assertEqual(sig_en["align"], "right")
+
+        adv_en = next(b for b in blocks_en if "Ramesh Patel" in b.get("text", ""))
+        mob_en = next(b for b in blocks_en if "9876543210" in b.get("text", ""))
+        self.assertEqual(adv_en["align"], "right")
+        self.assertEqual(mob_en["align"], "right")
 
 
 if __name__ == "__main__":

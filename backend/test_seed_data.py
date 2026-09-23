@@ -2778,9 +2778,8 @@ Place : {{taluka_place}}
                 {"contains": "સ્થળ :", "align": "left"},
                 {"contains": "Place:", "align": "left"},
                 {"contains": "Place :", "align": "left"},
-                {"contains": "-------------------", "align": "right", "indent": False},
-                {"contains": "------------------", "align": "right", "indent": False},
                 {"contains": "----------", "align": "right", "indent": False},
+                {"contains": "--------------------", "align": "right", "indent": False},
             ],
         },
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
@@ -2812,7 +2811,7 @@ Place : {{taluka_place}}
 તારીખ : {{date}}
 સ્થળ : {{place}}
 
--------------------
+----------
 {{advocate_name}}
 {{mobile_number}}""",
         "content_en": """IN THE COURT OF THE HON'BLE {{court}},
@@ -2844,7 +2843,7 @@ The said copies may please be delivered to the undersigned or on our behalf to {
 Date: {{date}}
 Place: {{place}}
 
--------------------
+--------------------
 {{advocate_name}}
 {{mobile_number}}""",
     },

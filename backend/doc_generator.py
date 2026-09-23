@@ -446,6 +446,8 @@ def normalize_legal_text(content: str) -> str:
                 cleaned.append("")
         else:
             blank_run = 0
+            if ":-" in line:
+                line = re.sub(r"\s*:-\s*", " :- ", line).strip()
             cleaned.append(line)
     return "\n".join(cleaned)
 
@@ -581,6 +583,8 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                             c_text = c_text[6:].strip()
                             if c_text.endswith("[/BOLD]"):
                                 c_text = c_text[:-7].strip()
+                        if ":-" in c_text:
+                            c_text = re.sub(r"\s*:-\s*", " :- ", c_text).strip()
                         clean_cells.append(c_text)
                         cell_aligns.append(c_align)
                         cell_bolds.append(c_bold)
@@ -687,14 +691,11 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                 or next_line_str.startswith("Advocate")
             )
         )
-        if is_dash_line and is_next_signature:
-            is_gujarati_sig = bool(
-                re.search(r"[\u0a80-\u0aff]", next_line_str)
-                or any(k in next_line_str for k in ("ના એડવોકેટ", "તરફે એડવોકેટ", "તરફે વકીલ", "એડવોકેટ"))
-            )
-            if is_gujarati_sig:
+        if is_dash_line:
+            is_gujarati_doc = bool(re.search(r"[\u0a80-\u0aff]", content))
+            if is_gujarati_doc:
                 line = "----------"
-            elif any(k in (title_en or "").lower() for k in ("exhibit", "marking documents")):
+            else:
                 line = "--------------------"
         is_date_place = (
             bool(
