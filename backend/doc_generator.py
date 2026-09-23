@@ -522,11 +522,13 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
     table_rows = []
     table_row_meta = []
     table_meta = {}
+    in_signature_block = False
 
     for raw in raw_lines:
         line = raw.strip()
         
         if line == "[TABLE_START]" or line.startswith("[TABLE_START"):
+            in_signature_block = False
             in_table = True
             table_rows = []
             table_row_meta = []
@@ -591,12 +593,25 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             continue
 
         if line == "--- PAGE BREAK ---":
+            in_signature_block = False
             blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "page_break"})
             continue
 
         if not line:
             blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "spacer"})
             continue
+
+        explicit_align = None
+        if line.startswith("[RIGHT]"):
+            explicit_align = "right"
+            line = line[7:].strip()
+        elif line.startswith("[CENTER]"):
+            explicit_align = "center"
+            line = line[8:].strip()
+        elif line.startswith("[LEFT]"):
+            explicit_align = "left"
+            line = line[6:].strip()
+
         curr_non_idx = nonempty
         nonempty += 1
 
@@ -690,17 +705,26 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
         )
 
         # 6. Advocate Signature
-        is_signature = bool(
-            (
-                (is_dash_line and is_next_signature)
-                or re.search(r"(?:Advocate\s+(?:for|of|to)|Advocate|ના\s+એડવોકેટ|તરફે\s+એડવોકેટ|તરફે\s+વકીલ|એડવોકેટ\s+શ્રી|\(સહી\)|સહી\s*[/:]|Sign\s*[/:])$", line, re.IGNORECASE)
-                or line.startswith("Advocate for")
-                or line.startswith("Advocate")
+        if is_court or is_title:
+            in_signature_block = False
+
+        if is_dash_line:
+            in_signature_block = True
+            is_signature = True
+        elif in_signature_block:
+            is_signature = True
+        else:
+            is_signature = bool(
+                (
+                    (is_dash_line and is_next_signature)
+                    or re.search(r"(?:Advocate\s+(?:for|of|to)|Advocate|ના\s+એડવોકેટ|તરફે\s+એડવોકેટ|તરફે\s+વકીલ|એડવોકેટ\s+શ્રી|\(સહી\)|સહી\s*[/:]|Sign\s*[/:])$", line, re.IGNORECASE)
+                    or line.startswith("Advocate for")
+                    or line.startswith("Advocate")
+                )
+                and not line.startswith("સદર")
+                and not line.startswith("આથી")
+                and len(line) < 80
             )
-            and not line.startswith("સદર")
-            and not line.startswith("આથી")
-            and len(line) < 80
-        )
 
         # 7. Parties (around versus before title)
         is_party = (
@@ -759,6 +783,9 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                     if "indent" in rule:
                         indent = bool(rule["indent"])
                     break
+
+        if explicit_align:
+            align = explicit_align
 
         blocks.append({"text": line, "align": align, "bold": bold, "indent": indent, "section": section})
 
@@ -1548,6 +1575,11 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                                 cell_y -= (body_size * 1.5)
                             curr_x += cell_w
                         y -= row_height
+                    y -= (body_size + 4.0)
+                    if y < margin_b:
+                        c.showPage()
+                        c.setFont(font_name, body_size)
+                        y = page_h - margin_t
                     continue
 
             if not entry:

@@ -438,6 +438,76 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ", exhibit_tpl["content_gu"])
         self.assertEqual(len(exhibit_tpl["fields"]), 11)
 
+    def test_15_signature_and_date_place_alignments_gu_and_en(self):
+        """Verify Date & Place are left-aligned and signature block (dash line, advocate name, mobile) is right-aligned."""
+        # Test Gujarati
+        ctx_gu = {
+            "court": "સિટી સિવિલ કોર્ટ",
+            "place": "અમદાવાદ",
+            "court_officer_detail": "શ્રી એ.બી. શાહ સાહેબની કોર્ટ",
+            "case_type": "રેગ્યુલર સિવિલ સૂટ",
+            "case_number": "૧૨૩/૨૦૨૪",
+            "case_date_type": "મુદ્દત તારીખ",
+            "case_date": "25/02/2026",
+            "party_1_role": "વાદી",
+            "party_1_name": "રાજેશકુમાર શાંતિલાલ શાહ",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "મહેશભાઈ કાનજીભાઈ પટેલ",
+            "document_details": "આંક - ૧, ૫, ૭ તથા હુકમની નકલ",
+            "number_of_copies": "2",
+            "recipient_name": "કિશોરભાઈ મોહનભાઈ પરમાર",
+            "date": "20/02/2026",
+            "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
+            "mobile_number": "9876543210",
+        }
+        rendered_gu = render_template(self.tpl["content_gu"], ctx_gu)
+        blocks_gu = build_blocks(rendered_gu, self.tpl["name_en"], self.tpl["name_gu"], align_rules=self.tpl["settings"].get("block_align"))
+        date_block_gu = next(b for b in blocks_gu if "તારીખ :" in b.get("text", ""))
+        place_block_gu = next(b for b in blocks_gu if "સ્થળ :" in b.get("text", ""))
+        self.assertEqual(date_block_gu["align"], "left")
+        self.assertEqual(place_block_gu["align"], "left")
+
+        sig_dash_gu = next(b for b in blocks_gu if "-------------------" in b.get("text", ""))
+        adv_name_gu = next(b for b in blocks_gu if "એડવોકેટ રમેશભાઈ પટેલ" in b.get("text", ""))
+        mobile_gu = next(b for b in blocks_gu if "9876543210" in b.get("text", ""))
+        self.assertEqual(sig_dash_gu["align"], "right")
+        self.assertEqual(adv_name_gu["align"], "right")
+        self.assertEqual(mobile_gu["align"], "right")
+
+        # Test English
+        ctx_en = {
+            "court": "City Civil Court",
+            "place": "Ahmedabad",
+            "court_officer_detail": "Hon Court of Additional Civil Judge",
+            "case_type": "Regular Civil Suit",
+            "case_number": "123/2024",
+            "case_date_type": "Disposal Date",
+            "case_date": "25/02/2026",
+            "party_1_role": "Plaintiff",
+            "party_1_name": "Rajeshkumar Shantilal Shah",
+            "party_2_role": "Defendant",
+            "party_2_name": "Maheshbhai Kanjibhai Patel",
+            "document_details": "Exhibit 1, 5, 7 and order copy",
+            "number_of_copies": "2",
+            "recipient_name": "Kishorbhai Mohanbhai Parmar",
+            "date": "20/02/2026",
+            "advocate_name": "Advocate Ramesh Patel",
+            "mobile_number": "9876543210",
+        }
+        rendered_en = render_template(self.tpl["content_en"], ctx_en)
+        blocks_en = build_blocks(rendered_en, self.tpl["name_en"], self.tpl["name_gu"], align_rules=self.tpl["settings"].get("block_align"))
+        date_block_en = next(b for b in blocks_en if "Date:" in b.get("text", ""))
+        place_block_en = next(b for b in blocks_en if "Place:" in b.get("text", ""))
+        self.assertEqual(date_block_en["align"], "left")
+        self.assertEqual(place_block_en["align"], "left")
+
+        sig_dash_en = next(b for b in blocks_en if "-------------------" in b.get("text", ""))
+        adv_name_en = next(b for b in blocks_en if "Advocate Ramesh Patel" in b.get("text", ""))
+        mobile_en = next(b for b in blocks_en if "9876543210" in b.get("text", ""))
+        self.assertEqual(sig_dash_en["align"], "right")
+        self.assertEqual(adv_name_en["align"], "right")
+        self.assertEqual(mobile_en["align"], "right")
+
 
 if __name__ == "__main__":
     unittest.main()
