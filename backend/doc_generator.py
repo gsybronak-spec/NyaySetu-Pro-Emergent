@@ -473,7 +473,21 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
     """
     normalized = normalize_legal_text(content)
     raw_lines = normalized.split("\n")
-    nonempty_lines = [(idx, line.strip()) for idx, line in enumerate(raw_lines) if line.strip()]
+    # Exclude table content from nonempty_lines so pre-scan indices match curr_non_idx in main loop
+    nonempty_lines = []
+    _in_tbl = False
+    for idx, raw in enumerate(raw_lines):
+        line_s = raw.strip()
+        if not line_s:
+            continue
+        if line_s == "[TABLE_START]" or line_s.startswith("[TABLE_START"):
+            _in_tbl = True
+            continue
+        if _in_tbl:
+            if line_s == "[TABLE_END]":
+                _in_tbl = False
+            continue
+        nonempty_lines.append((idx, line_s))
 
     # Pre-scan for court header, versus, and title positions
     court_idx_0 = False
@@ -562,7 +576,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                     if row_line.startswith("[HEADER]"):
                         is_header = True
                         row_line = row_line[len("[HEADER]"):].strip()
-                    raw_cells = [c.strip() for c in row_line.split(" | ")]
+                    raw_cells = [c.strip() for c in row_line.split("|")]
                     clean_cells = []
                     cell_aligns = []
                     cell_bolds = []
@@ -585,6 +599,8 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                                 c_text = c_text[:-7].strip()
                         if ":-" in c_text:
                             c_text = re.sub(r"\s*:-\s*", " :- ", c_text).strip()
+                        if c_text in (":-", ":", "નં. :", "No. :", "-", "નં. : |", "No. : |"):
+                            c_text = ""
                         clean_cells.append(c_text)
                         cell_aligns.append(c_align)
                         cell_bolds.append(c_bold)
@@ -729,12 +745,15 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
         # 7. Parties (around versus before title)
         is_party = (
-            (vs_idx != -1 and (title_idx == -1 or vs_idx < title_idx) and (curr_non_idx == vs_idx - 1 or curr_non_idx == vs_idx + 1))
+            (vs_idx != -1 and (title_idx == -1 or vs_idx < title_idx) and (
+                (curr_non_idx < vs_idx and (curr_non_idx >= vs_idx - 2 or ":-" in line))
+                or (curr_non_idx > vs_idx and (curr_non_idx <= vs_idx + 2 or ":-" in line))
+            ))
             or line.startswith("{{party_line}}")
             or line.startswith("{{opposite_party_line}}")
             or line.startswith("{{party_name}}")
             or line.startswith("{{opposite_party}}")
-            or bool(re.match(r"^(વાદી|પ્રતિવાદી|અરજદાર|સામાવાળા|ફરિયાદી|આરોપી|Plaintiff|Defendant|Applicant|Respondent|Petitioner)\s*[:\.]", line, re.IGNORECASE))
+            or bool(re.match(r"^(વાદી|પ્રતિવાદી|અરજદાર|સામાવાળા|સામેવાળા|ફરીયાદી|ફરિયાદી|આરોપી|પક્ષકાર|Plaintiff|Defendant|Applicant|Respondent|Petitioner|Complainant|Accused|Appellant)", line, re.IGNORECASE))
         )
 
         # Default classification according to NYAYSETU_LEGAL_FORMAT_V1
@@ -797,7 +816,10 @@ def render_template(content_template: str, values: dict) -> str:
     result = content_template
     for k, v in (values or {}).items():
         result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
-    result = re.sub(r"\{\{[^}]+\}\}", "____", result)
+    if "પ્રમાણિત નકલ મેળવવા બાબત" in result or "Application for Obtaining Certified Copy" in result:
+        result = re.sub(r"\{\{[^}]+\}\}", "", result)
+    else:
+        result = re.sub(r"\{\{[^}]+\}\}", "____", result)
     return result
 
 

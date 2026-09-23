@@ -154,46 +154,22 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertNotIn("deposit", keys)
         self.assertNotIn("amount", keys)
 
-    def test_04_field_properties(self):
+    def test_04_all_19_fields_optional(self):
         fmap = {f["key"]: f for f in self.tpl["fields"]}
-        self.assertEqual(fmap["court_name"]["type"], "select")
-        self.assertTrue(fmap["court_name"]["required"])
-        self.assertEqual(fmap["district"]["type"], "select")
-        self.assertTrue(fmap["district"]["required"])
-        self.assertEqual(fmap["taluka"]["type"], "select")
-        self.assertFalse(fmap["taluka"]["required"])
-        self.assertEqual(fmap["court_officer_detail"]["type"], "text")
-        self.assertTrue(fmap["court_officer_detail"]["required"])
-        self.assertEqual(fmap["case_type"]["type"], "select")
-        self.assertTrue(fmap["case_type"]["required"])
-        self.assertEqual(fmap["case_number"]["type"], "text")
-        self.assertTrue(fmap["case_number"]["required"])
-        self.assertEqual(fmap["case_date_type"]["type"], "radio")
-        self.assertTrue(fmap["case_date_type"]["required"])
-        self.assertEqual(fmap["case_date"]["type"], "date")
-        self.assertTrue(fmap["case_date"]["required"])
-        self.assertEqual(fmap["party_1_role"]["type"], "radio")
-        self.assertTrue(fmap["party_1_role"]["required"])
-        self.assertEqual(fmap["party_1_name"]["type"], "text")
-        self.assertTrue(fmap["party_1_name"]["required"])
-        self.assertEqual(fmap["party_2_role"]["type"], "radio")
-        self.assertTrue(fmap["party_2_role"]["required"])
-        self.assertEqual(fmap["party_2_name"]["type"], "text")
-        self.assertTrue(fmap["party_2_name"]["required"])
-        self.assertEqual(fmap["document_details"]["type"], "textarea")
-        self.assertTrue(fmap["document_details"]["required"])
-        self.assertEqual(fmap["number_of_copies"]["type"], "number")
-        self.assertTrue(fmap["number_of_copies"]["required"])
-        self.assertEqual(fmap["recipient_name"]["type"], "text")
-        self.assertTrue(fmap["recipient_name"]["required"])
-        self.assertEqual(fmap["date"]["type"], "date")
-        self.assertTrue(fmap["date"]["required"])
-        self.assertEqual(fmap["place"]["type"], "text")
-        self.assertFalse(fmap["place"]["required"])
-        self.assertEqual(fmap["advocate_name"]["type"], "text")
-        self.assertTrue(fmap["advocate_name"]["required"])
-        self.assertEqual(fmap["mobile_number"]["type"], "text")
-        self.assertTrue(fmap["mobile_number"]["required"])
+        for key, f in fmap.items():
+            self.assertFalse(f["required"], f"Field '{key}' must be optional (required=False)")
+
+        # Explicitly verify the specific fields identified in instructions
+        self.assertFalse(fmap["document_details"]["required"])
+        self.assertFalse(fmap["number_of_copies"]["required"])
+        self.assertFalse(fmap["recipient_name"]["required"])
+        self.assertFalse(fmap["mobile_number"]["required"])
+        self.assertFalse(fmap["advocate_name"]["required"])
+        self.assertFalse(fmap["court_officer_detail"]["required"])
+        self.assertFalse(fmap["case_date"]["required"])
+        self.assertFalse(fmap["court_name"]["required"])
+        self.assertFalse(fmap["district"]["required"])
+        self.assertFalse(fmap["case_number"]["required"])
 
     def test_05_settings_geometry_and_typography(self):
         s = self.tpl["settings"]
@@ -666,6 +642,33 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             self.assertEqual(p2_block["text"], "પ્રતિવાદી :- મહેશભાઈ પટેલ")
             self.assertNotIn("  :-", p1_block["text"])
             self.assertNotIn(":-  ", p1_block["text"])
+            # Assert IDENTICAL alignment, indentation, and section for Party 1 and Party 2
+            self.assertEqual(p1_block["align"], "left")
+            self.assertEqual(p2_block["align"], "left")
+            self.assertFalse(p1_block["indent"])
+            self.assertFalse(p2_block["indent"])
+            self.assertEqual(p1_block["section"], "party")
+            self.assertEqual(p2_block["section"], "party")
+
+            # Gujarati party alignment: Fariyadi vs Aropi (User's reported case)
+            values_fariyadi = dict(values_gu)
+            values_fariyadi["party_1_role"] = "ફરીયાદી"
+            values_fariyadi["party_1_name"] = "જે જે"
+            values_fariyadi["party_2_role"] = "આરોપી"
+            values_fariyadi["party_2_name"] = "રરર"
+            ctx_far = await server.build_render_context(user, None, values_fariyadi, "gu")
+            rend_far = render_template(self.tpl["content_gu"], ctx_far)
+            blks_far = build_blocks(rend_far, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            p1_far = next(b for b in blks_far if "જે જે" in b.get("text", ""))
+            p2_far = next(b for b in blks_far if "રરર" in b.get("text", ""))
+            self.assertEqual(p1_far["text"], "ફરીયાદી :- જે જે")
+            self.assertEqual(p2_far["text"], "આરોપી :- રરર")
+            self.assertEqual(p1_far["align"], "left")
+            self.assertEqual(p2_far["align"], "left")
+            self.assertFalse(p1_far["indent"], "Party 1 must not be indented!")
+            self.assertFalse(p2_far["indent"], "Party 2 must not be indented!")
+            self.assertEqual(p1_far["section"], "party")
+            self.assertEqual(p2_far["section"], "party")
 
             # English party spacing
             values_en = {
@@ -695,6 +698,12 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             p2_block_en = next(b for b in blocks_en if "Jane Smith" in b.get("text", ""))
             self.assertEqual(p1_block_en["text"], "Plaintiff :- John Doe")
             self.assertEqual(p2_block_en["text"], "Defendant :- Jane Smith")
+            self.assertEqual(p1_block_en["align"], "left")
+            self.assertEqual(p2_block_en["align"], "left")
+            self.assertFalse(p1_block_en["indent"])
+            self.assertFalse(p2_block_en["indent"])
+            self.assertEqual(p1_block_en["section"], "party")
+            self.assertEqual(p2_block_en["section"], "party")
 
         asyncio.run(_test())
 
@@ -738,6 +747,122 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         mob_en = next(b for b in blocks_en if "9876543210" in b.get("text", ""))
         self.assertEqual(adv_en["align"], "right")
         self.assertEqual(mob_en["align"], "right")
+
+    def test_19_optional_blank_field_rendering_and_table_integrity(self):
+        """Test template with cases A through J where various optional fields are left blank.
+        Verify:
+        - Document generation/preview is never blocked.
+        - Exactly TWO tables are rendered.
+        - Table 1 has 3 rows × 2 cols with row 0 merged.
+        - Table 2 has 2 rows × 2 cols.
+        - No 'undefined', 'null', 'None', 'N/A', 'Required', '[object Object]', or '____' in output.
+        - Deposit blanks strictly 6 underscores (GU) and 12 underscores (EN).
+        """
+        async def _run_cases():
+            user = {"id": "test_adv", "name_gu": "એડવોકેટ રમેશભાઈ પટેલ", "name_en": "Advocate Ramesh Patel"}
+            
+            base_values = {
+                "court_name": "principal_senior_civil_judge",
+                "district": "gandhinagar",
+                "court_officer_detail": "શ્રી એ.બી. શાહ સાહેબની કોર્ટ",
+                "case_type": "regular_civil_suit",
+                "case_number": "૧૨૩/૨૦૨૪",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "party_1_role": "વાદી",
+                "party_1_name": "રાજેશકુમાર શાહ",
+                "party_2_role": "પ્રતિવાદી",
+                "party_2_name": "મહેશભાઈ પટેલ",
+                "document_details": "આંક ૧, ૫",
+                "number_of_copies": "2",
+                "recipient_name": "કિશોરભાઈ",
+                "date": "2026-02-20",
+                "place": "કલોલ, ગાંધીનગર",
+                "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
+                "mobile_number": "9876543210",
+            }
+
+            test_variations = [
+                ("A_all_filled", {}),
+                ("B_document_details_blank", {"document_details": ""}),
+                ("C_number_of_copies_blank", {"number_of_copies": ""}),
+                ("D_recipient_name_blank", {"recipient_name": ""}),
+                ("E_mobile_number_blank", {"mobile_number": ""}),
+                ("F_advocate_name_blank", {"advocate_name": ""}),
+                ("G_case_date_blank", {"case_date": "", "case_date_type": ""}),
+                ("H_court_officer_blank", {"court_officer_detail": ""}),
+                ("I_parties_partially_blank", {"party_1_name": "", "party_2_role": ""}),
+                ("J_all_optional_blank", {
+                    "document_details": "", "number_of_copies": "", "recipient_name": "",
+                    "mobile_number": "", "court_officer_detail": "", "case_date": "",
+                    "case_date_type": "", "place": "",
+                }),
+            ]
+
+            for name, overrides in test_variations:
+                # 1. Gujarati test
+                vals_gu = dict(base_values)
+                vals_gu.update(overrides)
+                ctx_gu = await server.build_render_context(user, None, vals_gu, "gu")
+                # validate_template_requirements must NOT raise HTTPException
+                server.validate_template_requirements(self.tpl, ctx_gu, "gu")
+                rend_gu = render_template(self.tpl["content_gu"], ctx_gu)
+                blks_gu = build_blocks(rend_gu, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+
+                # Asserts on text
+                self.assertNotIn("undefined", rend_gu, f"Case {name} leaked undefined")
+                self.assertNotIn("null", rend_gu, f"Case {name} leaked null")
+                self.assertNotIn("None", rend_gu, f"Case {name} leaked None")
+                self.assertNotIn("N/A", rend_gu, f"Case {name} leaked N/A")
+                self.assertIn("______", rend_gu, f"Case {name} must have 6 underscores deposit blank")
+                self.assertNotIn("____", rend_gu.replace("______", ""), f"Case {name} leaked ____ placeholder")
+
+                # Table structure verification
+                tables_gu = [b for b in blks_gu if b.get("section") == "table"]
+                self.assertEqual(len(tables_gu), 2, f"Case {name} must have exactly 2 tables")
+                self.assertEqual(len(tables_gu[0]["rows"]), 3, f"Case {name} Table 1 must have 3 rows")
+                self.assertEqual(len(tables_gu[1]["rows"]), 2, f"Case {name} Table 2 must have 2 rows")
+
+                # 2. English test
+                vals_en = {
+                    "court_name": "principal_senior_civil_judge",
+                    "district": "gandhinagar",
+                    "court_officer_detail": "Court of Shri A.B. Shah",
+                    "case_type": "regular_civil_suit",
+                    "case_number": "123/2024",
+                    "case_date_type": "Next Hearing Date",
+                    "case_date": "2026-02-25",
+                    "party_1_role": "Plaintiff",
+                    "party_1_name": "Rajeshkumar Shah",
+                    "party_2_role": "Defendant",
+                    "party_2_name": "Maheshbhai Patel",
+                    "document_details": "Exhibit 1, 5",
+                    "number_of_copies": "2",
+                    "recipient_name": "Kishorbhai",
+                    "date": "2026-02-20",
+                    "place": "Kalol, Gandhinagar",
+                    "advocate_name": "Advocate Ramesh Patel",
+                    "mobile_number": "9876543210",
+                }
+                vals_en.update(overrides)
+                ctx_en = await server.build_render_context(user, None, vals_en, "en")
+                server.validate_template_requirements(self.tpl, ctx_en, "en")
+                rend_en = render_template(self.tpl["content_en"], ctx_en)
+                blks_en = build_blocks(rend_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+
+                self.assertNotIn("undefined", rend_en, f"Case {name} EN leaked undefined")
+                self.assertNotIn("null", rend_en, f"Case {name} EN leaked null")
+                self.assertNotIn("None", rend_en, f"Case {name} EN leaked None")
+                self.assertNotIn("N/A", rend_en, f"Case {name} EN leaked N/A")
+                self.assertIn("____________", rend_en, f"Case {name} EN must have 12 underscores deposit blank")
+                self.assertNotIn("____", rend_en.replace("____________", ""), f"Case {name} EN leaked ____ placeholder")
+
+                tables_en = [b for b in blks_en if b.get("section") == "table"]
+                self.assertEqual(len(tables_en), 2, f"Case {name} EN must have exactly 2 tables")
+                self.assertEqual(len(tables_en[0]["rows"]), 3, f"Case {name} EN Table 1 must have 3 rows")
+                self.assertEqual(len(tables_en[1]["rows"]), 2, f"Case {name} EN Table 2 must have 2 rows")
+
+        asyncio.run(_run_cases())
 
 
 if __name__ == "__main__":

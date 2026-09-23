@@ -621,6 +621,9 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
+    if (templateId === "certified_copy_application") {
+      return [];
+    }
     const missing: string[] = [];
     if (!caseId) {
       // Required base fields in No-Case mode

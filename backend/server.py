@@ -4160,6 +4160,16 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             elif cdt in ("Disposal Date", "disposal_date", "ફેંસલ તારીખ"):
                 ctx["case_date_type"] = "ફેંસલ તારીખ"
 
+    # Ensure certified_copy_application template keys are clean strings (never None or undefined)
+    for k in (
+        "court_officer_detail", "case_date_type", "case_date",
+        "party_1_role", "party_1_name", "party_2_role", "party_2_name",
+        "document_details", "number_of_copies", "recipient_name",
+        "place", "advocate_name", "mobile_number",
+    ):
+        if k not in ctx or ctx[k] is None:
+            ctx[k] = ""
+
     return ctx
 
 
