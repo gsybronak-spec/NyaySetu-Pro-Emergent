@@ -191,18 +191,53 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         table_blocks = [b for b in blocks_gu if b.get("section") == "table"]
         self.assertEqual(len(table_blocks), 2, f"Expected 2 tables, found {len(table_blocks)}")
 
-        # Table 1: Case details table
+        # Table 1: Case details table (3 rows x 2 cols, row 0 merged)
         t1 = table_blocks[0]
         self.assertEqual(t1.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
         self.assertEqual(len(t1["rows"]), 3)
-        # Row 1 is merged single cell
+        # Row 0: Merged court officer detail
+        self.assertEqual(len(t1["rows"][0]), 1)
         self.assertIn("{{court_officer_detail}}", t1["rows"][0][0])
+        # Row 1: Case type label without redundant colon/dash
+        self.assertEqual(t1["rows"][1][0], "{{case_type}} નં.")
+        self.assertNotIn(":-", t1["rows"][1][0])
+        self.assertNotIn(":", t1["rows"][1][0])
+        self.assertEqual(t1["rows"][1][1], "{{case_number}}")
+        # Row 2: Case date type label without redundant colon/dash
+        self.assertEqual(t1["rows"][2][0], "{{case_date_type}}")
+        self.assertNotIn(":-", t1["rows"][2][0])
+        self.assertNotIn(":", t1["rows"][2][0])
+        self.assertEqual(t1["rows"][2][1], "{{case_date}}")
 
-        # Table 2: Document request table
+        # Table 2: Document request table (2 rows x 2 cols)
         t2 = table_blocks[1]
         self.assertEqual(t2.get("meta"), {"cols": [64.6, 35.4], "align": ["left", "center"]})
         self.assertEqual(len(t2["rows"]), 2)
+        # Row 0: Header row is marked and BOTH cells are centered
         self.assertTrue(t2.get("row_meta", [{}])[0].get("is_header", False))
+        self.assertEqual(t2.get("row_meta", [{}])[0].get("align"), ["center", "center"])
+        self.assertEqual(t2["rows"][0], ["માંગેલ દસ્તાવેજ ની વિગત", "કુલ નંગ"])
+        # Row 1: Data row retains left / center alignment
+        self.assertEqual(t2["rows"][1], ["{{document_details}}", "{{number_of_copies}}"])
+
+        # English block verification
+        blocks_en = build_blocks(self.tpl["content_en"])
+        table_blocks_en = [b for b in blocks_en if b.get("section") == "table"]
+        self.assertEqual(len(table_blocks_en), 2)
+        t1_en = table_blocks_en[0]
+        self.assertEqual(t1_en.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
+        self.assertEqual(t1_en["rows"][1][0], "{{case_type}} No.")
+        self.assertNotIn(":-", t1_en["rows"][1][0])
+        self.assertNotIn(":", t1_en["rows"][1][0])
+        self.assertEqual(t1_en["rows"][2][0], "{{case_date_type}}")
+        self.assertNotIn(":-", t1_en["rows"][2][0])
+        self.assertNotIn(":", t1_en["rows"][2][0])
+
+        t2_en = table_blocks_en[1]
+        self.assertEqual(t2_en.get("meta"), {"cols": [64.6, 35.4], "align": ["left", "center"]})
+        self.assertTrue(t2_en.get("row_meta", [{}])[0].get("is_header", False))
+        self.assertEqual(t2_en.get("row_meta", [{}])[0].get("align"), ["center", "center"])
+        self.assertEqual(t2_en["rows"][0], ["Particulars of Requested Documents", "Total Copies"])
 
     def test_07_gujarati_fidelity_and_deposit_underscores(self):
         c_gu = self.tpl["content_gu"]

@@ -599,8 +599,10 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                                 c_text = c_text[:-7].strip()
                         if ":-" in c_text:
                             c_text = re.sub(r"\s*:-\s*", " :- ", c_text).strip()
-                        if c_text in (":-", ":", "નં. :", "No. :", "-", "નં. : |", "No. : |"):
+                        if c_text in (":-", ":", "નં. :", "No. :", "-", "નં. : |", "No. : |", "નં. :-", "No. :-"):
                             c_text = ""
+                        if is_header and not c_align:
+                            c_align = "center"
                         clean_cells.append(c_text)
                         cell_aligns.append(c_align)
                         cell_bolds.append(c_bold)
@@ -1089,10 +1091,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
                         c_align_str = None
                         if r_m.get("align") and c_idx < len(r_m["align"]):
                             c_align_str = r_m["align"][c_idx]
+                        if not c_align_str and is_hdr:
+                            c_align_str = "center"
                         if not c_align_str and c_idx < len(default_aligns):
                             c_align_str = default_aligns[c_idx]
-                        if is_hdr and not c_align_str:
-                            c_align_str = "center"
                         c_align = 2 if c_align_str == "right" else (1 if c_align_str == "center" else 0)
                         c_bold = False
                         if r_m.get("bold") and c_idx < len(r_m["bold"]):
@@ -1121,7 +1123,7 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
                 t_style = [
                     ('INNERGRID', (0,0), (-1,-1), 0.5, colors.black),
                     ('BOX', (0,0), (-1,-1), 0.5, colors.black),
-                    ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
                 ]
                 t_style.extend(span_commands)
                 t.setStyle(RLTableStyle(t_style))
@@ -1513,10 +1515,10 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                         c_align_str = r_m["align"][c_idx]
                     if not c_align_str and is_span and default_aligns:
                         c_align_str = default_aligns[0]
+                    elif not c_align_str and is_hdr:
+                        c_align_str = "center"
                     elif not c_align_str and c_idx < len(default_aligns):
                         c_align_str = default_aligns[c_idx]
-                    if is_hdr and not c_align_str:
-                        c_align_str = "center"
                     if not c_align_str:
                         c_align_str = "left"
 
@@ -1541,6 +1543,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                         "bold": c_bold,
                         "latin": c_latin,
                         "is_span": is_span,
+                        "is_header": is_hdr,
                     })
                 table_shaped.append(row_shaped)
             shaped.append({"type": "table", "rows": table_shaped, "num_cols": num_cols, "col_widths": col_widths})
@@ -1599,7 +1602,8 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
                             
                             c.rect(curr_x, y - row_height, cell_w, row_height)
                             
-                            cell_y = y - 5 - body_size
+                            vert_pad = (row_height - (len(cell_lines) * (body_size * 1.5))) / 2.0 if cell_data.get("is_header") else 5.0
+                            cell_y = y - max(5.0, vert_pad) - body_size
                             for ln in cell_lines:
                                 line_w = ln["width"]
                                 if cell_align == "right":

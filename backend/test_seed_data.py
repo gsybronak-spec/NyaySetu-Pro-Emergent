@@ -2787,8 +2787,8 @@ Place : {{taluka_place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
 [RIGHT]{{court_officer_detail}}
-[RIGHT]{{case_type}} નં. : | {{case_number}}
-[RIGHT]{{case_date_type}} :- | {{case_date}}
+[RIGHT]{{case_type}} નં. | {{case_number}}
+[RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]
 
 {{party_1_role}} :- {{party_1_name}}
@@ -2802,7 +2802,7 @@ Place : {{taluka_place}}
 સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી.
 
 [TABLE_START cols="64.6,35.4" align="left,center"]
-[HEADER] માંગેલ દસ્તાવેજ ની વિગત | કુલ નંગ
+[HEADER] [CENTER] માંગેલ દસ્તાવેજ ની વિગત | [CENTER] કુલ નંગ
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 
@@ -2819,8 +2819,8 @@ AT: {{place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
 [RIGHT]{{court_officer_detail}}
-[RIGHT]{{case_type}} No. : | {{case_number}}
-[RIGHT]{{case_date_type}} :- | {{case_date}}
+[RIGHT]{{case_type}} No. | {{case_number}}
+[RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]
 
 {{party_1_role}} :- {{party_1_name}}
@@ -2834,7 +2834,7 @@ We, the undersigned Advocate, respectfully submit before this Hon'ble Court that
 From the aforesaid case, we require certified copies duly signed and sealed of the documents mentioned hereinbelow for the purpose of study and judicial proceedings. It is therefore respectfully prayed that this Hon'ble Court may be pleased to issue the signed and sealed certified copies expeditiously.
 
 [TABLE_START cols="64.6,35.4" align="left,center"]
-[HEADER] Particulars of Requested Documents | Total Copies
+[HEADER] [CENTER] Particulars of Requested Documents | [CENTER] Total Copies
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 

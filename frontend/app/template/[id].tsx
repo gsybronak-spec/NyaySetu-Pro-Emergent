@@ -1403,7 +1403,7 @@ export default function TemplateApplication() {
                             ]}
                           >
                             {row.map((cellText: string, cIdx: number) => {
-                              const cellAlign = (rMeta.align?.[cIdx] || defaultAligns[cIdx] || (isSpan ? (defaultAligns[0] || "right") : "left")) as ("left" | "right" | "center");
+                              const cellAlign = (rMeta.align?.[cIdx] || (isHeader ? "center" : defaultAligns[cIdx]) || (isSpan ? (defaultAligns[0] || "right") : "left")) as ("left" | "right" | "center");
                               const cellBold = isHeader || !!rMeta.bold?.[cIdx];
 
                               let colWidthPercent = "100%";
