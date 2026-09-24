@@ -4310,7 +4310,13 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Closing Purshish advocate_for role auto-flow
     raw_adv_for = ctx.get("advocate_for")
     if raw_adv_for:
-        adv_for_role = resolve_party_role_label(raw_adv_for, language)
+        if raw_adv_for == "party_1":
+            target_role = ctx.get("party_1_role") or ("વાદી" if language == "gu" else "Plaintiff")
+        elif raw_adv_for == "party_2":
+            target_role = ctx.get("party_2_role") or ("પ્રતિવાદી" if language == "gu" else "Defendant")
+        else:
+            target_role = raw_adv_for
+        adv_for_role = resolve_party_role_label(target_role, language)
         ctx["advocate_for_role"] = adv_for_role
         if language == "gu":
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
