@@ -386,6 +386,20 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
+      if (templateId === "closing_purshish" && k === "advocate_for") {
+        const roleStr = String(v || "").trim();
+        if (roleStr) {
+          let roleGu = roleStr;
+          let roleEn = roleStr;
+          if (roleStr === "complainant" || roleStr === "ફરીયાદી") { roleGu = "ફરીયાદી"; roleEn = "Complainant"; }
+          else if (roleStr === "applicant" || roleStr === "અરજદાર") { roleGu = "અરજદાર"; roleEn = "Applicant"; }
+          else if (roleStr === "plaintiff" || roleStr === "વાદી") { roleGu = "વાદી"; roleEn = "Plaintiff"; }
+          else if (roleStr === "accused" || roleStr === "આરોપી") { roleGu = "આરોપી"; roleEn = "Accused"; }
+          else if (roleStr === "opponent" || roleStr === "respondent" || roleStr === "સામાવાળા") { roleGu = "સામાવાળા"; roleEn = "Opponent"; }
+          else if (roleStr === "defendant" || roleStr === "પ્રતિવાદી") { roleGu = "પ્રતિવાદી"; roleEn = "Defendant"; }
+          next["advocate_name"] = language === "gu" ? `${roleGu} ના એડવોકેટ` : `Advocate for ${roleEn}`;
+        }
+      }
       return next;
     });
   };
@@ -621,7 +635,7 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
-    if (templateId === "certified_copy_application") {
+    if (templateId === "certified_copy_application" || templateId === "closing_purshish") {
       return [];
     }
     const missing: string[] = [];
@@ -1462,6 +1476,7 @@ export default function TemplateApplication() {
                         textAlign: b.align === "center" ? "center" : b.align === "right" ? "right" : "left",
                         fontWeight: b.bold ? "700" : "400",
                         fontSize: b.bold ? 15 : 13,
+                        textDecorationLine: (b.underline || b.section === "title") ? "underline" : "none",
                         marginBottom: b.text ? 6 : 10,
                       },
                     ]}

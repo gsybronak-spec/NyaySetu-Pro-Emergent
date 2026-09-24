@@ -3158,6 +3158,17 @@ def _get_canonical_certified_copy_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "certified_copy_application"), None)
 
 
+def _get_canonical_closing_purshish_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "closing_purshish"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "closing_purshish"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3224,6 +3235,41 @@ async def _ensure_seed_complete() -> None:
                         needs_update = True
                     if needs_update:
                         await doc_ref_cc.update(update_dict)
+                        invalidate_published_templates_cache()
+
+            doc_ref_cp = db.collection("templates").document("closing_purshish")
+            snap_cp = await doc_ref_cp.get()
+            cp_seed = _get_canonical_closing_purshish_template()
+            if cp_seed:
+                if not snap_cp.exists:
+                    await doc_ref_cp.set({
+                        **cp_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_cp = snap_cp.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_cp.get("content_gu") != cp_seed["content_gu"]:
+                        update_dict["content_gu"] = cp_seed["content_gu"]
+                        needs_update = True
+                    if cur_cp.get("content_en") != cp_seed["content_en"]:
+                        update_dict["content_en"] = cp_seed["content_en"]
+                        needs_update = True
+                    if cur_cp.get("settings") != cp_seed["settings"]:
+                        update_dict["settings"] = cp_seed["settings"]
+                        needs_update = True
+                    if cur_cp.get("fields") != cp_seed.get("fields"):
+                        update_dict["fields"] = cp_seed["fields"]
+                        needs_update = True
+                    if cur_cp.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_cp.update(update_dict)
                         invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
@@ -3307,6 +3353,32 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "closing_purshish" or t.get("template_id") == "closing_purshish"):
+                cp_seed = _get_canonical_closing_purshish_template()
+                if cp_seed:
+                    needs_update = False
+                    if t.get("content_gu") != cp_seed["content_gu"]:
+                        t["content_gu"] = cp_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != cp_seed["content_en"]:
+                        t["content_en"] = cp_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != cp_seed["settings"]:
+                        t["settings"] = cp_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != cp_seed.get("fields"):
+                        t["fields"] = cp_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "closing_purshish")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3317,6 +3389,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("certified_copy_application").set({
                             **cc_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_cp = any((t.get("id") == "closing_purshish" or t.get("template_id") == "closing_purshish") for t in db_templates)
+        if not found_cp and "closing_purshish" not in deleted_ids:
+            cp_seed = _get_canonical_closing_purshish_template()
+            if cp_seed:
+                db_templates.append(dict(cp_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("closing_purshish").set({
+                            **cp_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -3419,12 +3507,43 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "closing_purshish" or template_id == "closing_purshish"):
+            cp_seed = _get_canonical_closing_purshish_template()
+            if cp_seed:
+                needs_update = False
+                if t.get("content_gu") != cp_seed["content_gu"]:
+                    t["content_gu"] = cp_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != cp_seed["content_en"]:
+                    t["content_en"] = cp_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != cp_seed["settings"]:
+                    t["settings"] = cp_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != cp_seed.get("fields"):
+                    t["fields"] = cp_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
         cc_seed = _get_canonical_certified_copy_template()
         if cc_seed and "certified_copy_application" not in deleted_ids:
             return {**cc_seed, "format_version": cc_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and template_id in ("closing_purshish", "closing_purshish_gu", "closing_purshish_en"):
+        cp_seed = _get_canonical_closing_purshish_template()
+        if cp_seed and "closing_purshish" not in deleted_ids:
+            return {**cp_seed, "format_version": cp_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -3514,6 +3633,17 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["settings"] = cc_seed["settings"]
                 if t.get("fields") != cc_seed.get("fields"):
                     t["fields"] = cc_seed["fields"]
+        if (t.get("id") == "closing_purshish" or t_id == "closing_purshish"):
+            cp_seed = _get_canonical_closing_purshish_template()
+            if cp_seed:
+                if t.get("content_gu") != cp_seed["content_gu"]:
+                    t["content_gu"] = cp_seed["content_gu"]
+                if t.get("content_en") != cp_seed["content_en"]:
+                    t["content_en"] = cp_seed["content_en"]
+                if t.get("settings") != cp_seed["settings"]:
+                    t["settings"] = cp_seed["settings"]
+                if t.get("fields") != cp_seed.get("fields"):
+                    t["fields"] = cp_seed["fields"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -4166,6 +4296,30 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "document_details", "number_of_copies", "recipient_name",
         "place", "advocate_name", "mobile_number",
+    ):
+        if k not in ctx or ctx[k] is None:
+            ctx[k] = ""
+
+    # Closing Purshish advocate_for role auto-flow
+    raw_adv_for = ctx.get("advocate_for")
+    if raw_adv_for:
+        adv_for_role = resolve_party_role_label(raw_adv_for, language)
+        ctx["advocate_for_role"] = adv_for_role
+        if language == "gu":
+            default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
+        else:
+            default_adv_desig = f"Advocate for {adv_for_role}"
+        if not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
+            ctx["advocate_name"] = default_adv_desig
+    else:
+        ctx.setdefault("advocate_for_role", "")
+
+    # Ensure closing_purshish template keys are clean strings (never None or undefined)
+    for k in (
+        "court_name", "court", "district", "taluka", "taluka_place",
+        "case_type", "case_number",
+        "party_1_role", "party_1_name", "party_2_role", "party_2_name",
+        "advocate_for", "advocate_for_role", "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
@@ -8962,6 +9116,20 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_en": cc_seed["content_en"],
                         "settings": cc_seed["settings"],
                         "fields": cc_seed["fields"],
+                    })
+            if t["id"] == "closing_purshish":
+                cp_seed = _get_canonical_closing_purshish_template()
+                if cp_seed and (
+                    existing.get("content_gu") != cp_seed["content_gu"]
+                    or existing.get("content_en") != cp_seed["content_en"]
+                    or existing.get("settings") != cp_seed["settings"]
+                    or existing.get("fields") != cp_seed.get("fields")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": cp_seed["content_gu"],
+                        "content_en": cp_seed["content_en"],
+                        "settings": cp_seed["settings"],
+                        "fields": cp_seed["fields"],
                     })
             skipped_ids.append(t["id"])
             continue

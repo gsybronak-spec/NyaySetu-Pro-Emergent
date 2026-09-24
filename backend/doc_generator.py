@@ -246,7 +246,7 @@ def get_doc_settings(overrides: dict = None) -> dict:
                 except (TypeError, ValueError):
                     settings["line_spacing"] = 18.0
             elif k in ("margin_top_cm", "margin_bottom_cm", "margin_left_cm", "margin_right_cm",
-                       "body_size", "heading_size", "paragraph_spacing",
+                       "body_size", "heading_size", "body_size_en", "heading_size_en", "paragraph_spacing",
                        "first_line_indent_pt", "alignment", "format_version"):
                 settings[k] = v
 
@@ -520,7 +520,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             or is_upper_en
             or (
                 len(line) < 75
-                and any(line.endswith(s) for s in ("અરજી", "પુરશીશ", "બાંહેધરી", "વકીલાતનામું", "રિપોર્ટ", "STATEMENT"))
+                and any(line.endswith(s) for s in ("અરજી", "પુરશીશ", "પુરસીસ", "બાંહેધરી", "વકીલાતનામું", "રિપોર્ટ", "STATEMENT", "PURSHISH"))
                 and not any(line.endswith(b) for b in ("છે.", "રહેશે.", "કરવા.", "બાબત.", "જણાવવાનું કે", "અરજ છે કે"))
                 and not line.startswith("સદર")
                 and not line.startswith("આથી")
@@ -632,6 +632,13 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             explicit_align = "left"
             line = line[6:].strip()
 
+        if line.strip() in (":-", ":", "નં. :", "No. :"):
+            line = ""
+
+        if not line:
+            blocks.append({"text": "", "align": "left", "bold": False, "indent": False, "section": "spacer"})
+            continue
+
         curr_non_idx = nonempty
         nonempty += 1
 
@@ -646,7 +653,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                 or line.startswith("મહેરબાન")
                 or "સાહેબશ્રીની કોર્ટમાં" in line
             ))
-            or (curr_non_idx == 1 and court_idx_0 and len(line) < 60 and not line.lower().startswith("versus") and "no." not in line.lower() and "નં." not in line)
+            or (curr_non_idx == 1 and court_idx_0 and len(line) < 60 and not line.lower().startswith("versus") and "no." not in line.lower() and "નં." not in line and not line.startswith("મુકામ") and not line.startswith("At") and not line.startswith("AT"))
             or (curr_non_idx <= 2 and (
                 line.startswith("IN THE COURT OF")
                 or line.startswith("BEFORE THE HON'BLE")
@@ -694,6 +701,7 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             or (t_gu and line == t_gu)
             or is_upper_en
             or (curr_non_idx == title_idx)
+            or line.strip() in ("ક્લોઝિંગ પુરસીસ", "CLOSING PURSHISH")
         )
 
         # 5. Date & Place
@@ -785,6 +793,8 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             is_numbered = bool(re.match(r"^(\d+|[૧-૯૦]+|[A-Za-z]|\([A-Za-z0-9]+\))[\.\)]\s*", line))
             indent = not is_numbered
 
+        underline = bool(section == "title" or is_title)
+
         # Optional align_rules override
         if align_rules:
             for rule in align_rules:
@@ -802,12 +812,14 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                         bold = bool(rule["bold"])
                     if "indent" in rule:
                         indent = bool(rule["indent"])
+                    if "underline" in rule:
+                        underline = bool(rule["underline"])
                     break
 
         if explicit_align:
             align = explicit_align
 
-        blocks.append({"text": line, "align": align, "bold": bold, "indent": indent, "section": section})
+        blocks.append({"text": line, "align": align, "bold": bold, "indent": indent, "section": section, "underline": underline})
 
     return blocks
 
@@ -816,7 +828,12 @@ def render_template(content_template: str, values: dict) -> str:
     result = content_template
     for k, v in (values or {}).items():
         result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
-    if "પ્રમાણિત નકલ મેળવવા બાબત" in result or "Application for Obtaining Certified Copy" in result:
+    if (
+        "પ્રમાણિત નકલ મેળવવા બાબત" in result
+        or "Application for Obtaining Certified Copy" in result
+        or "ક્લોઝિંગ પુરસીસ" in result
+        or "CLOSING PURSHISH" in result
+    ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
         result = re.sub(r"\{\{[^}]+\}\}", "____", result)
@@ -871,8 +888,14 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
         )
         align_css = b.get("align", "left")
         is_bold = b.get("bold", False)
+        is_under = b.get("underline", False) or b.get("section") == "title"
         css_class = "block center bold" if is_bold and align_css == "center" else "block bold" if is_bold else "block"
-        style_attr = f'style="text-align: {align_css};"' if align_css != "left" and not is_bold else ""
+        extra_styles = []
+        if align_css != "left" and not (is_bold and align_css == "center"):
+            extra_styles.append(f"text-align: {align_css};")
+        if is_under:
+            extra_styles.append("text-decoration: underline;")
+        style_attr = f'style="{" ".join(extra_styles)}"' if extra_styles else ""
         body_html_parts.append(f'<div class="{css_class}" {style_attr}>{safe}</div>')
 
     body_html = "\n".join(body_html_parts)
@@ -997,7 +1020,10 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
         if b.get("section") == "page_break":
             story.append(RLPageBreak())
             continue
-        body_sz = float(s.get("body_size", 12))
+        if language != "gu" and "body_size_en" in s:
+            body_sz = float(s["body_size_en"])
+        else:
+            body_sz = float(s.get("body_size", 12))
         raw_ls = float(s.get("line_spacing", 18))
         if raw_ls <= 3.0 or raw_ls < body_sz:
             raw_ls = max(16.0, round(body_sz * 1.4, 1))
@@ -1105,9 +1131,13 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
             safe = _apply_latin_fallback_markup(b["text"], latin_font=latin_fallback_bold if b["bold"] else latin_fallback_normal)
         else:
             safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        if b.get("section") == "title":
+        if b.get("section") == "title" or b.get("underline"):
             safe = f"<u>{safe}</u>"
-        f_size = s["heading_size"] if b["bold"] else body_sz
+        if language != "gu" and "heading_size_en" in s:
+            head_sz = float(s["heading_size_en"])
+        else:
+            head_sz = float(s.get("heading_size", 14))
+        f_size = head_sz if b["bold"] else body_sz
         if b.get("section") == "body":
             lead = max(round(body_sz * 1.5, 1), raw_ls)
         else:
@@ -2374,7 +2404,7 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
 
         run = p.add_run(b["text"])
         run.font.name = font_name
-        if b.get("section") == "title":
+        if b.get("section") == "title" or b.get("underline"):
             run.font.underline = True
         # ensure complex-script (Gujarati) also uses the font
         try:
@@ -2384,7 +2414,15 @@ def generate_docx(blocks: list, language: str = "en", settings: dict = None) -> 
             run._element.rPr.rFonts.set(qn("w:hAnsi"), font_name)
         except Exception:
             pass
-        run.font.size = Pt(s["heading_size"] if b["bold"] else s["body_size"])
+        if language != "gu" and "heading_size_en" in s:
+            docx_head_sz = float(s["heading_size_en"])
+        else:
+            docx_head_sz = float(s.get("heading_size", 14))
+        if language != "gu" and "body_size_en" in s:
+            docx_body_sz = float(s["body_size_en"])
+        else:
+            docx_body_sz = float(s.get("body_size", 12))
+        run.font.size = Pt(docx_head_sz if b["bold"] else docx_body_sz)
         run.bold = b["bold"]
 
     buf = io.BytesIO()
