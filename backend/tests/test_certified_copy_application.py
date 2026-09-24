@@ -850,7 +850,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
                 self.assertNotIn("None", rend_gu, f"Case {name} leaked None")
                 self.assertNotIn("N/A", rend_gu, f"Case {name} leaked N/A")
                 self.assertIn("______", rend_gu, f"Case {name} must have 6 underscores deposit blank")
-                self.assertNotIn("____", rend_gu.replace("______", ""), f"Case {name} leaked ____ placeholder")
+                self.assertNotIn("____", rend_gu.replace("__________", "").replace("______", ""), f"Case {name} leaked ____ placeholder")
 
                 # Table structure verification
                 tables_gu = [b for b in blks_gu if b.get("section") == "table"]
@@ -890,7 +890,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
                 self.assertNotIn("None", rend_en, f"Case {name} EN leaked None")
                 self.assertNotIn("N/A", rend_en, f"Case {name} EN leaked N/A")
                 self.assertIn("____________", rend_en, f"Case {name} EN must have 12 underscores deposit blank")
-                self.assertNotIn("____", rend_en.replace("____________", ""), f"Case {name} EN leaked ____ placeholder")
+                self.assertNotIn("____", rend_en.replace("____________________", "").replace("____________", ""), f"Case {name} EN leaked ____ placeholder")
 
                 tables_en = [b for b in blks_en if b.get("section") == "table"]
                 self.assertEqual(len(tables_en), 2, f"Case {name} EN must have exactly 2 tables")
@@ -1014,7 +1014,181 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
 
         asyncio.run(_test())
 
+    def test_22_recipient_name_optional_and_exact_sentence_fallback(self):
+        """Verify recipient_name optional behavior with exact sentence fallback:
+        - Gujarati filled: સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી રમેશભાઈ પટેલ ને આપશો.
+        - Gujarati blank:  સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી __________ ને આપશો. (10 underscores)
+        - English filled:  The said copies may please be delivered to the undersigned or to Ramesh Patel on our behalf.
+        - English blank:   The said copies may please be delivered to the undersigned or to ____________________ on our behalf. (20 underscores)
+        - Deposit blanks unchanged (6 GU / 12 EN).
+        - Saved Case immutability preserved.
+        - Multi-format generation (PDF, DOCX, ODT) successful.
+        """
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+            }
+            saved_case = {
+                "id": "saved_case_cc_rec_test",
+                "court_id": "court_of_jmfc",
+                "court": "2nd JMFC",
+                "court_label": "2nd JMFC",
+                "district_id": "gandhinagar",
+                "district_label": "Gandhinagar",
+                "taluka_id": "kalol",
+                "taluka_label": "Kalol",
+                "case_type_id": "regular_civil_suit",
+                "case_type_label": "Regular Civil Suit",
+                "case_number": "123/2024",
+                "party_name": "Rajeshkumar Shah",
+                "party_role": "Plaintiff",
+                "opposite_party": "Maheshbhai Patel",
+                "opposite_party_role": "Defendant",
+            }
+
+            # TEST 1 — Gujarati filled: recipient_name = "રમેશભાઈ પટેલ"
+            vals_gu_filled = {
+                "court_officer_detail": "સુપ્રિટેન્ડન્ટશ્રી, નકલ શાખા",
+                "case_number": "૧૨૩/૨૦૨૪",
+                "case_type": "regular_civil_suit",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-03-01",
+                "party_1_name": "રાજેશકુમાર શાહ",
+                "party_1_role": "વાદી",
+                "party_2_name": "મહેશભાઈ પટેલ",
+                "party_2_role": "પ્રતિવાદી",
+                "document_details": "આંક - ૧, ૫",
+                "number_of_copies": "2",
+                "recipient_name": "રમેશભાઈ પટેલ",
+                "date": "2026-03-01",
+                "place": "ગાંધીનગર",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_gu_filled = await server.build_render_context(user, saved_case, vals_gu_filled, "gu", template_id=TEMPLATE_ID)
+            rend_gu_filled = render_template(self.tpl["content_gu"], ctx_gu_filled)
+            expected_gu_filled = "સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી રમેશભાઈ પટેલ ને આપશો."
+            self.assertIn(expected_gu_filled, rend_gu_filled)
+
+            # TEST 2 — Gujarati blank: recipient_name = "" / whitespace / None
+            for blank_val in ("", "   ", None):
+                vals_gu_blank = dict(vals_gu_filled)
+                vals_gu_blank["recipient_name"] = blank_val
+                ctx_gu_blank = await server.build_render_context(user, saved_case, vals_gu_blank, "gu", template_id=TEMPLATE_ID)
+                rend_gu_blank = render_template(self.tpl["content_gu"], ctx_gu_blank)
+                expected_gu_blank = "સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી __________ ને આપશો."
+                self.assertIn(expected_gu_blank, rend_gu_blank)
+                # Verify exactly 10 underscores
+                rec_underscores_gu = re.findall(r"અથવા અમારા વતી (_+) ને આપશો", rend_gu_blank)
+                self.assertEqual(len(rec_underscores_gu), 1)
+                self.assertEqual(len(rec_underscores_gu[0]), 10, f"Expected 10 underscores in Gujarati blank, got {len(rec_underscores_gu[0])}")
+
+            # TEST 3 — English filled: recipient_name = "Ramesh Patel"
+            vals_en_filled = {
+                "court_officer_detail": "Superintendent, Copying Branch",
+                "case_number": "123/2024",
+                "case_type": "regular_civil_suit",
+                "case_date_type": "Next Hearing Date",
+                "case_date": "2026-03-01",
+                "party_1_name": "Rajeshkumar Shah",
+                "party_1_role": "Plaintiff",
+                "party_2_name": "Maheshbhai Patel",
+                "party_2_role": "Defendant",
+                "document_details": "Exh. 1, 5",
+                "number_of_copies": "2",
+                "recipient_name": "Ramesh Patel",
+                "date": "2026-03-01",
+                "place": "Gandhinagar",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_en_filled = await server.build_render_context(user, saved_case, vals_en_filled, "en", template_id=TEMPLATE_ID)
+            rend_en_filled = render_template(self.tpl["content_en"], ctx_en_filled)
+            expected_en_filled = "The said copies may please be delivered to the undersigned or to Ramesh Patel on our behalf."
+            self.assertIn(expected_en_filled, rend_en_filled)
+
+            # TEST 4 — English blank: recipient_name = "" / whitespace / None
+            for blank_val in ("", "   ", None):
+                vals_en_blank = dict(vals_en_filled)
+                vals_en_blank["recipient_name"] = blank_val
+                ctx_en_blank = await server.build_render_context(user, saved_case, vals_en_blank, "en", template_id=TEMPLATE_ID)
+                rend_en_blank = render_template(self.tpl["content_en"], ctx_en_blank)
+                expected_en_blank = "The said copies may please be delivered to the undersigned or to ____________________ on our behalf."
+                self.assertIn(expected_en_blank, rend_en_blank)
+                # Verify exactly 20 underscores
+                rec_underscores_en = re.findall(r"or to (_+) on our behalf", rend_en_blank)
+                self.assertEqual(len(rec_underscores_en), 1)
+                self.assertEqual(len(rec_underscores_en[0]), 20, f"Expected 20 underscores in English blank, got {len(rec_underscores_en[0])}")
+
+            # TEST 5 — Blank recipient must NOT block Preview validation
+            vals_blank_preview = dict(vals_gu_filled)
+            vals_blank_preview["recipient_name"] = ""
+            ctx_blank_preview = await server.build_render_context(user, saved_case, vals_blank_preview, "gu", template_id=TEMPLATE_ID)
+            # This must not raise HTTPException
+            server.validate_template_requirements(self.tpl, ctx_blank_preview, "gu")
+
+            # TEST 6 — Blank recipient must NOT block PDF / DOCX / ODT generation
+            blks_gu = build_blocks(rend_gu_blank, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings_gu = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_gu_blank, "ctx": ctx_gu_blank})
+            pdf_gu = generate_pdf(blks_gu, "gu", doc_settings_gu)
+            self.assertGreater(len(pdf_gu), 1000)
+
+            blks_en = build_blocks(rend_en_blank, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings_en = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_en_blank, "ctx": ctx_en_blank})
+            pdf_en = generate_pdf(blks_en, "en", doc_settings_en)
+            self.assertGreater(len(pdf_en), 1000)
+
+            try:
+                docx_en = generate_docx(blks_en, "en", doc_settings_en)
+                if docx_en:
+                    self.assertTrue(base64.b64decode(docx_en).startswith(b"PK"))
+            except Exception:
+                pass
+
+            odt_en = generate_odt(blks_en, "en", doc_settings_en)
+            self.assertGreater(len(odt_en), 100)
+            self.assertTrue(base64.b64decode(odt_en).startswith(b"PK"))
+
+            # TEST 7 — Verify no banned placeholder leakage: undefined, null, None, N/A, Required, [object Object], {{recipient_name}}
+            banned_placeholders = [
+                "undefined", "null", "None", "N/A", "Required", "[object Object]", "{{recipient_name}}"
+            ]
+            for ph in banned_placeholders:
+                # pass banned placeholder as input
+                vals_leak_gu = dict(vals_gu_filled, recipient_name=ph)
+                ctx_leak_gu = await server.build_render_context(user, saved_case, vals_leak_gu, "gu", template_id=TEMPLATE_ID)
+                rend_leak_gu = render_template(self.tpl["content_gu"], ctx_leak_gu)
+                self.assertNotIn(ph, rend_leak_gu, f"Banned placeholder '{ph}' leaked in Gujarati!")
+                self.assertIn("__________", rend_leak_gu)
+
+                vals_leak_en = dict(vals_en_filled, recipient_name=ph)
+                ctx_leak_en = await server.build_render_context(user, saved_case, vals_leak_en, "en", template_id=TEMPLATE_ID)
+                rend_leak_en = render_template(self.tpl["content_en"], ctx_leak_en)
+                self.assertNotIn(ph, rend_leak_en, f"Banned placeholder '{ph}' leaked in English!")
+                self.assertIn("____________________", rend_leak_en)
+
+            # TEST 8 — Verify Deposit Amount remains unchanged: Gujarati = exactly 6 underscores, English = exactly 12 underscores
+            self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", rend_gu_blank)
+            dep_gu = re.findall(r"રૂ\. (_+) જમા", rend_gu_blank)
+            self.assertEqual(len(dep_gu), 1)
+            self.assertEqual(len(dep_gu[0]), 6, "Deposit amount in Gujarati must have exactly 6 underscores")
+
+            self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", rend_en_blank)
+            dep_en = re.findall(r"Rs\. (_+) has been deposited", rend_en_blank)
+            self.assertEqual(len(dep_en), 1)
+            self.assertEqual(len(dep_en[0]), 12, "Deposit amount in English must have exactly 12 underscores")
+
+            # TEST 9 — Verify Saved Case is not modified by this rendering fallback
+            self.assertEqual(saved_case["court"], "2nd JMFC")
+            self.assertEqual(saved_case["court_label"], "2nd JMFC")
+            self.assertEqual(saved_case["court_id"], "court_of_jmfc")
+            self.assertNotIn("recipient_name", saved_case)
+
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

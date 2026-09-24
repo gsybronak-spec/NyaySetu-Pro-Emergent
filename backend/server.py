@@ -4323,6 +4323,17 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
 
+    # Certified Copy Application: Optional recipient_name with exact underscore fallback
+    # Gujarati blank: exactly 10 underscores (__________)
+    # English blank: exactly 20 underscores (____________________)
+    if tpl_id == "certified_copy_application" or "number_of_copies" in ctx:
+        raw_rec = str(ctx.get("recipient_name") or "").strip()
+        banned = {"", "none", "null", "undefined", "n/a", "na", "required", "[object object]", "{{recipient_name}}"}
+        if raw_rec and raw_rec.lower() not in banned:
+            ctx["recipient_name"] = raw_rec
+        else:
+            ctx["recipient_name"] = "__________" if language == "gu" else "____________________"
+
     # Closing Purshish advocate_for role auto-flow
     raw_adv_for = ctx.get("advocate_for")
     if raw_adv_for:

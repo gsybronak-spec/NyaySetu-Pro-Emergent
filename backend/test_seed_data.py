@@ -2806,7 +2806,7 @@ Place : {{taluka_place}}
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 
-સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{recipient_name}} ને આપશોજી. જે નકલ માટે ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.
+સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{recipient_name}} ને આપશો. જે નકલ માટે ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.
 
 તારીખ : {{date}}
 સ્થળ : {{place}}
@@ -2838,7 +2838,7 @@ From the aforesaid case, we require certified copies duly signed and sealed of t
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 
-The said copies may please be delivered to the undersigned or on our behalf to {{recipient_name}}. For the said copies, an amount of Rs. ____________ has been deposited towards deposit.
+The said copies may please be delivered to the undersigned or to {{recipient_name}} on our behalf. For the said copies, an amount of Rs. ____________ has been deposited towards deposit.
 
 Date: {{date}}
 Place: {{place}}

@@ -827,8 +827,19 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
 
 def render_template(content_template: str, values: dict) -> str:
+    vals = dict(values or {})
+    if (
+        "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
+        or "Application for Obtaining Certified Copy" in content_template
+    ):
+        raw_rec = str(vals.get("recipient_name") or "").strip()
+        banned = {"", "none", "null", "undefined", "n/a", "na", "required", "[object object]", "{{recipient_name}}"}
+        if not raw_rec or raw_rec.lower() in banned:
+            is_gu = "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
+            vals["recipient_name"] = "__________" if is_gu else "____________________"
+
     result = content_template
-    for k, v in (values or {}).items():
+    for k, v in vals.items():
         result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
     if (
         "પ્રમાણિત નકલ મેળવવા બાબત" in result
