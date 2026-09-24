@@ -3942,8 +3942,9 @@ async def resolve_court_label(raw_court: Optional[str], language: str, case: Opt
     return ""
 
 
-async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str) -> dict:
+async def build_render_context(user: dict, case: Optional[dict], values: dict, language: str, template_id: Optional[str] = None) -> dict:
     ctx = dict(values or {})
+    tpl_id = template_id or (values or {}).get("template_id") or ("certified_copy_application" if "number_of_copies" in (values or {}) else None)
     # Issue 3 & 16: Advocate name strictly controlled by document language.
     # When generating Gujarati document -> use advocate_name_gu (exact stored value).
     # When generating English document -> use advocate_name_en (exact stored value).
@@ -3987,7 +3988,13 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["court_name"] = custom_court
     else:
         initial_court_raw = ctx.get("court_name") or ctx.get("court")
-        resolved_court = await resolve_court_label(initial_court_raw, language, case=case)
+        # For certified_copy_application, advocate can specify an independent application court.
+        # Do not allow case.court_id to hijack resolution of initial_court_raw.
+        resolved_court = await resolve_court_label(
+            initial_court_raw, 
+            language, 
+            case=None if (tpl_id == "certified_copy_application" and initial_court_raw) else case
+        )
         if resolved_court:
             ctx["court"] = resolved_court
             ctx["court_name"] = resolved_court
@@ -4009,9 +4016,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             case_court = (case.get("custom_court_name_gu") if language == "gu" else case.get("custom_court_name_en")) or case.get("custom_court_name_en") or case.get("custom_court_name_gu") or case.get("court_custom") or case.get("court")
         else:
             case_court = await resolve_court_label(case.get("court_id") or case.get("court_custom") or case.get("court"), language, case=case)
-        if case_court:
-            ctx["court"] = case_court
-            ctx["court_name"] = case_court
+        if tpl_id == "certified_copy_application" and (ctx.get("court_name") or ctx.get("court")):
+            # Certified Copy Application: Application court is independently editable from Saved Case.
+            # Do NOT overwrite user-selected application court with case_court.
+            pass
+        else:
+            if case_court:
+                ctx["court"] = case_court
+                ctx["court_name"] = case_court
         ctx.setdefault("case_number", case.get("case_number") or "")
         # case type
         ct = next((x for x in CASE_TYPES if x["id"] == case.get("case_type_id")), None)
@@ -4108,7 +4120,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["court"] = custom_court
             ctx["court_name"] = custom_court
     else:
-        final_resolved_court = await resolve_court_label(court_final, language, case=case)
+        final_resolved_court = await resolve_court_label(
+            court_final,
+            language,
+            case=None if (tpl_id == "certified_copy_application" and court_final) else case
+        )
         if final_resolved_court:
             ctx["court"] = final_resolved_court
             ctx["court_name"] = final_resolved_court
@@ -4405,7 +4421,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     if req.case_id:
         _snap = await db.collection("cases").document(req.case_id).get()
         case = _snap.to_dict() if _snap.exists else None
-    ctx = await build_render_context(user, case, req.values, req.language)
+    ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))
     validate_template_requirements(t, ctx, req.language)
     tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
     rendered = render_template(tpl, ctx)
@@ -4437,7 +4453,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     if req.case_id:
         _case_snap = await db.collection("cases").document(req.case_id).get()
         case = _case_snap.to_dict() if _case_snap.exists else None
-    ctx = await build_render_context(user, case, req.values, req.language)
+    ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))
     validate_template_requirements(t, ctx, req.language)
 
     # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.

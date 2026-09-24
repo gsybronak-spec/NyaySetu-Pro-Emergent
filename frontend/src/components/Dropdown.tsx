@@ -51,7 +51,15 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { keyboardHeight } = useKeyboardHeight();
-  const selected = options.find((o) => o.id === value);
+  const selected = options.find(
+    (o) =>
+      o.id === value ||
+      (value &&
+        (o.id?.toLowerCase() === String(value).toLowerCase() ||
+          o.label === value ||
+          o.label?.toLowerCase() === String(value).toLowerCase() ||
+          o.sublabel === value))
+  );
 
   const filtered = useMemo(() => {
     let list = Array.isArray(options) ? options : [];
@@ -97,8 +105,8 @@ export function Dropdown({
           disabled && { opacity: 0.5 },
         ]}
       >
-        <Text style={{ color: selected ? colors.onSurface : colors.muted, flex: 1 }} numberOfLines={1}>
-          {selected ? selected.label : placeholder}
+        <Text style={{ color: selected || value ? colors.onSurface : colors.muted, flex: 1 }} numberOfLines={1}>
+          {selected ? selected.label : (value && typeof value === "string" ? value : placeholder)}
         </Text>
         {loading ? (
           <ActivityIndicator size="small" color={colors.brandPrimary} />

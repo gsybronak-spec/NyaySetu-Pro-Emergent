@@ -899,6 +899,122 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
 
         asyncio.run(_run_cases())
 
+    def test_21_saved_case_editable_application_court_immutability(self):
+        """Verify that opening Certified Copy Application from a Saved Case allows
+        independently editing the application court, while leaving the Saved Case 100% untouched."""
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+            }
+            # Saved Case with Court = "2nd JMFC"
+            saved_case = {
+                "id": "saved_case_jmfc_123",
+                "court_id": "court_of_jmfc",
+                "court": "2nd JMFC",
+                "court_label": "2nd JMFC",
+                "district_id": "gandhinagar",
+                "district_label": "Gandhinagar",
+                "taluka_id": "kalol",
+                "taluka_label": "Kalol",
+                "case_type_id": "regular_civil_suit",
+                "case_type_label": "Regular Civil Suit",
+                "case_number": "123/2024",
+                "party_name": "Rajeshkumar Shantilal Shah",
+                "party_role": "Plaintiff",
+                "opposite_party": "Maheshbhai Kanjibhai Patel",
+                "opposite_party_role": "Defendant",
+            }
+
+            # TEST 1: Initial context uses Saved Case court
+            vals_init = {
+                "court_name": "2nd JMFC",
+                "case_number": "123/2024",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_init = await server.build_render_context(user, saved_case, vals_init, "en", template_id=TEMPLATE_ID)
+            self.assertIn("2nd JMFC", ctx_init["court"])
+
+            # TEST 2: Advocate changes application Court to "Chief Judicial Magistrate"
+            vals_changed_en = {
+                "court_name": "Chief Judicial Magistrate",
+                "case_number": "123/2024",
+                "document_details": "Exh. 1, 5",
+                "number_of_copies": "2",
+                "date": "2026-03-01",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_changed_en = await server.build_render_context(user, saved_case, vals_changed_en, "en", template_id=TEMPLATE_ID)
+            self.assertEqual(ctx_changed_en["court"], "Chief Judicial Magistrate")
+
+            rend_preview_en = render_template(self.tpl["content_en"], ctx_changed_en)
+            self.assertIn("IN THE COURT OF THE HON'BLE Chief Judicial Magistrate,", rend_preview_en)
+            self.assertNotIn("2nd JMFC", rend_preview_en)
+
+            # TEST 3: CRITICAL DATA-SAFETY — Saved Case MUST remain completely untouched!
+            self.assertEqual(saved_case["court"], "2nd JMFC")
+            self.assertEqual(saved_case["court_label"], "2nd JMFC")
+            self.assertEqual(saved_case["court_id"], "court_of_jmfc")
+
+            # TEST 4: Gujarati document rendering & PDF generation with selected application court
+            vals_changed_gu = {
+                "court_name": "chief_judicial_magistrate",
+                "case_number": "૧૨૩/૨૦૨૪",
+                "document_details": "આંક - ૧, ૫",
+                "number_of_copies": "2",
+                "date": "2026-03-01",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_changed_gu = await server.build_render_context(user, saved_case, vals_changed_gu, "gu", template_id=TEMPLATE_ID)
+            self.assertEqual(ctx_changed_gu["court"], "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ")
+
+            rend_gu = render_template(self.tpl["content_gu"], ctx_changed_gu)
+            self.assertIn("મહેરબાન ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટમાં,", rend_gu)
+            self.assertNotIn("2nd JMFC", rend_gu)
+
+            blks_gu = build_blocks(rend_gu, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            pdf_bytes_gu = generate_pdf(blks_gu, "gu", get_doc_settings(self.tpl["settings"]))
+            self.assertGreater(len(pdf_bytes_gu), 1000)
+
+            # TEST 5: English PDF generation
+            blks_en = build_blocks(rend_preview_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            pdf_bytes_en = generate_pdf(blks_en, "en", get_doc_settings(self.tpl["settings"]))
+            self.assertGreater(len(pdf_bytes_en), 1000)
+
+            # TEST 6: Direct Template mode still allows normal Court selection
+            vals_direct = {
+                "court_name": "chief_judicial_magistrate",
+                "district": "gandhinagar",
+                "case_number": "123/2024",
+                "document_details": "Exh. 1",
+                "number_of_copies": "1",
+                "date": "2026-03-01",
+                "template_id": TEMPLATE_ID,
+            }
+            ctx_direct = await server.build_render_context(user, None, vals_direct, "en", template_id=TEMPLATE_ID)
+            self.assertEqual(ctx_direct["court"], "Chief Judicial Magistrate")
+
+            # TEST 7: Other templates remain unaffected — case court takes precedence
+            vals_other = {
+                "court_name": "Chief Judicial Magistrate",
+                "case_number": "123/2024",
+                "date": "2026-03-01",
+                "template_id": "closing_purshish",
+            }
+            ctx_other = await server.build_render_context(user, saved_case, vals_other, "en", template_id="closing_purshish")
+            self.assertEqual(ctx_other["court"], "Court of JMFC")
+            self.assertNotEqual(ctx_other["court"], "Chief Judicial Magistrate")
+
+            # FINAL RE-VERIFICATION of Saved Case Immutability
+            self.assertEqual(saved_case["court"], "2nd JMFC")
+            self.assertEqual(saved_case["court_label"], "2nd JMFC")
+            self.assertEqual(saved_case["court_id"], "court_of_jmfc")
+
+        asyncio.run(_test())
+
 
 if __name__ == "__main__":
     unittest.main()
+

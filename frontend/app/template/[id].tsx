@@ -255,7 +255,7 @@ export default function TemplateApplication() {
         } else if (cs.court_id || cs.court || cs.court_label) {
           const courtVal = cs.court_id || cs.court || cs.court_label;
           initialValues["court"] = courtVal;
-          initialValues["court_name"] = cs.court_label || cs.court || cs.court_id;
+          initialValues["court_name"] = cs.court_id || cs.court_label || cs.court;
           initialValues["court_source"] = "catalog";
         }
         if (cs.case_type_id) initialValues["case_type"] = cs.case_type_id;
@@ -435,6 +435,7 @@ export default function TemplateApplication() {
     for (const [k, val] of Object.entries(v)) {
       out[k] = isISODate(val) ? formatDateDisplay(val) : val;
     }
+    out["template_id"] = templateId;
     const rep = out["representing_party"] || out["advocate_side"] || "party_1";
     if (rep === "party" || rep === "party1" || rep === "party_1" || rep === "complainant" || rep === "plaintiff" || rep === "applicant") {
       out["selected_party_role"] = out["party_1_role"] || out["party_role"] || "";
@@ -548,11 +549,14 @@ export default function TemplateApplication() {
     };
     const rows: { key: string; label: string; value: string }[] = [];
     for (const [key, lEn, lGu] of CASE_OWNED_LABELS) {
+      if (templateId === "certified_copy_application" && (key === "court" || key === "court_name")) {
+        continue;
+      }
       const v = src[key];
       if (v) rows.push({ key, label: language === "gu" ? lGu : lEn, value: String(v) });
     }
     return rows;
-  }, [caseData, language, values.party_role, values.opposite_party_role, values.advocate_name, userProfile]);
+  }, [caseData, language, values.party_role, values.opposite_party_role, values.advocate_name, userProfile, templateId]);
 
   // Separate template application fields into app-specific vs date field
   // Separate template application fields into app-specific vs date field
@@ -608,6 +612,9 @@ export default function TemplateApplication() {
     return templateFields.filter((f: any) => {
       // In Saved Case mode: hide base case fields, advocate profile fields, and direct-only fields
       if (caseId) {
+        if (templateId === "certified_copy_application" && (f.key === "court_name" || f.key === "court")) {
+          return true;
+        }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
         if (f.source === "saved_case" || f.source === "advocate_profile") return false;
         if (f.mode === "DIRECT_TEMPLATE") return false;
@@ -620,7 +627,7 @@ export default function TemplateApplication() {
       if (f.key === "date") return false;
       return true;
     });
-  }, [templateFields, caseId]);
+  }, [templateFields, caseId, templateId]);
 
   const dateField = useMemo(() => {
     const found = templateFields.find((f: any) => f.key === "date");
@@ -771,23 +778,40 @@ export default function TemplateApplication() {
     }
 
     if (f.type === "select" || f.type === "court_select") {
-      if (f.source === "courts" || f.key === "court" || f.key === "court_name") {
+      if (f.source === "courts" || f.source === "case_court" || f.key === "court" || f.key === "court_name") {
         const isOther = fvalue === "other" || values.court === "other" || values.court_name === "other" || values.court_source === "custom";
+        const courtOptions = courts.length > 0
+          ? [
+              ...courts.map((c: any) => ({
+                id: c.id,
+                label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+              })),
+              ...(!isOther && (fvalue || values.court || values.court_name) && !courts.some(c => c.id === (fvalue || values.court || values.court_name) || c.en === (fvalue || values.court || values.court_name) || c.gu === (fvalue || values.court || values.court_name)) ? [{
+                id: fvalue || values.court || values.court_name,
+                label: fvalue || values.court || values.court_name,
+              }] : []),
+              { id: "other", label: "Other / અન્ય કોર્ટ" },
+            ]
+          : [
+              ...(f.options || []).map((o: any) => ({
+                id: o.value || o.id,
+                label: language === "gu" ? (o.label_gu || o.label_en) : (o.label_en || o.label_gu),
+              })),
+              ...(!isOther && (fvalue || values.court || values.court_name) && !(f.options || []).some((o: any) => (o.value || o.id) === (fvalue || values.court || values.court_name) || o.label_en === (fvalue || values.court || values.court_name) || o.label_gu === (fvalue || values.court || values.court_name)) ? [{
+                id: fvalue || values.court || values.court_name,
+                label: fvalue || values.court || values.court_name,
+              }] : []),
+              { id: "other", label: "Other / અન્ય કોર્ટ" },
+            ];
         return (
-          <View key={f.key}>
+          <View key={f.key} testID={`field-${f.key}`}>
             <Dropdown
-              testID={`field-${f.key}`}
+              testID="field-court"
               label={label}
               placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
               value={isOther ? "other" : (fvalue || values.court || values.court_name || null)}
               emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
-              options={[
-                ...courts.map((c: any) => ({
-                  id: c.id,
-                  label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
-                })),
-                { id: "other", label: "Other / અન્ય કોર્ટ" },
-              ]}
+              options={courtOptions}
               onChange={(v) => {
                 if (v === "other") {
                   update(f.key, "other");
