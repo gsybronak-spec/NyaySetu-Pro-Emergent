@@ -2656,6 +2656,11 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(base)
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
+    # Active canonical templates must never be masked by historical tombstones
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish"):
+        expanded.discard(active_id)
+        expanded.discard(f"{active_id}_gu")
+        expanded.discard(f"{active_id}_en")
     return expanded
 
 
@@ -3293,7 +3298,9 @@ async def _get_published_templates() -> list:
     now_ts = time.time()
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
-            return list(_PUBLISHED_TEMPLATES_CACHE["data"])
+            cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
+            if any(t.get("id") == "closing_purshish" for t in cached):
+                return cached
 
     deleted_ids = await _get_deleted_template_ids()
     db_templates = []
