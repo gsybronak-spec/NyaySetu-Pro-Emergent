@@ -3120,6 +3120,307 @@ Place: {{place}}
 --------------------
 {{advocate_name}}""",
     },
+    {
+        "id": "closing_argument_right_application",
+        "name_en": "Application for Closing the Right to Make Arguments",
+        "name_gu": "દલીલોનો હક બંધ કરાવવાની અરજી",
+        "category": "General",
+        "aliases": [
+            "closing argument right application",
+            "application for closing the right to make arguments",
+            "dalilo no haq bandh karavani arji",
+            "dalilo no haq bandh",
+            "દલીલોનો હક બંધ કરાવવાની અરજી",
+            "દલીલોનો હક બંધ કરવા બાબત",
+            "દલીલોનો હક બંધ",
+            "હક બંધ અરજી",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટ નું નામ",
+                "type": "select",
+                "required": False,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજિસ્ટ્રેટ"},
+                    {"value": "district_sessions_judge", "label_en": "District & Sessions Judge", "label_gu": "ડિસ્ટ્રિક્ટ એન્ડ સેશન્સ જજ"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "labour_court", "label_en": "Labour Court", "label_gu": "લેબર કોર્ટ"},
+                    {"value": "small_cause_court", "label_en": "Small Cause Court", "label_gu": "સ્મોલ કોઝ કોર્ટ"},
+                    {"value": "commercial_court", "label_en": "Commercial Court", "label_gu": "કોમર્શિયલ કોર્ટ"},
+                    {"value": "special_court", "label_en": "Special Court", "label_gu": "સ્પેશિયલ કોર્ટ"},
+                    {"value": "motor_accident_claims_tribunal", "label_en": "Motor Accident Claims Tribunal", "label_gu": "મોટર અકસ્માત ક્લેઈમ્સ ટ્રિબ્યુનલ"},
+                    {"value": "other", "label_en": "Other / Custom Court", "label_gu": "અન્ય કોર્ટ"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": False,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "amreli", "label_en": "Amreli", "label_gu": "અમરેલી"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "aravalli", "label_en": "Aravalli", "label_gu": "અરવલ્લી"},
+                    {"value": "banaskantha", "label_en": "Banaskantha", "label_gu": "બનાસકાંઠા"},
+                    {"value": "bharuch", "label_en": "Bharuch", "label_gu": "ભરૂચ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "botad", "label_en": "Botad", "label_gu": "બોટાદ"},
+                    {"value": "chhota_udepur", "label_en": "Chhota Udepur", "label_gu": "છોટા ઉદેપુર"},
+                    {"value": "dahod", "label_en": "Dahod", "label_gu": "દાહોદ"},
+                    {"value": "dang", "label_en": "Dang", "label_gu": "ડાંગ"},
+                    {"value": "devbhoomi_dwarka", "label_en": "Devbhoomi Dwarka", "label_gu": "દેવભૂમિ દ્વારકા"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "gir_somnath", "label_en": "Gir Somnath", "label_gu": "ગીર સોમનાથ"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "kheda", "label_en": "Kheda", "label_gu": "ખેડા"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mahisagar", "label_en": "Mahisagar", "label_gu": "મહીસાગર"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "morbi", "label_en": "Morbi", "label_gu": "મોરબી"},
+                    {"value": "narmada", "label_en": "Narmada", "label_gu": "નર્મદા"},
+                    {"value": "navsari", "label_en": "Navsari", "label_gu": "નવસારી"},
+                    {"value": "panchmahal", "label_en": "Panchmahal", "label_gu": "પંચમહાલ"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                    {"value": "porbandar", "label_en": "Porbandar", "label_gu": "પોરબંદર"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "sabarkantha", "label_en": "Sabarkantha", "label_gu": "સાબરકાંઠા"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "surendranagar", "label_en": "Surendranagar", "label_gu": "સુરેન્દ્રનગર"},
+                    {"value": "tapi", "label_en": "Tapi", "label_gu": "તાપી"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "valsad", "label_en": "Valsad", "label_gu": "વલસાડ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "options": [],
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": False,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "motor_accident_claim", "label_en": "MACP", "label_gu": "મોટર અકસ્માત ક્લેઈમ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": False,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_opposite_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_opposite_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Advocate For",
+                "label_gu": "કોના તરફે એડવોકેટ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "closed_party",
+                "label_en": "Right-to-be-closed Party",
+                "label_gu": "કોનો હક્ક ચાલુ છે જેબંધ કરવાનો છે",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "duration_status",
+                "label_en": "Duration / Hearing Status",
+                "label_gu": "ઘણી મુદ્દતથી / આજ દીન સુધી",
+                "type": "radio",
+                "required": False,
+                "options": [
+                    {"value": "ઘણી મુદ્દતથી", "label_en": "From several hearings", "label_gu": "ઘણી મુદ્દતથી"},
+                    {"value": "આજ દિન સુધી", "label_en": "Till date", "label_gu": "આજ દિન સુધી"},
+                ],
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": False,
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "સ્થળ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation / Name",
+                "label_gu": "ના એડવોકેટ / એડવોકેટનું નામ",
+                "type": "text",
+                "required": False,
+                "placeholder": "એડવોકેટનું નામ",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"contains": "મુકામ :-", "align": "center", "bold": True, "indent": False},
+                {"contains": "AT:", "align": "center", "bold": True, "indent": False},
+                {"contains": "બાબત :- દલીલોનો હક બંધ કરવા બાબત", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "SUBJECT: APPLICATION FOR CLOSING THE RIGHT TO MAKE ARGUMENTS", "align": "center", "bold": True, "underline": True, "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+મુકામ :- {{taluka_place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+વિરુદ્ધ
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત :- દલીલોનો હક બંધ કરવા બાબત...
+
+સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+
+સદર કેસ આપ નામદાર કોર્ટમા આજ રોજ દલીલો પર છે. પરંતુ સદર કેસમાં {{closed_party_role}} પોતે જાતે કે તેમના વકીલશ્રી આજરોજ આપ નામદાર કોર્ટમા હાજર ન હોઈ, તેમજ કોઈ મુદ્દત રીપોર્ટ રજુ કરેલ ન હોઈ જેથી {{closed_party_role}} નો દલીલો કરવાનો હક બંધ કરી આગળની ન્યાયિક કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+----------
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+AT: {{taluka_place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+VERSUS
+{{party_2_role}} :- {{party_2_name}}
+
+SUBJECT: APPLICATION FOR CLOSING THE RIGHT TO MAKE ARGUMENTS...
+
+In the present matter, we, the Advocate for {{advocate_for_role}}, respectfully submit before this Hon'ble Court that...
+
+The present case is scheduled today for arguments before this Hon'ble Court. However, in the said case, {{closed_party_role}} personally or their advocate is not present before this Hon'ble Court today, nor has any adjournment report been submitted, therefore this Hon'ble Court may be pleased to close the right of {{closed_party_role}} to make arguments and pass appropriate orders to proceed further with the judicial proceedings.
+
+Date: {{date}}
+Place: {{place}}
+
+--------------------
+{{advocate_name}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

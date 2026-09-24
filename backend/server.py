@@ -2657,7 +2657,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3174,6 +3174,17 @@ def _get_canonical_closing_purshish_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "closing_purshish"), None)
 
 
+def _get_canonical_closing_argument_right_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "closing_argument_right_application"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "closing_argument_right_application"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3276,6 +3287,41 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref_cp.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_car = db.collection("templates").document("closing_argument_right_application")
+            snap_car = await doc_ref_car.get()
+            car_seed = _get_canonical_closing_argument_right_template()
+            if car_seed:
+                if not snap_car.exists:
+                    await doc_ref_car.set({
+                        **car_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_car = snap_car.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_car.get("content_gu") != car_seed["content_gu"]:
+                        update_dict["content_gu"] = car_seed["content_gu"]
+                        needs_update = True
+                    if cur_car.get("content_en") != car_seed["content_en"]:
+                        update_dict["content_en"] = car_seed["content_en"]
+                        needs_update = True
+                    if cur_car.get("settings") != car_seed["settings"]:
+                        update_dict["settings"] = car_seed["settings"]
+                        needs_update = True
+                    if cur_car.get("fields") != car_seed.get("fields"):
+                        update_dict["fields"] = car_seed["fields"]
+                        needs_update = True
+                    if cur_car.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_car.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3299,7 +3345,7 @@ async def _get_published_templates() -> list:
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached):
+            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached):
                 return cached
 
     deleted_ids = await _get_deleted_template_ids()
@@ -3386,6 +3432,32 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "closing_argument_right_application" or t.get("template_id") == "closing_argument_right_application"):
+                car_seed = _get_canonical_closing_argument_right_template()
+                if car_seed:
+                    needs_update = False
+                    if t.get("content_gu") != car_seed["content_gu"]:
+                        t["content_gu"] = car_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != car_seed["content_en"]:
+                        t["content_en"] = car_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != car_seed["settings"]:
+                        t["settings"] = car_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != car_seed.get("fields"):
+                        t["fields"] = car_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "closing_argument_right_application")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3412,6 +3484,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("closing_purshish").set({
                             **cp_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_car = any((t.get("id") == "closing_argument_right_application" or t.get("template_id") == "closing_argument_right_application") for t in db_templates)
+        if not found_car and "closing_argument_right_application" not in deleted_ids:
+            car_seed = _get_canonical_closing_argument_right_template()
+            if car_seed:
+                db_templates.append(dict(car_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("closing_argument_right_application").set({
+                            **car_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -3540,6 +3628,32 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "closing_argument_right_application" or template_id == "closing_argument_right_application"):
+            car_seed = _get_canonical_closing_argument_right_template()
+            if car_seed:
+                needs_update = False
+                if t.get("content_gu") != car_seed["content_gu"]:
+                    t["content_gu"] = car_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != car_seed["content_en"]:
+                    t["content_en"] = car_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != car_seed["settings"]:
+                    t["settings"] = car_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != car_seed.get("fields"):
+                    t["fields"] = car_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
@@ -3551,6 +3665,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         cp_seed = _get_canonical_closing_purshish_template()
         if cp_seed and "closing_purshish" not in deleted_ids:
             return {**cp_seed, "format_version": cp_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and template_id in ("closing_argument_right_application", "closing_argument_right_application_gu", "closing_argument_right_application_en"):
+        car_seed = _get_canonical_closing_argument_right_template()
+        if car_seed and "closing_argument_right_application" not in deleted_ids:
+            return {**car_seed, "format_version": car_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -3651,6 +3770,17 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["settings"] = cp_seed["settings"]
                 if t.get("fields") != cp_seed.get("fields"):
                     t["fields"] = cp_seed["fields"]
+        if (t.get("id") == "closing_argument_right_application" or t_id == "closing_argument_right_application"):
+            car_seed = _get_canonical_closing_argument_right_template()
+            if car_seed:
+                if t.get("content_gu") != car_seed["content_gu"]:
+                    t["content_gu"] = car_seed["content_gu"]
+                if t.get("content_en") != car_seed["content_en"]:
+                    t["content_en"] = car_seed["content_en"]
+                if t.get("settings") != car_seed["settings"]:
+                    t["settings"] = car_seed["settings"]
+                if t.get("fields") != car_seed.get("fields"):
+                    t["fields"] = car_seed["fields"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -4334,7 +4464,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx["recipient_name"] = "__________" if language == "gu" else "____________________"
 
-    # Closing Purshish advocate_for role auto-flow
+    # Closing Purshish & Closing Argument Right Application advocate_for role auto-flow
     raw_adv_for = ctx.get("advocate_for")
     if raw_adv_for:
         if raw_adv_for == "party_1":
@@ -4354,12 +4484,31 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx.setdefault("advocate_for_role", "")
 
-    # Ensure closing_purshish template keys are clean strings (never None or undefined)
+    # Closing Argument Right Application: closed_party role auto-flow
+    raw_closed = ctx.get("closed_party")
+    if raw_closed:
+        if raw_closed == "party_1":
+            target_closed = ctx.get("party_1_role") or ("વાદી" if language == "gu" else "Plaintiff")
+        elif raw_closed == "party_2":
+            target_closed = ctx.get("party_2_role") or ("આરોપી" if language == "gu" else "Accused")
+        else:
+            target_closed = raw_closed
+        ctx["closed_party_role"] = resolve_party_role_label(target_closed, language)
+    else:
+        if ctx.get("party_2_role") and ctx.get("advocate_for") in ("party_1", ctx.get("party_1_role")):
+            ctx["closed_party_role"] = resolve_party_role_label(ctx.get("party_2_role"), language)
+        elif ctx.get("party_1_role") and ctx.get("advocate_for") in ("party_2", ctx.get("party_2_role")):
+            ctx["closed_party_role"] = resolve_party_role_label(ctx.get("party_1_role"), language)
+        else:
+            ctx.setdefault("closed_party_role", "")
+
+    # Ensure closing_purshish & closing_argument_right_application template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-        "advocate_for", "advocate_for_role", "date", "place", "advocate_name",
+        "advocate_for", "advocate_for_role", "closed_party", "closed_party_role",
+        "duration_status", "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
@@ -9170,6 +9319,20 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_en": cp_seed["content_en"],
                         "settings": cp_seed["settings"],
                         "fields": cp_seed["fields"],
+                    })
+            if t["id"] == "closing_argument_right_application":
+                car_seed = _get_canonical_closing_argument_right_template()
+                if car_seed and (
+                    existing.get("content_gu") != car_seed["content_gu"]
+                    or existing.get("content_en") != car_seed["content_en"]
+                    or existing.get("settings") != car_seed["settings"]
+                    or existing.get("fields") != car_seed.get("fields")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": car_seed["content_gu"],
+                        "content_en": car_seed["content_en"],
+                        "settings": car_seed["settings"],
+                        "fields": car_seed["fields"],
                     })
             skipped_ids.append(t["id"])
             continue

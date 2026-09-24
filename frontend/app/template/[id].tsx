@@ -386,7 +386,7 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
-      if (templateId === "closing_purshish" && k === "advocate_for") {
+      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application") && k === "advocate_for") {
         const roleStr = String(v || "").trim();
         if (roleStr) {
           let roleGu = roleStr;
@@ -642,7 +642,7 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
-    if (templateId === "certified_copy_application" || templateId === "closing_purshish") {
+    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application") {
       return [];
     }
     const missing: string[] = [];
@@ -866,6 +866,21 @@ export default function TemplateApplication() {
         if (f.key === "advocate_side" && templateId === "certified_report") {
           rawOpts.push({ value: "other", label_en: "Other", label_gu: "અન્ય" });
         }
+      }
+      if ((f.key === "advocate_for" || f.key === "closed_party") && (values.party_1_role || values.party_2_role)) {
+        const p1 = values.party_1_role;
+        const p2 = values.party_2_role;
+        const prioritized: any[] = [];
+        const others: any[] = [];
+        for (const opt of rawOpts) {
+          const val = opt.value ?? opt.key;
+          if (val === p1 || val === p2) {
+            prioritized.push(opt);
+          } else {
+            others.push(opt);
+          }
+        }
+        rawOpts = [...prioritized, ...others];
       }
       const opts = rawOpts.map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
       return (

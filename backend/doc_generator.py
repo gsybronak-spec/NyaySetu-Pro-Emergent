@@ -846,6 +846,8 @@ def render_template(content_template: str, values: dict) -> str:
         or "Application for Obtaining Certified Copy" in result
         or "ક્લોઝિંગ પુરસીસ" in result
         or "CLOSING PURSHISH" in result
+        or "દલીલોનો હક બંધ કરવા બાબત" in result
+        or "APPLICATION FOR CLOSING THE RIGHT TO MAKE ARGUMENTS" in result
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
@@ -1567,7 +1569,7 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
         sec = b.get("section")
         size = heading_size if (sec in ("court_header", "title") or b.get("bold")) else body_size
         align = b.get("align", "left")
-        is_title = b.get("section") == "title"
+        is_title = b.get("section") == "title" or bool(b.get("underline"))
         block_indent = para_indent_pt if (b.get("indent") and align in ("justify", "left")) else 0.0
         cur_latin = latin_bold if (b.get("bold") or sec in ("court_header", "title")) else latin_normal
         lines, space_adv = _wrap_hb_lines(hb_font, upem, text, size, max_width, indent_pt=block_indent, latin_font=cur_latin)
