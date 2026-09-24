@@ -4479,10 +4479,17 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        if not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
+        is_closing_arg = (tpl_id == "closing_argument_right_application" or "closed_party" in ctx or "closed_party" in values)
+        if is_closing_arg:
+            ctx["advocate_name"] = default_adv_desig
+        elif not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
+        is_closing_arg = (tpl_id == "closing_argument_right_application" or "closed_party" in ctx or "closed_party" in values)
+        if is_closing_arg:
+            if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
+                ctx["advocate_name"] = ""
 
     # Closing Argument Right Application: closed_party role auto-flow
     raw_closed = ctx.get("closed_party")

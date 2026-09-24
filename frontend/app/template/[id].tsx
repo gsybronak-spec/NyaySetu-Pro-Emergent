@@ -97,6 +97,20 @@ const NORMALIZE_ROLE_MAP: Record<string, string> = {
   Accused: "accused",
 };
 
+function getAdvocateDesignation(roleStr: string, lang: "gu" | "en"): string {
+  const r = String(roleStr || "").trim();
+  if (!r) return "";
+  let roleGu = r;
+  let roleEn = r;
+  if (r === "complainant" || r === "ફરીયાદી") { roleGu = "ફરીયાદી"; roleEn = "Complainant"; }
+  else if (r === "applicant" || r === "અરજદાર") { roleGu = "અરજદાર"; roleEn = "Applicant"; }
+  else if (r === "plaintiff" || r === "વાદી") { roleGu = "વાદી"; roleEn = "Plaintiff"; }
+  else if (r === "accused" || r === "આરોપી") { roleGu = "આરોપી"; roleEn = "Accused"; }
+  else if (r === "opponent" || r === "respondent" || r === "સામાવાળા") { roleGu = "સામાવાળા"; roleEn = "Opponent"; }
+  else if (r === "defendant" || r === "પ્રતિવાદી") { roleGu = "પ્રતિવાદી"; roleEn = "Defendant"; }
+  return lang === "gu" ? `${roleGu} ના એડવોકેટ` : `Advocate for ${roleEn}`;
+}
+
 function RoleChips({
   label,
   options,
@@ -299,7 +313,13 @@ export default function TemplateApplication() {
         (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
         language
       );
-      initialValues["advocate_name"] = advName;
+      if (templateId === "closing_argument_right_application") {
+        const rawAdvFor = initialValues["advocate_for"];
+        const effectiveRole = rawAdvFor === "party_1" ? initialValues["party_1_role"] : rawAdvFor === "party_2" ? initialValues["party_2_role"] : rawAdvFor;
+        initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language) : "";
+      } else {
+        initialValues["advocate_name"] = advName;
+      }
       initialValues["advocate_qualification"] =
         (language === "gu" ? me?.qualification_gu : me?.qualification_en) || me?.qualification || "";
       initialValues["advocate_address"] =
@@ -386,18 +406,13 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
-      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application") && k === "advocate_for") {
-        const roleStr = String(v || "").trim();
-        if (roleStr) {
-          let roleGu = roleStr;
-          let roleEn = roleStr;
-          if (roleStr === "complainant" || roleStr === "ફરીયાદી") { roleGu = "ફરીયાદી"; roleEn = "Complainant"; }
-          else if (roleStr === "applicant" || roleStr === "અરજદાર") { roleGu = "અરજદાર"; roleEn = "Applicant"; }
-          else if (roleStr === "plaintiff" || roleStr === "વાદી") { roleGu = "વાદી"; roleEn = "Plaintiff"; }
-          else if (roleStr === "accused" || roleStr === "આરોપી") { roleGu = "આરોપી"; roleEn = "Accused"; }
-          else if (roleStr === "opponent" || roleStr === "respondent" || roleStr === "સામાવાળા") { roleGu = "સામાવાળા"; roleEn = "Opponent"; }
-          else if (roleStr === "defendant" || roleStr === "પ્રતિવાદી") { roleGu = "પ્રતિવાદી"; roleEn = "Defendant"; }
-          next["advocate_name"] = language === "gu" ? `${roleGu} ના એડવોકેટ` : `Advocate for ${roleEn}`;
+      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
+        const curAdvFor = k === "advocate_for" ? v : next["advocate_for"];
+        if (curAdvFor) {
+          const effectiveRole = curAdvFor === "party_1" ? next["party_1_role"] : curAdvFor === "party_2" ? next["party_2_role"] : curAdvFor;
+          next["advocate_name"] = getAdvocateDesignation(effectiveRole, language);
+        } else {
+          next["advocate_name"] = "";
         }
       }
       return next;
@@ -615,16 +630,22 @@ export default function TemplateApplication() {
         if (templateId === "certified_copy_application" && (f.key === "court_name" || f.key === "court")) {
           return true;
         }
+        if (templateId === "closing_argument_right_application" && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+          return true;
+        }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
         if (f.source === "saved_case" || f.source === "advocate_profile") return false;
         if (f.mode === "DIRECT_TEMPLATE") return false;
       } else {
         // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
         if (f.mode === "SAVED_CASE") return false;
+        if (templateId === "closing_argument_right_application" && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+          return true;
+        }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
       }
       if (f.key === "representing_party") return false;
-      if (f.key === "date") return false;
+      if (f.key === "date" && templateId !== "closing_argument_right_application") return false;
       return true;
     });
   }, [templateFields, caseId, templateId]);
@@ -925,6 +946,18 @@ export default function TemplateApplication() {
             })}
           </View>
         </View>
+      );
+    if (templateId === "closing_argument_right_application" && f.key === "advocate_name") {
+      return (
+        <Field
+          key={f.key}
+          testID="field-advocate_name"
+          label={language === "gu" ? "ના એડવોકેટ (હોદ્દો)" : "Advocate Designation"}
+          placeholder={language === "gu" ? "કોના તરફે એડવોકેટ માંથી આપોઆપ આવશે" : "Auto-derived from Advocate For"}
+          value={fvalue || ""}
+          editable={false}
+          style={{ opacity: 0.9, backgroundColor: colors.surfaceSecondary }}
+        />
       );
     }
 
@@ -1298,13 +1331,15 @@ export default function TemplateApplication() {
                   }}
                 />
 
-                <Field
-                  testID="field-advocate_name"
-                  label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
-                  placeholder={language === "gu" ? "દા.ત. એડવોકેટ રોનક સોલંકી" : "e.g. Adv. Ronak Solanki"}
-                  value={values.advocate_name || ""}
-                  onChangeText={(v) => update("advocate_name", v)}
-                />
+                {templateId !== "closing_argument_right_application" && (
+                  <Field
+                    testID="field-advocate_name"
+                    label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
+                    placeholder={language === "gu" ? "દા.ત. એડવોકેટ રોનક સોલંકી" : "e.g. Adv. Ronak Solanki"}
+                    value={values.advocate_name || ""}
+                    onChangeText={(v) => update("advocate_name", v)}
+                  />
+                )}
               </View>
             )}
 
@@ -1334,10 +1369,12 @@ export default function TemplateApplication() {
 
             {appSpecificFields.map((f: any) => renderFieldInput(f))}
 
-            {/* Date Field — ALWAYS THE LAST FIELD */}
-            <View style={{ marginTop: Spacing.sm }}>
-              {renderFieldInput(dateField)}
-            </View>
+            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application where date is in template sequence) */}
+            {templateId !== "closing_argument_right_application" && (
+              <View style={{ marginTop: Spacing.sm }}>
+                {renderFieldInput(dateField)}
+              </View>
+            )}
 
             </View>
 

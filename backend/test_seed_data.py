@@ -3324,7 +3324,7 @@ Place: {{place}}
             {
                 "key": "duration_status",
                 "label_en": "Duration / Hearing Status",
-                "label_gu": "ઘણી મુદ્દતથી / આજ દીન સુધી",
+                "label_gu": "ઘણી મુદ્દતથી / આજ દિન સુધી",
                 "type": "radio",
                 "required": False,
                 "options": [
@@ -3349,11 +3349,12 @@ Place: {{place}}
             },
             {
                 "key": "advocate_name",
-                "label_en": "Advocate Designation / Name",
-                "label_gu": "ના એડવોકેટ / એડવોકેટનું નામ",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
                 "type": "text",
                 "required": False,
-                "placeholder": "એડવોકેટનું નામ",
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
             },
         ],
         "settings": {

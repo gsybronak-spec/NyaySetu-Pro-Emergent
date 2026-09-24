@@ -416,6 +416,51 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
         self.assertIsNotNone(canonical)
         self.assertEqual(canonical["id"], "closing_argument_right_application")
 
+    async def test_19_advocate_designation_auto_derivation(self):
+        """Verify advocate_name automatically derives from advocate_for selection without manual typing."""
+        user = {"name": "Advocate Ramesh Test", "advocate_name_gu": "એડવોકેટ રમેશ ટેસ્ટ", "advocate_name_en": "Advocate Ramesh Test"}
+        roles_to_expected = [
+            ("ફરીયાદી", "ફરીયાદી ના એડવોકેટ"),
+            ("અરજદાર", "અરજદાર ના એડવોકેટ"),
+            ("વાદી", "વાદી ના એડવોકેટ"),
+            ("આરોપી", "આરોપી ના એડવોકેટ"),
+            ("સામાવાળા", "સામાવાળા ના એડવોકેટ"),
+            ("પ્રતિવાદી", "પ્રતિવાદી ના એડવોકેટ"),
+        ]
+        for role, expected_desig in roles_to_expected:
+            vals = {"advocate_for": role, "closed_party": "સામાવાળા"}
+            ctx = await server.build_render_context(user, None, vals, "gu", template_id="closing_argument_right_application")
+            self.assertEqual(ctx["advocate_name"], expected_desig, f"advocate_for={role} should derive {expected_desig}")
+
+        # English derivation
+        roles_to_expected_en = [
+            ("plaintiff", "Advocate for Plaintiff"),
+            ("complainant", "Advocate for Complainant"),
+            ("applicant", "Advocate for Applicant"),
+            ("defendant", "Advocate for Defendant"),
+            ("accused", "Advocate for Accused"),
+            ("opponent", "Advocate for Opponent"),
+        ]
+        for role, expected_desig in roles_to_expected_en:
+            vals = {"advocate_for": role, "closed_party": "opponent"}
+            ctx = await server.build_render_context(user, None, vals, "en", template_id="closing_argument_right_application")
+            self.assertEqual(ctx["advocate_name"], expected_desig, f"advocate_for={role} should derive {expected_desig}")
+
+        # Blank advocate_for must remain non-blocking and blank
+        vals_blank = {"advocate_for": "", "closed_party": ""}
+        ctx_blank = await server.build_render_context(user, None, vals_blank, "gu", template_id="closing_argument_right_application")
+        self.assertEqual(ctx_blank["advocate_name"], "", "Blank advocate_for should leave advocate_name blank")
+
+    def test_20_duration_status_radio_options(self):
+        """Verify duration_status is a radio button with exact canonical options."""
+        dur_f = next(f for f in self.tpl["fields"] if f["key"] == "duration_status")
+        self.assertEqual(dur_f["type"], "radio")
+        self.assertFalse(dur_f.get("required"))
+        self.assertEqual(dur_f["label_gu"], "ઘણી મુદ્દતથી / આજ દિન સુધી")
+        opts = [o["value"] for o in dur_f.get("options", [])]
+        self.assertEqual(opts, ["ઘણી મુદ્દતથી", "આજ દિન સુધી"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
