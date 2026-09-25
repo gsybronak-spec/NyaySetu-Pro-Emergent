@@ -4631,17 +4631,9 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Reopen Right to Argue Application: Taluka/Mukam & argument_failure_reason resolution
     is_reopen_app = (tpl_id in ("reopen_right_to_argue_application", "reopen_right_to_argue_application_gu", "reopen_right_to_argue_application_en") or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
     if is_reopen_app:
-        if _tal and _dist:
-            combined_loc = f"{_tal}, {_dist}"
-            ctx["district"] = combined_loc
-            ctx["taluka_place"] = combined_loc
-            if not raw_place or raw_place == _dist:
-                ctx["place"] = combined_loc
-        elif _dist:
-            ctx["district"] = _dist
-            ctx["taluka_place"] = _dist
-            if not raw_place:
-                ctx["place"] = _dist
+        ctx["district"] = _dist or ""
+        ctx["place"] = _dist or ""
+        ctx["taluka_place"] = _dist or ""
 
     raw_reason = str(ctx.get("argument_failure_reason") or "").strip()
     custom_reason = str(ctx.get("argument_failure_reason_custom") or ctx.get("argument_failure_reason_other") or "").strip()
@@ -4655,15 +4647,19 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Language-aware reason translation for English
     if language == "en":
         reason_map_en = {
-            "આરોપીના દાદા ગુજરી ગયેલ હોવાના": "the accused's grandfather passed away",
-            "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના": "the accused had to travel abroad for business purposes",
-            "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના": "the advocate for the accused could not attend this Hon'ble Court due to illness",
-            "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય": "the accused is in jail in connection with another crime",
+            "દલીલો તૈયાર ન હોવાના": "arguments were not prepared",
+            "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to illness, which",
+            "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to social commitments, which",
+            "આરોપીના સગા ગુજરી ગયેલ, જે": "a relative of the accused passed away, which",
+            "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ, જે": "the accused had to travel abroad for business, which",
+            "આરોપી બીજા ગુન્હાના કામ અર્થે જેલમાં હોય, જે": "the accused is in jail in connection with another offense, which",
             "અન્ય": "Other",
-            "Accused's grandfather passed away": "the accused's grandfather passed away",
-            "Accused had to travel abroad for business": "the accused had to travel abroad for business purposes",
-            "Accused's advocate could not appear due to illness": "the advocate for the accused could not attend this Hon'ble Court due to illness",
-            "Accused is in jail in connection with another crime": "the accused is in jail in connection with another crime",
+            "Arguments not prepared": "arguments were not prepared",
+            "We could not attend this Hon'ble Court due to illness, which": "we could not attend this Hon'ble Court due to illness, which",
+            "We could not attend this Hon'ble Court due to social commitments, which": "we could not attend this Hon'ble Court due to social commitments, which",
+            "Accused's relative passed away, which": "a relative of the accused passed away, which",
+            "Accused had to travel abroad for business, which": "the accused had to travel abroad for business, which",
+            "Accused is in jail in connection with another offense, which": "the accused is in jail in connection with another offense, which",
             "Other": "Other",
         }
         if ctx.get("argument_failure_reason") in reason_map_en:

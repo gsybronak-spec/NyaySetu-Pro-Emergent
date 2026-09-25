@@ -142,33 +142,41 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
         self.assertEqual(p2_opts, ["આરોપી", "સામાવાળા", "પ્રતિવાદી"])
 
     def test_06_canonical_reason_dropdown_options(self):
-        """6. Verify argument_failure_reason dropdown has the exact 5 canonical choices from Page 1."""
+        """6. Verify argument_failure_reason dropdown has the exact 7 canonical choices."""
         reason_field = next(f for f in self.tpl["fields"] if f["key"] == "argument_failure_reason")
         self.assertEqual(reason_field["type"], "select")
         opts = [o["value"] for o in reason_field.get("options", [])]
         expected_opts = [
-            "આરોપીના દાદા ગુજરી ગયેલ હોવાના",
-            "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના",
-            "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના",
-            "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય",
+            "દલીલો તૈયાર ન હોવાના",
+            "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+            "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે",
+            "આરોપીના સગા ગુજરી ગયેલ, જે",
+            "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ, જે",
+            "આરોપી બીજા ગુન્હાના કામ અર્થે જેલમાં હોય, જે",
             "અન્ય",
         ]
         self.assertEqual(opts, expected_opts)
 
     async def test_07_taluka_district_mukam_logic(self):
-        """7. Verify Taluka logic: when taluka is selected -> [taluka], [district]; when blank -> [district]."""
+        """7. Verify District -> Mukam/Place auto-fill logic: place directly synchronizes with district."""
         user = {"name": "Test Advocate"}
-        ctx_with = await server.build_render_context(
-            user, None, {"district": "gandhinagar", "taluka": "kalol"}, "gu", template_id="reopen_right_to_argue_application"
+        ctx_gn = await server.build_render_context(
+            user, None, {"district": "gandhinagar"}, "gu", template_id="reopen_right_to_argue_application"
         )
-        self.assertEqual(ctx_with["district"], "કલોલ, ગાંધીનગર")
-        self.assertEqual(ctx_with["place"], "કલોલ, ગાંધીનગર")
+        self.assertEqual(ctx_gn["district"], "ગાંધીનગર")
+        self.assertEqual(ctx_gn["place"], "ગાંધીનગર")
 
-        ctx_without = await server.build_render_context(
-            user, None, {"district": "gandhinagar", "taluka": ""}, "gu", template_id="reopen_right_to_argue_application"
+        ctx_ahm = await server.build_render_context(
+            user, None, {"district": "ahmedabad"}, "gu", template_id="reopen_right_to_argue_application"
         )
-        self.assertEqual(ctx_without["district"], "ગાંધીનગર")
-        self.assertEqual(ctx_without["place"], "ગાંધીનગર")
+        self.assertEqual(ctx_ahm["district"], "અમદાવાદ")
+        self.assertEqual(ctx_ahm["place"], "અમદાવાદ")
+
+        ctx_blank = await server.build_render_context(
+            user, None, {"district": ""}, "gu", template_id="reopen_right_to_argue_application"
+        )
+        self.assertEqual(ctx_blank["district"], "")
+        self.assertEqual(ctx_blank["place"], "")
 
     def test_08_court_name_formatting(self):
         """8. Verify Court Name is centered, bold, 15pt GU / 16pt EN."""
@@ -269,23 +277,23 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
             "party_1_role": "વાદી",
             "party_2_role": "પ્રતિવાદી",
             "advocate_for": "વાદી",
-            "argument_failure_reason": "આરોપીના દાદા ગુજરી ગયેલ હોવાના",
+            "argument_failure_reason": "દલીલો તૈયાર ન હોવાના",
         }
         ctx_gu = await server.build_render_context(user, None, vals, "gu", template_id="reopen_right_to_argue_application")
         rendered_gu = doc_generator.render_template(self.tpl["content_gu"], ctx_gu)
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જમા ે અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે.", rendered_gu)
-        self.assertIn("જે આરોપીના દાદા ગુજરી ગયેલ હોવાના કારણસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered_gu)
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જેમા અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે.", rendered_gu)
+        self.assertIn("જે દલીલો તૈયાર ન હોવાના કારણોસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered_gu)
 
         ctx_en = await server.build_render_context(user, None, vals, "en", template_id="reopen_right_to_argue_application")
         rendered_en = doc_generator.render_template(self.tpl["content_en"], ctx_en)
         self.assertIn("The said case is pending before this Hon'ble Court for arguments. Wherein our right to make arguments has been closed by this Hon'ble Court.", rendered_en)
-        self.assertIn("As arguments could not be made due to the reason that the accused's grandfather passed away, and as the said reason is reasonable and getting an opportunity to make arguments is in the interest of justice, it is prayed to be pleased to pass appropriate order reopening our right to make arguments and granting us an opportunity to make arguments.", rendered_en)
+        self.assertIn("As arguments could not be made due to the reason that arguments were not prepared, and as the said reason is reasonable and getting an opportunity to make arguments is in the interest of justice, it is prayed to be pleased to pass appropriate order reopening our right to make arguments and granting us an opportunity to make arguments.", rendered_en)
 
     def test_17_paragraphs_indent_and_justified(self):
         """17. Verify paragraphs are justified with 1-tab first line indent."""
         rendered = """સદર કામમા અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જમા ે અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે આરોપીના દાદા ગુજરી ગયેલ હોવાના કારણસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી."""
+સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જેમા અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે દલીલો તૈયાર ન હોવાના કારણોસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી."""
         blocks = doc_generator.build_blocks(rendered, align_rules=self.tpl["settings"].get("block_align"))
         non_spacers = [b for b in blocks if b.get("section") != "spacer"]
         self.assertEqual(non_spacers[0]["align"], "justify")
@@ -301,12 +309,12 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
             "party_2_role": "પ્રતિવાદી",
             "advocate_for": "વાદી",
             "argument_failure_reason": "અન્ય",
-            "argument_failure_reason_custom": "અમો વકીલશ્રીનું ટ્રેન મોડી પડવાના કારણે પહોંચી શકાયું ન હોવાના",
+            "argument_failure_reason_custom": "મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના",
         }
         ctx = await server.build_render_context(user, None, vals, "gu", template_id="reopen_right_to_argue_application")
-        self.assertEqual(ctx["argument_failure_reason"], "અમો વકીલશ્રીનું ટ્રેન મોડી પડવાના કારણે પહોંચી શકાયું ન હોવાના")
+        self.assertEqual(ctx["argument_failure_reason"], "મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના")
         rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
-        self.assertIn("જે અમો વકીલશ્રીનું ટ્રેન મોડી પડવાના કારણે પહોંચી શકાયું ન હોવાના કારણસર દલીલો થઈ શકેલ નહિ", rendered)
+        self.assertIn("જે મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના કારણોસર દલીલો થઈ શકેલ નહિ", rendered)
         self.assertNotIn("અન્ય", rendered)
 
     async def test_19_reason_other_blank_fallback(self):
@@ -322,7 +330,7 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
         ctx = await server.build_render_context(user, None, vals, "gu", template_id="reopen_right_to_argue_application")
         self.assertEqual(ctx["argument_failure_reason"], "અન્ય")
         rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
-        self.assertIn("જે અન્ય કારણસર દલીલો થઈ શકેલ નહિ", rendered)
+        self.assertIn("જે અન્ય કારણોસર દલીલો થઈ શકેલ નહિ", rendered)
 
     def test_20_date_and_place_left_aligned(self):
         """20. Verify Date and Place blocks are left-aligned."""
@@ -523,6 +531,65 @@ Advocate for Complainant"""
             tpl = next((t for t in TEMPLATES if t.get("id") == tid), None)
             self.assertIsNotNone(tpl, f"Template {tid} must exist in TEMPLATES")
             self.assertTrue(len(tpl.get("fields", [])) > 0, f"Template {tid} must have fields")
+
+    async def test_31_user_tests_a_through_h(self):
+        """31. Verify all 8 explicitly mandated tests A through H from user specification."""
+        user = {"name": "Test Advocate"}
+
+        # TEST A: Select advocate_for = ફરીયાદી
+        ctx_a = await server.build_render_context(user, None, {"advocate_for": "ફરીયાદી"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_a = doc_generator.render_template(self.tpl["content_gu"], ctx_a)
+        self.assertIn("સદર કામમા અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", rendered_a)
+
+        # TEST B: Select advocate_for = વાદી
+        ctx_b = await server.build_render_context(user, None, {"advocate_for": "વાદી"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_b = doc_generator.render_template(self.tpl["content_gu"], ctx_b)
+        self.assertIn("સદર કામમા અમો વાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", rendered_b)
+
+        # TEST C: Select reason = દલીલો તૈયાર ન હોવાના
+        ctx_c = await server.build_render_context(user, None, {"argument_failure_reason": "દલીલો તૈયાર ન હોવાના"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_c = doc_generator.render_template(self.tpl["content_gu"], ctx_c)
+        self.assertIn("જે દલીલો તૈયાર ન હોવાના કારણોસર દલીલો થઈ શકેલ નહિ", rendered_c)
+
+        # TEST D: Select reason = આરોપીના સગા ગુજરી ગયેલ, જે
+        ctx_d = await server.build_render_context(user, None, {"argument_failure_reason": "આરોપીના સગા ગુજરી ગયેલ, જે"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_d = doc_generator.render_template(self.tpl["content_gu"], ctx_d)
+        self.assertIn("જે આરોપીના સગા ગુજરી ગયેલ, જે કારણોસર દલીલો થઈ શકેલ નહિ", rendered_d)
+
+        # TEST E: Select "અન્ય", Enter "મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના"
+        ctx_e = await server.build_render_context(
+            user, None,
+            {"argument_failure_reason": "અન્ય", "argument_failure_reason_custom": "મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના"},
+            "gu",
+            template_id="reopen_right_to_argue_application"
+        )
+        rendered_e = doc_generator.render_template(self.tpl["content_gu"], ctx_e)
+        self.assertIn("જે મારા પિતાશ્રી હોસ્પિટલમાં દાખલ થયેલ હોવાના કારણોસર દલીલો થઈ શકેલ નહિ", rendered_e)
+        self.assertNotIn("અન્ય", rendered_e)
+
+        # TEST F: Select District = ગાંધીનગર -> lower Mukam/Place: ગાંધીનગર
+        ctx_f = await server.build_render_context(user, None, {"district": "ગાંધીનગર"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_f = doc_generator.render_template(self.tpl["content_gu"], ctx_f)
+        self.assertEqual(ctx_f["district"], "ગાંધીનગર")
+        self.assertEqual(ctx_f["place"], "ગાંધીનગર")
+        self.assertIn("મુકામ :- ગાંધીનગર", rendered_f)
+        self.assertIn("સ્થળ : ગાંધીનગર", rendered_f)
+
+        # TEST G: Change District = અમદાવાદ -> lower Mukam/Place: અમદાવાદ
+        ctx_g = await server.build_render_context(user, None, {"district": "અમદાવાદ"}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_g = doc_generator.render_template(self.tpl["content_gu"], ctx_g)
+        self.assertEqual(ctx_g["district"], "અમદાવાદ")
+        self.assertEqual(ctx_g["place"], "અમદાવાદ")
+        self.assertIn("મુકામ :- અમદાવાદ", rendered_g)
+        self.assertIn("સ્થળ : અમદાવાદ", rendered_g)
+
+        # TEST H: Clear District -> lower Mukam/Place becomes blank
+        ctx_h = await server.build_render_context(user, None, {"district": ""}, "gu", template_id="reopen_right_to_argue_application")
+        rendered_h = doc_generator.render_template(self.tpl["content_gu"], ctx_h)
+        self.assertEqual(ctx_h["district"], "")
+        self.assertEqual(ctx_h["place"], "")
+        self.assertIn("મુકામ :- ", rendered_h)
+        self.assertIn("સ્થળ : ", rendered_h)
 
 
 if __name__ == "__main__":

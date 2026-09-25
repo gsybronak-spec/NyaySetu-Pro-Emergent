@@ -3607,14 +3607,16 @@ Place: {{place}}
             {
                 "key": "argument_failure_reason",
                 "label_en": "Reason for Failure to Argue",
-                "label_gu": "દલીલો ન થઈ શકવાનુ યોગ્ય કારણ",
+                "label_gu": "દલીલો ન થઈ શકવાનું યોગ્ય કારણ",
                 "type": "select",
                 "required": False,
                 "options": [
-                    {"value": "આરોપીના દાદા ગુજરી ગયેલ હોવાના", "label_en": "Accused's grandfather passed away", "label_gu": "આરોપીના દાદા ગુજરી ગયેલ હોવાના"},
-                    {"value": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના", "label_en": "Accused had to travel abroad for business", "label_gu": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના"},
-                    {"value": "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના", "label_en": "Accused's advocate could not appear due to illness", "label_gu": "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના"},
-                    {"value": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય", "label_en": "Accused is in jail in connection with another crime", "label_gu": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય"},
+                    {"value": "દલીલો તૈયાર ન હોવાના", "label_en": "Arguments not prepared", "label_gu": "દલીલો તૈયાર ન હોવાના"},
+                    {"value": "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે", "label_en": "We could not attend this Hon'ble Court due to illness, which", "label_gu": "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે"},
+                    {"value": "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે", "label_en": "We could not attend this Hon'ble Court due to social commitments, which", "label_gu": "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે"},
+                    {"value": "આરોપીના સગા ગુજરી ગયેલ, જે", "label_en": "Accused's relative passed away, which", "label_gu": "આરોપીના સગા ગુજરી ગયેલ, જે"},
+                    {"value": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ, જે", "label_en": "Accused had to travel abroad for business, which", "label_gu": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ, જે"},
+                    {"value": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલમાં હોય, જે", "label_en": "Accused is in jail in connection with another offense, which", "label_gu": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલમાં હોય, જે"},
                     {"value": "અન્ય", "label_en": "Other", "label_gu": "અન્ય"},
                 ],
             },
@@ -3701,7 +3703,7 @@ Place: {{place}}
 
 સદર કામમા અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જમા ે અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{argument_failure_reason}} કારણસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જેમા અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{argument_failure_reason}} કારણોસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 

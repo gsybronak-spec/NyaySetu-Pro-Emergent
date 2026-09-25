@@ -328,6 +328,11 @@ export default function TemplateApplication() {
       initialValues["advocate_enrollment_no"] = me?.bar_council_no || me?.sanad_no || me?.enrollment_no || "";
       initialValues["sanad_number"] = initialValues["advocate_enrollment_no"];
       initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
+      if (templateId === "reopen_right_to_argue_application") {
+        const dVal = initialValues["district"];
+        const distObj = districts.find((d: any) => d.id === dVal || d.gu === dVal || d.en === dVal);
+        initialValues["place"] = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (dVal || "");
+      }
       initialValues["representing_party"] = initialValues["representing_party"] || "party";
       initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
 
@@ -415,20 +420,11 @@ export default function TemplateApplication() {
           next["advocate_name"] = "";
         }
       }
-      if (templateId === "reopen_right_to_argue_application" && (k === "district" || k === "taluka")) {
-        const distVal = k === "district" ? v : next["district"];
-        const talVal = k === "taluka" ? v : next["taluka"];
+      if (templateId === "reopen_right_to_argue_application" && k === "district") {
+        const distVal = v;
         const distObj = districts.find((d: any) => d.id === distVal || d.gu === distVal || d.en === distVal);
         const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (distVal || "");
-        const talObj = talukas.find((t: any) => t.id === talVal || t.gu === talVal || t.en === talVal);
-        const talLabel = talObj ? (language === "gu" ? talObj.gu : talObj.en) : (talVal || "");
-        if (talLabel && distLabel) {
-          next["place"] = `${talLabel}, ${distLabel}`;
-        } else if (distLabel) {
-          next["place"] = distLabel;
-        } else if (talLabel) {
-          next["place"] = talLabel;
-        }
+        next["place"] = distLabel || "";
       }
       return next;
     });
@@ -537,9 +533,8 @@ export default function TemplateApplication() {
     out["taluka_place"] = derivedPlace;
 
     if (templateId === "reopen_right_to_argue_application") {
-      if (rawTal && rawDist) {
-        out["district"] = derivedPlace;
-      }
+      out["place"] = rawDist || "";
+      out["district"] = rawDist || "";
       const curReason = out["argument_failure_reason"];
       const customReason = (out["argument_failure_reason_custom"] || "").trim();
       if (curReason === "અન્ય" || curReason === "other" || curReason === "Other") {
@@ -1000,6 +995,20 @@ export default function TemplateApplication() {
           testID="field-advocate_name"
           label={language === "gu" ? (templateId === "reopen_right_to_argue_application" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : "Advocate Designation"}
           placeholder={language === "gu" ? "કોના તરફે એડવોકેટ માંથી આપોઆપ આવશે" : "Auto-derived from Advocate For"}
+          value={fvalue || ""}
+          editable={false}
+          style={{ opacity: 0.9, backgroundColor: colors.surfaceSecondary }}
+        />
+      );
+    }
+
+    if (templateId === "reopen_right_to_argue_application" && f.key === "place") {
+      return (
+        <Field
+          key={f.key}
+          testID="field-place"
+          label={label}
+          placeholder={language === "gu" ? "જીલ્લા માંથી આપોઆપ આવશે" : "Auto-derived from District"}
           value={fvalue || ""}
           editable={false}
           style={{ opacity: 0.9, backgroundColor: colors.surfaceSecondary }}
