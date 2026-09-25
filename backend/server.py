@@ -2657,7 +2657,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3196,6 +3196,17 @@ def _get_canonical_reopen_right_to_argue_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "reopen_right_to_argue_application"), None)
 
 
+def _get_canonical_exemption_arji_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "exemption_arji"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "exemption_arji"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3368,6 +3379,41 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref_rr.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_ex = db.collection("templates").document("exemption_arji")
+            snap_ex = await doc_ref_ex.get()
+            ex_seed_arji = _get_canonical_exemption_arji_template()
+            if ex_seed_arji:
+                if not snap_ex.exists:
+                    await doc_ref_ex.set({
+                        **ex_seed_arji,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_ex = snap_ex.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_ex.get("content_gu") != ex_seed_arji["content_gu"]:
+                        update_dict["content_gu"] = ex_seed_arji["content_gu"]
+                        needs_update = True
+                    if cur_ex.get("content_en") != ex_seed_arji["content_en"]:
+                        update_dict["content_en"] = ex_seed_arji["content_en"]
+                        needs_update = True
+                    if cur_ex.get("settings") != ex_seed_arji["settings"]:
+                        update_dict["settings"] = ex_seed_arji["settings"]
+                        needs_update = True
+                    if cur_ex.get("fields") != ex_seed_arji.get("fields"):
+                        update_dict["fields"] = ex_seed_arji["fields"]
+                        needs_update = True
+                    if cur_ex.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_ex.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3391,7 +3437,7 @@ async def _get_published_templates() -> list:
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached):
+            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached):
                 return cached
 
     deleted_ids = await _get_deleted_template_ids()
@@ -3530,6 +3576,32 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "exemption_arji" or t.get("template_id") == "exemption_arji"):
+                ex_seed = _get_canonical_exemption_arji_template()
+                if ex_seed:
+                    needs_update = False
+                    if t.get("content_gu") != ex_seed["content_gu"]:
+                        t["content_gu"] = ex_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != ex_seed["content_en"]:
+                        t["content_en"] = ex_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != ex_seed["settings"]:
+                        t["settings"] = ex_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != ex_seed.get("fields"):
+                        t["fields"] = ex_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "exemption_arji")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3588,6 +3660,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("reopen_right_to_argue_application").set({
                             **rr_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_ex = any((t.get("id") == "exemption_arji" or t.get("template_id") == "exemption_arji") for t in db_templates)
+        if not found_ex and "exemption_arji" not in deleted_ids:
+            ex_seed = _get_canonical_exemption_arji_template()
+            if ex_seed:
+                db_templates.append(dict(ex_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("exemption_arji").set({
+                            **ex_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -3768,6 +3856,32 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "exemption_arji" or template_id == "exemption_arji"):
+            ex_seed = _get_canonical_exemption_arji_template()
+            if ex_seed:
+                needs_update = False
+                if t.get("content_gu") != ex_seed["content_gu"]:
+                    t["content_gu"] = ex_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != ex_seed["content_en"]:
+                    t["content_en"] = ex_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != ex_seed["settings"]:
+                    t["settings"] = ex_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != ex_seed.get("fields"):
+                    t["fields"] = ex_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
@@ -3789,6 +3903,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         rr_seed = _get_canonical_reopen_right_to_argue_template()
         if rr_seed and "reopen_right_to_argue_application" not in deleted_ids:
             return {**rr_seed, "format_version": rr_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and template_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance"):
+        ex_seed = _get_canonical_exemption_arji_template()
+        if ex_seed and "exemption_arji" not in deleted_ids:
+            return {**ex_seed, "format_version": ex_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -4598,14 +4717,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values)
         if is_closing_or_reopen:
             ctx["advocate_name"] = default_adv_desig
         elif not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -4644,7 +4763,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     else:
         ctx["argument_failure_reason"] = raw_reason
 
-    # Language-aware reason translation for English
+    # Language-aware reason translation for English (Reopen Right to Argue)
     if language == "en":
         reason_map_en = {
             "દલીલો તૈયાર ન હોવાના": "arguments were not prepared",
@@ -4666,13 +4785,57 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         if ctx.get("argument_failure_reason") in reason_map_en:
             ctx["argument_failure_reason"] = reason_map_en[ctx["argument_failure_reason"]]
 
-    # Ensure closing_purshish, closing_argument_right_application & reopen_right_to_argue_application template keys are clean strings (never None or undefined)
+    # Exemption Application (હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ))
+    is_exemption_app = (tpl_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance") or "absence_reason" in ctx or "absence_reason" in values)
+    if is_exemption_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        raw_abs_reason = str(ctx.get("absence_reason") or "").strip()
+        custom_abs_reason = str(ctx.get("absence_reason_custom") or ctx.get("absence_reason_other") or "").strip()
+        if raw_abs_reason in ("અન્ય", "other", "Other"):
+            ctx["absence_reason"] = custom_abs_reason if custom_abs_reason else ("અન્ય" if language == "gu" else "Other")
+        elif not raw_abs_reason and custom_abs_reason:
+            ctx["absence_reason"] = custom_abs_reason
+        else:
+            ctx["absence_reason"] = raw_abs_reason
+
+        if language == "en":
+            abs_reason_map_en = {
+                "અનિવાર્ય સંજોગોના": "unavoidable circumstances",
+                "બહારગામ ગયેલ હોવાના": "being out of station",
+                "માંદગીના": "illness",
+                "સામાજીક કાર્યોમા રોકાયેલ હોવાના": "social commitments",
+                "બીજી કોર્ટમા પણ મુદ્દત હોય જેથી બીજી કોર્ટમા ગયેલ હોવાના": "having a hearing in another court and having attended that court",
+                "અન્ય": "other reasons",
+                "Unavoidable circumstances": "unavoidable circumstances",
+                "Being out of station": "being out of station",
+                "Illness": "illness",
+                "Social commitments": "social commitments",
+                "Having a hearing in another court and attended that court": "having a hearing in another court and having attended that court",
+                "Other": "other reasons",
+            }
+            if ctx.get("absence_reason") in abs_reason_map_en:
+                ctx["absence_reason"] = abs_reason_map_en[ctx["absence_reason"]]
+
+    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application & exemption_arji template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "advocate_for", "advocate_for_role", "closed_party", "closed_party_role",
         "argument_failure_reason", "argument_failure_reason_custom",
+        "absence_reason", "absence_reason_custom",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
