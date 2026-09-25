@@ -84,20 +84,20 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
         self.assertIn("દલીલોનો હક બંધ કરવા બાબત", aliases)
 
     def test_02_field_count_and_keys(self):
-        """Verify exactly 15 advocate-facing fields exist with exact keys and order."""
+        """Verify exactly 14 advocate-facing fields exist with exact keys and order."""
         fields = self.tpl.get("fields", [])
-        self.assertEqual(len(fields), 15, f"Expected 15 fields, got {len(fields)}")
+        self.assertEqual(len(fields), 14, f"Expected 14 fields, got {len(fields)}")
         keys = [f["key"] for f in fields]
         expected_keys = [
             "court_name", "district", "taluka", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "advocate_for", "closed_party", "duration_status",
+            "advocate_for", "closed_party",
             "date", "place", "advocate_name",
         ]
         self.assertEqual(keys, expected_keys)
 
     def test_03_field_types(self):
-        """Verify types of all 15 fields."""
+        """Verify types of all 14 fields."""
         type_map = {f["key"]: f.get("type") for f in self.tpl.get("fields", [])}
         expected_types = {
             "court_name": "select",
@@ -111,7 +111,6 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
             "party_2_name": "text",
             "advocate_for": "select",
             "closed_party": "select",
-            "duration_status": "radio",
             "date": "date",
             "place": "text",
             "advocate_name": "text",
@@ -120,7 +119,7 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
             self.assertEqual(type_map.get(k), expected_type, f"Field {k} should have type {expected_type}")
 
     def test_04_all_advocate_fields_optional(self):
-        """Verify ALL 15 advocate-facing fields have required: False."""
+        """Verify ALL 14 advocate-facing fields have required: False."""
         for f in self.tpl.get("fields", []):
             self.assertFalse(f.get("required"), f"Field {f['key']} must have required: False")
 
@@ -133,10 +132,6 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
         f_p2 = next(f for f in self.tpl["fields"] if f["key"] == "party_2_role")
         p2_vals = [o["value"] for o in f_p2["options"]]
         self.assertEqual(p2_vals, ["આરોપી", "સામાવાળા", "પ્રતિવાદી"])
-
-        f_dur = next(f for f in self.tpl["fields"] if f["key"] == "duration_status")
-        dur_vals = [o["value"] for o in f_dur["options"]]
-        self.assertEqual(dur_vals, ["ઘણી મુદ્દતથી", "આજ દિન સુધી"])
 
     async def test_06_advocate_for_dynamic_role_resolution(self):
         """Verify Advocate For dynamically sets advocate_for_role and advocate designation."""
@@ -217,6 +212,8 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
         self.assertIn(expected_p1, rendered)
 
         # Paragraph 2
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં આજ રોજ દલીલો પર છે.", rendered)
+        self.assertNotIn("સદર કેસ આપ નામદાર કોર્ટમા આજ રોજ દલીલો પર છે.", rendered)
         self.assertIn("સદર કેસમાં આરોપી પોતે જાતે કે તેમના વકીલશ્રી આજરોજ આપ નામદાર કોર્ટમા હાજર ન હોઈ", rendered)
         self.assertIn("જેથી આરોપી નો દલીલો કરવાનો હક બંધ કરી આગળની ન્યાયિક કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
 
@@ -451,14 +448,14 @@ class TestClosingArgumentRightApplicationTemplate(unittest.IsolatedAsyncioTestCa
         ctx_blank = await server.build_render_context(user, None, vals_blank, "gu", template_id="closing_argument_right_application")
         self.assertEqual(ctx_blank["advocate_name"], "", "Blank advocate_for should leave advocate_name blank")
 
-    def test_20_duration_status_radio_options(self):
-        """Verify duration_status is a radio button with exact canonical options."""
-        dur_f = next(f for f in self.tpl["fields"] if f["key"] == "duration_status")
-        self.assertEqual(dur_f["type"], "radio")
-        self.assertFalse(dur_f.get("required"))
-        self.assertEqual(dur_f["label_gu"], "ઘણી મુદ્દતથી / આજ દિન સુધી")
-        opts = [o["value"] for o in dur_f.get("options", [])]
-        self.assertEqual(opts, ["ઘણી મુદ્દતથી", "આજ દિન સુધી"])
+    def test_20_duration_status_removed_and_grammar_fixed(self):
+        """Verify duration_status is completely removed (14 fields) and grammar fix is in place."""
+        field_keys = [f["key"] for f in self.tpl["fields"]]
+        self.assertNotIn("duration_status", field_keys, "duration_status must be completely removed")
+        self.assertEqual(len(field_keys), 14, "Template must have exactly 14 fields")
+        # Grammar fix in content_gu
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં આજ રોજ દલીલો પર છે.", self.tpl["content_gu"])
+        self.assertNotIn("સદર કેસ આપ નામદાર કોર્ટમા આજ રોજ દલીલો પર છે.", self.tpl["content_gu"])
 
 
 if __name__ == "__main__":

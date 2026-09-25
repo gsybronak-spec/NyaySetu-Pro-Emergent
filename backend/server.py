@@ -4515,7 +4515,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "case_type", "case_number",
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "advocate_for", "advocate_for_role", "closed_party", "closed_party_role",
-        "duration_status", "date", "place", "advocate_name",
+        "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
