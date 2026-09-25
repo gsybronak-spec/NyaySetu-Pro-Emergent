@@ -4648,6 +4648,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     if language == "en":
         reason_map_en = {
             "દલીલો તૈયાર ન હોવાના": "arguments were not prepared",
+            "દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "arguments were not prepared / we could not attend this Hon'ble Court due to illness, which",
             "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to illness, which",
             "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to social commitments, which",
             "આરોપીના સગા ગુજરી ગયેલ, જે": "a relative of the accused passed away, which",

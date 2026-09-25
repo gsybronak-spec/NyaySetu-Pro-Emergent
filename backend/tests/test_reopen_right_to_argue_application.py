@@ -142,13 +142,12 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
         self.assertEqual(p2_opts, ["આરોપી", "સામાવાળા", "પ્રતિવાદી"])
 
     def test_06_canonical_reason_dropdown_options(self):
-        """6. Verify argument_failure_reason dropdown has the exact 7 canonical choices."""
+        """6. Verify argument_failure_reason dropdown has the exact 6 canonical choices."""
         reason_field = next(f for f in self.tpl["fields"] if f["key"] == "argument_failure_reason")
         self.assertEqual(reason_field["type"], "select")
         opts = [o["value"] for o in reason_field.get("options", [])]
         expected_opts = [
-            "દલીલો તૈયાર ન હોવાના",
-            "અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+            "દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
             "અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમા આવી શકીએ તેમ ન હતા, જે",
             "આરોપીના સગા ગુજરી ગયેલ, જે",
             "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ, જે",
@@ -156,6 +155,10 @@ class TestReopenRightToArgueApplicationTemplate(unittest.IsolatedAsyncioTestCase
             "અન્ય",
         ]
         self.assertEqual(opts, expected_opts)
+        self.assertEqual(len(opts), 6)
+        for o in reason_field.get("options", []):
+            self.assertEqual(o["label_gu"], o["value"])
+            self.assertEqual(o["label_en"], o["value"])
 
     async def test_07_taluka_district_mukam_logic(self):
         """7. Verify District -> Mukam/Place auto-fill logic: place directly synchronizes with district."""
@@ -546,10 +549,15 @@ Advocate for Complainant"""
         rendered_b = doc_generator.render_template(self.tpl["content_gu"], ctx_b)
         self.assertIn("સદર કામમા અમો વાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", rendered_b)
 
-        # TEST C: Select reason = દલીલો તૈયાર ન હોવાના
-        ctx_c = await server.build_render_context(user, None, {"argument_failure_reason": "દલીલો તૈયાર ન હોવાના"}, "gu", template_id="reopen_right_to_argue_application")
+        # TEST C: Select reason = દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે
+        ctx_c = await server.build_render_context(
+            user, None,
+            {"argument_failure_reason": "દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે"},
+            "gu",
+            template_id="reopen_right_to_argue_application"
+        )
         rendered_c = doc_generator.render_template(self.tpl["content_gu"], ctx_c)
-        self.assertIn("જે દલીલો તૈયાર ન હોવાના કારણોસર દલીલો થઈ શકેલ નહિ", rendered_c)
+        self.assertIn("જે દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે કારણોસર દલીલો થઈ શકેલ નહિ", rendered_c)
 
         # TEST D: Select reason = આરોપીના સગા ગુજરી ગયેલ, જે
         ctx_d = await server.build_render_context(user, None, {"argument_failure_reason": "આરોપીના સગા ગુજરી ગયેલ, જે"}, "gu", template_id="reopen_right_to_argue_application")
