@@ -806,8 +806,17 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
                 if a not in ("left", "center", "right", "justify"):
                     continue
                 needle = rule.get("contains")
+                prefix = rule.get("prefix")
                 pos = rule.get("position")
-                matched = (needle and needle in line) or (pos is not None and int(pos) == nonempty)
+                matched = True
+                if needle and needle not in line:
+                    matched = False
+                if prefix and not line.startswith(prefix):
+                    matched = False
+                if pos is not None and int(pos) != nonempty:
+                    matched = False
+                if not needle and not prefix and pos is None:
+                    matched = False
                 if matched:
                     align = a
                     if "bold" in rule:

@@ -556,7 +556,7 @@ POLICE_STATIONS = [
 # fields: list of {key, label_en, label_gu, type, required}
 try:
     from test_seed_data import TEMPLATES as _TEST_TEMPLATES
-    TEMPLATES = [t for t in _TEST_TEMPLATES if t.get("id") in ("document_exhibit_application", "document_return_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application")]
+    TEMPLATES = [t for t in _TEST_TEMPLATES if t.get("id") in ("document_exhibit_application", "document_return_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application")]
 except Exception:
     TEMPLATES = []
 

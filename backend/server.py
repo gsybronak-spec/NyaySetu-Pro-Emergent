@@ -2657,7 +2657,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3185,6 +3185,17 @@ def _get_canonical_closing_argument_right_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "closing_argument_right_application"), None)
 
 
+def _get_canonical_reopen_right_to_argue_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "reopen_right_to_argue_application"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "reopen_right_to_argue_application"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3322,6 +3333,41 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref_car.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_rr = db.collection("templates").document("reopen_right_to_argue_application")
+            snap_rr = await doc_ref_rr.get()
+            rr_seed = _get_canonical_reopen_right_to_argue_template()
+            if rr_seed:
+                if not snap_rr.exists:
+                    await doc_ref_rr.set({
+                        **rr_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_rr = snap_rr.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_rr.get("content_gu") != rr_seed["content_gu"]:
+                        update_dict["content_gu"] = rr_seed["content_gu"]
+                        needs_update = True
+                    if cur_rr.get("content_en") != rr_seed["content_en"]:
+                        update_dict["content_en"] = rr_seed["content_en"]
+                        needs_update = True
+                    if cur_rr.get("settings") != rr_seed["settings"]:
+                        update_dict["settings"] = rr_seed["settings"]
+                        needs_update = True
+                    if cur_rr.get("fields") != rr_seed.get("fields"):
+                        update_dict["fields"] = rr_seed["fields"]
+                        needs_update = True
+                    if cur_rr.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_rr.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3345,7 +3391,7 @@ async def _get_published_templates() -> list:
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached):
+            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached):
                 return cached
 
     deleted_ids = await _get_deleted_template_ids()
@@ -3458,6 +3504,32 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "reopen_right_to_argue_application" or t.get("template_id") == "reopen_right_to_argue_application"):
+                rr_seed = _get_canonical_reopen_right_to_argue_template()
+                if rr_seed:
+                    needs_update = False
+                    if t.get("content_gu") != rr_seed["content_gu"]:
+                        t["content_gu"] = rr_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != rr_seed["content_en"]:
+                        t["content_en"] = rr_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != rr_seed["settings"]:
+                        t["settings"] = rr_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != rr_seed.get("fields"):
+                        t["fields"] = rr_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "reopen_right_to_argue_application")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3500,6 +3572,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("closing_argument_right_application").set({
                             **car_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_rr = any((t.get("id") == "reopen_right_to_argue_application" or t.get("template_id") == "reopen_right_to_argue_application") for t in db_templates)
+        if not found_rr and "reopen_right_to_argue_application" not in deleted_ids:
+            rr_seed = _get_canonical_reopen_right_to_argue_template()
+            if rr_seed:
+                db_templates.append(dict(rr_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("reopen_right_to_argue_application").set({
+                            **rr_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -3654,6 +3742,32 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "reopen_right_to_argue_application" or template_id == "reopen_right_to_argue_application"):
+            rr_seed = _get_canonical_reopen_right_to_argue_template()
+            if rr_seed:
+                needs_update = False
+                if t.get("content_gu") != rr_seed["content_gu"]:
+                    t["content_gu"] = rr_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != rr_seed["content_en"]:
+                    t["content_en"] = rr_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != rr_seed["settings"]:
+                    t["settings"] = rr_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != rr_seed.get("fields"):
+                    t["fields"] = rr_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
@@ -3670,6 +3784,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         car_seed = _get_canonical_closing_argument_right_template()
         if car_seed and "closing_argument_right_application" not in deleted_ids:
             return {**car_seed, "format_version": car_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and template_id in ("reopen_right_to_argue_application", "reopen_right_to_argue_application_gu", "reopen_right_to_argue_application_en"):
+        rr_seed = _get_canonical_reopen_right_to_argue_template()
+        if rr_seed and "reopen_right_to_argue_application" not in deleted_ids:
+            return {**rr_seed, "format_version": rr_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -4479,15 +4598,15 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_arg = (tpl_id == "closing_argument_right_application" or "closed_party" in ctx or "closed_party" in values)
-        if is_closing_arg:
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
+        if is_closing_or_reopen:
             ctx["advocate_name"] = default_adv_desig
         elif not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_arg = (tpl_id == "closing_argument_right_application" or "closed_party" in ctx or "closed_party" in values)
-        if is_closing_arg:
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
+        if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
 
@@ -4509,12 +4628,44 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx.setdefault("closed_party_role", "")
 
-    # Ensure closing_purshish & closing_argument_right_application template keys are clean strings (never None or undefined)
+    # Reopen Right to Argue Application: argument_failure_reason resolution
+    raw_reason = str(ctx.get("argument_failure_reason") or "").strip()
+    custom_reason = str(ctx.get("argument_failure_reason_custom") or ctx.get("argument_failure_reason_other") or "").strip()
+    if raw_reason in ("અન્ય", "other", "Other"):
+        ctx["argument_failure_reason"] = custom_reason if custom_reason else ("અન્ય" if language == "gu" else "Other")
+    elif not raw_reason and custom_reason:
+        ctx["argument_failure_reason"] = custom_reason
+    else:
+        ctx["argument_failure_reason"] = raw_reason
+
+    # Language-aware reason translation for English
+    if language == "en":
+        reason_map_en = {
+            "અમો વકીલશ્રી અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય": "we the advocate could not appear due to engagement in another court",
+            "અમો વકીલશ્રી બીમારીના કારણે હાજર રહી શકેલ ન હોય": "we the advocate could not appear due to illness",
+            "અમો વકીલશ્રી અંગત કામ સબબ બહારગામ ગયેલ હોય": "we the advocate had to travel out of town for personal work",
+            "અમો પક્ષકાર બીમારીના કારણે હાજર રહી શકેલ ન હોય": "we the party could not appear due to illness",
+            "અમો પક્ષકાર અંગત કામ સબબ બહારગામ ગયેલ હોય": "we the party had to travel out of town for personal work",
+            "અમો પક્ષકાર અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય": "we the party could not appear due to engagement in another court",
+            "અન્ય": "Other",
+            "Advocate could not appear due to engagement in another court": "we the advocate could not appear due to engagement in another court",
+            "Advocate could not appear due to illness": "we the advocate could not appear due to illness",
+            "Advocate had to travel out of town for personal work": "we the advocate had to travel out of town for personal work",
+            "Party could not appear due to illness": "we the party could not appear due to illness",
+            "Party had to travel out of town for personal work": "we the party had to travel out of town for personal work",
+            "Party could not appear due to engagement in another court": "we the party could not appear due to engagement in another court",
+            "Other": "Other",
+        }
+        if ctx.get("argument_failure_reason") in reason_map_en:
+            ctx["argument_failure_reason"] = reason_map_en[ctx["argument_failure_reason"]]
+
+    # Ensure closing_purshish, closing_argument_right_application & reopen_right_to_argue_application template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "advocate_for", "advocate_for_role", "closed_party", "closed_party_role",
+        "argument_failure_reason", "argument_failure_reason_custom",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:

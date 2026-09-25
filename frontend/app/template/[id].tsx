@@ -313,7 +313,7 @@ export default function TemplateApplication() {
         (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
         language
       );
-      if (templateId === "closing_argument_right_application") {
+      if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") {
         const rawAdvFor = initialValues["advocate_for"];
         const effectiveRole = rawAdvFor === "party_1" ? initialValues["party_1_role"] : rawAdvFor === "party_2" ? initialValues["party_2_role"] : rawAdvFor;
         initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language) : "";
@@ -406,7 +406,7 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
-      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
+      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
         const curAdvFor = k === "advocate_for" ? v : next["advocate_for"];
         if (curAdvFor) {
           const effectiveRole = curAdvFor === "party_1" ? next["party_1_role"] : curAdvFor === "party_2" ? next["party_2_role"] : curAdvFor;
@@ -514,8 +514,22 @@ export default function TemplateApplication() {
     } else if (rawTal) {
       derivedPlace = rawTal;
     }
-    out["place"] = derivedPlace;
+    if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") {
+      out["place"] = (v["place"] !== undefined && v["place"] !== null && v["place"] !== "") ? v["place"] : derivedPlace;
+    } else {
+      out["place"] = derivedPlace;
+    }
     out["taluka_place"] = derivedPlace;
+
+    if (templateId === "reopen_right_to_argue_application") {
+      const curReason = out["argument_failure_reason"];
+      const customReason = (out["argument_failure_reason_custom"] || "").trim();
+      if (curReason === "અન્ય" || curReason === "other" || curReason === "Other") {
+        if (customReason) {
+          out["argument_failure_reason"] = customReason;
+        }
+      }
+    }
 
     return out;
   };
@@ -630,7 +644,7 @@ export default function TemplateApplication() {
         if (templateId === "certified_copy_application" && (f.key === "court_name" || f.key === "court")) {
           return true;
         }
-        if (templateId === "closing_argument_right_application" && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
@@ -639,13 +653,13 @@ export default function TemplateApplication() {
       } else {
         // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
         if (f.mode === "SAVED_CASE") return false;
-        if (templateId === "closing_argument_right_application" && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
       }
       if (f.key === "representing_party") return false;
-      if (f.key === "date" && templateId !== "closing_argument_right_application") return false;
+      if (f.key === "date" && templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application") return false;
       return true;
     });
   }, [templateFields, caseId, templateId]);
@@ -663,7 +677,7 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
-    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application") {
+    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") {
       return [];
     }
     const missing: string[] = [];
@@ -904,16 +918,28 @@ export default function TemplateApplication() {
         rawOpts = [...prioritized, ...others];
       }
       const opts = rawOpts.map((o: any) => ({ id: o.value ?? o.key, label: pickLabel(o) }));
+      const isOtherReason = f.key === "argument_failure_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       return (
-        <Dropdown
-          key={f.key}
-          testID={`field-${f.key}`}
-          label={label}
-          placeholder={language === "gu" ? "પસંદ કરો..." : "Select..."}
-          value={fvalue || null}
-          options={opts}
-          onChange={(v) => update(f.key, v)}
-        />
+        <View key={f.key} style={{ marginBottom: Spacing.md }}>
+          <Dropdown
+            testID={`field-${f.key}`}
+            label={label}
+            placeholder={language === "gu" ? "પસંદ કરો..." : "Select..."}
+            value={fvalue || null}
+            options={opts}
+            onChange={(v) => update(f.key, v)}
+          />
+          {isOtherReason && (
+            <Field
+              testID="field-argument_failure_reason_custom"
+              label={language === "gu" ? "યોગ્ય કારણ લખો" : "Enter Reason"}
+              placeholder={language === "gu" ? "યોગ્ય કારણ લખો" : "Enter appropriate reason"}
+              value={values.argument_failure_reason_custom || ""}
+              onChangeText={(txt) => update("argument_failure_reason_custom", txt)}
+              style={{ marginTop: Spacing.sm }}
+            />
+          )}
+        </View>
       );
     }
 
@@ -947,12 +973,14 @@ export default function TemplateApplication() {
           </View>
         </View>
       );
-    if (templateId === "closing_argument_right_application" && f.key === "advocate_name") {
+    }
+
+    if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") && f.key === "advocate_name") {
       return (
         <Field
           key={f.key}
           testID="field-advocate_name"
-          label={language === "gu" ? "ના એડવોકેટ (હોદ્દો)" : "Advocate Designation"}
+          label={language === "gu" ? (templateId === "reopen_right_to_argue_application" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : "Advocate Designation"}
           placeholder={language === "gu" ? "કોના તરફે એડવોકેટ માંથી આપોઆપ આવશે" : "Auto-derived from Advocate For"}
           value={fvalue || ""}
           editable={false}
@@ -1331,7 +1359,7 @@ export default function TemplateApplication() {
                   }}
                 />
 
-                {templateId !== "closing_argument_right_application" && (
+                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && (
                   <Field
                     testID="field-advocate_name"
                     label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
@@ -1369,8 +1397,8 @@ export default function TemplateApplication() {
 
             {appSpecificFields.map((f: any) => renderFieldInput(f))}
 
-            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application where date is in template sequence) */}
-            {templateId !== "closing_argument_right_application" && (
+            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application and reopen_right_to_argue_application where date is in template sequence) */}
+            {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && (
               <View style={{ marginTop: Spacing.sm }}>
                 {renderFieldInput(dateField)}
               </View>
