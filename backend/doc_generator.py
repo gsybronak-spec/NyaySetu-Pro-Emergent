@@ -718,11 +718,16 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             )
         )
         if is_dash_line:
-            is_gujarati_doc = bool(re.search(r"[\u0a80-\u0aff]", content))
-            if is_gujarati_doc:
+            if len(line.strip()) >= 15:
+                line = "--------------------"
+            elif len(line.strip()) <= 12:
                 line = "----------"
             else:
-                line = "--------------------"
+                is_gujarati_doc = bool(re.search(r"[\u0a80-\u0aff]", content)) and not ("In the Court of" in content or "IN THE COURT OF" in content)
+                if is_gujarati_doc:
+                    line = "----------"
+                else:
+                    line = "--------------------"
         is_date_place = (
             bool(
                 re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
@@ -857,6 +862,9 @@ def render_template(content_template: str, values: dict) -> str:
         or "CLOSING PURSHISH" in result
         or "દલીલોનો હક બંધ કરવા બાબત" in result
         or "APPLICATION FOR CLOSING THE RIGHT TO MAKE ARGUMENTS" in result
+        or "દલીલો કરવા નો હક ફરીથી ખોલવા બાબત" in result
+        or "દલીલો કરવાનો હક ફરીથી ખોલવા બાબત" in result
+        or "reopening the right to make arguments" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:

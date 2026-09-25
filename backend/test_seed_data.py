@@ -3504,7 +3504,10 @@ Place: {{place}}
                 "required": False,
                 "source": "case_taluka",
                 "mode": ["saved_case", "direct_template"],
-                "options": [],
+                "options": [
+                    {"value": t["gu"], "label_en": t["en"], "label_gu": t["gu"], "district_id": t["district_id"]}
+                    for t in TALUKAS
+                ],
             },
             {
                 "key": "case_type",
@@ -3604,16 +3607,14 @@ Place: {{place}}
             {
                 "key": "argument_failure_reason",
                 "label_en": "Reason for Failure to Argue",
-                "label_gu": "દલીલ ન થઈ શકવાનું કારણ",
+                "label_gu": "દલીલો ન થઈ શકવાનુ યોગ્ય કારણ",
                 "type": "select",
                 "required": False,
                 "options": [
-                    {"value": "અમો વકીલશ્રી અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય", "label_en": "Advocate could not appear due to engagement in another court", "label_gu": "અમો વકીલશ્રી અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય"},
-                    {"value": "અમો વકીલશ્રી બીમારીના કારણે હાજર રહી શકેલ ન હોય", "label_en": "Advocate could not appear due to illness", "label_gu": "અમો વકીલશ્રી બીમારીના કારણે હાજર રહી શકેલ ન હોય"},
-                    {"value": "અમો વકીલશ્રી અંગત કામ સબબ બહારગામ ગયેલ હોય", "label_en": "Advocate had to travel out of town for personal work", "label_gu": "અમો વકીલશ્રી અંગત કામ સબબ બહારગામ ગયેલ હોય"},
-                    {"value": "અમો પક્ષકાર બીમારીના કારણે હાજર રહી શકેલ ન હોય", "label_en": "Party could not appear due to illness", "label_gu": "અમો પક્ષકાર બીમારીના કારણે હાજર રહી શકેલ ન હોય"},
-                    {"value": "અમો પક્ષકાર અંગત કામ સબબ બહારગામ ગયેલ હોય", "label_en": "Party had to travel out of town for personal work", "label_gu": "અમો પક્ષકાર અંગત કામ સબબ બહારગામ ગયેલ હોય"},
-                    {"value": "અમો પક્ષકાર અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય", "label_en": "Party could not appear due to engagement in another court", "label_gu": "અમો પક્ષકાર અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય"},
+                    {"value": "આરોપીના દાદા ગુજરી ગયેલ હોવાના", "label_en": "Accused's grandfather passed away", "label_gu": "આરોપીના દાદા ગુજરી ગયેલ હોવાના"},
+                    {"value": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના", "label_en": "Accused had to travel abroad for business", "label_gu": "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના"},
+                    {"value": "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના", "label_en": "Accused's advocate could not appear due to illness", "label_gu": "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના"},
+                    {"value": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય", "label_en": "Accused is in jail in connection with another crime", "label_gu": "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય"},
                     {"value": "અન્ય", "label_en": "Other", "label_gu": "અન્ય"},
                 ],
             },
@@ -3627,10 +3628,10 @@ Place: {{place}}
             {
                 "key": "place",
                 "label_en": "Place",
-                "label_gu": "મુકામ",
+                "label_gu": "સ્થળ",
                 "type": "text",
                 "required": False,
-                "placeholder": "મુકામ",
+                "placeholder": "સ્થળ",
             },
             {
                 "key": "advocate_name",
@@ -3660,67 +3661,79 @@ Place: {{place}}
             "paragraph_spacing": 6.0,
             "first_line_indent_pt": 28.35,
             "block_align": [
-                {"contains": "કોર્ટમાં", "align": "center", "bold": True, "indent": False},
-                {"contains": "IN THE COURT OF", "align": "center", "bold": True, "indent": False},
-                {"prefix": "મુકામ :-", "contains": "મુકામ :-", "position": 2, "align": "center", "bold": False, "indent": False},
-                {"prefix": "At :-", "contains": "At :-", "position": 2, "align": "center", "bold": False, "indent": False},
-                {"contains": "કેસ નં.", "align": "right", "bold": False, "indent": False},
-                {"contains": "નં.", "align": "right", "bold": False, "indent": False},
-                {"contains": "Case No.", "align": "right", "bold": False, "indent": False},
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True, "indent": False},
+                {"contains": "In the Court of the Hon'ble", "align": "center", "bold": True, "indent": False},
+                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"prefix": "Place :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"contains": "નં. :", "align": "right", "bold": False, "indent": False},
                 {"contains": "No. :", "align": "right", "bold": False, "indent": False},
                 {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
-                {"prefix": "VERSUS", "contains": "VERSUS", "align": "center", "bold": False, "indent": False},
-                {"contains": "બાબત :- દલીલો કરવા નો હક ફરીથી ખોલવા બાબત", "align": "center", "bold": True, "underline": True, "indent": False},
-                {"contains": "Subject :- Regarding reopening of the right to make arguments", "align": "center", "bold": True, "underline": True, "indent": False},
-                {"contains": "સદર કામે", "align": "justify", "bold": False, "indent": True},
-                {"contains": "In the present matter", "align": "justify", "bold": False, "indent": True},
-                {"contains": "સદર કામ આજ રોજ", "align": "justify", "bold": False, "indent": True},
-                {"contains": "The present matter has been fixed", "align": "justify", "bold": False, "indent": True},
-                {"prefix": "તારીખ :", "contains": "તારીખ :", "align": "left", "bold": False, "indent": False},
-                {"prefix": "Date:", "contains": "Date:", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
+                {"contains": "બાબત :- દલીલો કરવા નો હક ફરીથી ખોલવા બાબત ...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "Subject :- Application for reopening the right to make arguments ...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"prefix": "સદર કામમા", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "In the said matter", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "સદર કેસ", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "The said case is pending", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "તારીખ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Date :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "સ્થળ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Place :", "align": "left", "bold": False, "indent": False},
                 {"contains": "----------", "align": "right", "bold": False, "indent": False},
                 {"contains": "--------------------", "align": "right", "bold": False, "indent": False},
+                {"contains": "ના એડવોકેટ", "align": "right", "bold": False, "indent": False},
+                {"contains": "Advocate for", "align": "right", "bold": False, "indent": False},
             ],
         },
         "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
-મુકામ :- {{place}}
+
+મુકામ :- {{district}}
 
 {{case_type}} નં. : {{case_number}}
 
 {{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
+
 {{party_2_role}} :- {{party_2_name}}
 
-બાબત :- દલીલો કરવા નો હક ફરીથી ખોલવા બાબત...
+બાબત :- દલીલો કરવા નો હક ફરીથી ખોલવા બાબત ...
 
-સદર કામે અમો {{advocate_for_role}} ના એડવોકેટ ની આપ નામદાર કોર્ટ ને નમ્ર અરજ છે કે,
+સદર કામમા અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કામ આજ રોજ દલીલ ઉપર મુકરર થયેલ હોય પરંતુ {{argument_failure_reason}}, જમા ે અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જેથી ન્યાય ના હિત માં અમોને દલીલો કરવા નો હક ફરીથી ખોલી આપવા મહેરબાની કરશો જી.
+સદર કેસ આપ નામદાર કોર્ટમાં દલીલો પર છે. જમા ે અમોનો દલીલો કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{argument_failure_reason}} કારણસર દલીલો થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા દલીલો કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો દલીલો કરવાનો હક ફરીથી ખોલી અમોને દલીલો કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
-મુકામ :- {{place}}
+
+સ્થળ : {{place}}
 
 ----------
+
 {{advocate_name}}""",
-        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
-At :- {{place}}
+        "content_en": """In the Court of the Hon'ble {{court_name}},
+
+Place :- {{district}}
 
 {{case_type}} No. : {{case_number}}
 
 {{party_1_role}} :- {{party_1_name}}
-VERSUS
+
+Versus
+
 {{party_2_role}} :- {{party_2_name}}
 
-Subject :- Regarding reopening of the right to make arguments...
+Subject :- Application for reopening the right to make arguments ...
 
-In the present matter, we, the Advocate for {{advocate_for_role}}, respectfully submit before this Hon'ble Court that,
+In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that.....
 
-The present matter has been fixed today for arguments, however, {{argument_failure_reason}}, due to which our right to make arguments has been closed by this Hon'ble Court. Therefore, in the interest of justice, this Hon'ble Court may be pleased to reopen our right to make arguments.
+The said case is pending before this Hon'ble Court for arguments. Wherein our right to make arguments has been closed by this Hon'ble Court. As arguments could not be made due to the reason that {{argument_failure_reason}}, and as the said reason is reasonable and getting an opportunity to make arguments is in the interest of justice, it is prayed to be pleased to pass appropriate order reopening our right to make arguments and granting us an opportunity to make arguments.
 
-Date: {{date}}
-Place: {{place}}
+Date : {{date}}
+
+Place : {{place}}
 
 --------------------
+
 {{advocate_name}}""",
     },
 ]

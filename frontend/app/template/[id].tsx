@@ -415,6 +415,21 @@ export default function TemplateApplication() {
           next["advocate_name"] = "";
         }
       }
+      if (templateId === "reopen_right_to_argue_application" && (k === "district" || k === "taluka")) {
+        const distVal = k === "district" ? v : next["district"];
+        const talVal = k === "taluka" ? v : next["taluka"];
+        const distObj = districts.find((d: any) => d.id === distVal || d.gu === distVal || d.en === distVal);
+        const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (distVal || "");
+        const talObj = talukas.find((t: any) => t.id === talVal || t.gu === talVal || t.en === talVal);
+        const talLabel = talObj ? (language === "gu" ? talObj.gu : talObj.en) : (talVal || "");
+        if (talLabel && distLabel) {
+          next["place"] = `${talLabel}, ${distLabel}`;
+        } else if (distLabel) {
+          next["place"] = distLabel;
+        } else if (talLabel) {
+          next["place"] = talLabel;
+        }
+      }
       return next;
     });
   };
@@ -522,6 +537,9 @@ export default function TemplateApplication() {
     out["taluka_place"] = derivedPlace;
 
     if (templateId === "reopen_right_to_argue_application") {
+      if (rawTal && rawDist) {
+        out["district"] = derivedPlace;
+      }
       const curReason = out["argument_failure_reason"];
       const customReason = (out["argument_failure_reason_custom"] || "").trim();
       if (curReason === "અન્ય" || curReason === "other" || curReason === "Other") {

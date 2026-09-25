@@ -4628,7 +4628,21 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx.setdefault("closed_party_role", "")
 
-    # Reopen Right to Argue Application: argument_failure_reason resolution
+    # Reopen Right to Argue Application: Taluka/Mukam & argument_failure_reason resolution
+    is_reopen_app = (tpl_id in ("reopen_right_to_argue_application", "reopen_right_to_argue_application_gu", "reopen_right_to_argue_application_en") or "argument_failure_reason" in ctx or "argument_failure_reason" in values)
+    if is_reopen_app:
+        if _tal and _dist:
+            combined_loc = f"{_tal}, {_dist}"
+            ctx["district"] = combined_loc
+            ctx["taluka_place"] = combined_loc
+            if not raw_place or raw_place == _dist:
+                ctx["place"] = combined_loc
+        elif _dist:
+            ctx["district"] = _dist
+            ctx["taluka_place"] = _dist
+            if not raw_place:
+                ctx["place"] = _dist
+
     raw_reason = str(ctx.get("argument_failure_reason") or "").strip()
     custom_reason = str(ctx.get("argument_failure_reason_custom") or ctx.get("argument_failure_reason_other") or "").strip()
     if raw_reason in ("અન્ય", "other", "Other"):
@@ -4641,19 +4655,15 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     # Language-aware reason translation for English
     if language == "en":
         reason_map_en = {
-            "અમો વકીલશ્રી અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય": "we the advocate could not appear due to engagement in another court",
-            "અમો વકીલશ્રી બીમારીના કારણે હાજર રહી શકેલ ન હોય": "we the advocate could not appear due to illness",
-            "અમો વકીલશ્રી અંગત કામ સબબ બહારગામ ગયેલ હોય": "we the advocate had to travel out of town for personal work",
-            "અમો પક્ષકાર બીમારીના કારણે હાજર રહી શકેલ ન હોય": "we the party could not appear due to illness",
-            "અમો પક્ષકાર અંગત કામ સબબ બહારગામ ગયેલ હોય": "we the party had to travel out of town for personal work",
-            "અમો પક્ષકાર અન્ય કોર્ટના રોકાણના કારણે હાજર રહી શકેલ ન હોય": "we the party could not appear due to engagement in another court",
+            "આરોપીના દાદા ગુજરી ગયેલ હોવાના": "the accused's grandfather passed away",
+            "આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના": "the accused had to travel abroad for business purposes",
+            "આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના": "the advocate for the accused could not attend this Hon'ble Court due to illness",
+            "આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય": "the accused is in jail in connection with another crime",
             "અન્ય": "Other",
-            "Advocate could not appear due to engagement in another court": "we the advocate could not appear due to engagement in another court",
-            "Advocate could not appear due to illness": "we the advocate could not appear due to illness",
-            "Advocate had to travel out of town for personal work": "we the advocate had to travel out of town for personal work",
-            "Party could not appear due to illness": "we the party could not appear due to illness",
-            "Party had to travel out of town for personal work": "we the party had to travel out of town for personal work",
-            "Party could not appear due to engagement in another court": "we the party could not appear due to engagement in another court",
+            "Accused's grandfather passed away": "the accused's grandfather passed away",
+            "Accused had to travel abroad for business": "the accused had to travel abroad for business purposes",
+            "Accused's advocate could not appear due to illness": "the advocate for the accused could not attend this Hon'ble Court due to illness",
+            "Accused is in jail in connection with another crime": "the accused is in jail in connection with another crime",
             "Other": "Other",
         }
         if ctx.get("argument_failure_reason") in reason_map_en:
