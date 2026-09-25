@@ -471,7 +471,7 @@ Advocate for Complainant"""
             "party_2_role": "આરોપી",
             "party_2_name": "સુરેશભાઈ શાહ",
             "advocate_for": "ફરીયાદી",
-            "argument_failure_reason": "આરોપીના દાદા ગુજરી ગયેલ હોવાના",
+            "argument_failure_reason": "દલીલો તૈયાર ન હોવાના / અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
             "date": "2026-09-25",
             "place": "કલોલ, ગાંધીનગર",
         }
