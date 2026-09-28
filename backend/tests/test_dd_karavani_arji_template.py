@@ -242,20 +242,20 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx["advocate_name"], "આરોપી ના એડવોકેટ")
 
     def test_15_verbatim_text_preservation_including_special_phrase(self):
-        """15. Verify verbatim text matching Page 2 of canonical PDF, preserving 'જેથી'."""
+        """15. Verify verbatim text matching Page 2 of canonical PDF, preserving 'જથી ે'."""
         content_gu = self.tpl["content_gu"]
         # Opening paragraph
         self.assertIn("સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", content_gu)
         # Paragraph 1
         self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}.", content_gu)
-        # Paragraph 2 - Note the exact verbatim source text containing 'જેથી'
-        self.assertIn("વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
-        self.assertIn("જેથી", content_gu)
+        # Paragraph 2 - Note the exact verbatim source text containing 'જથી ે'
+        self.assertIn("વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
+        self.assertIn("જથી ે", content_gu)
 
     def test_16_verbatim_subject_line(self):
-        """16. Verify subject line verbatim: બાબત :- કેસ ડિસમીસ કરવા બાબત..."""
+        """16. Verify subject line verbatim: બાબત :- કેસ ડિસ મી સ કરવા બાબત ..."""
         content_gu = self.tpl["content_gu"]
-        self.assertIn("બાબત :- કેસ ડિસમીસ કરવા બાબત...", content_gu)
+        self.assertIn("બાબત :- કેસ ડિસ મી સ કરવા બાબત ...", content_gu)
 
     def test_17_court_heading_and_case_line_format(self):
         """17. Verify court heading, mukam, and single-line case format."""
@@ -326,10 +326,10 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ફરીયાદી :- રમેશભાઈ પટેલ", rendered)
         self.assertIn("વિરુદ્ધ", rendered)
         self.assertIn("આરોપી :- સુરેશભાઈ શાહ", rendered)
-        self.assertIn("બાબત :- કેસ ડિસમીસ કરવા બાબત...", rendered)
+        self.assertIn("બાબત :- કેસ ડિસ મી સ કરવા બાબત ...", rendered)
         self.assertIn("સદર કામમાં અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", rendered)
         self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય.", rendered)
-        self.assertIn("વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertIn("વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
         self.assertIn("સ્થળ : કલોલ, ગાંધીનગર", rendered)
         self.assertIn("ફરીયાદી ના એડવોકેટ", rendered)
         self.assertNotIn("{{", rendered)

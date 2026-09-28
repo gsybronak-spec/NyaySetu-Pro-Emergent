@@ -4330,6 +4330,7 @@ Place : {{place}}
                 {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
                 {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
                 {"prefix": "બાબત :-", "contains": "બાબત :-", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "બાબત :- કેસ ડિસ મી સ કરવા બાબત ...", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"contains": "બાબત :- કેસ ડિસમીસ કરવા બાબત...", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"contains": "Subject :- Application for Dismissal of Case ...", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"prefix": "સદર કામમાં અમો", "align": "justify", "bold": False, "indent": True},
@@ -4360,13 +4361,13 @@ Place : {{place}}
 
 {{party_2_role}} :- {{party_2_name}}
 
-બાબત :- કેસ ડિસમીસ કરવા બાબત...
+બાબત :- કેસ ડિસ મી સ કરવા બાબત ...
 
     સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
     સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}.
 
-    વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+    વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 
