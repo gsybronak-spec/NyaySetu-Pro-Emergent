@@ -4948,7 +4948,32 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     rendered = render_template(tpl, ctx)
     blocks = build_blocks(rendered, t["name_en"], t["name_gu"],
                           (t.get("settings") or {}).get("block_align"))
-    return {"content": rendered, "blocks": blocks, "language": req.language, "template_id": t.get("template_id", t["id"])}
+
+    tpl_settings = dict(t.get("settings") or {})
+    if req.language == "en":
+        if "body_size_en" in tpl_settings:
+            tpl_settings["body_size"] = tpl_settings["body_size_en"]
+        if "heading_size_en" in tpl_settings:
+            tpl_settings["heading_size"] = tpl_settings["heading_size_en"]
+        if "line_spacing_en" in tpl_settings:
+            tpl_settings["line_spacing"] = tpl_settings["line_spacing_en"]
+    doc_settings = get_doc_settings({
+        **tpl_settings,
+        "page_size": page_size,
+        "template_id": t["id"],
+        "raw_content": rendered,
+        "ctx": ctx,
+    })
+    pdf_b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
+    return {
+        "content": rendered,
+        "blocks": blocks,
+        "language": req.language,
+        "template_id": t.get("template_id", t["id"]),
+        "pdf_base64": pdf_b64,
+        "mime_type": "application/pdf",
+        "gen_meta": gen_meta,
+    }
 
 
 @api.post("/applications/download")

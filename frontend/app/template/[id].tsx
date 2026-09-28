@@ -32,6 +32,7 @@ import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
 import { PlanPurchaseModal } from "@/src/components/PlanPurchaseModal";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
+import { ActualPdfViewer } from "@/src/components/ActualPdfViewer";
 
 type Step = "fields" | "preview" | "output";
 
@@ -191,6 +192,15 @@ export default function TemplateApplication() {
   const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | "png" | null>(null);
   const [filename, setFilename] = useState("");
   const [notice, setNotice] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [pdfBase64, setPdfBase64] = useState<string>("");
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+
+  const valuesRef = useRef(values);
+  valuesRef.current = values;
+  const languageRef = useRef(language);
+  languageRef.current = language;
+  const debounceTimerRef = useRef<any>(null);
+  const fetchPreviewPdfRef = useRef<any>(null);
 
   // Catalog datasets for No-Case mode
   const [districts, setDistricts] = useState<any[]>(() => catalogCache.peekDistricts());
@@ -448,6 +458,7 @@ export default function TemplateApplication() {
   // When language switches, fetch template for new language seamlessly without full reload
   const handleLanguageChange = (newLang: "en" | "gu") => {
     setLanguage(newLang);
+    languageRef.current = newLang;
     const effectiveId = resolveTemplateId(templateId, newLang) || templateId;
     const baseId = templateId.replace(/_(gu|en)$/, "");
     api.template(effectiveId)
@@ -471,6 +482,10 @@ export default function TemplateApplication() {
         );
         update("advocate_name", newDefault);
       }
+    }
+
+    if ((step === "preview" || pdfBase64) && fetchPreviewPdfRef.current) {
+      fetchPreviewPdfRef.current(undefined, newLang);
     }
   };
 
@@ -765,6 +780,9 @@ export default function TemplateApplication() {
       const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
       setPreview(res.content);
       setBlocks(res.blocks || []);
+      if (res?.pdf_base64) {
+        setPdfBase64(res.pdf_base64);
+      }
       setStep("preview");
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -772,6 +790,54 @@ export default function TemplateApplication() {
       setBusy(false);
     }
   };
+
+  const fetchPreviewPdf = useCallback(async (customValues?: Record<string, any>, customLang?: "en" | "gu") => {
+    const activeValues = customValues || valuesRef.current;
+    const activeLang = customLang || languageRef.current;
+    if (missingRequired.length > 0) return;
+    setPreviewLoading(true);
+    try {
+      const res = await api.previewApp({
+        template_id: templateId,
+        case_id: caseId,
+        language: activeLang,
+        values: toDocValues(activeValues),
+      });
+      if (res?.pdf_base64) {
+        setPdfBase64(res.pdf_base64);
+      }
+      if (res?.content) {
+        setPreview(res.content);
+      }
+      if (res?.blocks) {
+        setBlocks(res.blocks);
+      }
+    } catch (e: any) {
+      console.warn("[preview] failed to refresh preview PDF:", e);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [templateId, caseId, missingRequired.length]);
+
+  fetchPreviewPdfRef.current = fetchPreviewPdf;
+
+  useEffect(() => {
+    if (step !== "preview" && !pdfBase64) return;
+    if (missingRequired.length > 0) return;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      fetchPreviewPdf();
+    }, 400);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [values, step]);
 
   const download = async (format: "pdf" | "docx" | "odt" | "png") => {
     if (!isUnlimited && walletBalance <= 0) {
@@ -1539,12 +1605,25 @@ export default function TemplateApplication() {
           <ScrollView contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}>
             <View
               style={[
-                styles.doc,
-                isDesktop && styles.docDesktop,
-                { backgroundColor: "#FFFFFF", borderColor: colors.border },
+                styles.previewContainer,
+                isDesktop && styles.previewContainerDesktop,
               ]}
               testID="preview-doc"
             >
+              {pdfBase64 ? (
+                <ActualPdfViewer
+                  base64={pdfBase64}
+                  loading={busy || previewLoading}
+                  testID="actual-pdf-viewer"
+                />
+              ) : (
+                <View
+                  style={[
+                    styles.doc,
+                    isDesktop && styles.docDesktop,
+                    { backgroundColor: "#FFFFFF", borderColor: colors.border },
+                  ]}
+                >
               {blocks.map((b, i) => {
                 if (b.section === "table" && Array.isArray(b.rows) && b.rows.length > 0) {
                   const metaCols = b.meta?.cols || [];
@@ -1656,6 +1735,8 @@ export default function TemplateApplication() {
                   </Text>
                 );
               })}
+                </View>
+              )}
             </View>
             <Pressable
               testID="edit-btn"
@@ -1865,7 +1946,7 @@ export default function TemplateApplication() {
         templateNameEn={template?.name_en}
         category={template?.category}
         onSelect={(lang) => {
-          setLanguage(lang);
+          handleLanguageChange(lang);
           setShowLanguageModal(false);
         }}
       />
@@ -1888,6 +1969,14 @@ const styles = StyleSheet.create({
   autofill: { padding: Spacing.md, borderRadius: Radius.md, borderWidth: 1 },
   autoChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
   doc: { padding: Spacing.lg, borderRadius: Radius.md, borderWidth: 1 },
+  previewContainer: {
+    width: "100%",
+    alignItems: "center",
+  },
+  previewContainerDesktop: {
+    maxWidth: 780,
+    width: "100%",
+  },
   docText: { color: "#111", fontSize: 13, lineHeight: 22 },
   editRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",

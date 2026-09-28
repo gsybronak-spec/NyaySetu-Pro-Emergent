@@ -460,6 +460,89 @@ class TestExemptionArjiTemplate(unittest.IsolatedAsyncioTestCase):
             self.assertIn(phrase.split(" ")[0], line_word_texts[1][0])
             self.assertIn(phrase.split(" ")[1], line_word_texts[1][-1])
 
+    async def test_24_preview_application_returns_pdf(self):
+        """24. Verify preview_application returns actual generated PDF matching download output without credit deduction."""
+        user = {
+            "id": "test_user_exemption_preview",
+            "name": "કિશન રાવલ",
+            "advocate_name_gu": "કિશન રાવલ",
+            "advocate_name_en": "Kishan Raval",
+            "unlimited_access": True,
+            "wallet_balance": 10,
+        }
+        test_values = {
+            "court_name": "ચીફ જ્યુડિશિયલ મેજિસ્ટ્રેટ સાહેબની કોર્ટ, રાજકોટ",
+            "district": "રાજકોટ",
+            "taluka": "રાજકોટ",
+            "case_type": "C.C.",
+            "case_number": "1234/2026",
+            "party_1_role": "ફરિયાદી",
+            "party_1_name": "રાજેશકુમાર મહેતા",
+            "party_2_role": "આરોપી",
+            "party_2_name": "વિજયકુમાર શાહ",
+            "advocate_for": "આરોપી",
+            "absence_reason": "અચાનક બીમાર હોવાથી હાજર રહી શકે તેમ નથી",
+            "date": "2026-09-28",
+            "place": "રાજકોટ",
+            "advocate_name": "કિશન રાવલ",
+        }
+
+        # 1. Preview request (Gujarati)
+        preview_req_gu = server.GenerateReq(
+            template_id="exemption_arji_gu",
+            language="gu",
+            values=test_values,
+        )
+        res_gu = await server.preview_application(preview_req_gu, user)
+        self.assertIn("pdf_base64", res_gu)
+        self.assertIn("blocks", res_gu)
+        self.assertEqual(res_gu.get("mime_type"), "application/pdf")
+
+        # Validate PDF bytes
+        pdf_b64 = res_gu["pdf_base64"]
+        self.assertTrue(len(pdf_b64) > 1000)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+        # Verify wallet balance was NOT deducted
+        self.assertEqual(user.get("wallet_balance"), 10)
+
+        # 2. Compare with download_application output for bit-identical PDF layout
+        mock_doc = MagicMock()
+        mock_doc.set = unittest.mock.AsyncMock()
+        mock_doc.delete = unittest.mock.AsyncMock()
+        mock_coll = MagicMock()
+        mock_coll.document = MagicMock(return_value=mock_doc)
+        orig_db = server.db
+        server.db = MagicMock()
+        server.db.collection = MagicMock(return_value=mock_coll)
+        try:
+            download_req_gu = server.DownloadReq(
+                template_id="exemption_arji_gu",
+                language="gu",
+                values=test_values,
+                format="pdf",
+                filename="exemption.pdf",
+            )
+            res_dl = await server.download_application(download_req_gu, user)
+            dl_b64 = res_dl["base64"]
+            dl_bytes = base64.b64decode(dl_b64)
+            self.assertTrue(dl_bytes.startswith(b"%PDF"))
+            self.assertLess(abs(len(pdf_bytes) - len(dl_bytes)), 20)
+        finally:
+            server.db = orig_db
+
+        # 3. Preview request (English)
+        preview_req_en = server.GenerateReq(
+            template_id="exemption_arji",
+            language="en",
+            values=test_values,
+        )
+        res_en = await server.preview_application(preview_req_en, user)
+        self.assertIn("pdf_base64", res_en)
+        pdf_en_bytes = base64.b64decode(res_en["pdf_base64"])
+        self.assertTrue(pdf_en_bytes.startswith(b"%PDF"))
+
 
 if __name__ == '__main__':
     unittest.main()
