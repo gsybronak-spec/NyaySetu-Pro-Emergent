@@ -219,59 +219,107 @@ Place : {{taluka_place}}
     },
     {
         "base_key": "dd_karavani_arji",
-        "aliases": ["dd", "dismiss in default", "ડિસમિસ", "ડિસમિસ ઇન ડિફોલ્ટ", "ડી.ડી."],
-        "name_gu": "ડી.ડી. કરાવવા અંગેની અરજી (ડિસમિસ ઇન ડિફોલ્ટ)",
-        "name_en": "Application for Dismissal in Default (D.D.)",
-        "category": "Civil",
-        "description": "Application to dismiss case due to non-prosecution or absence of complainant/plaintiff.",
+        "aliases": ["dd", "dismiss in default", "ડિસમિસ", "ડિસમિસ ઇન ડિફોલ્ટ", "ડી.ડી.", "DD કરાવવાની અરજી", "DD કરાવવાની arji", "dd karavani arji", "Application for Dismissal of Case", "કેસ ડિસમીસ કરવા બાબત"],
+        "name_gu": "DD કરાવવાની અરજી",
+        "name_en": "Application for Dismissal of Case",
+        "category": "General",
+        "description": "Application for Dismissal of Case (DD કરાવવાની અરજી)",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Opposite party / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
-            {'key': 'case_or_suit', 'label_en': 'Case or Suit', 'label_gu': 'કેસ અથવા દાવો', 'type': 'select', 'required': True, 'options': [{'value': 'કેસ', 'label_en': 'Case', 'label_gu': 'કેસ'}, {'value': 'દાવો', 'label_en': 'Suit', 'label_gu': 'દાવો'}]},
-            {'key': 'dismiss_reason', 'label_en': 'Reason / grounds for dismissal', 'label_gu': 'ડિસમીસ કરવાના કારણો (દા.ત. ફરીયાદી મુદ્દતે હાજર રહેતા નથી...)', 'type': 'textarea', 'required': True},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {"key": "court_name", "label_gu": "કોર્ટ નુ નામ", "label_en": "Court Name", "type": "select", "required": False},
+            {"key": "district", "label_gu": "જીલ્લો", "label_en": "District", "type": "select", "required": False},
+            {"key": "taluka", "label_gu": "તાલુકો", "label_en": "Taluka", "type": "select", "required": False},
+            {"key": "case_type", "label_gu": "કેસ પ્રકાર", "label_en": "Case Type", "type": "select", "required": False},
+            {"key": "case_number", "label_gu": "કેસ નંબર", "label_en": "Case Number", "type": "text", "required": False},
+            {"key": "party_1_role", "label_gu": "પાર્ટી ૧ રોલ", "label_en": "Party 1 Role", "type": "select", "required": False},
+            {"key": "party_1_name", "label_gu": "પાર્ટી ૧ નામ", "label_en": "Party 1 Name", "type": "text", "required": False},
+            {"key": "party_2_role", "label_gu": "પાર્ટી ૨ રોલ", "label_en": "Party 2 Role", "type": "select", "required": False},
+            {"key": "party_2_name", "label_gu": "પાર્ટી ૨ નામ", "label_en": "Party 2 Name", "type": "text", "required": False},
+            {"key": "advocate_for", "label_gu": "કોના તરફથી એડવોકેટ", "label_en": "Advocate For", "type": "select", "required": False},
+            {"key": "dismissal_reason", "label_gu": "ડિસમીસ કરવા માટેનું કારણ", "label_en": "Dismissal Reason", "type": "select", "required": False, "options": [
+                {"value": "પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય", "label_gu": "પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય", "label_en": "A settlement has been arrived at between the parties"},
+                {"value": "ફરિયાદી સમાધાન કરવા માંગતા હોય", "label_gu": "ફરિયાદી સમાધાન કરવા માંગતા હોય", "label_en": "The complainant desires to settle the matter"},
+                {"value": "હવે કોઈ તકરાર બાકી રહેલ ન હોય", "label_gu": "હવે કોઈ તકરાર બાકી રહેલ ન હોય", "label_en": "No dispute now remains between the parties"},
+                {"value": "અન્ય", "label_gu": "અન્ય", "label_en": "Other"},
+            ]},
+            {"key": "date", "label_gu": "તારીખ", "label_en": "Date", "type": "date", "required": False},
+            {"key": "place", "label_gu": "સ્થળ", "label_en": "Place", "type": "text", "required": False},
+            {"key": "advocate_name", "label_gu": "વકીલશ્રી નું નામ", "label_en": "Advocate Name", "type": "text", "required": False},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
-મુકામ :- {{taluka_place}}
+        "settings": {
+            "page_size": "A4",
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "font_family": "Lohit Gujarati",
+            "body_font_size": 13,
+            "header_font_size": 15,
+            "block_align": {
+                "court_heading": "center",
+                "place_heading": "center",
+                "case_info": "right",
+                "parties_block": "left",
+                "subject_line": "center",
+                "app_opener": "left",
+                "body_paragraphs": "justify",
+                "date_place_block": "left",
+                "signature_block": "right",
+            },
+        },
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
+મુકામ :- {{place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
 
-બાબત :- {{case_or_suit}} ડિસમીસ કરવા બાબત...
+{{party_2_role}} :- {{party_2_name}}
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+બાબત :- કેસ ડિસમીસ કરવા બાબત...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismiss_reason}} હોવાથી સદર કેસ આગળ ચલાવવાની જરૂરિયાત રહેતી નથી.
+    સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-વધુમા આવા ખોટા કેસ ડિસમીસ કરવામાં આવે તે ન્યાયના હિતમાં હોય, જેથી સદર કેસ ડિસમીસ કરી આગળની કાર્યવાહી પૂર્ણ કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}.
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+    વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """In the Court of the Hon'ble {{court_name}},
+
+Place :- {{place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 Versus
-{{opposite_party_line}}
 
-SUBJECT: APPLICATION TO DISMISS {{case_or_suit}}
+{{party_2_role}} :- {{party_2_name}}
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+Subject :- Application for Dismissal of Case ...
 
-The said case is pending before this Hon'ble Court. In the said matter, as {{dismiss_reason}}, there remains no necessity to proceed further with the said case.
+    In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that...
 
-Furthermore, it is in the interest of justice that such false cases be dismissed. It is therefore prayed that this Hon'ble Court may be pleased to dismiss the said case and pass appropriate orders to conclude further proceedings.
+    The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}.
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+    Furthermore, {{advocate_for_role}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
 
---------------------------- Advocate for {{selected_party_role}}""",
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
     },
     {
         "base_key": "document_parat_levani_arji",
