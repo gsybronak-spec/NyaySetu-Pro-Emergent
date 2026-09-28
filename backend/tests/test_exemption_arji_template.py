@@ -389,6 +389,77 @@ class TestExemptionArjiTemplate(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(bool(pub.get("content_gu")))
             self.assertTrue(bool(pub.get("content_en")))
 
+    def test_22_exemption_arji_subject_nowrap_hb(self):
+        """22. Verify HarfBuzz line-wrapping treats (એક્ઝામ્પશન રીપોર્ટ) and (એક્ઝામ્પ્શન રીપોર્ટ) as atomic non-breaking phrase."""
+        orig_shape = doc_generator._shape_hb_word
+        try:
+            def fake_shape_hb_word(font, upem, word, size, latin_font="Times-Roman"):
+                if not word:
+                    return []
+                return [{"adv": len(word) * 8.0, "is_latin": False, "gid": 1, "xoff": 0, "yoff": 0, "text": word}]
+            doc_generator._shape_hb_word = fake_shape_hb_word
+
+            for phrase in ("(એક્ઝામ્પશન રીપોર્ટ)", "(એક્ઝામ્પ્શન રીપોર્ટ)"):
+                text = f"બાબત :- હાજરી મુક્તિ આપવા બાબત... {phrase}"
+                tokens = doc_generator._tokenize_hb_words(text)
+                # Ensure the bracketed phrase is grouped together as one token item
+                expected_group = phrase.split(" ")
+                self.assertIn(expected_group, tokens)
+
+                # Test wide width (fits on one line)
+                lines_wide, _ = doc_generator._wrap_hb_lines(None, 1000, text, 13.0, 500.0)
+                self.assertEqual(len(lines_wide), 1)
+                self.assertIn(phrase, lines_wide[0]["text"])
+
+                # Test narrow width (wraps before opening bracket, phrase stays intact on line 2)
+                lines_narrow, _ = doc_generator._wrap_hb_lines(None, 1000, text, 13.0, 300.0)
+                self.assertEqual(len(lines_narrow), 2)
+                self.assertIn("બાબત :- હાજરી મુક્તિ આપવા બાબત...", lines_narrow[0]["text"])
+                self.assertEqual(lines_narrow[1]["text"], phrase)
+
+                # Confirm neither line has split bracket words
+                for l in lines_narrow:
+                    line_t = l["text"]
+                    self.assertFalse(line_t.endswith("(એક્ઝામ્પશન") or line_t.endswith("(એક્ઝામ્પ્શન"), f"Bracket phrase was split: {line_t}")
+                    self.assertFalse(line_t.startswith("રીપોર્ટ)"), f"Bracket phrase was split: {line_t}")
+        finally:
+            doc_generator._shape_hb_word = orig_shape
+
+    def test_23_exemption_arji_subject_nowrap_reportlab(self):
+        """23. Verify ReportLab renderer keeps bracketed phrase intact and never splits across lines."""
+        for phrase in ("(એક્ઝામ્પશન રીપોર્ટ)", "(એક્ઝામ્પ્શન રીપોર્ટ)"):
+            blocks = [{
+                "text": f"બાબત :- હાજરી મુક્તિ આપવા બાબત... {phrase}",
+                "align": "center",
+                "bold": True,
+                "section": "title",
+                "underline": True,
+            }]
+
+            # Narrow margins forcing wrap
+            narrow_settings = {
+                "page_size": "A4",
+                "margin_left_cm": 6.0,
+                "margin_right_cm": 6.0,
+            }
+            pdf_b64 = doc_generator.generate_pdf(blocks, "gu", narrow_settings)
+            self.assertIsNotNone(pdf_b64)
+            pdf_bytes = base64.b64decode(pdf_b64)
+            self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+            # Inspect ReportLab broken lines
+            import reportlab.platypus as platypus
+            from reportlab.lib.styles import ParagraphStyle
+            style = ParagraphStyle("t", fontName="NotoSansGujarati", fontSize=13, leading=18, alignment=1)
+            raw_text = f"<u>બાબત :- હાજરી મુક્તિ આપવા બાબત... {phrase.replace(' ', '&nbsp;')}</u>"
+            p = platypus.Paragraph(raw_text, style)
+            p.wrap(250, 500)
+            line_word_texts = [[f.text for f in line.words] for line in p.blPara.lines]
+            self.assertEqual(len(line_word_texts), 2)
+            self.assertIn("બાબત...", line_word_texts[0][-1])
+            self.assertIn(phrase.split(" ")[0], line_word_texts[1][0])
+            self.assertIn(phrase.split(" ")[1], line_word_texts[1][-1])
+
 
 if __name__ == '__main__':
     unittest.main()

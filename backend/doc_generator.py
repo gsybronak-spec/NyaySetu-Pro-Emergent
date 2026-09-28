@@ -918,6 +918,11 @@ def generate_pdf_playwright(blocks: list, language: str = "en", settings: dict =
             .replace(">", "&gt;")
             .replace('"', "&quot;")
         )
+        safe = re.sub(
+            r"\((?:એક્ઝામ્પશન|એક્ઝામ્પ્શન)\s+રીપોર્ટ\)",
+            r'<span style="white-space: nowrap;">\g<0></span>',
+            safe
+        )
         align_css = b.get("align", "left")
         is_bold = b.get("bold", False)
         is_under = b.get("underline", False) or b.get("section") == "title"
@@ -1161,6 +1166,7 @@ def _generate_pdf_reportlab_inner(blocks: list, language: str = "en", settings: 
             continue
         if language == "gu":
             safe = _apply_latin_fallback_markup(b["text"], latin_font=latin_fallback_bold if b["bold"] else latin_fallback_normal)
+            safe = re.sub(r"\((?:એક્ઝામ્પશન|એક્ઝામ્પ્શન)\s+રીપોર્ટ\)", lambda m: m.group(0).replace(" ", "&nbsp;"), safe)
         else:
             safe = b["text"].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         if b.get("section") == "title" or b.get("underline"):
@@ -1348,6 +1354,40 @@ def _shape_hb_word(hb_font, upem, word: str, size_pt: float, latin_font: str = "
     return out
 
 
+def _tokenize_hb_words(text: str) -> list:
+    """Tokenize text into items (each item is a list of raw word strings).
+
+    Atomic groups (such as '(એક્ઝામ્પશન રીપોર્ટ)' or '(એક્ઝામ્પ્શન રીપોર્ટ)' or short parenthetical phrases)
+    stay grouped together as a single multi-word item so HarfBuzz word wrapping
+    keeps the entire phrase on the same line, wrapping before the opening bracket.
+    """
+    words = text.split(" ")
+    items = []
+    i = 0
+    n = len(words)
+    while i < n:
+        raw = words[i]
+        matched_group = None
+        for span_len in (3, 2):
+            if i + span_len <= n:
+                candidate = " ".join(words[i:i+span_len])
+                if re.search(r"^\(?(?:એક્ઝામ્પશન|એક્ઝામ્પ્શન)\s+રીપોર્ટ\)?", candidate):
+                    matched_group = words[i:i+span_len]
+                    break
+                if words[i].startswith("(") and words[i+span_len-1].endswith(")"):
+                    inner = " ".join(words[i:i+span_len])
+                    if inner.count("(") == 1 and inner.count(")") == 1:
+                        matched_group = words[i:i+span_len]
+                        break
+        if matched_group:
+            items.append(matched_group)
+            i += len(matched_group)
+        else:
+            items.append([raw])
+            i += 1
+    return items
+
+
 def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float, indent_pt: float = 0.0, latin_font: str = "Times-Roman"):
     """Shape + wrap a paragraph into lines of shaped words with optional first-line indent.
 
@@ -1358,7 +1398,7 @@ def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float
         space_adv = _shape_hb_word(hb_font, upem, " ", size_pt, latin_font=latin_font)[0]["adv"]
     except Exception:
         space_adv = size_pt * 0.28
-    words = text.split(" ")
+    items = _tokenize_hb_words(text)
     lines = []
     cur_words = []
     cur_raw = []
@@ -1366,10 +1406,12 @@ def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float
     line_idx = 0
     cur_max_width = max(max_width_pt - (indent_pt if line_idx == 0 else 0.0), 50.0)
 
-    for raw in words:
-        w = _shape_hb_word(hb_font, upem, raw, size_pt, latin_font=latin_font) if raw else []
-        ww = sum(g["adv"] for g in w)
-        if cur_words and cur_width + space_adv + ww > cur_max_width:
+    for item in items:
+        shaped_words = [_shape_hb_word(hb_font, upem, raw, size_pt, latin_font=latin_font) if raw else [] for raw in item]
+        word_widths = [sum(g["adv"] for g in w) for w in shaped_words]
+        item_w = sum(word_widths) + max(0, len(item) - 1) * space_adv
+
+        if cur_words and cur_width + space_adv + item_w > cur_max_width:
             lines.append({
                 "words": cur_words,
                 "width": cur_width,
@@ -1380,9 +1422,11 @@ def _wrap_hb_lines(hb_font, upem, text: str, size_pt: float, max_width_pt: float
             cur_words, cur_raw, cur_width = [], [], 0.0
             line_idx += 1
             cur_max_width = max_width_pt
-        cur_words.append(w)
-        cur_raw.append(raw)
-        cur_width += (space_adv if len(cur_words) > 1 else 0.0) + ww
+
+        for w, raw, ww in zip(shaped_words, item, word_widths):
+            cur_words.append(w)
+            cur_raw.append(raw)
+            cur_width += (space_adv if len(cur_words) > 1 else 0.0) + ww
 
     lines.append({
         "words": cur_words,
