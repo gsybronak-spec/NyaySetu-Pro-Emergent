@@ -1723,7 +1723,8 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
             lines, size, align, space_adv, is_title, *rest = entry
             sec = rest[0] if rest else ("court_header" if is_title else "body")
             block_latin_font = rest[1] if len(rest) > 1 else (latin_bold if (is_title or sec == "court_header") else latin_normal)
-            block_ls = max(round(body_size * 1.5, 1), raw_ls) if sec == "body" else line_spacing
+            is_dd = (settings or {}).get("template_id") == "dd_karavani_arji"
+            block_ls = line_spacing if is_dd else (max(round(body_size * 1.5, 1), raw_ls) if sec == "body" else line_spacing)
             c.setFont(font_name, size)
             for ln in lines:
                 width = ln["width"]
@@ -2075,8 +2076,9 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
 def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = None, template_id: str = "", raw_content: str = "", ctx: dict = None, **kwargs) -> tuple:
     """Public PDF generation API returning (base64, metadata)."""
-    s = settings or {}
+    s = dict(settings or {})
     tid = template_id or s.get("template_id", "")
+    s["template_id"] = tid
     r_content = raw_content or s.get("raw_content", "")
     r_ctx = ctx or s.get("ctx")
 
@@ -2100,18 +2102,18 @@ def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = N
     if has_gujarati:
         try:
             with _unique_subset_tag():
-                return _generate_pdf_hb_inner(blocks, language, settings)
+                return _generate_pdf_hb_inner(blocks, language, s)
         except Exception:
             try:
                 with _unique_subset_tag():
-                    return _generate_pdf_reportlab_inner(blocks, language, settings), {
+                    return _generate_pdf_reportlab_inner(blocks, language, s), {
                         "engine": "reportlab",
-                        "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
+                        "font_family": _gujarati_font_family(s.get("gujarati_font")),
                     }
             except Exception:
-                return generate_pdf_playwright(blocks, language, settings), {
+                return generate_pdf_playwright(blocks, language, s), {
                     "engine": "chromium",
-                    "font_family": _gujarati_font_family((settings or {}).get("gujarati_font")),
+                    "font_family": _gujarati_font_family(s.get("gujarati_font")),
                 }
     try:
         with _unique_subset_tag():

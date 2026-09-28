@@ -153,66 +153,7 @@ Advocate of {{selected_party_role}}
 {{selected_party_role}}ના એડવોકેટ
 """,
     },
-    {
-        "id": "dd_karavani_arji",
-        "name_en": "Application to Dismiss the Case / Suit",
-        "name_gu": "કેસ/દાવો ડિસમિસ કરવાની અરજી",
-        "category": "General",
-        "aliases": ["dismiss", "ડિસમિસ", "ડી.ડી.", "dd", "કેસ ડિસમિસ"],
-        "fields": [
-            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
-             "options": [
-                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
-                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
-             ]},
-            {"key": "dismiss_reason", "label_en": "Reason for dismissal of the case", "label_gu": "કેસ/દાવો ડિસમિસ કરવાનું કારણ", "type": "textarea", "required": True},
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
-        ],
-        "content_en": """IN THE COURT OF {{court}},
-{{taluka_place}}
-
-{{case_type}} No. {{case_number}}
-
-{{party_line}}
-Versus
-{{opposite_party_line}}
-
-APPLICATION FOR DISMISSAL OF THE CASE / SUIT
-
-In the above matter, we, advocate of {{selected_party_role}}, most respectfully submit this application to this Hon'ble Court that......
-
-The said case is pending before this Hon'ble Court. As {{dismiss_reason}} in the said case, there is no need to proceed further with the said case.
-
-Moreover, it would be in the interest of justice that the said case be dismissed; it is therefore appropriate that the said case be dismissed. This Hon'ble Court may be pleased to dismiss the said case and complete the further proceedings by passing appropriate orders.
-
-Date : {{date_display}}
-Place : {{taluka_place}}
-
-Advocate of {{selected_party_role}}
-""",
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
-{{taluka_place}}
-
-{{case_type}} નં. {{case_number}}
-
-{{party_line}}
-વિરુદ્ધ
-{{opposite_party_line}}
-
-કેસ/દાવો ડિસમિસ કરવાની અરજી
-
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
-
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{dismiss_reason}} હોવાથી સદર કેસ આગળ ચલાવવાની જરૂરિયાત રહેલ નથી.
-
-વધુમા સદર કેસ ડિસમિસ કરવામાં આવે તે ન્યાયના હિતમાં હોય, જેથી સદર કેસ ડિસમિસ કરવો યોગ્ય હોય, સદર કેસ ડિસમિસ કરી આગળની કાર્યવાહી પૂર્ણ કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
-
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
-
-{{selected_party_role}}ના એડવોકેટ
-""",
-    },
+    next(t for t in __import__("test_seed_data").TEMPLATES if t.get("id") == "dd_karavani_arji"),
     {
         "id": "document_return",
         "name_en": "Application for Return of Document",

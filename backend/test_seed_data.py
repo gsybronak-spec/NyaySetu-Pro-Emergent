@@ -4312,20 +4312,24 @@ Place : {{place}}
             "heading_size": 15,
             "body_font_size": 13,
             "header_font_size": 15,
+            "template_id": "dd_karavani_arji",
             "body_size_en": 14,
             "heading_size_en": 16,
             "line_spacing": 18.0,
             "paragraph_spacing": 6.0,
             "first_line_indent_pt": 28.35,
             "block_align": [
+                {"prefix": "મહેરબાન", "align": "center", "bold": True, "indent": False},
                 {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True, "indent": False},
+                {"prefix": "In the Court", "align": "center", "bold": True, "indent": False},
                 {"contains": "In the Court of the Hon'ble", "align": "center", "bold": True, "indent": False},
-                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": False, "indent": False},
-                {"prefix": "Place :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": True, "indent": False},
+                {"prefix": "Place :-", "position": 2, "align": "center", "bold": True, "indent": False},
                 {"contains": "નં. :", "align": "right", "bold": False, "indent": False},
                 {"contains": "No. :", "align": "right", "bold": False, "indent": False},
                 {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
                 {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
+                {"prefix": "બાબત :-", "contains": "બાબત :-", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"contains": "બાબત :- કેસ ડિસમીસ કરવા બાબત...", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"contains": "Subject :- Application for Dismissal of Case ...", "align": "center", "bold": True, "underline": True, "indent": False},
                 {"prefix": "સદર કામમાં અમો", "align": "justify", "bold": False, "indent": True},
@@ -4362,7 +4366,7 @@ Place : {{place}}
 
     સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}.
 
-    વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+    વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 
