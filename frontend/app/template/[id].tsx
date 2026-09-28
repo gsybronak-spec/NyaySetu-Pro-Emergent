@@ -214,10 +214,11 @@ export default function TemplateApplication() {
     try {
       // Resolve template ID safely (handle base keys or language-specific keys)
       const effectiveId = resolveTemplateId(templateId, language) || templateId;
+      const baseId = templateId.replace(/_(gu|en)$/, "");
 
       // Parallelize ALL data fetching concurrently for sub-second load times
       const [t, me, dists, cts, cs, w, drafts] = await Promise.all([
-        api.template(effectiveId).catch(() => api.template(templateId)),
+        api.template(effectiveId).catch(() => api.template(baseId)).catch(() => api.template(templateId)),
         user ? Promise.resolve(user) : api.me().catch(() => null),
         catalogCache.getDistricts(),
         catalogCache.getCaseTypes(),
@@ -448,7 +449,10 @@ export default function TemplateApplication() {
   const handleLanguageChange = (newLang: "en" | "gu") => {
     setLanguage(newLang);
     const effectiveId = resolveTemplateId(templateId, newLang) || templateId;
+    const baseId = templateId.replace(/_(gu|en)$/, "");
     api.template(effectiveId)
+      .catch(() => api.template(baseId))
+      .catch(() => api.template(templateId))
       .then((newTpl) => {
         if (newTpl) setTemplate(newTpl);
       })

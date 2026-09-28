@@ -197,8 +197,8 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
   },
   {
     baseKey: "exemption_arji",
-    guId: "exemption_arji_gu",
-    enId: "exemption_arji_en",
+    guId: "exemption_arji",
+    enId: "exemption_arji",
     name_gu: "હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ)",
     name_en: "Application for Exemption from Personal Appearance (Exemption Report)",
     category: "Criminal",
@@ -207,7 +207,25 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
     keywords_gu: ["હાજરી મુક્તિ", "હાજરી માફી", "એક્ઝામ્પ્શન રીપોર્ટ", "ગેરહાજર માફી", "બીમારી માફી", "વ્યક્તિગત હાજરી માફી"],
     keywords_en: ["exemption", "personal appearance", "dispense with attendance", "absence", "sick leave", "appearance exemption", "exemption report"],
     transliterations: ["hazari mukti", "hazari mafi", "hajiri mafi", "mafi", "exemption arji", "hajiri", "exemption report"],
-    aliases: ["hazari_mafi_arji", "exemption", "હાજરી માફી", "હાજરી મુક્તિ", "mafi", "hazari mafi"],
+    aliases: [
+      "hazari_mafi_arji",
+      "exemption",
+      "exemption_arji",
+      "exemption_arji_gu",
+      "exemption_arji_en",
+      "exemption_appearance",
+      "exemption appearance",
+      "exemption_application",
+      "exemption report",
+      "હાજરી માફી",
+      "હાજરી મુક્તિ",
+      "હાજરી મુક્તિ આપવા બાબત",
+      "એક્ઝામ્પ્શન રીપોર્ટ",
+      "હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ)",
+      "હાજરી મુક્તિ આપવા બાબત અરજી (એક્ઝામ્પ્શન રીપોર્ટ)",
+      "mafi",
+      "hazari mafi",
+    ],
   },
   {
     baseKey: "fs_no_haq_bandh_karvani_arji",
@@ -442,9 +460,9 @@ export function findTemplatePair(idOrBaseKey?: string | null): TemplateLogicalPa
 export function resolveTemplateId(idOrBaseKey: string, lang: "gu" | "en" = "gu"): string {
   if (!idOrBaseKey) return "";
   const raw = String(idOrBaseKey).trim();
-  if (raw.endsWith(`_${lang}`)) return raw;
   const pair = findTemplatePair(raw);
   if (pair) return lang === "gu" ? pair.guId : pair.enId;
+  if (raw.endsWith(`_${lang}`)) return raw;
   return raw;
 }
 

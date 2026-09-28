@@ -3684,7 +3684,27 @@ async def _get_published_templates() -> list:
                         pass
     
     if not db_templates and db is None:
-        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in TEMPLATES_V2 if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+        canonical_seeds = [
+            _get_canonical_exhibit_template(),
+            _get_canonical_certified_copy_template(),
+            _get_canonical_closing_purshish_template(),
+            _get_canonical_closing_argument_right_template(),
+            _get_canonical_reopen_right_to_argue_template(),
+            _get_canonical_exemption_arji_template(),
+        ]
+        canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
+        v2_items = []
+        for t in TEMPLATES_V2:
+            base = t.get("base_key") or (t.get("id")[:-3] if t.get("id", "").endswith(("_gu", "_en")) else t.get("id"))
+            if base in canonicals_by_id:
+                if not any(x.get("id") == base for x in v2_items):
+                    v2_items.append(canonicals_by_id[base])
+            else:
+                v2_items.append(t)
+        for cid, cseed in canonicals_by_id.items():
+            if not any(x.get("id") == cid for x in v2_items):
+                v2_items.append(cseed)
+        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
 
     db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
@@ -3701,30 +3721,41 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     if _is_templates_disabled():
         return None
     deleted_ids = await _get_deleted_template_ids()
-    cand_set = {template_id, f"{template_id}_gu", f"{template_id}_en"}
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
-    cand_set.add(base_cand)
+    cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
+    # Active canonical templates must never be masked by historical tombstones
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji"):
+        deleted_ids.discard(active_id)
+        deleted_ids.discard(f"{active_id}_gu")
+        deleted_ids.discard(f"{active_id}_en")
     if cand_set.intersection(deleted_ids):
         return None
+
+    lookup_candidates = list(dict.fromkeys([template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"]))
 
     # Fast path: check in-memory cached published templates first (<0.1ms)
     try:
         all_tpls = await _get_published_templates()
-        for cand in (template_id, f"{template_id}_gu", f"{template_id}_en"):
+        for cand in lookup_candidates:
             for tpl in all_tpls:
-                if (tpl.get("id") == cand or tpl.get("template_id") == cand) and tpl.get("id") not in deleted_ids and tpl.get("template_id") not in deleted_ids:
+                if (tpl.get("id") == cand or tpl.get("template_id") == cand or tpl.get("slug") == cand) and tpl.get("id") not in deleted_ids and tpl.get("template_id") not in deleted_ids:
                     return {**tpl, "format_version": tpl.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
     except Exception:
         pass
 
-    _snap = await db.collection("templates").document(template_id).get()
-    t = _snap.to_dict() if _snap.exists and _snap.to_dict().get("status") in ("published", None) else None
-    if not t:
-        _snap_gu = await db.collection("templates").document(f"{template_id}_gu").get()
-        t = _snap_gu.to_dict() if _snap_gu.exists and _snap_gu.to_dict().get("status") in ("published", None) else None
-    if not t:
-        _snap_en = await db.collection("templates").document(f"{template_id}_en").get()
-        t = _snap_en.to_dict() if _snap_en.exists and _snap_en.to_dict().get("status") in ("published", None) else None
+    t = None
+    if db is not None:
+        for cand in lookup_candidates:
+            if not t:
+                try:
+                    _snap = await db.collection("templates").document(cand).get()
+                    if _snap.exists and _snap.to_dict().get("status") in ("published", None):
+                        cand_t = _snap.to_dict()
+                        if cand_t.get("id") not in deleted_ids and cand_t.get("template_id") not in deleted_ids:
+                            t = cand_t
+                            break
+                except Exception:
+                    pass
     if t and t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids:
         if (t.get("id") == "document_exhibit_application" or template_id == "document_exhibit_application"):
             ex_seed = _get_canonical_exhibit_template()
@@ -3856,7 +3887,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
-        if (t.get("id") == "exemption_arji" or template_id == "exemption_arji"):
+        if (t.get("id") == "exemption_arji" or template_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en") or base_cand == "exemption_arji"):
             ex_seed = _get_canonical_exemption_arji_template()
             if ex_seed:
                 needs_update = False
@@ -3884,27 +3915,27 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
-    if not t and template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en"):
+    if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
         cc_seed = _get_canonical_certified_copy_template()
         if cc_seed and "certified_copy_application" not in deleted_ids:
             return {**cc_seed, "format_version": cc_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
-    if not t and template_id in ("closing_purshish", "closing_purshish_gu", "closing_purshish_en"):
+    if not t and (base_cand == "closing_purshish" or template_id in ("closing_purshish", "closing_purshish_gu", "closing_purshish_en")):
         cp_seed = _get_canonical_closing_purshish_template()
         if cp_seed and "closing_purshish" not in deleted_ids:
             return {**cp_seed, "format_version": cp_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
-    if not t and template_id in ("closing_argument_right_application", "closing_argument_right_application_gu", "closing_argument_right_application_en"):
+    if not t and (base_cand == "closing_argument_right_application" or template_id in ("closing_argument_right_application", "closing_argument_right_application_gu", "closing_argument_right_application_en")):
         car_seed = _get_canonical_closing_argument_right_template()
         if car_seed and "closing_argument_right_application" not in deleted_ids:
             return {**car_seed, "format_version": car_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
-    if not t and template_id in ("reopen_right_to_argue_application", "reopen_right_to_argue_application_gu", "reopen_right_to_argue_application_en"):
+    if not t and (base_cand == "reopen_right_to_argue_application" or template_id in ("reopen_right_to_argue_application", "reopen_right_to_argue_application_gu", "reopen_right_to_argue_application_en")):
         rr_seed = _get_canonical_reopen_right_to_argue_template()
         if rr_seed and "reopen_right_to_argue_application" not in deleted_ids:
             return {**rr_seed, "format_version": rr_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
-    if not t and template_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance"):
+    if not t and (base_cand == "exemption_arji" or template_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance")):
         ex_seed = _get_canonical_exemption_arji_template()
         if ex_seed and "exemption_arji" not in deleted_ids:
             return {**ex_seed, "format_version": ex_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
@@ -4084,12 +4115,14 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
 @api.get("/templates/{template_id}")
 async def get_template(template_id: str):
     t = await _get_template_by_id(template_id)
+    if not t and template_id.endswith(("_gu", "_en")):
+        t = await _get_template_by_id(template_id[:-3])
     if not t:
         raise HTTPException(404, "Template not found")
     return {
         **public_template(t),
-        "content_en": t["content_en"],
-        "content_gu": t["content_gu"],
+        "content_en": t.get("content_en", ""),
+        "content_gu": t.get("content_gu", ""),
         "aliases": t.get("aliases", []),
     }
 

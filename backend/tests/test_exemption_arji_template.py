@@ -374,6 +374,21 @@ class TestExemptionArjiTemplate(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(docx_b64)
             self.assertGreater(len(docx_b64), 100)
 
+    def test_21_template_lookup_aliases_and_suffixes(self):
+        """21. Verify _get_template_by_id and get_template resolve base key, _gu, and _en suffixes."""
+        import asyncio
+        for tid in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en"):
+            tpl = asyncio.run(server._get_template_by_id(tid))
+            self.assertIsNotNone(tpl, f"Failed to resolve template for id: {tid}")
+            self.assertEqual(tpl.get("id"), "exemption_arji")
+            self.assertIn("હાજરી મુક્તિ આપવા બાબત", tpl.get("name_gu", ""))
+
+            pub = asyncio.run(server.get_template(tid))
+            self.assertIsNotNone(pub, f"Failed to get_template for id: {tid}")
+            self.assertEqual(pub.get("id"), "exemption_arji")
+            self.assertTrue(bool(pub.get("content_gu")))
+            self.assertTrue(bool(pub.get("content_en")))
+
 
 if __name__ == '__main__':
     unittest.main()
