@@ -451,6 +451,11 @@ export default function TemplateApplication() {
         const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (curDist || "");
         next["place"] = curTal ? `${curTal}, ${distLabel}` : (distLabel || "");
       }
+      if (templateId === "dd_karavani_arji" && k === "dismissal_reason") {
+        if (v !== "અન્ય" && v !== "other" && v !== "Other") {
+          next["dismissal_reason_custom"] = "";
+        }
+      }
       return next;
     });
   };
@@ -592,9 +597,10 @@ export default function TemplateApplication() {
         const curReason = out["dismissal_reason"];
         const customReason = (out["dismissal_reason_custom"] || "").trim();
         if (curReason === "અન્ય" || curReason === "other" || curReason === "Other") {
-          if (customReason) {
-            out["dismissal_reason"] = customReason;
-          }
+          out["dismissal_reason"] = customReason || curReason;
+        } else {
+          delete out["dismissal_reason_custom"];
+          delete out["dismissal_reason_other"];
         }
       }
     }
@@ -786,6 +792,13 @@ export default function TemplateApplication() {
       );
       return;
     }
+    if (templateId === "dd_karavani_arji" && (values.dismissal_reason === "અન્ય" || values.dismissal_reason === "other" || values.dismissal_reason === "Other") && !values.dismissal_reason_custom?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો." : "Please enter the custom reason for dismissal."
+      );
+      return;
+    }
     setBusy(true);
     try {
       const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
@@ -853,6 +866,13 @@ export default function TemplateApplication() {
   const download = async (format: "pdf" | "docx" | "odt" | "png") => {
     if (!isUnlimited && walletBalance <= 0) {
       setShowPurchaseModal(true);
+      return;
+    }
+    if (templateId === "dd_karavani_arji" && (values.dismissal_reason === "અન્ય" || values.dismissal_reason === "other" || values.dismissal_reason === "Other") && !values.dismissal_reason_custom?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો." : "Please enter the custom reason for dismissal."
+      );
       return;
     }
     setBusy(true);
@@ -1073,8 +1093,9 @@ export default function TemplateApplication() {
           {isOtherDismissalReason && (
             <Field
               testID="field-dismissal_reason_custom"
-              label={language === "gu" ? "યોગ્ય કારણ લખો" : "Enter Reason"}
-              placeholder={language === "gu" ? "યોગ્ય કારણ લખો" : "Enter appropriate reason"}
+              label={language === "gu" ? "અન્ય કેસ ડિસમીસ કરવાનું કારણ" : "Other Reason for Dismissal"}
+              placeholder={language === "gu" ? "અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો..." : "Enter custom reason for dismissal..."}
+              multiline={true}
               value={values.dismissal_reason_custom || ""}
               onChangeText={(txt) => update("dismissal_reason_custom", txt)}
               style={{ marginTop: Spacing.sm }}

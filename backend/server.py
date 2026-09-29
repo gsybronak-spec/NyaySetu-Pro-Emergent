@@ -5038,13 +5038,17 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["dismissal_reason"] = custom_dd_reason
         else:
             ctx["dismissal_reason"] = raw_dd_reason
+            ctx["dismissal_reason_custom"] = ""
+            ctx["dismissal_reason_other"] = ""
 
         if language == "en":
             dd_reason_map_en = {
+                "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી": "the complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf",
                 "પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય": "a settlement has been arrived at between the parties",
                 "ફરિયાદી સમાધાન કરવા માંગતા હોય": "the complainant desires to settle the matter",
                 "હવે કોઈ તકરાર બાકી રહેલ ન હોય": "no dispute now remains between the parties",
                 "અન્ય": "other reasons",
+                "The complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf": "the complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf",
                 "A settlement has been arrived at between the parties": "a settlement has been arrived at between the parties",
                 "The complainant desires to settle the matter": "the complainant desires to settle the matter",
                 "No dispute now remains between the parties": "no dispute now remains between the parties",

@@ -118,7 +118,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_role": "radio",
             "party_2_name": "text",
             "advocate_for": "select",
-            "dismissal_reason": "textarea",
+            "dismissal_reason": "select",
             "date": "date",
             "place": "text",
             "advocate_name": "text",
@@ -144,11 +144,16 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(opts, ["આરોપી", "સામાવાળા", "પ્રતિવાદી"])
 
     def test_07_dismissal_reason_field(self):
-        """7. Verify dismissal_reason is textarea with canonical placeholder matching Page 1."""
+        """7. Verify dismissal_reason is select dropdown with exact options and label."""
         f = next(f for f in self.tpl["fields"] if f["key"] == "dismissal_reason")
-        self.assertEqual(f["type"], "textarea")
+        self.assertEqual(f["type"], "select")
+        self.assertEqual(f["label_gu"], "કેસ ડિસમીસ કરવાનું કારણ")
         self.assertFalse(f.get("required"))
-        self.assertIn("ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી", f.get("placeholder", ""))
+        options = f.get("options", [])
+        self.assertEqual(len(options), 2)
+        opt_values = [o["value"] for o in options]
+        self.assertEqual(opt_values[0], "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી")
+        self.assertEqual(opt_values[1], "અન્ય")
 
     def test_08_advocate_for_options(self):
         """8. Verify advocate_for options include party roles."""
@@ -528,6 +533,149 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(sb.get("bold"))
         self.assertTrue(sb.get("underline"))
         self.assertFalse(sb.get("indent"))
+
+    def test_32_predefined_reason_generation(self):
+        """32. Select predefined option 1 -> generate PDF -> verify exact predefined text appears in rendered document & PDF."""
+        import asyncio
+        user = {"advocate_name_gu": "રોનક સોલંકી"}
+        predefined_reason = "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી"
+        values = {
+            "template_id": "dd_karavani_arji",
+            "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "taluka": "કલોલ",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૨૩૪/૨૦૨૬",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રમેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "party_1",
+            "dismissal_reason": predefined_reason,
+            "date": "2026-09-29",
+        }
+        ctx = asyncio.run(server.build_render_context(user, None, values, "gu"))
+        self.assertEqual(ctx["dismissal_reason"], predefined_reason)
+        self.assertEqual(ctx["dismissal_reason_custom"], "")
+        rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+        self.assertIn(predefined_reason, rendered)
+        self.assertIn(f"સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {predefined_reason}. વધુમાં", rendered)
+
+        blocks = doc_generator.build_blocks(
+            rendered,
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        pdf_b64, meta = doc_generator.generate_pdf_detailed(
+            blocks,
+            language="gu",
+            settings=self.tpl.get("settings"),
+            template_id="dd_karavani_arji",
+            raw_content=rendered,
+            ctx=ctx,
+        )
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+    def test_33_other_custom_reason_generation(self):
+        """33. Select 'અન્ય' -> enter custom reason -> generate PDF -> verify custom text appears."""
+        import asyncio
+        user = {"advocate_name_gu": "રોનક સોલંકી"}
+        custom_reason = "બંને પક્ષકારો વચ્ચે સમાધાન થયેલ હોવાથી હવે કેસ ચલાવવાની જરૂર નથી"
+        values = {
+            "template_id": "dd_karavani_arji",
+            "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "taluka": "કલોલ",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૨૩૪/૨૦૨૬",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રમેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "party_1",
+            "dismissal_reason": "અન્ય",
+            "dismissal_reason_custom": custom_reason,
+            "date": "2026-09-29",
+        }
+        ctx = asyncio.run(server.build_render_context(user, None, values, "gu"))
+        self.assertEqual(ctx["dismissal_reason"], custom_reason)
+        rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+        self.assertIn(custom_reason, rendered)
+        self.assertIn(f"સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {custom_reason}. વધુમાં", rendered)
+
+        blocks = doc_generator.build_blocks(
+            rendered,
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        pdf_b64, meta = doc_generator.generate_pdf_detailed(
+            blocks,
+            language="gu",
+            settings=self.tpl.get("settings"),
+            template_id="dd_karavani_arji",
+            raw_content=rendered,
+            ctx=ctx,
+        )
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+    def test_34_switch_other_to_predefined_no_leakage(self):
+        """34. Switch અન્ય -> predefined -> verify custom text does not leak into context or PDF."""
+        import asyncio
+        user = {"advocate_name_gu": "રોનક સોલંકી"}
+        predefined_reason = "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી"
+        stale_custom = "જૂનું કસ્ટમ લખાણ જે લીક ન થવું જોઈએ"
+        values = {
+            "template_id": "dd_karavani_arji",
+            "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "taluka": "કલોલ",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૨૩૪/૨૦૨૬",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રમેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "party_1",
+            "dismissal_reason": predefined_reason,
+            "dismissal_reason_custom": stale_custom,
+            "date": "2026-09-29",
+        }
+        ctx = asyncio.run(server.build_render_context(user, None, values, "gu"))
+        self.assertEqual(ctx["dismissal_reason"], predefined_reason)
+        self.assertEqual(ctx["dismissal_reason_custom"], "")
+        rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+        self.assertIn(predefined_reason, rendered)
+        self.assertNotIn(stale_custom, rendered)
+
+    def test_35_two_paragraph_structure_and_vadhumo_preserved_with_both_options(self):
+        """35. Verify exactly 2 body paragraphs, continuous Paragraph 2 with વધુમાં, and subject line preserved."""
+        predefined_reason = "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી"
+        ctx = {"advocate_for_role": "ફરીયાદી", "dismissal_reason": predefined_reason}
+        rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+        blocks = doc_generator.build_blocks(
+            rendered,
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        body_blocks = [b for b in blocks if b.get("align") == "justify" and b.get("indent") is True]
+        self.assertEqual(len(body_blocks), 2, "Must have exactly 2 body paragraphs")
+        self.assertTrue(body_blocks[1]["text"].startswith("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે."))
+        self.assertIn("વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ", body_blocks[1]["text"])
+
+        vadhumo_blocks = [b for b in blocks if b.get("text", "").strip().startswith("વધુમાં")]
+        self.assertEqual(len(vadhumo_blocks), 0)
+
+        subject_blocks = [b for b in blocks if "બાબત :-" in b.get("text", "")]
+        self.assertEqual(len(subject_blocks), 1)
+        self.assertEqual(subject_blocks[0]["text"], "બાબત :- કેસ ડીસમીસ કરવા બાબત ...")
+        self.assertEqual(subject_blocks[0]["align"], "center")
 
 
 if __name__ == "__main__":

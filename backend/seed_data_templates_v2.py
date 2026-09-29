@@ -235,10 +235,8 @@ Place : {{taluka_place}}
             {"key": "party_2_role", "label_gu": "પાર્ટી ૨ રોલ", "label_en": "Party 2 Role", "type": "select", "required": False},
             {"key": "party_2_name", "label_gu": "પાર્ટી ૨ નામ", "label_en": "Party 2 Name", "type": "text", "required": False},
             {"key": "advocate_for", "label_gu": "કોના તરફથી એડવોકેટ", "label_en": "Advocate For", "type": "select", "required": False},
-            {"key": "dismissal_reason", "label_gu": "ડિસમીસ કરવા માટેનું કારણ", "label_en": "Dismissal Reason", "type": "select", "required": False, "options": [
-                {"value": "પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય", "label_gu": "પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય", "label_en": "A settlement has been arrived at between the parties"},
-                {"value": "ફરિયાદી સમાધાન કરવા માંગતા હોય", "label_gu": "ફરિયાદી સમાધાન કરવા માંગતા હોય", "label_en": "The complainant desires to settle the matter"},
-                {"value": "હવે કોઈ તકરાર બાકી રહેલ ન હોય", "label_gu": "હવે કોઈ તકરાર બાકી રહેલ ન હોય", "label_en": "No dispute now remains between the parties"},
+            {"key": "dismissal_reason", "label_gu": "કેસ ડિસમીસ કરવાનું કારણ", "label_en": "Reason for Dismissal", "type": "select", "required": False, "options": [
+                {"value": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી", "label_gu": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી", "label_en": "The complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf"},
                 {"value": "અન્ય", "label_gu": "અન્ય", "label_en": "Other"},
             ]},
             {"key": "date", "label_gu": "તારીખ", "label_en": "Date", "type": "date", "required": False},

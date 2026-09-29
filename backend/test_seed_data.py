@@ -4265,10 +4265,21 @@ Place : {{place}}
             {
                 "key": "dismissal_reason",
                 "label_en": "Reason for Dismissal",
-                "label_gu": "કેસ ડિસમીસ કરવાનુ કારણ",
-                "type": "textarea",
+                "label_gu": "કેસ ડિસમીસ કરવાનું કારણ",
+                "type": "select",
                 "required": False,
-                "placeholder": "દા.ત. ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી",
+                "options": [
+                    {
+                        "value": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી",
+                        "label_gu": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી",
+                        "label_en": "The complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf",
+                    },
+                    {
+                        "value": "અન્ય",
+                        "label_gu": "અન્ય",
+                        "label_en": "Other",
+                    },
+                ],
             },
             {
                 "key": "date",
