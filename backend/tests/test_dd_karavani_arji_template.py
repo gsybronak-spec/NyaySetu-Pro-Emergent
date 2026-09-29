@@ -242,20 +242,26 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx["advocate_name"], "આરોપી ના એડવોકેટ")
 
     def test_15_verbatim_text_preservation_including_special_phrase(self):
-        """15. Verify verbatim text matching Page 2 of canonical PDF, preserving 'જથી ે'."""
+        """15. Verify verbatim text matching canonical source with જેથી and exactly two body paragraphs."""
         content_gu = self.tpl["content_gu"]
         # Opening paragraph
         self.assertIn("સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", content_gu)
-        # Paragraph 1
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}.", content_gu)
-        # Paragraph 2 - Note the exact verbatim source text containing 'જથી ે'
-        self.assertIn("વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
-        self.assertIn("જથી ે", content_gu)
+        # Continuous Paragraph 2: 'સદર કેસ...' and 'વધુમાં...' in ONE single paragraph with 'જેથી'
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
+        self.assertIn("જેથી", content_gu)
+        self.assertNotIn("જથી", content_gu)
+        self.assertNotIn("જથી ે", content_gu)
+        # Ensure 'વધુમાં' is NOT a separate paragraph break
+        self.assertNotIn("\n\n    વધુમાં", content_gu)
+        self.assertNotIn("\n    વધુમાં", content_gu)
 
     def test_16_verbatim_subject_line(self):
-        """16. Verify subject line verbatim: બાબત :- કેસ ડિસ મી સ કરવા બાબત ..."""
+        """16. Verify subject line with intact ડીસમીસ token: બાબત :- કેસ ડીસમીસ કરવા બાબત ..."""
         content_gu = self.tpl["content_gu"]
-        self.assertIn("બાબત :- કેસ ડિસ મી સ કરવા બાબત ...", content_gu)
+        self.assertIn("બાબત :- કેસ ડીસમીસ કરવા બાબત ...", content_gu)
+        self.assertIn("ડીસમીસ", content_gu)
+        self.assertNotIn("ડીસ મી સ", content_gu)
+        self.assertNotIn("ડિસ મી સ", content_gu)
 
     def test_17_court_heading_and_case_line_format(self):
         """17. Verify court heading, mukam, and single-line case format."""
@@ -326,10 +332,14 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ફરીયાદી :- રમેશભાઈ પટેલ", rendered)
         self.assertIn("વિરુદ્ધ", rendered)
         self.assertIn("આરોપી :- સુરેશભાઈ શાહ", rendered)
-        self.assertIn("બાબત :- કેસ ડિસ મી સ કરવા બાબત ...", rendered)
+        self.assertIn("બાબત :- કેસ ડીસમીસ કરવા બાબત ...", rendered)
         self.assertIn("સદર કામમાં અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", rendered)
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય.", rendered)
-        self.assertIn("વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જથી ે સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય. વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertIn("જેથી", rendered)
+        self.assertNotIn("જથી", rendered)
+        self.assertNotIn("જથી ે", rendered)
+        self.assertNotIn("ડીસ મી સ", rendered)
+        self.assertNotIn("ડિસ મી સ", rendered)
         self.assertIn("સ્થળ : કલોલ, ગાંધીનગર", rendered)
         self.assertIn("ફરીયાદી ના એડવોકેટ", rendered)
         self.assertNotIn("{{", rendered)
@@ -466,6 +476,58 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         tpls = asyncio.run(server._get_published_templates())
         found = any(t.get("id") == "dd_karavani_arji" or t.get("template_id") == "dd_karavani_arji" for t in tpls)
         self.assertTrue(found, "dd_karavani_arji must be present in published templates list")
+
+    def test_29_body_contains_exactly_two_paragraphs(self):
+        """29. Verify the body text produces exactly two justified body paragraph blocks."""
+        blocks = doc_generator.build_blocks(
+            self.tpl["content_gu"],
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        body_blocks = [b for b in blocks if b.get("align") == "justify" and b.get("indent") is True]
+        self.assertEqual(len(body_blocks), 2, f"Must have exactly 2 body paragraph blocks, found {len(body_blocks)}")
+        self.assertTrue(body_blocks[0]["text"].startswith("સદર કામમાં અમો"))
+        self.assertTrue(body_blocks[1]["text"].startswith("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ"))
+        self.assertIn("વધુમાં", body_blocks[1]["text"])
+        self.assertIn("જેથી", body_blocks[1]["text"])
+
+    def test_30_vadhumo_not_separate_block_no_separate_indent(self):
+        """30. Verify 'વધુમાં' is continuous in paragraph 2 and never has a separate block or indent."""
+        blocks = doc_generator.build_blocks(
+            self.tpl["content_gu"],
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        vadhumo_blocks = [b for b in blocks if b.get("text", "").strip().startswith("વધુમાં")]
+        self.assertEqual(len(vadhumo_blocks), 0, "'વધુમાં' must NOT be the start of an independent block")
+
+        # Verify in raw content that there is no paragraph break before વધુમાં
+        self.assertNotIn("\n\n    વધુમાં", self.tpl["content_gu"])
+        self.assertNotIn("\n    વધુમાં", self.tpl["content_gu"])
+        self.assertNotIn("\n\nવધુમાં", self.tpl["content_gu"])
+        self.assertNotIn("\nવધુમાં", self.tpl["content_gu"])
+
+    def test_31_subject_token_integrity(self):
+        """31. Verify subject line has intact ડીસમીસ token, is centered, bold, and underlined."""
+        blocks = doc_generator.build_blocks(
+            self.tpl["content_gu"],
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        subject_blocks = [b for b in blocks if "બાબત :-" in b.get("text", "")]
+        self.assertEqual(len(subject_blocks), 1, "Must have exactly 1 subject block")
+        sb = subject_blocks[0]
+        self.assertEqual(sb["text"], "બાબત :- કેસ ડીસમીસ કરવા બાબત ...")
+        self.assertIn("ડીસમીસ", sb["text"])
+        self.assertNotIn("ડીસ મી સ", sb["text"])
+        self.assertNotIn("ડિસ મી સ", sb["text"])
+        self.assertEqual(sb.get("align"), "center")
+        self.assertTrue(sb.get("bold"))
+        self.assertTrue(sb.get("underline"))
+        self.assertFalse(sb.get("indent"))
 
 
 if __name__ == "__main__":
