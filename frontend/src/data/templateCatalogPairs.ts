@@ -155,8 +155,8 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
   },
   {
     baseKey: "dd_karavani_arji",
-    guId: "dd_karavani_arji_gu",
-    enId: "dd_karavani_arji_en",
+    guId: "dd_karavani_arji",
+    enId: "dd_karavani_arji",
     name_gu: "DD કરાવવાની અરજી",
     name_en: "Application for Dismissal of Case",
     category: "General",
@@ -166,6 +166,9 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
     keywords_en: ["dismissal of case", "dd karavani arji", "application for dismissal of case", "dd", "dismiss in default"],
     transliterations: ["dd", "dd karavani arji", "dismiss", "case dismiss"],
     aliases: [
+      "dd_karavani_arji",
+      "dd_karavani_arji_gu",
+      "dd_karavani_arji_en",
       "dd",
       "dismiss in default",
       "ડિસમિસ",

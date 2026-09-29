@@ -130,11 +130,11 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'dd_karavani_arji',
-    guId: 'dd_karavani_arji_gu',
-    enId: 'dd_karavani_arji_en',
-    name_gu: 'ડી.ડી. કરાવવા અંગેની અરજી (ડિસમિસ ઇન ડિફોલ્ટ)',
-    name_en: 'Application for Dismissal in Default (D.D.)',
-    category: 'Civil',
+    guId: 'dd_karavani_arji',
+    enId: 'dd_karavani_arji',
+    name_gu: 'DD કરાવવાની અરજી',
+    name_en: 'Application for Dismissal of Case',
+    category: 'General',
   },
   {
     baseKey: 'warrant_no_hath_bido_apvani_arji',

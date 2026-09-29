@@ -440,6 +440,34 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(tpl_found)
         self.assertEqual(tpl_found["name_gu"], "DD કરાવવાની અરજી")
 
+    def test_26_deleted_template_ids_does_not_mask_dd_karavani_arji(self):
+        """26. Verify dd_karavani_arji is never masked by historical tombstones."""
+        import asyncio
+        deleted_ids = asyncio.run(server._get_deleted_template_ids())
+        self.assertNotIn("dd_karavani_arji", deleted_ids)
+        self.assertNotIn("dd_karavani_arji_gu", deleted_ids)
+        self.assertNotIn("dd_karavani_arji_en", deleted_ids)
+
+    def test_27_get_catalog_template_order_includes_dd_karavani_arji(self):
+        """27. Verify catalog template order includes dd_karavani_arji."""
+        import asyncio
+        order_res = asyncio.run(server.get_catalog_template_order())
+        self.assertIn("template_order", order_res)
+        order = order_res["template_order"]
+        self.assertTrue(
+            "dd_karavani_arji" in order or "dd_karavani_arji_gu" in order or "dd_karavani_arji_en" in order,
+            f"dd_karavani_arji must be present in template_order: {order}"
+        )
+
+    def test_28_get_published_templates_includes_dd_karavani_arji(self):
+        """28. Verify _get_published_templates includes canonical dd_karavani_arji."""
+        import asyncio
+        server.invalidate_published_templates_cache()
+        tpls = asyncio.run(server._get_published_templates())
+        found = any(t.get("id") == "dd_karavani_arji" or t.get("template_id") == "dd_karavani_arji" for t in tpls)
+        self.assertTrue(found, "dd_karavani_arji must be present in published templates list")
+
 
 if __name__ == "__main__":
     unittest.main()
+
