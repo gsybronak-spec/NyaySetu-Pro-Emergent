@@ -764,7 +764,7 @@ TEMPLATES = [
         "name_en": "Adjournment Application",
         "name_gu": "મુદત અરજી",
         "category": "General",
-        "aliases": ["mudat", "mudat arji", "adjournment", "adjournment application", "date application", "મુદત", "મુદત અરજી"],
+        "aliases": ["legacy_adjournment", "adjournment_legacy"],
         "fields": [
             {"key": "next_date", "label_en": "Next Requested Date", "label_gu": "આગામી માંગેલ તારીખ", "type": "date", "required": True},
             {"key": "reason", "label_en": "Reason for Adjournment", "label_gu": "મુદત માટેનું કારણ", "type": "textarea", "required": True},
@@ -4403,6 +4403,356 @@ Subject :- Application for Dismissal of Case ...
     In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that...
 
     The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}. Furthermore, {{advocate_for_role}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
+
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
+    },
+    {
+        "id": "mudat_arji",
+        "name_gu": "મુદત અરજી",
+        "name_en": "Application for Adjournment",
+        "category": "General",
+        "is_active": True,
+        "aliases": [
+            "mudat_arji",
+            "mudat_arji_gu",
+            "mudat_arji_en",
+            "mudat",
+            "mudat arji",
+            "મુદત",
+            "મુદત અરજી",
+            "મુદ્દત અરજી",
+            "Application for Adjournment",
+            "Adjournment Application",
+            "મુદ્દત આપવા બાબત",
+            "adjournment",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટ નુ નામ",
+                "type": "select",
+                "required": False,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજિસ્ટ્રેટ"},
+                    {"value": "district_sessions_judge", "label_en": "District & Sessions Judge", "label_gu": "ડિસ્ટ્રિક્ટ એન્ડ સેશન્સ જજ"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "labour_court", "label_en": "Labour Court", "label_gu": "લેબર કોર્ટ"},
+                    {"value": "small_cause_court", "label_en": "Small Cause Court", "label_gu": "સ્મોલ કોઝ કોર્ટ"},
+                    {"value": "commercial_court", "label_en": "Commercial Court", "label_gu": "કોમર્શિયલ કોર્ટ"},
+                    {"value": "special_court", "label_en": "Special Court", "label_gu": "સ્પેશિયલ કોર્ટ"},
+                    {"value": "motor_accident_claims_tribunal", "label_en": "Motor Accident Claims Tribunal", "label_gu": "મોટર અકસ્માત ક્લેઈમ્સ ટ્રિબ્યુનલ"},
+                    {"value": "other", "label_en": "Other / Custom Court", "label_gu": "અન્ય કોર્ટ"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": False,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "amreli", "label_en": "Amreli", "label_gu": "અમરેલી"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "aravalli", "label_en": "Aravalli", "label_gu": "અરવલ્લી"},
+                    {"value": "banaskantha", "label_en": "Banaskantha", "label_gu": "બનાસકાંઠા"},
+                    {"value": "bharuch", "label_en": "Bharuch", "label_gu": "ભરૂચ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "botad", "label_en": "Botad", "label_gu": "બોટાદ"},
+                    {"value": "chhota_udepur", "label_en": "Chhota Udepur", "label_gu": "છોટા ઉદેપુર"},
+                    {"value": "dahod", "label_en": "Dahod", "label_gu": "દાહોદ"},
+                    {"value": "dang", "label_en": "Dang", "label_gu": "ડાંગ"},
+                    {"value": "devbhoomi_dwarka", "label_en": "Devbhoomi Dwarka", "label_gu": "દેવભૂમિ દ્વારકા"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "gir_somnath", "label_en": "Gir Somnath", "label_gu": "ગીર સોમનાથ"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "kheda", "label_en": "Kheda", "label_gu": "ખેડા"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mahisagar", "label_en": "Mahisagar", "label_gu": "મહીસાગર"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "morbi", "label_en": "Morbi", "label_gu": "મોરબી"},
+                    {"value": "narmada", "label_en": "Narmada", "label_gu": "નર્મદા"},
+                    {"value": "navsari", "label_en": "Navsari", "label_gu": "નવસારી"},
+                    {"value": "panchmahal", "label_en": "Panchmahal", "label_gu": "પંચમહાલ"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                    {"value": "porbandar", "label_en": "Porbandar", "label_gu": "પોરબંદર"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "sabarkantha", "label_en": "Sabarkantha", "label_gu": "સાબરકાંઠા"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "surendranagar", "label_en": "Surendranagar", "label_gu": "સુરેન્દ્રનગર"},
+                    {"value": "tapi", "label_en": "Tapi", "label_gu": "તાપી"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "valsad", "label_en": "Valsad", "label_gu": "વલસાડ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તાલુકો ફરજીયાત નથી. જો કોઈ તાલુકો સિલેક્ટ કરે છે તો ડ્રાફ્ટીંગ મા ઓટોમેટીક તાલુકો આગળ થઈ જવો જોઈએ અને જિલ્લો પાછળ (દાત. કલોલ, ગાંધીનગર)",
+                "options": [
+                    {"value": t["gu"], "label_en": t["en"], "label_gu": t["gu"], "district_id": t["district_id"]}
+                    for t in TALUKAS
+                ],
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": False,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "motor_accident_claim", "label_en": "MACP", "label_gu": "મોટર અકસ્માત ક્લેઈમ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": False,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર - ૧ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર - ૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_opposite_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_opposite_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Advocate For",
+                "label_gu": "કોના તરફે એડવોકેટ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "adjournment_reason",
+                "label_en": "Reason for Adjournment",
+                "label_gu": "મુદ્દત માંગવાનું કારણ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "અનિવાર્ય સંજોગોના", "label_en": "Unavoidable circumstances", "label_gu": "અનિવાર્ય સંજોગોના"},
+                    {"value": "પુરાવા તૈયાર કરવાના બાકી હોવાના", "label_en": "Evidence is yet to be prepared", "label_gu": "પુરાવા તૈયાર કરવાના બાકી હોવાના"},
+                    {"value": "કેસ વિશે પુરતો અભ્યાસ કરવાનો બાકી હોવાના", "label_en": "Adequate study of the case is yet to be completed", "label_gu": "કેસ વિશે પુરતો અભ્યાસ કરવાનો બાકી હોવાના"},
+                    {"value": "બહારગામ ગયેલ હોવાના", "label_en": "Having gone out of town", "label_gu": "બહારગામ ગયેલ હોવાના"},
+                    {"value": "માંદગીના", "label_en": "Illness", "label_gu": "માંદગીના"},
+                    {"value": "સામાજીક કાર્યોમા રોકાયેલ હોવાના", "label_en": "Being engaged in social commitments", "label_gu": "સામાજીક કાર્યોમા રોકાયેલ હોવાના"},
+                    {"value": "બીજી કોર્ટમાં રોકાયેલ હોવાના", "label_en": "Being engaged in another court", "label_gu": "બીજી કોર્ટમાં રોકાયેલ હોવાના"},
+                    {"value": "અન્ય", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "other_adjournment_reason",
+                "label_en": "Other Reason for Adjournment",
+                "label_gu": "અન્ય મુદ્દત માંગવાનું કારણ",
+                "type": "textarea",
+                "required": False,
+                "depends_on": "adjournment_reason=અન્ય",
+                "placeholder": "અન્ય મુદ્દત માંગવાનું કારણ લખો...",
+                "description_gu": "જો અન્ય ઓપ્શન સિલેક્ટ કરે તો નવુ ટેક્ષ બોક્ષ આવી જવુ જોઈએ જેમા તેમના હિસાબે કોઈ કારણ લખી શકે",
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": False,
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "readonly": True,
+                "placeholder": "સ્થળ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
+                "type": "text",
+                "required": False,
+                "readonly": True,
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "font_family": "Lohit Gujarati",
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_font_size": 13,
+            "header_font_size": 15,
+            "template_id": "mudat_arji",
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"prefix": "મહેરબાન", "align": "center", "bold": True, "indent": False},
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True, "indent": False},
+                {"prefix": "In the Court", "align": "center", "bold": True, "indent": False},
+                {"contains": "In the Court of the Hon'ble", "align": "center", "bold": True, "indent": False},
+                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": True, "indent": False},
+                {"prefix": "Place :-", "position": 2, "align": "center", "bold": True, "indent": False},
+                {"contains": "નં. :", "align": "right", "bold": False, "indent": False},
+                {"contains": "No. :", "align": "right", "bold": False, "indent": False},
+                {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
+                {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
+                {"prefix": "બાબત :-", "contains": "બાબત :-", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "બાબત :- મુદ્દત આપવા બાબત...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "બાબત :- મુદ્દત આપવા બાબત ...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "Subject :- Application for Adjournment ...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"prefix": "સદર કામમાં અમો", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "In the said matter", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "The said case is pending before this Hon'ble Court", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "તારીખ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Date :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "સ્થળ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Place :", "align": "left", "bold": False, "indent": False},
+                {"contains": "----------", "align": "right", "bold": False, "indent": False},
+                {"contains": "--------------------", "align": "right", "bold": False, "indent": False},
+                {"contains": "ના એડવોકેટ", "align": "right", "bold": False, "indent": False},
+                {"contains": "Advocate for", "align": "right", "bold": False, "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
+મુકામ :- {{place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+વિરુદ્ધ
+
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત :- મુદ્દત આપવા બાબત...
+
+    સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
+
+    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેની મુદ્દત આજ રોજની છે પરંતુ સદર કામમાં અમો આજરોજ {{adjournment_reason}} કારણોસર ન્યાયિક કાર્યવાહી આજરોજ પુરતી આગળ ચલાવી શકીએ તેમ ન હોઈ, સદરહુ કામમાં આજરોજ કેસ આગળ ન ચલાવવા ન્યાયના હિતમાં એક મુદ્દત આપી યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """In the Court of the Hon'ble {{court_name}},
+
+Place :- {{place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+Versus
+
+{{party_2_role}} :- {{party_2_name}}
+
+Subject :- Application for Adjournment ...
+
+    In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that...
+
+    The said case is pending before this Hon'ble Court. The date of hearing is today, but in the said matter we are unable to proceed further with the judicial proceedings today due to {{adjournment_reason}}, therefore in the interest of justice it is prayed that this Hon'ble Court may be pleased to grant an adjournment not to proceed further with the case today and pass appropriate orders.
 
 Date : {{date}}
 

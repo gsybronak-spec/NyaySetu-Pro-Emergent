@@ -18,10 +18,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'mudat_arji',
-    guId: 'mudat_arji_gu',
-    enId: 'mudat_arji_en',
+    guId: 'mudat_arji',
+    enId: 'mudat_arji',
     name_gu: 'મુદત અરજી',
-    name_en: 'Adjournment Application (Time Petition)',
+    name_en: 'Application for Adjournment',
     category: 'General',
   },
   {

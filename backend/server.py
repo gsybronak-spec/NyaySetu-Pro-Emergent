@@ -2657,7 +2657,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3218,6 +3218,17 @@ def _get_canonical_dd_karavani_arji_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "dd_karavani_arji"), None)
 
 
+def _get_canonical_mudat_arji_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "mudat_arji"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "mudat_arji"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3460,6 +3471,41 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref_dd.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_mudat = db.collection("templates").document("mudat_arji")
+            snap_mudat = await doc_ref_mudat.get()
+            mudat_seed_arji = _get_canonical_mudat_arji_template()
+            if mudat_seed_arji:
+                if not snap_mudat.exists:
+                    await doc_ref_mudat.set({
+                        **mudat_seed_arji,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_mudat = snap_mudat.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_mudat.get("content_gu") != mudat_seed_arji["content_gu"]:
+                        update_dict["content_gu"] = mudat_seed_arji["content_gu"]
+                        needs_update = True
+                    if cur_mudat.get("content_en") != mudat_seed_arji["content_en"]:
+                        update_dict["content_en"] = mudat_seed_arji["content_en"]
+                        needs_update = True
+                    if cur_mudat.get("settings") != mudat_seed_arji["settings"]:
+                        update_dict["settings"] = mudat_seed_arji["settings"]
+                        needs_update = True
+                    if cur_mudat.get("fields") != mudat_seed_arji.get("fields"):
+                        update_dict["fields"] = mudat_seed_arji["fields"]
+                        needs_update = True
+                    if cur_mudat.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_mudat.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3483,7 +3529,7 @@ async def _get_published_templates() -> list:
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached) and any(t.get("id") == "dd_karavani_arji" for t in cached):
+            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached) and any(t.get("id") == "dd_karavani_arji" for t in cached) and any(t.get("id") == "mudat_arji" for t in cached):
                 return cached
 
     deleted_ids = await _get_deleted_template_ids()
@@ -3674,6 +3720,32 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "mudat_arji" or t.get("template_id") == "mudat_arji"):
+                mudat_seed = _get_canonical_mudat_arji_template()
+                if mudat_seed:
+                    needs_update = False
+                    if t.get("content_gu") != mudat_seed["content_gu"]:
+                        t["content_gu"] = mudat_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != mudat_seed["content_en"]:
+                        t["content_en"] = mudat_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != mudat_seed["settings"]:
+                        t["settings"] = mudat_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != mudat_seed.get("fields"):
+                        t["fields"] = mudat_seed["fields"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "mudat_arji")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3770,6 +3842,22 @@ async def _get_published_templates() -> list:
                         }))
                     except Exception:
                         pass
+
+        found_mudat = any((t.get("id") == "mudat_arji" or t.get("template_id") == "mudat_arji") for t in db_templates)
+        if not found_mudat and "mudat_arji" not in deleted_ids:
+            mudat_seed = _get_canonical_mudat_arji_template()
+            if mudat_seed:
+                db_templates.append(dict(mudat_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("mudat_arji").set({
+                            **mudat_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
     
     if not db_templates and db is None:
         canonical_seeds = [
@@ -3780,6 +3868,7 @@ async def _get_published_templates() -> list:
             _get_canonical_reopen_right_to_argue_template(),
             _get_canonical_exemption_arji_template(),
             _get_canonical_dd_karavani_arji_template(),
+            _get_canonical_mudat_arji_template(),
         ]
         canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
         v2_items = []
@@ -4028,6 +4117,32 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "mudat_arji" or template_id in ("mudat_arji", "mudat_arji_gu", "mudat_arji_en") or base_cand == "mudat_arji"):
+            mudat_seed = _get_canonical_mudat_arji_template()
+            if mudat_seed:
+                needs_update = False
+                if t.get("content_gu") != mudat_seed["content_gu"]:
+                    t["content_gu"] = mudat_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != mudat_seed["content_en"]:
+                    t["content_en"] = mudat_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != mudat_seed["settings"]:
+                    t["settings"] = mudat_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != mudat_seed.get("fields"):
+                    t["fields"] = mudat_seed["fields"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -4059,6 +4174,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         dd_seed = _get_canonical_dd_karavani_arji_template()
         if dd_seed and "dd_karavani_arji" not in deleted_ids:
             return {**dd_seed, "format_version": dd_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "mudat_arji" or template_id in ("mudat_arji", "mudat_arji_gu", "mudat_arji_en")):
+        mudat_seed = _get_canonical_mudat_arji_template()
+        if mudat_seed and "mudat_arji" not in deleted_ids:
+            return {**mudat_seed, "format_version": mudat_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -4203,6 +4323,17 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["settings"] = dd_seed["settings"]
                 if t.get("fields") != dd_seed.get("fields"):
                     t["fields"] = dd_seed["fields"]
+        if (t.get("id") == "mudat_arji" or t_id == "mudat_arji"):
+            mudat_seed = _get_canonical_mudat_arji_template()
+            if mudat_seed:
+                if t.get("content_gu") != mudat_seed["content_gu"]:
+                    t["content_gu"] = mudat_seed["content_gu"]
+                if t.get("content_en") != mudat_seed["content_en"]:
+                    t["content_en"] = mudat_seed["content_en"]
+                if t.get("settings") != mudat_seed["settings"]:
+                    t["settings"] = mudat_seed["settings"]
+                if t.get("fields") != mudat_seed.get("fields"):
+                    t["fields"] = mudat_seed["fields"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -4903,14 +5034,14 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
         if is_closing_or_reopen:
             ctx["advocate_name"] = default_adv_desig
         elif not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -5057,7 +5188,57 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             if ctx.get("dismissal_reason") in dd_reason_map_en:
                 ctx["dismissal_reason"] = dd_reason_map_en[ctx["dismissal_reason"]]
 
-    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji & dd_karavani_arji template keys are clean strings (never None or undefined)
+    # Mudat Application (મુદત અરજી / Application for Adjournment)
+    is_mudat_app = (tpl_id in ("mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "adjournment_reason" in ctx or "adjournment_reason" in values)
+    if is_mudat_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        raw_mudat_reason = str(ctx.get("adjournment_reason") or "").strip()
+        custom_mudat_reason = str(ctx.get("other_adjournment_reason") or ctx.get("adjournment_reason_custom") or ctx.get("adjournment_reason_other") or "").strip()
+        if raw_mudat_reason in ("અન્ય", "other", "Other"):
+            ctx["adjournment_reason"] = custom_mudat_reason if custom_mudat_reason else ("અન્ય" if language == "gu" else "Other")
+        elif not raw_mudat_reason and custom_mudat_reason:
+            ctx["adjournment_reason"] = custom_mudat_reason
+        else:
+            ctx["adjournment_reason"] = raw_mudat_reason
+            ctx["other_adjournment_reason"] = ""
+            ctx["adjournment_reason_custom"] = ""
+            ctx["adjournment_reason_other"] = ""
+
+        if language == "en":
+            mudat_reason_map_en = {
+                "અનિવાર્ય સંજોગોના": "unavoidable circumstances",
+                "પુરાવા તૈયાર કરવાના બાકી હોવાના": "evidence is yet to be prepared",
+                "કેસ વિશે પુરતો અભ્યાસ કરવાનો બાકી હોવાના": "adequate study of the case is yet to be completed",
+                "બહારગામ ગયેલ હોવાના": "having gone out of town",
+                "માંદગીના": "illness",
+                "સામાજીક કાર્યોમા રોકાયેલ હોવાના": "being engaged in social commitments",
+                "બીજી કોર્ટમાં રોકાયેલ હોવાના": "being engaged in another court",
+                "અન્ય": "other reasons",
+                "Unavoidable circumstances": "unavoidable circumstances",
+                "Evidence is yet to be prepared": "evidence is yet to be prepared",
+                "Adequate study of the case is yet to be completed": "adequate study of the case is yet to be completed",
+                "Having gone out of town": "having gone out of town",
+                "Illness": "illness",
+                "Being engaged in social commitments": "being engaged in social commitments",
+                "Being engaged in another court": "being engaged in another court",
+                "Other": "other reasons",
+            }
+            if ctx.get("adjournment_reason") in mudat_reason_map_en:
+                ctx["adjournment_reason"] = mudat_reason_map_en[ctx["adjournment_reason"]]
+
+    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji & mudat_arji template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
@@ -5066,6 +5247,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "argument_failure_reason", "argument_failure_reason_custom",
         "absence_reason", "absence_reason_custom",
         "dismissal_reason", "dismissal_reason_custom",
+        "adjournment_reason", "other_adjournment_reason", "adjournment_reason_custom",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
@@ -6019,7 +6201,7 @@ async def get_catalog_template_order():
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -8723,7 +8905,7 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -9964,6 +10146,20 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_en": dd_seed["content_en"],
                         "settings": dd_seed["settings"],
                         "fields": dd_seed["fields"],
+                    })
+            if t["id"] == "mudat_arji":
+                mudat_seed = _get_canonical_mudat_arji_template()
+                if mudat_seed and (
+                    existing.get("content_gu") != mudat_seed["content_gu"]
+                    or existing.get("content_en") != mudat_seed["content_en"]
+                    or existing.get("settings") != mudat_seed["settings"]
+                    or existing.get("fields") != mudat_seed.get("fields")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": mudat_seed["content_gu"],
+                        "content_en": mudat_seed["content_en"],
+                        "settings": mudat_seed["settings"],
+                        "fields": mudat_seed["fields"],
                     })
             skipped_ids.append(t["id"])
             continue
