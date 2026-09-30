@@ -137,12 +137,13 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
 
     def test_02_field_count_and_keys(self):
         fields = self.tpl["fields"]
-        self.assertEqual(len(fields), 19, f"Expected exactly 19 fields, got {len(fields)}")
+        self.assertEqual(len(fields), 21, f"Expected exactly 21 fields, got {len(fields)}")
         keys = [f["key"] for f in fields]
         expected_keys = [
             "court_name", "district", "taluka", "court_officer_detail",
             "case_type", "case_number", "case_date_type", "case_date",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
+            "copy_request_purpose", "other_copy_request_purpose",
             "document_details", "number_of_copies", "recipient_name",
             "date", "place", "advocate_name", "mobile_number",
         ]
@@ -154,7 +155,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertNotIn("deposit", keys)
         self.assertNotIn("amount", keys)
 
-    def test_04_all_19_fields_optional(self):
+    def test_04_all_fields_optional(self):
         fmap = {f["key"]: f for f in self.tpl["fields"]}
         for key, f in fmap.items():
             self.assertFalse(f["required"], f"Field '{key}' must be optional (required=False)")
@@ -170,6 +171,8 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertFalse(fmap["court_name"]["required"])
         self.assertFalse(fmap["district"]["required"])
         self.assertFalse(fmap["case_number"]["required"])
+        self.assertFalse(fmap["copy_request_purpose"]["required"])
+        self.assertFalse(fmap["other_copy_request_purpose"]["required"])
 
     def test_05_settings_geometry_and_typography(self):
         s = self.tpl["settings"]
@@ -244,7 +247,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,", c_gu)
         self.assertIn("મુકામ :- {{place}}", c_gu)
         self.assertIn("બાબત : પ્રમાણિત નકલ મેળવવા બાબત ...", c_gu)
-        self.assertIn("સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય", c_gu)
+        self.assertIn("સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની {{copy_request_purpose}} જરૂરીયાત હોય", c_gu)
         # Exactly 6 underscores in Gujarati deposit
         self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", c_gu)
         # Exactly 10 dashes in Gujarati signature line
@@ -1184,6 +1187,102 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             self.assertEqual(saved_case["court_label"], "2nd JMFC")
             self.assertEqual(saved_case["court_id"], "court_of_jmfc")
             self.assertNotIn("recipient_name", saved_case)
+
+        asyncio.run(_test())
+
+    def test_23_dynamic_copy_request_purpose(self):
+        """Verify dynamic copy_request_purpose according to exact prompt specifications."""
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "રોનક સોલંકી",
+                "advocate_name_en": "Ronak Solanki",
+                "mobile": "9876543210",
+            }
+            base_vals = {
+                "court_name": "ચીફ જ્યુડીશ્યલ મેજીસ્ટ્રેટ સાહેબની કોર્ટ",
+                "district": "અમદાવાદ",
+                "court_officer_detail": "ચીફ જ્યુડીશ્યલ મેજીસ્ટ્રેટ સાહેબની કોર્ટ",
+                "case_type": "ક્રિમીનલ કેસ",
+                "case_number": "૧૦૧/૨૦૨૪",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-09-30",
+                "party_1_role": "ફરીયાદી",
+                "party_1_name": "રમેશભાઈ પટેલ",
+                "party_2_role": "આરોપી",
+                "party_2_name": "સુરેશભાઈ શાહ",
+                "document_details": "આંક - ૧, ૫, ૭ ની નકલ",
+                "number_of_copies": "૨",
+                "recipient_name": "અરવિંદભાઈ",
+                "date": "2026-09-30",
+                "place": "અમદાવાદ",
+                "advocate_name": "રોનક સોલંકી",
+                "mobile_number": "9876543210",
+                "template_id": TEMPLATE_ID,
+            }
+
+            # TEST 1: copy_request_purpose = "અભ્યાસ અર્થે" -> Correct sentence generated
+            vals_1 = dict(base_vals, copy_request_purpose="અભ્યાસ અર્થે")
+            ctx_1 = await server.build_render_context(user, None, vals_1, "gu", template_id=TEMPLATE_ID)
+            rend_1 = render_template(self.tpl["content_gu"], ctx_1)
+            expected_sent_1 = "સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી."
+            self.assertIn(expected_sent_1, rend_1)
+
+            # TEST 2: copy_request_purpose = "ન્યાયિક કાર્યવાહી અર્થે" -> Correct sentence generated
+            vals_2 = dict(base_vals, copy_request_purpose="ન્યાયિક કાર્યવાહી અર્થે")
+            ctx_2 = await server.build_render_context(user, None, vals_2, "gu", template_id=TEMPLATE_ID)
+            rend_2 = render_template(self.tpl["content_gu"], ctx_2)
+            expected_sent_2 = "સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી."
+            self.assertIn(expected_sent_2, rend_2)
+
+            # TEST 3: copy_request_purpose = "અન્ય", other_copy_request_purpose = "સરકારી કચેરીમાં રજૂ કરવા અર્થે" -> Correct custom sentence generated
+            vals_3 = dict(base_vals, copy_request_purpose="અન્ય", other_copy_request_purpose="સરકારી કચેરીમાં રજૂ કરવા અર્થે")
+            ctx_3 = await server.build_render_context(user, None, vals_3, "gu", template_id=TEMPLATE_ID)
+            rend_3 = render_template(self.tpl["content_gu"], ctx_3)
+            expected_sent_3 = "સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની સરકારી કચેરીમાં રજૂ કરવા અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી."
+            self.assertIn(expected_sent_3, rend_3)
+
+            # TEST 4: Select "અન્ય" -> enter custom reason -> switch back to "અભ્યાસ અર્થે" -> Custom reason does not appear anywhere in preview/PDF
+            vals_4 = dict(base_vals, copy_request_purpose="અભ્યાસ અર્થે", other_copy_request_purpose="સરકારી કચેરીમાં રજૂ કરવા અર્થે")
+            ctx_4 = await server.build_render_context(user, None, vals_4, "gu", template_id=TEMPLATE_ID)
+            rend_4 = render_template(self.tpl["content_gu"], ctx_4)
+            self.assertNotIn("સરકારી કચેરીમાં રજૂ કરવા અર્થે", rend_4)
+            self.assertIn(expected_sent_1, rend_4)
+
+            # TEST 5: Select "અન્ય" -> leave custom reason empty -> Generation is blocked with proper validation
+            vals_5 = dict(base_vals, copy_request_purpose="અન્ય", other_copy_request_purpose="")
+            ctx_5 = await server.build_render_context(user, None, vals_5, "gu", template_id=TEMPLATE_ID)
+            with self.assertRaises(server.HTTPException) as cm:
+                server.validate_template_requirements(self.tpl, ctx_5, "gu")
+            self.assertEqual(cm.exception.status_code, 400)
+
+            # TEST 6: Preview PDF and downloaded PDF contain identical dynamic purpose content
+            blks_3 = build_blocks(rend_3, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings_3 = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_3, "ctx": ctx_3})
+            pdf_b64_3 = generate_pdf(blks_3, "gu", doc_settings_3)
+            self.assertIsNotNone(pdf_b64_3)
+            pdf_bytes_3 = base64.b64decode(pdf_b64_3)
+            self.assertTrue(pdf_bytes_3.startswith(b"%PDF"))
+            self.assertGreater(len(pdf_bytes_3), 1000)
+
+            # TEST 7: English version dynamic purpose
+            # 7a: For study
+            vals_en_1 = dict(base_vals, copy_request_purpose="For study")
+            ctx_en_1 = await server.build_render_context(user, None, vals_en_1, "en", template_id=TEMPLATE_ID)
+            rend_en_1 = render_template(self.tpl["content_en"], ctx_en_1)
+            self.assertIn("documents mentioned hereinbelow for study. It is therefore respectfully prayed", rend_en_1)
+
+            # 7b: For judicial proceedings
+            vals_en_2 = dict(base_vals, copy_request_purpose="For judicial proceedings")
+            ctx_en_2 = await server.build_render_context(user, None, vals_en_2, "en", template_id=TEMPLATE_ID)
+            rend_en_2 = render_template(self.tpl["content_en"], ctx_en_2)
+            self.assertIn("documents mentioned hereinbelow for judicial proceedings. It is therefore respectfully prayed", rend_en_2)
+
+            # 7c: Other with custom English text
+            vals_en_3 = dict(base_vals, copy_request_purpose="Other", other_copy_request_purpose="for submission to government authorities")
+            ctx_en_3 = await server.build_render_context(user, None, vals_en_3, "en", template_id=TEMPLATE_ID)
+            rend_en_3 = render_template(self.tpl["content_en"], ctx_en_3)
+            self.assertIn("documents mentioned hereinbelow for submission to government authorities. It is therefore respectfully prayed", rend_en_3)
 
         asyncio.run(_test())
 

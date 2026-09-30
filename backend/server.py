@@ -5004,6 +5004,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "document_details", "number_of_copies", "recipient_name",
         "place", "advocate_name", "mobile_number",
+        "copy_request_purpose", "other_copy_request_purpose",
     ):
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
@@ -5018,6 +5019,42 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["recipient_name"] = raw_rec
         else:
             ctx["recipient_name"] = "__________" if language == "gu" else "____________________"
+
+        raw_purpose = str(ctx.get("copy_request_purpose") or values.get("copy_request_purpose") or "").strip()
+        custom_purpose = str(ctx.get("other_copy_request_purpose") or values.get("other_copy_request_purpose") or values.get("copy_request_purpose_custom") or "").strip()
+
+        if raw_purpose in ("અન્ય", "other", "Other"):
+            ctx["copy_request_purpose"] = custom_purpose if custom_purpose else ("અન્ય" if language == "gu" else "other")
+        elif not raw_purpose and custom_purpose:
+            ctx["copy_request_purpose"] = custom_purpose
+        elif raw_purpose:
+            ctx["copy_request_purpose"] = raw_purpose
+            ctx["other_copy_request_purpose"] = ""
+            ctx["copy_request_purpose_custom"] = ""
+        else:
+            ctx["copy_request_purpose"] = "અભ્યાસ અર્થે" if language == "gu" else "for study"
+            ctx["other_copy_request_purpose"] = ""
+            ctx["copy_request_purpose_custom"] = ""
+
+        if language == "en":
+            cc_purpose_map_en = {
+                "અભ્યાસ અર્થે": "for study",
+                "ન્યાયિક કાર્યવાહી અર્થે": "for judicial proceedings",
+                "અન્ય": "other purpose",
+                "For study": "for study",
+                "for study": "for study",
+                "for_study": "for study",
+                "For judicial proceedings": "for judicial proceedings",
+                "for judicial proceedings": "for judicial proceedings",
+                "for_judicial_proceedings": "for judicial proceedings",
+                "Other": "other purpose",
+                "other": "other purpose",
+            }
+            cur_p = ctx.get("copy_request_purpose", "")
+            if cur_p in cc_purpose_map_en:
+                ctx["copy_request_purpose"] = cc_purpose_map_en[cur_p]
+            elif cur_p and not cur_p.lower().startswith("for ") and not cur_p.lower().startswith("to "):
+                ctx["copy_request_purpose"] = f"for {cur_p}"
 
     # Closing Purshish & Closing Argument Right Application advocate_for role auto-flow
     raw_adv_for = ctx.get("advocate_for")
@@ -5301,6 +5338,13 @@ def validate_template_requirements(t: dict, ctx: dict, language: str = "en") -> 
             else f"આ દસ્તાવેજ માટે જરૂરી વિગત ખૂટે છે: {', '.join(missing)}"
         )
         raise HTTPException(400, msg)
+
+    if t.get("id") == "certified_copy_application":
+        raw_p = str(ctx.get("copy_request_purpose") or "").strip()
+        custom_p = str(ctx.get("other_copy_request_purpose") or ctx.get("copy_request_purpose_custom") or "").strip()
+        if raw_p in ("અન્ય", "other", "Other") and not custom_p:
+            msg = "કૃપા કરીને અન્ય કારણ દાખલ કરો." if language == "gu" else "Please enter the custom reason for copy request."
+            raise HTTPException(400, msg)
 
 
 @api.post("/applications/preview")

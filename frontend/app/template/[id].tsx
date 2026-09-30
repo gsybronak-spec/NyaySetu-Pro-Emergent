@@ -462,6 +462,12 @@ export default function TemplateApplication() {
           next["adjournment_reason_custom"] = "";
         }
       }
+      if (templateId === "certified_copy_application" && k === "copy_request_purpose") {
+        if (v !== "અન્ય" && v !== "other" && v !== "Other") {
+          next["other_copy_request_purpose"] = "";
+          next["copy_request_purpose_custom"] = "";
+        }
+      }
       return next;
     });
   };
@@ -619,6 +625,18 @@ export default function TemplateApplication() {
           delete out["adjournment_reason_custom"];
           delete out["adjournment_reason_other"];
         }
+      }
+    }
+
+    if (templateId === "certified_copy_application") {
+      const curPurpose = out["copy_request_purpose"];
+      const customPurpose = (out["other_copy_request_purpose"] || out["copy_request_purpose_custom"] || "").trim();
+      if (curPurpose === "અન્ય" || curPurpose === "other" || curPurpose === "Other") {
+        out["copy_request_purpose"] = customPurpose || curPurpose;
+      } else {
+        delete out["other_copy_request_purpose"];
+        delete out["copy_request_purpose_custom"];
+        delete out["copy_request_purpose_other"];
       }
     }
 
@@ -823,6 +841,13 @@ export default function TemplateApplication() {
       );
       return;
     }
+    if (templateId === "certified_copy_application" && (values.copy_request_purpose === "અન્ય" || values.copy_request_purpose === "other" || values.copy_request_purpose === "Other") && !(values.other_copy_request_purpose || values.copy_request_purpose_custom)?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for copy request."
+      );
+      return;
+    }
     setBusy(true);
     try {
       const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
@@ -906,6 +931,13 @@ export default function TemplateApplication() {
       );
       return;
     }
+    if (templateId === "certified_copy_application" && (values.copy_request_purpose === "અન્ય" || values.copy_request_purpose === "other" || values.copy_request_purpose === "Other") && !(values.other_copy_request_purpose || values.copy_request_purpose_custom)?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for copy request."
+      );
+      return;
+    }
     setBusy(true);
     setDownloading(format);
     setNotice(null);
@@ -964,6 +996,7 @@ export default function TemplateApplication() {
   };
 
   const renderFieldInput = (f: any) => {
+    if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason") return null;
     if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
     const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
     const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en || o.label_gu);
@@ -1092,6 +1125,7 @@ export default function TemplateApplication() {
       const isOtherAbsenceReason = f.key === "absence_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       const isOtherDismissalReason = f.key === "dismissal_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       const isOtherAdjournmentReason = f.key === "adjournment_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
+      const isOtherCopyRequestPurpose = f.key === "copy_request_purpose" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       return (
         <View key={f.key} style={{ marginBottom: Spacing.md }}>
           <Dropdown
@@ -1143,6 +1177,20 @@ export default function TemplateApplication() {
               onChangeText={(txt) => {
                 update("other_adjournment_reason", txt);
                 update("adjournment_reason_custom", txt);
+              }}
+              style={{ marginTop: Spacing.sm }}
+            />
+          )}
+          {isOtherCopyRequestPurpose && (
+            <Field
+              testID="field-other_copy_request_purpose"
+              label={language === "gu" ? "અન્ય કારણ" : "Other Purpose"}
+              placeholder={language === "gu" ? "ઉદાહરણ: સરકારી કચેરીમાં રજૂ કરવા અર્થે" : "Example: For submission to government office"}
+              multiline={true}
+              value={values.other_copy_request_purpose || values.copy_request_purpose_custom || ""}
+              onChangeText={(txt) => {
+                update("other_copy_request_purpose", txt);
+                update("copy_request_purpose_custom", txt);
               }}
               style={{ marginTop: Spacing.sm }}
             />

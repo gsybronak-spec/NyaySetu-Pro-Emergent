@@ -2685,6 +2685,28 @@ Place : {{taluka_place}}
                 "placeholder": "પક્ષકાર - ૨ નું નામ",
             },
             {
+                "key": "copy_request_purpose",
+                "label_en": "Purpose of Copy Request",
+                "label_gu": "નકલ માંગવાનું કારણ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "અભ્યાસ અર્થે", "label_en": "For study", "label_gu": "અભ્યાસ અર્થે"},
+                    {"value": "ન્યાયિક કાર્યવાહી અર્થે", "label_en": "For judicial proceedings", "label_gu": "ન્યાયિક કાર્યવાહી અર્થે"},
+                    {"value": "અન્ય", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "other_copy_request_purpose",
+                "label_en": "Other Purpose",
+                "label_gu": "અન્ય કારણ",
+                "type": "textarea",
+                "required": False,
+                "depends_on": "copy_request_purpose=અન્ય",
+                "placeholder": "ઉદાહરણ: સરકારી કચેરીમાં રજૂ કરવા અર્થે",
+                "placeholder_en": "e.g. For submission to government office",
+            },
+            {
                 "key": "document_details",
                 "label_en": "Particulars of Requested Documents",
                 "label_gu": "માંગેલ દસ્તાવેજ ની વિગત",
@@ -2799,7 +2821,7 @@ Place : {{taluka_place}}
 
 અમો નીચે સહી કરનાર એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે....
 
-સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની અભ્યાસ તેમજ ન્યાયિક કાર્યવાહી અર્થે જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી.
+સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની {{copy_request_purpose}} જરૂરીયાત હોય, સહિ-સિક્કાવાળી પ્રમાણિત નકલ તાત્કાલીક આપવા મહેરબાની કરશોજી.
 
 [TABLE_START cols="64.6,35.4" align="left,center"]
 [HEADER] [CENTER] માંગેલ દસ્તાવેજ ની વિગત | [CENTER] કુલ નંગ
@@ -2831,7 +2853,7 @@ Subject: Application for Obtaining Certified Copy...
 
 We, the undersigned Advocate, respectfully submit before this Hon'ble Court that...
 
-From the aforesaid case, we require certified copies duly signed and sealed of the documents mentioned hereinbelow for the purpose of study and judicial proceedings. It is therefore respectfully prayed that this Hon'ble Court may be pleased to issue the signed and sealed certified copies expeditiously.
+From the aforesaid case, we require certified copies duly signed and sealed of the documents mentioned hereinbelow {{copy_request_purpose}}. It is therefore respectfully prayed that this Hon'ble Court may be pleased to issue the signed and sealed certified copies expeditiously.
 
 [TABLE_START cols="64.6,35.4" align="left,center"]
 [HEADER] [CENTER] Particulars of Requested Documents | [CENTER] Total Copies

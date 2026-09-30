@@ -364,7 +364,7 @@ class TestClosingPurshishTemplate(unittest.TestCase):
         cc_tpl = server._get_canonical_certified_copy_template()
         self.assertIsNotNone(cc_tpl)
         self.assertEqual(cc_tpl["id"], "certified_copy_application")
-        self.assertEqual(len(cc_tpl["fields"]), 19)
+        self.assertEqual(len(cc_tpl["fields"]), 21)
 
     def test_20_zero_regression_on_document_exhibit(self):
         """Verify document_exhibit_application template is unaffected."""
