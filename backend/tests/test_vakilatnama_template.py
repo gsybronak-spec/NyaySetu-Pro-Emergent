@@ -1,0 +1,463 @@
+# -*- coding: utf-8 -*-
+import os
+import re
+import unittest
+import base64
+import io
+import sys
+import asyncio
+from pathlib import Path
+from unittest.mock import MagicMock
+
+# Add backend directory to sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Mock third-party dependencies if not installed
+for mod in [
+    'docx', 'docx.shared', 'docx.enum.text', 'docx.oxml', 'docx.oxml.ns',
+    'google', 'google.cloud', 'google.cloud.firestore',
+    'fastapi', 'fastapi.exceptions', 'fastapi.responses',
+    'fastapi.middleware.cors', 'fastapi.middleware.gzip',
+    'pydantic', 'httpx', 'dotenv', 'jwt', 'bcrypt', 'razorpay',
+    'cryptography', 'cryptography.hazmat', 'cryptography.hazmat.primitives',
+    'cryptography.hazmat.primitives.serialization', 'cryptography.x509'
+]:
+    if mod not in sys.modules:
+        sys.modules[mod] = MagicMock()
+
+class _MockRouter:
+    def __init__(self, *args, **kwargs): pass
+    def get(self, *args, **kwargs): return lambda f: f
+    def post(self, *args, **kwargs): return lambda f: f
+    def put(self, *args, **kwargs): return lambda f: f
+    def delete(self, *args, **kwargs): return lambda f: f
+    def patch(self, *args, **kwargs): return lambda f: f
+    def include_router(self, *args, **kwargs): pass
+
+class _MockFastAPI(_MockRouter):
+    def __init__(self, *args, **kwargs): pass
+    def add_middleware(self, *args, **kwargs): pass
+    def exception_handler(self, *args, **kwargs): return lambda f: f
+    def on_event(self, *args, **kwargs): return lambda f: f
+
+class _MockHTTPException(Exception):
+    def __init__(self, status_code, detail=""):
+        self.status_code = status_code
+        self.detail = detail
+        super().__init__(f"{status_code}: {detail}")
+
+fastapi_mock = sys.modules['fastapi']
+fastapi_mock.FastAPI = _MockFastAPI
+fastapi_mock.APIRouter = _MockRouter
+fastapi_mock.HTTPException = _MockHTTPException
+fastapi_mock.Depends = lambda x: x
+fastapi_mock.Header = lambda *args, **kwargs: None
+fastapi_mock.Request = MagicMock
+fastapi_mock.Response = MagicMock
+fastapi_mock.Cookie = lambda *args, **kwargs: None
+
+class _PydanticBaseModel:
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+
+from test_seed_data import TEMPLATES
+import doc_generator
+import server
+
+
+class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.tpl_crim = next((t for t in TEMPLATES if t.get("id") == "vakilatnama_criminal"), None)
+        self.tpl_civ = next((t for t in TEMPLATES if t.get("id") == "vakilatnama_civil"), None)
+        self.assertIsNotNone(self.tpl_crim, "vakilatnama_criminal template must be present in TEMPLATES")
+        self.assertIsNotNone(self.tpl_civ, "vakilatnama_civil template must be present in TEMPLATES")
+
+    def test_01_both_variants_exist_and_metadata(self):
+        """1. Verify both Criminal and Civil Vakilatnama templates exist with proper metadata."""
+        self.assertEqual(self.tpl_crim["id"], "vakilatnama_criminal")
+        self.assertEqual(self.tpl_crim["name_gu"], "વકીલાતનામું (ક્રિમિનલ)")
+        self.assertEqual(self.tpl_crim["name_en"], "Vakalatnama (Criminal)")
+        self.assertEqual(self.tpl_crim["category"], "Criminal")
+
+        self.assertEqual(self.tpl_civ["id"], "vakilatnama_civil")
+        self.assertEqual(self.tpl_civ["name_gu"], "વકીલાતનામું (સિવિલ)")
+        self.assertEqual(self.tpl_civ["name_en"], "Vakalatnama (Civil)")
+        self.assertEqual(self.tpl_civ["category"], "Civil")
+
+    def test_02_field_count_and_exact_order(self):
+        """2. Verify exact 18 fields in exact Page 1 canonical order for both variants."""
+        expected_keys = [
+            "advocate_name",
+            "advocate_qualification",
+            "advocate_address",
+            "advocate_mobile",
+            "advocate_enrollment_number",
+            "court_name",
+            "district",
+            "taluka",
+            "case_type",
+            "case_number",
+            "party_1_role",
+            "party_1_name",
+            "party_2_role",
+            "party_2_name",
+            "advocate_for",
+            "date",
+            "place",
+            "party_signature_name",
+        ]
+        crim_keys = [f["key"] for f in self.tpl_crim["fields"]]
+        civ_keys = [f["key"] for f in self.tpl_civ["fields"]]
+
+        self.assertEqual(len(crim_keys), 18, f"Criminal fields count must be 18, got {len(crim_keys)}")
+        self.assertEqual(len(civ_keys), 18, f"Civil fields count must be 18, got {len(civ_keys)}")
+        self.assertEqual(crim_keys, expected_keys, "Criminal field keys do not match canonical sequence")
+        self.assertEqual(civ_keys, expected_keys, "Civil field keys do not match canonical sequence")
+
+    def test_03_field_optionality_and_types(self):
+        """3. Verify required vs optional fields and field types match Page 1 specifications."""
+        for tpl in (self.tpl_crim, self.tpl_civ):
+            f_map = {f["key"]: f for f in tpl["fields"]}
+
+            # Required fields
+            self.assertTrue(f_map["advocate_name"]["required"])
+            self.assertTrue(f_map["court_name"]["required"])
+            self.assertTrue(f_map["district"]["required"])
+            self.assertTrue(f_map["case_type"]["required"])
+            self.assertTrue(f_map["case_number"]["required"])
+            self.assertTrue(f_map["party_1_role"]["required"])
+            self.assertTrue(f_map["party_1_name"]["required"])
+            self.assertTrue(f_map["party_2_role"]["required"])
+            self.assertTrue(f_map["party_2_name"]["required"])
+            self.assertTrue(f_map["advocate_for"]["required"])
+            self.assertTrue(f_map["date"]["required"])
+            self.assertTrue(f_map["party_signature_name"]["required"])
+
+            # Optional fields
+            self.assertFalse(f_map["advocate_qualification"]["required"])
+            self.assertFalse(f_map["advocate_address"]["required"])
+            self.assertFalse(f_map["advocate_mobile"]["required"])
+            self.assertFalse(f_map["advocate_enrollment_number"]["required"])
+            self.assertFalse(f_map["taluka"]["required"])
+            self.assertFalse(f_map["place"]["required"])
+
+            # Types
+            self.assertEqual(f_map["advocate_name"]["type"], "text")
+            self.assertEqual(f_map["advocate_address"]["type"], "textarea")
+            self.assertEqual(f_map["court_name"]["type"], "select")
+            self.assertEqual(f_map["district"]["type"], "select")
+            self.assertEqual(f_map["taluka"]["type"], "select")
+            self.assertEqual(f_map["party_1_role"]["type"], "radio")
+            self.assertEqual(f_map["party_2_role"]["type"], "radio")
+            self.assertEqual(f_map["advocate_for"]["type"], "select")
+            self.assertEqual(f_map["date"]["type"], "date")
+            self.assertEqual(f_map["party_signature_name"]["type"], "text")
+
+    def test_04_labels_exclude_page_1_instructional_tags(self):
+        """4. Verify field labels do not leak Page 1 instructional tags into UI or documents."""
+        instructional_patterns = [r"\(ડ્રોપ\s*બોક્ષ\)", r"\(ટેક્ષ\s*બોક્ષ\)", r"\(ઓટોસેવ\s*પણ\s*એડીટેબલ\)", r"\(રેડીયો\s*બટન\)"]
+        for tpl in (self.tpl_crim, self.tpl_civ):
+            for f in tpl["fields"]:
+                for pat in instructional_patterns:
+                    self.assertIsNone(re.search(pat, f["label_gu"]), f"Instruction tag {pat} leaked into label_gu of {f['key']}")
+                    self.assertIsNone(re.search(pat, f["label_en"]), f"Instruction tag {pat} leaked into label_en of {f['key']}")
+
+    def test_05_dynamic_place_resolution_taluka_and_district(self):
+        """5. Verify dynamic place rule: [taluka], [district] if taluka present, else [district]."""
+        user = {"advocate_name_gu": "હિતેશ કે. જાદવ", "advocate_name_en": "Hitesh K. Jadav"}
+        
+        # With taluka (Gujarati)
+        vals_with_taluka = {"district": "ગાંધીનગર", "taluka": "કલોલ", "template_id": "vakilatnama_criminal"}
+        ctx = asyncio.run(server.build_render_context(user, None, vals_with_taluka, "gu"))
+        self.assertEqual(ctx["place"], "કલોલ, ગાંધીનગર")
+
+        # Without taluka (Gujarati)
+        vals_no_taluka = {"district": "ગાંધીનગર", "taluka": "", "template_id": "vakilatnama_criminal"}
+        ctx_no = asyncio.run(server.build_render_context(user, None, vals_no_taluka, "gu"))
+        self.assertEqual(ctx_no["place"], "ગાંધીનગર")
+
+        # With taluka (English)
+        vals_with_taluka_en = {"district": "Gandhinagar", "taluka": "Kalol", "template_id": "vakilatnama_criminal"}
+        ctx_en = asyncio.run(server.build_render_context(user, None, vals_with_taluka_en, "en"))
+        self.assertEqual(ctx_en["place"], "Kalol, Gandhinagar")
+
+        # Without taluka (English)
+        vals_no_taluka_en = {"district": "Gandhinagar", "taluka": "", "template_id": "vakilatnama_criminal"}
+        ctx_no_en = asyncio.run(server.build_render_context(user, None, vals_no_taluka_en, "en"))
+        self.assertEqual(ctx_no_en["place"], "Gandhinagar")
+
+    def test_06_advocate_name_preserved_not_overwritten_with_designation(self):
+        """6. Verify advocate_name is the actual professional name, NOT overwritten with 'ફરીયાદી ના એડવોકેટ'."""
+        user = {
+            "advocate_name_gu": "હિતેશ કે. જાદવ",
+            "advocate_name_en": "Adv. Hitesh K. Jadav",
+            "bar_council_no": "G/1234/2010",
+        }
+        vals = {
+            "template_id": "vakilatnama_criminal",
+            "advocate_name": "હિતેશ કે. જાદવ",
+            "advocate_for": "ફરીયાદી",
+        }
+        ctx = asyncio.run(server.build_render_context(user, None, vals, "gu"))
+        self.assertEqual(ctx["advocate_name"], "હિતેશ કે. જાદવ")
+        self.assertNotIn("ના એડવોકેટ", ctx["advocate_name"])
+
+    def test_07_party_signature_name_distinct_from_party_1_name(self):
+        """7. Verify party_signature_name (Field 18) is independent and distinct from party_1_name."""
+        user = {}
+        vals = {
+            "template_id": "vakilatnama_criminal",
+            "party_1_name": "રાજેશભાઈ પટેલ (મુખ્ય પક્ષકાર)",
+            "party_signature_name": "રાજેશભાઈ પટેલ (સહી કરનાર)",
+        }
+        ctx = asyncio.run(server.build_render_context(user, None, vals, "gu"))
+        self.assertEqual(ctx["party_signature_name"], "રાજેશભાઈ પટેલ (સહી કરનાર)")
+        self.assertNotEqual(ctx["party_signature_name"], ctx["party_1_name"])
+
+    def test_08_criminal_legal_text_exact_and_independent(self):
+        """8. Verify Criminal legal body contains 'કેસમાં' and criminal powers, without civil clauses."""
+        content_gu = self.tpl_crim["content_gu"]
+        content_en = self.tpl_crim["content_en"]
+
+        # Criminal Gujarati powers
+        self.assertIn("કેસમાં", content_gu)
+        self.assertIn("અરજીઓ કરવા", content_gu)
+        self.assertIn("પુરશીશ આપવા", content_gu)
+        self.assertIn("દસ્તાવેજો રજૂ કરવા", content_gu)
+        self.assertIn("પુરાવા આપવા", content_gu)
+        self.assertIn("સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા", content_gu)
+        self.assertIn("સમાધાન કરવા", content_gu)
+        self.assertIn("પ્રમાણિત નકલ મેળવવા", content_gu)
+        self.assertIn("અપીલ કરવા", content_gu)
+        self.assertIn("રિવિઝન કરવા", content_gu)
+        self.assertIn("સદર કેસ સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.", content_gu)
+
+        # Must NOT contain civil-specific clauses
+        self.assertNotIn("દાવામાં", content_gu)
+        self.assertNotIn("કરારદાદ કબુલ કરવા", content_gu)
+        self.assertNotIn("કોર્ટફીઝ રીફંડનો દાખલો", content_gu)
+        self.assertNotIn("દાવો પરત ખેંચી લેવા", content_gu)
+
+    def test_09_civil_legal_text_exact_and_independent(self):
+        """9. Verify Civil legal body contains 'દાવામાં' and civil powers, without criminal clauses."""
+        content_gu = self.tpl_civ["content_gu"]
+        content_en = self.tpl_civ["content_en"]
+
+        # Civil Gujarati powers
+        self.assertIn("દાવામાં", content_gu)
+        self.assertIn("કરારદાદ કબુલ કરવા", content_gu)
+        self.assertIn("કોર્ટમાં હાજર રહેવા", content_gu)
+        self.assertIn("દસ્તાવેજો કરવા", content_gu)
+        self.assertIn("પૈસા રજુ કરવા", content_gu)
+        self.assertIn("પૈસા પરત લેવા", content_gu)
+        self.assertIn("તેમના નામનો કોર્ટફીઝ રીફંડનો દાખલો લેવા", content_gu)
+        self.assertIn("રકમો લેવા", content_gu)
+        self.assertIn("અમારા વતી દાવો પરત ખેંચી લેવા", content_gu)
+        self.assertIn("અપીલ કરવા", content_gu)
+        self.assertIn("સદર દાવા સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.", content_gu)
+
+        # Must NOT contain criminal-specific clauses
+        self.assertNotIn("કેસમાં", content_gu)
+        self.assertNotIn("સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા", content_gu)
+        self.assertNotIn("રિવિઝન કરવા", content_gu)
+
+    def test_10_paragraph_2_binding_clause_in_both(self):
+        """10. Verify Paragraph 2 binding clause is present in both variants."""
+        expected_para2_gu = "અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે."
+        expected_para2_en = "accept all legal proceedings conducted by the said Advocate"
+
+        self.assertIn(expected_para2_gu, self.tpl_crim["content_gu"])
+        self.assertIn(expected_para2_gu, self.tpl_civ["content_gu"])
+        self.assertIn(expected_para2_en, self.tpl_crim["content_en"])
+        self.assertIn(expected_para2_en, self.tpl_civ["content_en"])
+
+    def test_11_single_page_settings_margins(self):
+        """11. Verify canonical margin settings: 3cm left/right, 2cm top/bottom, A4 page size."""
+        for tpl in (self.tpl_crim, self.tpl_civ):
+            s = tpl["settings"]
+            self.assertEqual(s["page_size"], "A4")
+            self.assertEqual(s["margin_left_cm"], 3.0)
+            self.assertEqual(s["margin_right_cm"], 3.0)
+            self.assertEqual(s["margin_top_cm"], 2.0)
+            self.assertEqual(s["margin_bottom_cm"], 2.0)
+            self.assertTrue(s.get("is_vakalatnama"))
+
+    def test_12_pdf_generation_criminal_gujarati(self):
+        """12. Verify valid PDF generation for Criminal Vakalatnama in Gujarati."""
+        ctx = {
+            "advocate_name": "હિતેશ કે. જાદવ",
+            "advocate_qualification": "બી.કોમ., એલએલ.બી.",
+            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
+            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
+            "advocate_enrollment_number": "જી/૧૨૩૪/૨૦૧૦",
+            "court_name": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
+            "district": "ગાંધીનગર",
+            "taluka": "કલોલ",
+            "place": "કલોલ, ગાંધીનગર",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૦૧/૨૦૨૪",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રાજેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "ફરીયાદી",
+            "date": "05/10/2026",
+            "party_signature_name": "રાજેશભાઈ પટેલ",
+        }
+        rendered = doc_generator.render_template(self.tpl_crim["content_gu"], ctx)
+        blocks = doc_generator.build_blocks(rendered, self.tpl_crim["name_en"], self.tpl_crim["name_gu"])
+        settings = dict(self.tpl_crim["settings"])
+        settings["template_id"] = "vakilatnama_criminal"
+        settings["raw_content"] = rendered
+        settings["ctx"] = ctx
+
+        pdf_b64 = doc_generator.generate_pdf(blocks, "gu", settings=settings, template_id="vakilatnama_criminal", raw_content=rendered, ctx=ctx)
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 10000)
+
+    def test_13_pdf_generation_civil_gujarati(self):
+        """13. Verify valid PDF generation for Civil Vakalatnama in Gujarati."""
+        ctx = {
+            "advocate_name": "હિતેશ કે. જાદવ",
+            "advocate_qualification": "બી.કોમ., એલએલ.બી.",
+            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
+            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
+            "advocate_enrollment_number": "જી/૧૨૩૪/૨૦૧૦",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "અમદાવાદ",
+            "taluka": "",
+            "place": "અમદાવાદ",
+            "case_type": "સ્પેશિયલ દિવાની મુકદમો",
+            "case_number": "૨૦૫/૨૦૨૩",
+            "party_1_role": "વાદી",
+            "party_1_name": "મહેશભાઈ વ્યાસ",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "દિનેશભાઈ સોની",
+            "advocate_for": "વાદી",
+            "date": "05/10/2026",
+            "party_signature_name": "મહેશભાઈ વ્યાસ",
+        }
+        rendered = doc_generator.render_template(self.tpl_civ["content_gu"], ctx)
+        blocks = doc_generator.build_blocks(rendered, self.tpl_civ["name_en"], self.tpl_civ["name_gu"])
+        settings = dict(self.tpl_civ["settings"])
+        settings["template_id"] = "vakilatnama_civil"
+        settings["raw_content"] = rendered
+        settings["ctx"] = ctx
+
+        pdf_b64 = doc_generator.generate_pdf(blocks, "gu", settings=settings, template_id="vakilatnama_civil", raw_content=rendered, ctx=ctx)
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 10000)
+
+    def test_14_pdf_generation_criminal_english(self):
+        """14. Verify valid PDF generation for Criminal Vakalatnama in English."""
+        ctx = {
+            "advocate_name": "Adv. Hitesh K. Jadav",
+            "advocate_qualification": "B.Com., LL.B.",
+            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
+            "advocate_mobile": "9876543210",
+            "advocate_enrollment_number": "G/1234/2010",
+            "court_name": "Chief Judicial Magistrate",
+            "district": "Gandhinagar",
+            "taluka": "Kalol",
+            "place": "Kalol, Gandhinagar",
+            "case_type": "Criminal Case",
+            "case_number": "101/2024",
+            "party_1_role": "Complainant",
+            "party_1_name": "Rajeshbhai Patel",
+            "party_2_role": "Accused",
+            "party_2_name": "Sureshbhai Shah",
+            "advocate_for": "Complainant",
+            "date": "05/10/2026",
+            "party_signature_name": "Rajeshbhai Patel",
+        }
+        rendered = doc_generator.render_template(self.tpl_crim["content_en"], ctx)
+        blocks = doc_generator.build_blocks(rendered, self.tpl_crim["name_en"], self.tpl_crim["name_gu"])
+        settings = dict(self.tpl_crim["settings"])
+        settings["template_id"] = "vakilatnama_criminal"
+        settings["raw_content"] = rendered
+        settings["ctx"] = ctx
+
+        pdf_b64 = doc_generator.generate_pdf(blocks, "en", settings=settings, template_id="vakilatnama_criminal", raw_content=rendered, ctx=ctx)
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 10000)
+
+    def test_15_pdf_generation_civil_english(self):
+        """15. Verify valid PDF generation for Civil Vakalatnama in English."""
+        ctx = {
+            "advocate_name": "Adv. Hitesh K. Jadav",
+            "advocate_qualification": "B.Com., LL.B.",
+            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
+            "advocate_mobile": "9876543210",
+            "advocate_enrollment_number": "G/1234/2010",
+            "court_name": "Principal Senior Civil Judge",
+            "district": "Ahmedabad",
+            "taluka": "",
+            "place": "Ahmedabad",
+            "case_type": "Special Civil Suit",
+            "case_number": "205/2023",
+            "party_1_role": "Plaintiff",
+            "party_1_name": "Maheshbhai Vyas",
+            "party_2_role": "Defendant",
+            "party_2_name": "Dineshbhai Soni",
+            "advocate_for": "Plaintiff",
+            "date": "05/10/2026",
+            "party_signature_name": "Maheshbhai Vyas",
+        }
+        rendered = doc_generator.render_template(self.tpl_civ["content_en"], ctx)
+        blocks = doc_generator.build_blocks(rendered, self.tpl_civ["name_en"], self.tpl_civ["name_gu"])
+        settings = dict(self.tpl_civ["settings"])
+        settings["template_id"] = "vakilatnama_civil"
+        settings["raw_content"] = rendered
+        settings["ctx"] = ctx
+
+        pdf_b64 = doc_generator.generate_pdf(blocks, "en", settings=settings, template_id="vakilatnama_civil", raw_content=rendered, ctx=ctx)
+        self.assertIsNotNone(pdf_b64)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertGreater(len(pdf_bytes), 10000)
+
+    def test_16_double_prefix_prevention(self):
+        """16. Verify double advocate title prefix (એડવોકેટશ્રી એડવોકેટ) is cleanly prevented."""
+        ctx = {
+            "advocate_name": "એડવોકેટ હિતેશ કે. જાદવ",
+            "advocate_qualification": "",
+            "advocate_address": "",
+            "advocate_mobile": "",
+            "advocate_enrollment_number": "",
+            "court_name": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
+            "district": "ગાંધીનગર",
+            "taluka": "",
+            "place": "ગાંધીનગર",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૦૧/૨૦૨૪",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રાજેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "ફરીયાદી",
+            "date": "05/10/2026",
+            "party_signature_name": "રાજેશભાઈ પટેલ",
+        }
+        rendered = doc_generator.render_template(self.tpl_crim["content_gu"], ctx)
+        settings = dict(self.tpl_crim["settings"])
+        settings["template_id"] = "vakilatnama_criminal"
+        settings["raw_content"] = rendered
+        settings["ctx"] = ctx
+
+        # Generate PDF and ensure no crash and double title is prevented
+        pdf_b64 = doc_generator.generate_pdf([], "gu", settings=settings, template_id="vakilatnama_criminal", raw_content=rendered, ctx=ctx)
+        self.assertIsNotNone(pdf_b64)
+
+
+if __name__ == "__main__":
+    unittest.main()

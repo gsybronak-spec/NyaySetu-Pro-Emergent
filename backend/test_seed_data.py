@@ -4793,6 +4793,720 @@ Place : {{place}}
 
 {{advocate_name}}""",
     },
+    {
+        "id": "vakilatnama_criminal",
+        "name_en": "Vakalatnama (Criminal)",
+        "name_gu": "વકીલાતનામું (ક્રિમિનલ)",
+        "category": "Criminal",
+        "aliases": [
+            "vakilatnama criminal",
+            "criminal vakalatnama",
+            "vakalatnama criminal",
+            "વકીલાતનામું ક્રિમિનલ",
+            "વકીલાતનામું",
+            "vakilatnama",
+            "vakalatnama",
+        ],
+        "fields": [
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Name",
+                "label_gu": "વકીલનું નામ",
+                "type": "text",
+                "required": True,
+                "source": "advocate_name",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_qualification",
+                "label_en": "Advocate Qualification",
+                "label_gu": "લાયકાત",
+                "type": "text",
+                "required": False,
+                "source": "advocate_qualification",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_address",
+                "label_en": "Advocate Address",
+                "label_gu": "સરનામું",
+                "type": "textarea",
+                "required": False,
+                "source": "advocate_address",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_mobile",
+                "label_en": "Advocate Mobile No.",
+                "label_gu": "મોબાઇલ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_mobile",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "મોબાઈલ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_enrollment_number",
+                "label_en": "Sanad / Enrollment No.",
+                "label_gu": "સનદ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_enrollment_number",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટનું નામ",
+                "type": "select",
+                "required": True,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કોર્ટ નુ નામ(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "additional_senior_civil_judge_acjm", "label_en": "Additional Senior Civil Judge & ACJM", "label_gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
+                    {"value": "principal_district_sessions_judge", "label_en": "Principal District & Sessions Judge", "label_gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
+                    {"value": "additional_civil_judge_jmfc", "label_en": "Additional Civil Judge & JMFC", "label_gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
+                    {"value": "civil_judge_jmfc", "label_en": "Civil Judge & JMFC", "label_gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
+                    {"value": "senior_civil_judge", "label_en": "Senior Civil Judge", "label_gu": "સિનિયર સિવિલ જજ"},
+                    {"value": "additional_district_judge", "label_en": "Additional District Judge", "label_gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
+                    {"value": "metropolitan_magistrate", "label_en": "Metropolitan Magistrate", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
+                    {"value": "court_of_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જિલ્લો",
+                "type": "select",
+                "required": True,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "જીલ્લો(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "amreli", "label_en": "Amreli", "label_gu": "અમરેલી"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "aravalli", "label_en": "Aravalli", "label_gu": "અરવલ્લી"},
+                    {"value": "banaskantha", "label_en": "Banaskantha", "label_gu": "બનાસકાંઠા"},
+                    {"value": "bharuch", "label_en": "Bharuch", "label_gu": "ભરૂચ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "botad", "label_en": "Botad", "label_gu": "બોટાદ"},
+                    {"value": "chhota_udepur", "label_en": "Chhota Udepur", "label_gu": "છોટા ઉદેપુર"},
+                    {"value": "dahod", "label_en": "Dahod", "label_gu": "દાહોદ"},
+                    {"value": "dang", "label_en": "Dang", "label_gu": "ડાંગ"},
+                    {"value": "devbhumi_dwarka", "label_en": "Devbhumi Dwarka", "label_gu": "દેવભૂમિ દ્વારકા"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "gir_somnath", "label_en": "Gir Somnath", "label_gu": "ગીર સોમનાથ"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "kheda", "label_en": "Kheda", "label_gu": "ખેડા"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mahisagar", "label_en": "Mahisagar", "label_gu": "મહીસાગર"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "morbi", "label_en": "Morbi", "label_gu": "મોરબી"},
+                    {"value": "narmada", "label_en": "Narmada", "label_gu": "નર્મદા"},
+                    {"value": "navsari", "label_en": "Navsari", "label_gu": "નવસારી"},
+                    {"value": "panchmahal", "label_en": "Panchmahal", "label_gu": "પંચમહાલ"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                    {"value": "porbandar", "label_en": "Porbandar", "label_gu": "પોરબંદર"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "sabarkantha", "label_en": "Sabarkantha", "label_gu": "સાબરકાંઠા"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "surendranagar", "label_en": "Surendranagar", "label_gu": "સુરેન્દ્રનગર"},
+                    {"value": "tapi", "label_en": "Tapi", "label_gu": "તાપી"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "valsad", "label_en": "Valsad", "label_gu": "વલસાડ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તાલુકો(ડ્રોપ બોક્ષ) ફરજીયાત નથી. જો કોઈ તાલુકો સિલેક્ટ કરે છે તો ડ્રાફ્ટીંગ મા ઓટોમેટીક તાલુકો આગળ થઈ જવો જોઈએ અને જિલ્લો પાછળ (દાત. કલોલ, ગાંધીનગર)",
+                "options": [
+                    {"value": t["gu"], "label_en": t["en"], "label_gu": t["gu"], "district_id": t["district_id"]}
+                    for t in TALUKAS
+                ],
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": True,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કેસ પ્રકાર(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત"},
+                    {"value": "motor_accident_claim", "label_en": "Motor Accident Claim Petition", "label_gu": "મોટર અકસ્માત વળતર અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "commercial_suit", "label_en": "Commercial Suit", "label_gu": "કોમર્શિયલ મુકદમો"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": True,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+                "description_gu": "કેસ નંબર (દા.ત. ૧૦૧/૨૦૨૪)(ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "party_1_role",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "૦ ફરીયાદી ૦ અરજદાર ૦ વાદી (પક્ષકાર-૧ની ભુમિકા)(રેડીયો બટન)",
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "party_1_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ દાખલ કરો",
+                "description_gu": "પક્ષકાર - ૧ નુ નામ (ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "party_2_role",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "૦ આરોપી ૦ સામાવાળા ૦ પ્રતિવાદી (પક્ષકાર-૨ ની ભુમિકા)(રેડીયો બટન)",
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent / Respondent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "party_2_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ દાખલ કરો",
+                "description_gu": "પક્ષકાર - ૨ નુ નામ (ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Appearing On Behalf Of",
+                "label_gu": "કોના તરફથી છો તે",
+                "type": "select",
+                "required": True,
+                "source": "advocate_for",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કોના તરફથી છો તે (ડ્રોપડાઉન બોક્ષ)",
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent / Respondent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તારીખ(જે દીવસે અરજી રજુ કરે તે તારીખ) (ટેક્ષ બોક્ષ અથવા કેલેન્ડર)",
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "read_only": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સ્થળ(ઓટોમેટીક ઉપર જે ડીસ્ટ્રીક્ટ સિલેક્ટ કર્યુ હોય એ)",
+            },
+            {
+                "key": "party_signature_name",
+                "label_en": "Name of Party Signing",
+                "label_gu": "પક્ષકારનું નામ",
+                "type": "text",
+                "required": True,
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "નીચે સહી કરનાર પક્ષકારનું નામ",
+                "description_gu": "પક્ષકારનુ નામ (ટેક્ષ બોક્ષ)",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 3.0,
+            "margin_right_cm": 3.0,
+            "font_family": "Lohit Gujarati",
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "is_vakalatnama": True,
+            "variant": "criminal",
+        },
+        "content_gu": """{{advocate_name}}
+{{advocate_qualification}}
+{{advocate_address}}
+{{advocate_mobile}}
+{{advocate_enrollment_number}}
+------------------------------------------------------------
+વકીલાતનામું
+મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+મુકામ :- {{place}}
+{{case_type}} નં. : {{case_number}}
+{{party_1_role}} :- {{party_1_name}}
+વિરુદ્ધ
+{{party_2_role}} :- {{party_2_name}}
+---------------------------------------------------------------------------------------------------------
+    અમો {{advocate_for}} તરીકે ઉપર દર્શાવેલ કેસમાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી હાજર રહેવા, અરજીઓ કરવા, પુરશીશ આપવા, દસ્તાવેજો રજૂ કરવા, પુરાવા આપવા, સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા, સમાધાન કરવા, પ્રમાણિત નકલ મેળવવા અપીલ કરવા, રિવિઝન કરવા તેમજ અન્ય કાયદેસરની કાર્યવાહી કરવા અને સદર કેસ સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
+
+    અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+પક્ષકારની સહી :- __________________                  એડવોકેટની સહી :- __________________
+
+પક્ષકારનું નામ :- {{party_signature_name}}                  એડવોકેટનું નામ :- {{advocate_name}}""",
+        "content_en": """{{advocate_name}}
+{{advocate_qualification}}
+{{advocate_address}}
+{{advocate_mobile}}
+{{advocate_enrollment_number}}
+------------------------------------------------------------
+VAKALATNAMA
+IN THE COURT OF THE HON'BLE {{court_name}},
+AT: {{place}}
+{{case_type}} No. : {{case_number}}
+{{party_1_role}} :- {{party_1_name}}
+VERSUS
+{{party_2_role}} :- {{party_2_name}}
+---------------------------------------------------------------------------------------------------------
+    We, as {{advocate_for}}, in the above-mentioned case, hereby empower and authorize Advocate Shri {{advocate_name}}, to appear on our behalf, to file applications, to submit purshish, to produce documents, to give evidence, to examine and cross-examine witnesses, to effect compromise, to obtain certified copies, to file appeals, to file revisions as well as to carry out other legal proceedings and to conduct all necessary legal proceedings in connection with the said case.
+
+    We accept all legal proceedings conducted by the said Advocate Shri on our behalf and the same shall remain binding upon us.
+
+Date : {{date}}
+Place : {{place}}
+
+Party's signature :- __________________                  Advocate's signature :- __________________
+
+Party's name :- {{party_signature_name}}                  Advocate's name :- {{advocate_name}}""",
+    },
+    {
+        "id": "vakilatnama_civil",
+        "name_en": "Vakalatnama (Civil)",
+        "name_gu": "વકીલાતનામું (સિવિલ)",
+        "category": "Civil",
+        "aliases": [
+            "vakilatnama civil",
+            "civil vakalatnama",
+            "vakalatnama civil",
+            "વકીલાતનામું સિવિલ",
+            "વકીલાતનામું",
+            "vakilatnama",
+            "vakalatnama",
+        ],
+        "fields": [
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Name",
+                "label_gu": "વકીલનું નામ",
+                "type": "text",
+                "required": True,
+                "source": "advocate_name",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_qualification",
+                "label_en": "Advocate Qualification",
+                "label_gu": "લાયકાત",
+                "type": "text",
+                "required": False,
+                "source": "advocate_qualification",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_address",
+                "label_en": "Advocate Address",
+                "label_gu": "સરનામું",
+                "type": "textarea",
+                "required": False,
+                "source": "advocate_address",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_mobile",
+                "label_en": "Advocate Mobile No.",
+                "label_gu": "મોબાઇલ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_mobile",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "મોબાઈલ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "advocate_enrollment_number",
+                "label_en": "Sanad / Enrollment No.",
+                "label_gu": "સનદ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_enrollment_number",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટનું નામ",
+                "type": "select",
+                "required": True,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કોર્ટ નુ નામ(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "additional_senior_civil_judge_acjm", "label_en": "Additional Senior Civil Judge & ACJM", "label_gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
+                    {"value": "principal_district_sessions_judge", "label_en": "Principal District & Sessions Judge", "label_gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
+                    {"value": "additional_civil_judge_jmfc", "label_en": "Additional Civil Judge & JMFC", "label_gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
+                    {"value": "civil_judge_jmfc", "label_en": "Civil Judge & JMFC", "label_gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
+                    {"value": "senior_civil_judge", "label_en": "Senior Civil Judge", "label_gu": "સિનિયર સિવિલ જજ"},
+                    {"value": "additional_district_judge", "label_en": "Additional District Judge", "label_gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
+                    {"value": "metropolitan_magistrate", "label_en": "Metropolitan Magistrate", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
+                    {"value": "court_of_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જિલ્લો",
+                "type": "select",
+                "required": True,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "જીલ્લો(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "amreli", "label_en": "Amreli", "label_gu": "અમરેલી"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "aravalli", "label_en": "Aravalli", "label_gu": "અરવલ્લી"},
+                    {"value": "banaskantha", "label_en": "Banaskantha", "label_gu": "બનાસકાંઠા"},
+                    {"value": "bharuch", "label_en": "Bharuch", "label_gu": "ભરૂચ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "botad", "label_en": "Botad", "label_gu": "બોટાદ"},
+                    {"value": "chhota_udepur", "label_en": "Chhota Udepur", "label_gu": "છોટા ઉદેપુર"},
+                    {"value": "dahod", "label_en": "Dahod", "label_gu": "દાહોદ"},
+                    {"value": "dang", "label_en": "Dang", "label_gu": "ડાંગ"},
+                    {"value": "devbhumi_dwarka", "label_en": "Devbhumi Dwarka", "label_gu": "દેવભૂમિ દ્વારકા"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "gir_somnath", "label_en": "Gir Somnath", "label_gu": "ગીર સોમનાથ"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "kheda", "label_en": "Kheda", "label_gu": "ખેડા"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mahisagar", "label_en": "Mahisagar", "label_gu": "મહીસાગર"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "morbi", "label_en": "Morbi", "label_gu": "મોરબી"},
+                    {"value": "narmada", "label_en": "Narmada", "label_gu": "નર્મદા"},
+                    {"value": "navsari", "label_en": "Navsari", "label_gu": "નવસારી"},
+                    {"value": "panchmahal", "label_en": "Panchmahal", "label_gu": "પંચમહાલ"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                    {"value": "porbandar", "label_en": "Porbandar", "label_gu": "પોરબંદર"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "sabarkantha", "label_en": "Sabarkantha", "label_gu": "સાબરકાંઠા"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "surendranagar", "label_en": "Surendranagar", "label_gu": "સુરેન્દ્રનગર"},
+                    {"value": "tapi", "label_en": "Tapi", "label_gu": "તાપી"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "valsad", "label_en": "Valsad", "label_gu": "વલસાડ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તાલુકો(ડ્રોપ બોક્ષ) ફરજીયાત નથી. જો કોઈ તાલુકો સિલેક્ટ કરે છે તો ડ્રાફ્ટીંગ મા ઓટોમેટીક તાલુકો આગળ થઈ જવો જોઈએ અને જિલ્લો પાછળ (દાત. કલોલ, ગાંધીનગર)",
+                "options": [
+                    {"value": t["gu"], "label_en": t["en"], "label_gu": t["gu"], "district_id": t["district_id"]}
+                    for t in TALUKAS
+                ],
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": True,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કેસ પ્રકાર(ડ્રોપ બોક્ષ)",
+                "options": [
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત"},
+                    {"value": "motor_accident_claim", "label_en": "Motor Accident Claim Petition", "label_gu": "મોટર અકસ્માત વળતર અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "commercial_suit", "label_en": "Commercial Suit", "label_gu": "કોમર્શિયલ મુકદમો"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": True,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+                "description_gu": "કેસ નંબર (દા.ત. ૧૦૧/૨૦૨૪)(ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "party_1_role",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "૦ ફરીયાદી ૦ અરજદાર ૦ વાદી (પક્ષકાર-૧ની ભુમિકા)(રેડીયો બટન)",
+                "options": [
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "party_1_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ દાખલ કરો",
+                "description_gu": "પક્ષકાર - ૧ નુ નામ (ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": True,
+                "source": "party_2_role",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "૦ આરોપી ૦ સામાવાળા ૦ પ્રતિવાદી (પક્ષકાર-૨ ની ભુમિકા)(રેડીયો બટન)",
+                "options": [
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent / Respondent", "label_gu": "સામાવાળા"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": True,
+                "source": "party_2_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ દાખલ કરો",
+                "description_gu": "પક્ષકાર - ૨ નુ નામ (ટેક્ષ બોક્ષ)",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Appearing On Behalf Of",
+                "label_gu": "કોના તરફથી છો તે",
+                "type": "select",
+                "required": True,
+                "source": "advocate_for",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "કોના તરફથી છો તે (ડ્રોપડાઉન બોક્ષ)",
+                "options": [
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent / Respondent", "label_gu": "સામાવાળા"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                ],
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તારીખ(જે દીવસે અરજી રજુ કરે તે તારીખ) (ટેક્ષ બોક્ષ અથવા કેલેન્ડર)",
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "read_only": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સ્થળ(ઓટોમેટીક ઉપર જે ડીસ્ટ્રીક્ટ સિલેક્ટ કર્યુ હોય એ)",
+            },
+            {
+                "key": "party_signature_name",
+                "label_en": "Name of Party Signing",
+                "label_gu": "પક્ષકારનું નામ",
+                "type": "text",
+                "required": True,
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "નીચે સહી કરનાર પક્ષકારનું નામ",
+                "description_gu": "પક્ષકારનુ નામ (ટેક્ષ બોક્ષ)",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 3.0,
+            "margin_right_cm": 3.0,
+            "font_family": "Lohit Gujarati",
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "is_vakalatnama": True,
+            "variant": "civil",
+        },
+        "content_gu": """{{advocate_name}}
+{{advocate_qualification}}
+{{advocate_address}}
+{{advocate_mobile}}
+{{advocate_enrollment_number}}
+------------------------------------------------------------
+વકીલાતનામું
+મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+મુકામ :- {{place}}
+{{case_type}} નં. : {{case_number}}
+{{party_1_role}} :- {{party_1_name}}
+વિરુદ્ધ
+{{party_2_role}} :- {{party_2_name}}
+---------------------------------------------------------------------------------------------------------
+    અમો {{advocate_for}} તરીકે ઉપર દર્શાવેલ દાવામાં એડવોકેટશ્રી {{advocate_name}}, ને અમારા વતી કરારદાદ કબુલ કરવા તથા કોર્ટમાં હાજર રહેવા, દસ્તાવેજો કરવા, પૈસા રજુ કરવા, પૈસા પરત લેવા, તેમના નામનો કોર્ટફીઝ રીફંડનો દાખલો લેવા, રકમો લેવા, અમારા વતી દાવો પરત ખેંચી લેવા, અપીલ કરવા તેમજ સદર દાવા સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.
+
+    અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે.
+
+તારીખ : {{date}}
+સ્થળ : {{place}}
+
+પક્ષકારની સહી :- __________________                  એડવોકેટની સહી :- __________________
+
+પક્ષકારનું નામ :- {{party_signature_name}}                  એડવોકેટનું નામ :- {{advocate_name}}""",
+        "content_en": """{{advocate_name}}
+{{advocate_qualification}}
+{{advocate_address}}
+{{advocate_mobile}}
+{{advocate_enrollment_number}}
+------------------------------------------------------------
+VAKALATNAMA
+IN THE COURT OF THE HON'BLE {{court_name}},
+AT: {{place}}
+{{case_type}} No. : {{case_number}}
+{{party_1_role}} :- {{party_1_name}}
+VERSUS
+{{party_2_role}} :- {{party_2_name}}
+---------------------------------------------------------------------------------------------------------
+    We, as {{advocate_for}}, in the above-mentioned suit, hereby empower and authorize Advocate Shri {{advocate_name}}, to accept compromise on our behalf and to appear before the Court, to execute documents, to deposit money, to receive refund of money, to obtain certificate of court-fees refund in his name, to receive amounts, to withdraw the suit on our behalf, to file appeals as well as to conduct all necessary legal proceedings in connection with the said suit.
+
+    We accept all legal proceedings conducted by the said Advocate Shri on our behalf and the same shall remain binding upon us.
+
+Date : {{date}}
+Place : {{place}}
+
+Party's signature :- __________________                  Advocate's signature :- __________________
+
+Party's name :- {{party_signature_name}}                  Advocate's name :- {{advocate_name}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

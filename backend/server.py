@@ -4870,6 +4870,8 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     if not ctx.get("advocate_mobile"):
         ctx["advocate_mobile"] = adv_mob
     adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("enrollment_no") or "").strip()
+    if not ctx.get("advocate_enrollment_number"):
+        ctx["advocate_enrollment_number"] = adv_bar
     if not ctx.get("advocate_enrollment_no"):
         ctx["advocate_enrollment_no"] = adv_bar
     if not ctx.get("advocate_sanad_no"):
@@ -4880,6 +4882,18 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["bar_council_no"] = adv_bar
     if not ctx.get("advocate_logo"):
         ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
+
+    # Vakalatnama specific fields: party_signature_name and advocate_for
+    if "party_signature_name" in values and values.get("party_signature_name") is not None:
+        ctx["party_signature_name"] = str(values.get("party_signature_name") or "").strip()
+    elif not ctx.get("party_signature_name"):
+        ctx["party_signature_name"] = str(ctx.get("party_sign_name") or "").strip()
+    if ctx.get("party_signature_name") and not ctx.get("party_sign_name"):
+        ctx["party_sign_name"] = ctx["party_signature_name"]
+
+    raw_adv_for = ctx.get("advocate_for") or values.get("advocate_for")
+    if raw_adv_for:
+        ctx["advocate_for"] = resolve_party_role_label(raw_adv_for, language)
 
     # Signature/pleading role & derived party info — the side the advocate represents.
     side = ctx.get("representing_party") or ctx.get("advocate_side") or "party"
@@ -5092,7 +5106,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
         is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
-        if is_closing_or_reopen:
+        if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
+            # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
+            pass
+        elif is_closing_or_reopen:
             ctx["advocate_name"] = default_adv_desig
         elif not client_adv or client_adv in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate") or "ના એડવોકેટ" in client_adv or client_adv.startswith("Advocate for"):
             ctx["advocate_name"] = default_adv_desig

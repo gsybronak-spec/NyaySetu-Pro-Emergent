@@ -737,12 +737,16 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
         )
 
         # 6. Advocate Signature
-        if is_court or is_title:
+        if is_court or is_title or line.startswith("સદર") or line.startswith("અમો") or line.startswith("આથી") or line.startswith("We") or line.startswith("In the"):
             in_signature_block = False
 
         if is_dash_line:
-            in_signature_block = True
-            is_signature = True
+            if curr_non_idx >= len(nonempty_lines) - 5 or is_next_signature:
+                in_signature_block = True
+                is_signature = True
+            else:
+                in_signature_block = False
+                is_signature = False
         elif in_signature_block:
             is_signature = True
         else:
@@ -1814,21 +1818,34 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
 
 def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings: dict = None, ctx: dict = None):
     """Specialized precision renderer for Vakalatnama documents to mirror the authoritative source PDFs."""
+    register_fonts()
     s = get_doc_settings(settings)
     pagesize = _resolve_pagesize(s.get("page_size", "A4"))
     page_w, page_h = pagesize
 
-    margin_l = 85.0
-    margin_r = 85.0
-    margin_t = 65.0
-    margin_b = 55.0
+    # Canonical source margins: Left 3 cm, Right 3 cm, Top 2 cm, Bottom 2 cm
+    margin_l = 85.04
+    margin_r = 85.04
+    margin_t = 56.69
+    margin_b = 56.69
     max_width = page_w - margin_l - margin_r
+    col_w = max_width / 2.0
 
-    family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
-    hb_font = _new_hb_font(family)
-    if not hb_font:
-        raise RuntimeError("HarfBuzz font unavailable for Vakalatnama")
-    upem = hb_font.face.upem
+    ctx = dict(ctx or {})
+
+    # Extract advocate lines from ctx if available, or parse from content
+    adv_name = (ctx.get("advocate_name") or "").strip()
+    adv_qual = (ctx.get("advocate_qualification") or "").strip()
+    adv_addr = (ctx.get("advocate_address") or "").strip()
+    adv_mob = (ctx.get("advocate_mobile") or "").strip()
+    adv_sanad = (
+        ctx.get("advocate_enrollment_number")
+        or ctx.get("advocate_enrollment_no")
+        or ctx.get("advocate_sanad_no")
+        or ctx.get("sanad_number")
+        or ctx.get("bar_council_no")
+        or ""
+    ).strip()
 
     raw_lines = [ln.strip() for ln in content.splitlines()]
     sections = [[]]
@@ -1840,253 +1857,526 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         else:
             sections[-1].append(ln)
 
-    advocate_lines = sections[0] if len(sections) > 0 else []
+    advocate_lines_raw = sections[0] if len(sections) > 0 else []
     meta_lines = sections[1] if len(sections) > 1 else []
     rest_lines = []
     for s_idx in range(2, len(sections)):
         rest_lines.extend(sections[s_idx])
 
+    # Assemble advocate lines (top right) in exact sequence: Name, Qualification, Address, Mobile, Sanad
+    advocate_lines = []
+    if adv_name and not ("ના એડવોકેટ" in adv_name or adv_name.startswith("Advocate for")):
+        advocate_lines.append(adv_name)
+    elif advocate_lines_raw and not ("ના એડવોકેટ" in advocate_lines_raw[0] or advocate_lines_raw[0].startswith("Advocate for")):
+        advocate_lines.append(advocate_lines_raw[0])
+    elif adv_name:
+        advocate_lines.append(adv_name)
+
+    if adv_qual:
+        advocate_lines.append(adv_qual)
+    elif len(advocate_lines_raw) > 1 and advocate_lines_raw[1]:
+        advocate_lines.append(advocate_lines_raw[1])
+
+    if adv_addr:
+        for addr_ln in adv_addr.splitlines():
+            if addr_ln.strip():
+                advocate_lines.append(addr_ln.strip())
+    elif len(advocate_lines_raw) > 2 and advocate_lines_raw[2]:
+        advocate_lines.append(advocate_lines_raw[2])
+
+    if adv_mob:
+        m_prefix = "મોબાઈલ નં. " if language == "gu" else "Mobile No. "
+        advocate_lines.append(adv_mob if any(p in adv_mob for p in ("મોબાઈલ", "Mobile")) else f"{m_prefix}{adv_mob}")
+    elif len(advocate_lines_raw) > 3 and advocate_lines_raw[3]:
+        advocate_lines.append(advocate_lines_raw[3])
+
+    if adv_sanad:
+        s_prefix = "સનદ નં. " if language == "gu" else "Sanad No. "
+        advocate_lines.append(adv_sanad if any(p in adv_sanad for p in ("સનદ", "Sanad")) else f"{s_prefix}{adv_sanad}")
+    elif len(advocate_lines_raw) > 4 and advocate_lines_raw[4]:
+        advocate_lines.append(advocate_lines_raw[4])
+
+    # Clean out instructional labels like (ડ્રોપ બોક્ષ), (ટેક્ષ બોક્ષ)
+    def clean_labels(t):
+        return re.sub(r"\((?:ડ્રોપ બોક્ષ|ટેક્ષ બોક્ષ|ઓટોસેવ પણ એડીટેબલ|રેડીયો બટન|ડ્રોપડાઉન બોક્ષ)\)", "", t).strip()
+
+    advocate_lines = [clean_labels(al) for al in advocate_lines if al.strip()]
+
+    # Parse court, place, case line, parties
     court_lines = []
     case_line = ""
     applicant_line = ""
-    versus_line = "વિરુદ્ધ" if language == "gu" else "Versus"
+    versus_line = "વિરુદ્ધ" if language == "gu" else "VERSUS"
     opponent_line = ""
     saw_vs = False
 
     for ln in meta_lines:
-        if "વકીલાતનામું" in ln or "VAKALATNAMA" in ln:
+        clean_ln = clean_labels(ln)
+        if "વકીલાતનામું" in clean_ln or "VAKALATNAMA" in clean_ln.upper():
             continue
-        if "સાહેબશ્રીની કોર્ટમાં" in ln or "IN THE COURT OF" in ln or ln.startswith("મહેરબાન"):
-            court_lines.append(ln)
-        elif court_lines and not case_line and not applicant_line and not any(k in ln for k in ("નં.", "No.", "વિરુદ્ધ", "Versus")):
-            court_lines.append(ln)
-        elif any(k in ln for k in ("નં.", "No.", "દાવો નં.", "કેસ નં.", "દાવા નં.")):
-            case_line = ln
-        elif ln in ("વિરુદ્ધ", "Versus", "વિરૂદ્ધ"):
+        if "સાહેબશ્રીની કોર્ટમાં" in clean_ln or "IN THE COURT OF" in clean_ln.upper() or clean_ln.startswith("મહેરબાન"):
+            court_lines.append(clean_ln)
+        elif court_lines and not case_line and not applicant_line and not any(k in clean_ln for k in ("નં.", "No.", "વિરુદ્ધ", "Versus", "VERSUS")):
+            court_lines.append(clean_ln)
+        elif any(k in clean_ln for k in ("નં.", "No.", "દાવો નં.", "કેસ નં.", "દાવા નં.")):
+            case_line = clean_ln
+        elif clean_ln in ("વિરુદ્ધ", "Versus", "VERSUS", "વિરૂદ્ધ"):
             saw_vs = True
         elif not saw_vs and not applicant_line:
-            applicant_line = ln
+            applicant_line = clean_ln
         elif saw_vs and not opponent_line:
-            opponent_line = ln
+            opponent_line = clean_ln
+
+    if not court_lines and ctx.get("court_name"):
+        c_name = ctx["court_name"]
+        court_lines = [
+            f"મહેરબાન {c_name} સાહેબશ્રીની કોર્ટમાં," if language == "gu" else f"IN THE COURT OF THE HON'BLE {c_name},"
+        ]
+        pl = ctx.get("place") or ctx.get("taluka_place") or ""
+        if pl:
+            court_lines.append(f"મુકામ :- {pl}" if language == "gu" else f"AT: {pl}")
+
+    if not case_line and (ctx.get("case_type") or ctx.get("case_number")):
+        ct = ctx.get("case_type") or ("કેસ" if language == "gu" else "Case")
+        cn = ctx.get("case_number") or ""
+        case_line = f"{ct} નં. : {cn}" if language == "gu" else f"{ct} No. : {cn}"
+
+    if not applicant_line and (ctx.get("party_1_role") or ctx.get("party_1_name")):
+        p1_r = ctx.get("party_1_role") or ("વાદી" if language == "gu" else "Plaintiff")
+        p1_n = ctx.get("party_1_name") or ""
+        applicant_line = f"{p1_r} :- {p1_n}"
+
+    if not opponent_line and (ctx.get("party_2_role") or ctx.get("party_2_name")):
+        p2_r = ctx.get("party_2_role") or ("પ્રતિવાદી" if language == "gu" else "Defendant")
+        p2_n = ctx.get("party_2_name") or ""
+        opponent_line = f"{p2_r} :- {p2_n}"
 
     body_lines = []
     date_lines = []
     for ln in rest_lines:
-        if ln.startswith("તા.") or ln.startswith("સ્થળ.") or ln.startswith("Date") or ln.startswith("Place"):
-            date_lines.append(ln)
-        elif "સહી" in ln or "Signature" in ln or "પક્ષકારનું નામ" in ln or "Party's name" in ln:
+        clean_ln = clean_labels(ln)
+        if clean_ln.startswith("તારીખ") or clean_ln.startswith("તા.") or clean_ln.startswith("સ્થળ") or clean_ln.startswith("Date") or clean_ln.startswith("Place"):
+            date_lines.append(clean_ln)
+        elif "સહી" in clean_ln or "signature" in clean_ln.lower() or "પક્ષકારનું નામ" in clean_ln or "party's name" in clean_ln.lower() or "એડવોકેટનું નામ" in clean_ln or "advocate's name" in clean_ln.lower():
             pass
         else:
-            body_lines.append(ln)
+            if clean_ln.strip():
+                cleaned_body = clean_ln.strip()
+                cleaned_body = re.sub(r"એડવોકેટશ્રી\s+એડવોકેટ\s+", "એડવોકેટશ્રી ", cleaned_body)
+                cleaned_body = re.sub(r"Advocate\s+Shri\s+Adv\.\s*", "Advocate Shri ", cleaned_body)
+                cleaned_body = re.sub(r"Advocate\s+Adv\.\s*", "Advocate ", cleaned_body)
+                body_lines.append(cleaned_body)
 
-    if not applicant_line and ctx:
-        applicant_line = ctx.get("party_line") or ""
-    if not opponent_line and ctx:
-        opponent_line = ctx.get("opposite_party_line") or ""
-    if not case_line and ctx:
-        c_type = ctx.get("case_type") or "દાવા"
-        c_num = ctx.get("case_number") or "____ / 20__"
-        case_line = f"{c_type} નં. {c_num}"
+    if not date_lines:
+        d_val = ctx.get("date") or ctx.get("date_display") or ""
+        p_val = ctx.get("place") or ctx.get("taluka_place") or ""
+        date_lines = [
+            f"તારીખ : {d_val}" if language == "gu" else f"Date : {d_val}",
+            f"સ્થળ : {p_val}" if language == "gu" else f"Place : {p_val}",
+        ]
 
-    if applicant_line and ":-" not in applicant_line:
-        applicant_line = re.sub(r"\s*[:\-]+\s*", " :- ", applicant_line)
-        if " :- " not in applicant_line:
-            parts = applicant_line.split(" ", 1)
-            applicant_line = f"{parts[0]} :- {parts[1]}" if len(parts) > 1 else f"{parts[0]} :-"
-    if opponent_line and ":-" not in opponent_line:
-        opponent_line = re.sub(r"\s*[:\-]+\s*", " :- ", opponent_line)
-        if " :- " not in opponent_line:
-            parts = opponent_line.split(" ", 1)
-            opponent_line = f"{parts[0]} :- {parts[1]}" if len(parts) > 1 else f"{parts[0]} :-"
+    p_name = clean_labels((ctx.get("party_signature_name") or ctx.get("party_sign_name") or "").strip())
+    raw_an = (ctx.get("advocate_name") or (advocate_lines[0] if advocate_lines else "")).strip()
+    if "ના એડવોકેટ" in raw_an or raw_an.startswith("Advocate for"):
+        raw_an = (advocate_lines[0] if advocate_lines else "").strip()
+    a_name = clean_labels(raw_an)
 
-    p_name = (ctx or {}).get("party_sign_name") or (ctx or {}).get("party_name") or ""
-    a_name = (ctx or {}).get("advocate_name") or (advocate_lines[0] if advocate_lines else "")
-
-    all_strings = raw_lines + advocate_lines + court_lines + [case_line, applicant_line, versus_line, opponent_line] + body_lines + date_lines + [
-        "વકીલાતનામું", "VAKALATNAMA", "વિરુદ્ધ", "Versus", "પક્ષકારની સહી :- __________________",
-        "એડવોકેટની સહી :- __________________", f"પક્ષકારનું નામ :- {p_name}", f"એડવોકેટનું નામ :- {a_name}",
-        "પક્ષકારની સહી :-", "એડવોકેટની સહી :-", "પક્ષકારનું નામ :-", "એડવોકેટનું નામ :-",
-        "Party's signature :- __________________", "Advocate's signature :- __________________",
-        f"Party's name :- {p_name}", f"Advocate's name :- {a_name}",
-        "[વકીલ શ્રીનુ નામ]", "[લાયકાત]", "[સરનામુ]", "[મોબાઈલ નં]", "[સનદ નં]",
-        "[દાવા] નં. [____ / 20__]", "[કેસ પ્રકાર] નં. [____ / 20__]", "મહેરબાન [________] સાહેબશ્રીની કોર્ટમાં,",
-        "[____]", "તા. [   ]", "સ્થળ. [   ]", "મહેરબાન ________ સાહેબશ્રીની કોર્ટમાં,",
-        "દાવા નં. ____ / 20__", "કેસ પ્રકાર નં. ____ / 20__", "[અરજદાર/વાદી] :-", "[સામાવાળા/પ્રતિવાદી] :-",
-        "[ફરીયાદી/અરજદાર/વાદી] :-", "[આરોપી/સામાવાળા/પ્રતિવાદી] :-"
-    ]
-
-    used_gids = set()
-    for s_item in all_strings:
-        for word in s_item.split():
-            for g in _shape_hb_word(hb_font, upem, word, 12.0):
-                used_gids.add(g["gid"])
-                
-    for bln in body_lines:
-        lines_wrap, _ = _wrap_hb_lines(hb_font, upem, bln, 10.5, max_width, indent_pt=28.0)
-        for ln in lines_wrap:
-            for w in ln["words"]:
-                for g in w:
-                    used_gids.add(g["gid"])
+    # Exact font sizes per canonical specification:
+    if language == "gu":
+        adv_name_size = 18.0
+        adv_detail_size = 14.0
+        title_size = 18.0
+        court_size = 15.0
+        mukam_size = 13.0
+        case_size = 13.0
+        party_size = 13.0
+        versus_size = 13.0
+        body_size = 13.0
+        date_size = 13.0
+        sig_size = 13.0
+        name_size = 13.0
+        body_line_h = 18.0
+        body_indent = 28.35
+    else:
+        adv_name_size = 18.0
+        adv_detail_size = 14.0
+        title_size = 18.0
+        court_size = 16.0
+        mukam_size = 14.0
+        case_size = 14.0
+        party_size = 14.0
+        versus_size = 14.0
+        body_size = 14.0
+        date_size = 14.0
+        sig_size = 14.0
+        name_size = 14.0
+        body_line_h = 18.5
+        body_indent = 28.35
 
     buf = io.BytesIO()
-    with tempfile.TemporaryDirectory() as tmpdir:
-        font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir, family)
-        c = pdfcanvas.Canvas(buf, pagesize=pagesize)
 
-        def draw_hb_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
-            if not text.strip():
-                return
-            c.setFont(font_name, size_pt)
-            w_shaped = _shape_hb_word(hb_font, upem, text, size_pt)
-            line_w = sum(g["adv"] for g in w_shaped)
-            if align == "center":
-                cur_x = x_start + (width_limit - line_w) / 2.0
-            elif align == "right":
-                cur_x = x_start + width_limit - line_w
-            else:
-                cur_x = x_start
-                
-            for g in w_shaped:
-                if g["gid"] in gid_to_pua:
-                    ch = chr(gid_to_pua[g["gid"]])
-                    c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], ch)
-                cur_x += g["adv"]
-                
-            if underline:
-                c.setLineWidth(1.0)
-                if align == "center":
-                    ux = x_start + (width_limit - line_w) / 2.0
-                elif align == "right":
-                    ux = x_start + width_limit - line_w
-                else:
-                    ux = x_start
-                c.line(ux, y_pos - 2.5, ux + line_w, y_pos - 2.5)
+    # Check if uharfbuzz is available for HarfBuzz shaping
+    has_uharfbuzz = False
+    try:
+        import uharfbuzz
+        has_uharfbuzz = True
+    except (ImportError, ModuleNotFoundError):
+        has_uharfbuzz = False
 
-        y = page_h - margin_t
-        
-        # 1. Top Header: Justice Symbol (Left) & Advocate Details (Right)
-        justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
-        img_size = 94.0
-        if os.path.exists(justice_img_path):
-            c.drawImage(justice_img_path, margin_l, y - img_size + 14, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
-
-        adv_y = y
-        for i, aln in enumerate(advocate_lines):
-            sz = 13.5 if i == 0 else 10.0
-            draw_hb_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=(i == 0))
-            adv_y -= (sz * 1.55)
-
-        y = min(y - img_size - 4, adv_y - 8)
-
-        # Full-width horizontal separator line 1
-        c.setLineWidth(1.0)
-        c.line(margin_l, y, margin_l + max_width, y)
-        y -= 26
-
-        # 2. Prominent Centered Title: "વકીલાતનામું"
-        title_text = "વકીલાતનામું" if language == "gu" else "VAKALATNAMA"
-        draw_hb_line(title_text, 16.0, margin_l, y, align="center", width_limit=max_width, is_bold=True)
-        y -= 28
-
-        # 3. Court Details (Centered)
-        for cln in court_lines:
-            draw_hb_line(cln, 11.0, margin_l, y, align="center", width_limit=max_width)
-            y -= 17
-        y -= 4
-
-        # 4. Case Details (Right Aligned)
-        if case_line:
-            draw_hb_line(case_line, 11.0, margin_l, y, align="right", width_limit=max_width)
-            y -= 22
-        else:
-            y -= 10
-
-        # 5. Parties Block
-        if applicant_line:
-            draw_hb_line(applicant_line, 11.0, margin_l, y, align="left", width_limit=max_width)
-            y -= 18
-            
-        draw_hb_line(versus_line, 11.0, margin_l, y, align="center", width_limit=max_width, is_bold=True)
-        y -= 18
-        
-        if opponent_line:
-            draw_hb_line(opponent_line, 11.0, margin_l, y, align="left", width_limit=max_width)
-            y -= 18
-            
-        y -= 6
-
-        # Full-width horizontal separator line 2
-        c.setLineWidth(1.0)
-        c.line(margin_l, y, margin_l + max_width, y)
-        y -= 22
-
-        # 6. Legal Body Paragraphs
-        for bln in body_lines:
-            lines_wrap, space_adv = _wrap_hb_lines(hb_font, upem, bln, 10.5, max_width, indent_pt=28.0)
-            for ln in lines_wrap:
-                w_list = ln["words"]
-                width = ln["width"]
-                line_indent = ln.get("indent", 0.0)
-                line_avail = max_width - line_indent
-                extra = 0.0
-                if not ln.get("is_last", False) and len(w_list) > 1:
-                    extra = (line_avail - width) / max(len(w_list) - 1, 1)
-                
-                cur_x = margin_l + line_indent
-                c.setFont(font_name, 10.5)
-                for wi, w in enumerate(w_list):
-                    for g in w:
-                        if g["gid"] in gid_to_pua:
-                            ch = chr(gid_to_pua[g["gid"]])
-                            c.drawString(cur_x + g["xoff"], y + g["yoff"], ch)
-                        cur_x += g["adv"]
-                    if wi < len(w_list) - 1:
-                        cur_x += space_adv + extra
-                y -= 17.5
-            y -= 8.0
-
-        y -= 6.0
-
-        # 7. Date and Place (Left)
-        date_y = y
-        for dln in date_lines:
-            draw_hb_line(dln, 10.5, margin_l, date_y, align="left", width_limit=max_width)
-            date_y -= 17.0
-        if not date_lines:
-            draw_hb_line(f"તા. {(ctx or {}).get('date_display', '')}", 10.5, margin_l, date_y, align="left", width_limit=max_width)
-            date_y -= 17.0
-            draw_hb_line(f"સ્થળ. {(ctx or {}).get('taluka_place', '')}", 10.5, margin_l, date_y, align="left", width_limit=max_width)
-
-        # 8. Signatures Block (Two Columns: Left = Client, Right = Advocate)
-        sig_y = y - 35.0
-        col_w = max_width / 2.0
-        
-        lbl_p_sig = "પક્ષકારની સહી :- __________________" if language == "gu" else "Party's signature :- __________________"
-        lbl_a_sig = "એડવોકેટની સહી :- __________________" if language == "gu" else "Advocate's signature :- __________________"
-        p_name_display = p_name if p_name else "__________________"
-        a_name_display = a_name if a_name else "__________________"
-        lbl_p_name = f"પક્ષકારનું નામ :- {p_name_display}" if language == "gu" else f"Party's name :- {p_name_display}"
-        lbl_a_name = f"એડવોકેટનું નામ :- {a_name_display}" if language == "gu" else f"Advocate's name :- {a_name_display}"
-        
-        draw_hb_line(lbl_p_sig, 10.5, margin_l, sig_y, align="left", width_limit=col_w)
-        draw_hb_line(lbl_a_sig, 10.5, margin_l + col_w, sig_y, align="left", width_limit=col_w)
-        
-        sig_y -= 38.0
-        
-        draw_hb_line(lbl_p_name, 10.5, margin_l, sig_y, align="left", width_limit=col_w)
-        draw_hb_line(lbl_a_name, 10.5, margin_l + col_w, sig_y, align="left", width_limit=col_w)
-
-        c.save()
+    if language == "gu" and has_uharfbuzz:
         try:
-            pdfmetrics._fonts.pop(font_name, None)
-        except Exception:
-            pass
+            family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
+            hb_font = _new_hb_font(family)
+            if hb_font:
+                upem = hb_font.face.upem
+                lbl_p_sig = "પક્ષકારની સહી :- "
+                lbl_a_sig = "એડવોકેટની સહી :- "
+                lbl_p_name = f"પક્ષકારનું નામ :- {p_name}" if p_name else "પક્ષકારનું નામ :- "
+                lbl_a_name = f"એડવોકેટનું નામ :- {a_name}" if a_name else "એડવોકેટનું નામ :- "
 
+                all_strings = raw_lines + advocate_lines + court_lines + [
+                    case_line, applicant_line, versus_line, opponent_line,
+                    "વકીલાતનામું", lbl_p_sig, lbl_a_sig, lbl_p_name, lbl_a_name,
+                ] + body_lines + date_lines
+
+                used_gids = set()
+                for s_item in all_strings:
+                    for word in s_item.split():
+                        for g in _shape_hb_word(hb_font, upem, word, 14.0):
+                            if g.get("gid") is not None:
+                                used_gids.add(g["gid"])
+
+                for bln in body_lines:
+                    lines_wrap, _ = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent)
+                    for ln in lines_wrap:
+                        for w in ln["words"]:
+                            for g in w:
+                                if g.get("gid") is not None:
+                                    used_gids.add(g["gid"])
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir, family)
+                    c = pdfcanvas.Canvas(buf, pagesize=pagesize)
+
+                    def draw_hb_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
+                        if not text.strip():
+                            return
+                        c.setFont(font_name, size_pt)
+                        w_shaped = _shape_hb_word(hb_font, upem, text, size_pt)
+                        line_w = sum(g["adv"] for g in w_shaped)
+                        if align == "center":
+                            cur_x = x_start + (width_limit - line_w) / 2.0
+                        elif align == "right":
+                            cur_x = x_start + width_limit - line_w
+                        else:
+                            cur_x = x_start
+
+                        for g in w_shaped:
+                            if g["gid"] in gid_to_pua:
+                                ch = chr(gid_to_pua[g["gid"]])
+                                c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], ch)
+                                if is_bold:
+                                    c.drawString(cur_x + g["xoff"] + 0.45, y_pos + g["yoff"], ch)
+                            cur_x += g["adv"]
+
+                        if underline:
+                            c.setLineWidth(1.0)
+                            ux = cur_x - line_w if align == "right" else (x_start + (width_limit - line_w) / 2.0 if align == "center" else x_start)
+                            c.line(ux, y_pos - 2.5, ux + line_w, y_pos - 2.5)
+
+                    y = page_h - margin_t
+
+                    # Top Header: Justice Symbol (Left) & Advocate Details (Right)
+                    justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
+                    img_size = 76.0
+                    if os.path.exists(justice_img_path):
+                        c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
+
+                    adv_y = y
+                    for i, aln in enumerate(advocate_lines):
+                        sz = adv_name_size if i == 0 else adv_detail_size
+                        draw_hb_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=True)
+                        adv_y -= (sz * 1.25)
+
+                    y = min(y - img_size - 4, adv_y - 4)
+
+                    # Horizontal Rule 1
+                    c.setLineWidth(1.0)
+                    c.line(margin_l, y, margin_l + max_width, y)
+                    y -= 16.0
+
+                    # Title
+                    draw_hb_line("વકીલાતનામું", title_size, margin_l, y, align="center", width_limit=max_width, is_bold=True, underline=True)
+                    y -= 22.0
+
+                    # Court Heading & Mukam
+                    for cln in court_lines:
+                        is_first = (cln == court_lines[0])
+                        sz = court_size if is_first else mukam_size
+                        draw_hb_line(cln, sz, margin_l, y, align="center", width_limit=max_width, is_bold=is_first)
+                        y -= (sz * 1.3)
+                    y -= 4.0
+
+                    # Case Line
+                    if case_line:
+                        draw_hb_line(case_line, case_size, margin_l, y, align="right", width_limit=max_width, is_bold=False)
+                        y -= (case_size * 1.35)
+
+                    # Parties
+                    if applicant_line:
+                        draw_hb_line(applicant_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+                        y -= (party_size * 1.3)
+                    draw_hb_line(versus_line, versus_size, margin_l, y, align="center", width_limit=max_width, is_bold=True)
+                    y -= (versus_size * 1.3)
+                    if opponent_line:
+                        draw_hb_line(opponent_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+                        y -= (party_size * 1.3)
+                    y -= 4.0
+
+                    # Horizontal Rule 2
+                    c.setLineWidth(1.0)
+                    c.line(margin_l, y, margin_l + max_width, y)
+                    y -= 16.0
+
+                    # Legal Body Paragraphs
+                    for bln in body_lines:
+                        lines_wrap, space_adv = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent)
+                        for ln in lines_wrap:
+                            w_list = ln["words"]
+                            width = ln["width"]
+                            line_indent = ln.get("indent", 0.0)
+                            line_avail = max_width - line_indent
+                            extra = 0.0
+                            if not ln.get("is_last", False) and len(w_list) > 1:
+                                extra = (line_avail - width) / max(len(w_list) - 1, 1)
+
+                            cur_x = margin_l + line_indent
+                            c.setFont(font_name, body_size)
+                            for wi, w in enumerate(w_list):
+                                for g in w:
+                                    if g["gid"] in gid_to_pua:
+                                        ch = chr(gid_to_pua[g["gid"]])
+                                        c.drawString(cur_x + g["xoff"], y + g["yoff"], ch)
+                                    cur_x += g["adv"]
+                                if wi < len(w_list) - 1:
+                                    cur_x += space_adv + extra
+                            y -= body_line_h
+                        y -= 8.0
+                    y -= 6.0
+
+                    # Date & Place
+                    for dln in date_lines:
+                        draw_hb_line(dln, date_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+                        y -= (date_size * 1.35)
+                    y -= 14.0
+
+                    # Signatures
+                    draw_hb_line(lbl_p_sig, sig_size, margin_l, y, align="left", width_limit=col_w)
+                    c.setLineWidth(0.8)
+                    w_sig_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_sig, sig_size))
+                    c.line(margin_l + w_sig_p + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+
+                    draw_hb_line(lbl_a_sig, sig_size, margin_l + col_w, y, align="left", width_limit=col_w)
+                    w_sig_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_sig, sig_size))
+                    c.line(margin_l + col_w + w_sig_a + 2, y - 1, margin_l + max_width, y - 1)
+                    y -= 22.0
+
+                    # Names
+                    draw_hb_line(lbl_p_name, name_size, margin_l, y, align="left", width_limit=col_w)
+                    if not p_name:
+                        w_name_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_name, name_size))
+                        c.line(margin_l + w_name_p + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+
+                    draw_hb_line(lbl_a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
+                    if not a_name:
+                        w_name_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_name, name_size))
+                        c.line(margin_l + col_w + w_name_a + 2, y - 1, margin_l + max_width, y - 1)
+
+                    c.save()
+                    try:
+                        pdfmetrics._fonts.pop(font_name, None)
+                    except Exception:
+                        pass
+
+                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    meta = {
+                        "engine": "harfbuzz_vakalatnama",
+                        "font_family": family,
+                        "font_version": GUJARATI_FONT_VERSIONS.get(family, "unknown"),
+                    }
+                    return b64, meta
+        except Exception:
+            buf = io.BytesIO()
+
+    # Standard ReportLab Canvas Renderer (for English and pure Python Gujarati)
+    c = pdfcanvas.Canvas(buf, pagesize=pagesize)
+    registered = pdfmetrics.getRegisteredFontNames()
+    if language == "gu":
+        family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
+        font_normal = family if family in registered else ("NotoSansGujarati" if "NotoSansGujarati" in registered else "Helvetica")
+        font_bold = f"{font_normal}-Bold" if f"{font_normal}-Bold" in registered else font_normal
+    else:
+        font_normal = "Times-Roman"
+        font_bold = "Times-Bold"
+
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    def draw_canvas_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
+        if not text.strip():
+            return
+        fname = font_bold if is_bold else font_normal
+        c.setFont(fname, size_pt)
+        lw = stringWidth(text, fname, size_pt)
+        if align == "center":
+            cur_x = x_start + (width_limit - lw) / 2.0
+        elif align == "right":
+            cur_x = x_start + width_limit - lw
+        else:
+            cur_x = x_start
+        c.drawString(cur_x, y_pos, text)
+        if underline:
+            c.setLineWidth(1.0)
+            c.line(cur_x, y_pos - 2.5, cur_x + lw, y_pos - 2.5)
+
+    def draw_canvas_paragraph(para_text, size_pt, x_start, y_pos, width_limit=max_width, line_height=18.0, indent_pt=28.35):
+        fname = font_normal
+        c.setFont(fname, size_pt)
+        words = para_text.strip().split()
+        if not words:
+            return y_pos
+        cur_y = y_pos
+        line_idx = 0
+        i = 0
+        while i < len(words):
+            cur_indent = indent_pt if line_idx == 0 else 0.0
+            avail = width_limit - cur_indent
+            line_words = []
+            line_w = 0.0
+            while i < len(words):
+                w = words[i]
+                w_w = stringWidth(w, fname, size_pt)
+                space_w = stringWidth(" ", fname, size_pt) if line_words else 0.0
+                if line_w + space_w + w_w <= avail or not line_words:
+                    line_words.append(w)
+                    line_w += space_w + w_w
+                    i += 1
+                else:
+                    break
+            is_last = (i >= len(words))
+            cur_x = x_start + cur_indent
+            if not is_last and len(line_words) > 1:
+                total_word_w = sum(stringWidth(w, fname, size_pt) for w in line_words)
+                space_adv = (avail - total_word_w) / max(len(line_words) - 1, 1)
+            else:
+                space_adv = stringWidth(" ", fname, size_pt)
+            for w in line_words:
+                c.drawString(cur_x, cur_y, w)
+                cur_x += stringWidth(w, fname, size_pt) + space_adv
+            cur_y -= line_height
+            line_idx += 1
+        return cur_y
+
+    y = page_h - margin_t
+
+    # 1. Top Header: Justice Symbol (Left) & Advocate Details (Right)
+    justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
+    img_size = 76.0
+    if os.path.exists(justice_img_path):
+        c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
+
+    adv_y = y
+    for i, aln in enumerate(advocate_lines):
+        sz = adv_name_size if i == 0 else adv_detail_size
+        draw_canvas_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=True)
+        adv_y -= (sz * 1.25)
+
+    y = min(y - img_size - 4, adv_y - 4)
+
+    # Upper Horizontal Rule
+    c.setLineWidth(1.0)
+    c.line(margin_l, y, margin_l + max_width, y)
+    y -= 16.0
+
+    # Title
+    doc_title = "વકીલાતનામું" if language == "gu" else "VAKALATNAMA"
+    draw_canvas_line(doc_title, title_size, margin_l, y, align="center", width_limit=max_width, is_bold=True, underline=True)
+    y -= 22.0
+
+    # Court Heading & Mukam (Place)
+    for cln in court_lines:
+        is_first = (cln == court_lines[0])
+        sz = court_size if is_first else mukam_size
+        draw_canvas_line(cln, sz, margin_l, y, align="center", width_limit=max_width, is_bold=is_first)
+        y -= (sz * 1.3)
+    y -= 4.0
+
+    # Case Line
+    if case_line:
+        draw_canvas_line(case_line, case_size, margin_l, y, align="right", width_limit=max_width, is_bold=False)
+        y -= (case_size * 1.35)
+
+    # Parties
+    if applicant_line:
+        draw_canvas_line(applicant_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+        y -= (party_size * 1.3)
+    draw_canvas_line(versus_line, versus_size, margin_l, y, align="center", width_limit=max_width, is_bold=True)
+    y -= (versus_size * 1.3)
+    if opponent_line:
+        draw_canvas_line(opponent_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+        y -= (party_size * 1.3)
+    y -= 4.0
+
+    # Lower Horizontal Rule
+    c.setLineWidth(1.0)
+    c.line(margin_l, y, margin_l + max_width, y)
+    y -= 16.0
+
+    # Legal Body Paragraphs
+    for bln in body_lines:
+        y = draw_canvas_paragraph(bln, body_size, margin_l, y, width_limit=max_width, line_height=body_line_h, indent_pt=body_indent)
+        y -= 8.0
+    y -= 6.0
+
+    # Date & Place
+    for dln in date_lines:
+        draw_canvas_line(dln, date_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
+        y -= (date_size * 1.35)
+    y -= 14.0
+
+    # Side-by-side Signatures
+    lbl_p_sig = "પક્ષકારની સહી :- " if language == "gu" else "Party's signature :- "
+    lbl_a_sig = "એડવોકેટની સહી :- " if language == "gu" else "Advocate's signature :- "
+    draw_canvas_line(lbl_p_sig, sig_size, margin_l, y, align="left", width_limit=col_w)
+    c.setLineWidth(0.8)
+    w_p_sig = stringWidth(lbl_p_sig, font_normal, sig_size)
+    c.line(margin_l + w_p_sig + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+
+    draw_canvas_line(lbl_a_sig, sig_size, margin_l + col_w, y, align="left", width_limit=col_w)
+    w_a_sig = stringWidth(lbl_a_sig, font_normal, sig_size)
+    c.line(margin_l + col_w + w_a_sig + 2, y - 1, margin_l + max_width, y - 1)
+    y -= 22.0
+
+    # Side-by-side Names
+    lbl_p_name_prefix = "પક્ષકારનું નામ :- " if language == "gu" else "Party's name :- "
+    lbl_a_name_prefix = "એડવોકેટનું નામ :- " if language == "gu" else "Advocate's name :- "
+    lbl_p_name = f"{lbl_p_name_prefix}{p_name}" if p_name else lbl_p_name_prefix
+    lbl_a_name = f"{lbl_a_name_prefix}{a_name}" if a_name else lbl_a_name_prefix
+
+    draw_canvas_line(lbl_p_name, name_size, margin_l, y, align="left", width_limit=col_w)
+    if not p_name:
+        w_p_name = stringWidth(lbl_p_name, font_normal, name_size)
+        c.line(margin_l + w_p_name + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+
+    draw_canvas_line(lbl_a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
+    if not a_name:
+        w_a_name = stringWidth(lbl_a_name, font_normal, name_size)
+        c.line(margin_l + col_w + w_a_name + 2, y - 1, margin_l + max_width, y - 1)
+
+    c.save()
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     meta = {
-        "engine": "harfbuzz_vakalatnama",
-        "font_family": family,
-        "font_version": GUJARATI_FONT_VERSIONS.get(family, "unknown"),
+        "engine": "canvas_vakalatnama",
+        "font_family": font_normal,
     }
     return b64, meta
 
@@ -2101,7 +2391,7 @@ def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = N
 
     # Check if this document is a Vakalatnama (Civil or Criminal)
     is_vak = (
-        tid in ("vakilatnama_civil", "vakilatnama_criminal")
+        tid in ("vakilatnama_civil", "vakilatnama_criminal", "vakilatnama", "vakalatnama")
         or s.get("is_vakalatnama")
         or any(b.get("section") == "title" and ("વકીલાતનામું" in (b.get("text") or "") or "VAKALATNAMA" in (b.get("text") or "")) for b in blocks)
         or ("વકીલાતનામું" in (r_content or "") or "VAKALATNAMA" in (r_content or "").upper())
