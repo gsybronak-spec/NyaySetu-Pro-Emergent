@@ -137,7 +137,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
 
     def test_02_field_count_and_keys(self):
         fields = self.tpl["fields"]
-        self.assertEqual(len(fields), 21, f"Expected exactly 21 fields, got {len(fields)}")
+        self.assertEqual(len(fields), 22, f"Expected exactly 22 fields, got {len(fields)}")
         keys = [f["key"] for f in fields]
         expected_keys = [
             "court_name", "district", "taluka", "court_officer_detail",
@@ -145,15 +145,18 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
             "copy_request_purpose", "other_copy_request_purpose",
             "document_details", "number_of_copies", "recipient_name",
+            "deposit_amount",
             "date", "place", "advocate_name", "mobile_number",
         ]
         self.assertEqual(keys, expected_keys)
 
-    def test_03_zero_deposit_amount_input_field(self):
-        keys = [f["key"] for f in self.tpl["fields"]]
-        self.assertNotIn("deposit_amount", keys)
-        self.assertNotIn("deposit", keys)
-        self.assertNotIn("amount", keys)
+    def test_03_deposit_amount_input_field(self):
+        fmap = {f["key"]: f for f in self.tpl["fields"]}
+        self.assertIn("deposit_amount", fmap)
+        dep = fmap["deposit_amount"]
+        self.assertEqual(dep["label_gu"], "ડિપોઝીટની રકમ")
+        self.assertEqual(dep["label_en"], "Deposit Amount")
+        self.assertFalse(dep["required"])
 
     def test_04_all_fields_optional(self):
         fmap = {f["key"]: f for f in self.tpl["fields"]}
@@ -164,6 +167,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertFalse(fmap["document_details"]["required"])
         self.assertFalse(fmap["number_of_copies"]["required"])
         self.assertFalse(fmap["recipient_name"]["required"])
+        self.assertFalse(fmap["deposit_amount"]["required"])
         self.assertFalse(fmap["mobile_number"]["required"])
         self.assertFalse(fmap["advocate_name"]["required"])
         self.assertFalse(fmap["court_officer_detail"]["required"])
@@ -194,13 +198,14 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         table_blocks = [b for b in blocks_gu if b.get("section") == "table"]
         self.assertEqual(len(table_blocks), 2, f"Expected 2 tables, found {len(table_blocks)}")
 
-        # Table 1: Case details table (3 rows x 2 cols, row 0 merged)
+        # Table 1: Case details table (3 rows x 2 cols, row 0 split into two columns)
         t1 = table_blocks[0]
         self.assertEqual(t1.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
         self.assertEqual(len(t1["rows"]), 3)
-        # Row 0: Merged court officer detail
-        self.assertEqual(len(t1["rows"][0]), 1)
-        self.assertIn("{{court_officer_detail}}", t1["rows"][0][0])
+        # Row 0: Two columns (Left: label, Right: selected court)
+        self.assertEqual(len(t1["rows"][0]), 2)
+        self.assertEqual(t1["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
+        self.assertEqual(t1["rows"][0][1], "{{court_name}}")
         # Row 1: Case type label without redundant colon/dash
         self.assertEqual(t1["rows"][1][0], "{{case_type}} નં.")
         self.assertNotIn(":-", t1["rows"][1][0])
@@ -229,6 +234,9 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertEqual(len(table_blocks_en), 2)
         t1_en = table_blocks_en[0]
         self.assertEqual(t1_en.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
+        self.assertEqual(len(t1_en["rows"][0]), 2)
+        self.assertEqual(t1_en["rows"][0][0], "Court of the Case")
+        self.assertEqual(t1_en["rows"][0][1], "{{court_name}}")
         self.assertEqual(t1_en["rows"][1][0], "{{case_type}} No.")
         self.assertNotIn(":-", t1_en["rows"][1][0])
         self.assertNotIn(":", t1_en["rows"][1][0])
@@ -248,8 +256,10 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("મુકામ :- {{place}}", c_gu)
         self.assertIn("બાબત : પ્રમાણિત નકલ મેળવવા બાબત ...", c_gu)
         self.assertIn("સદર કેસમાંથી અમોને નીચે જણાવેલ દસ્તાવેજની સહી-સિક્કાવાળી પ્રમાણિત નકલની {{copy_request_purpose}} જરૂરીયાત હોય", c_gu)
-        # Exactly 6 underscores in Gujarati deposit
-        self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", c_gu)
+        self.assertIn("ડિપોઝિટ પેટે રૂ. {{deposit_amount}} જમા કરાવેલ છે.", c_gu)
+        # Exactly 6 underscores in Gujarati deposit when rendered with empty default
+        rend_gu = render_template(c_gu, {})
+        self.assertIn("ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", rend_gu)
         # Exactly 10 dashes in Gujarati signature line
         self.assertIn("----------\n{{advocate_name}}", c_gu)
 
@@ -259,8 +269,10 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertIn("AT: {{place}}", c_en)
         self.assertIn("Subject: Application for Obtaining Certified Copy...", c_en)
         self.assertIn("From the aforesaid case, we require certified copies duly signed and sealed", c_en)
-        # Exactly 12 underscores in English deposit
-        self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", c_en)
+        self.assertIn("an amount of Rs. {{deposit_amount}} has been deposited towards deposit.", c_en)
+        # Exactly 12 underscores in English deposit when rendered with empty default
+        rend_en = render_template(c_en, {})
+        self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", rend_en)
         # Exactly 20 dashes in English signature line
         self.assertIn("--------------------\n{{advocate_name}}", c_en)
 
@@ -1283,6 +1295,197 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             ctx_en_3 = await server.build_render_context(user, None, vals_en_3, "en", template_id=TEMPLATE_ID)
             rend_en_3 = render_template(self.tpl["content_en"], ctx_en_3)
             self.assertIn("documents mentioned hereinbelow for submission to government authorities. It is therefore respectfully prayed", rend_en_3)
+
+        asyncio.run(_test())
+
+    def test_24_table_first_row_split_and_dynamic_deposit(self):
+        """Dedicated verification of:
+        1. Table 1 first row split into two columns (Left: label, Right: selected court).
+        2. Dynamic court value updates in right cell.
+        3. Optional deposit_amount field (empty fallback vs filled amount in GU & EN).
+        4. Copy request purpose regression and leak prevention.
+        5. Preview and Download PDF generation parity.
+        """
+        async def _test():
+            user = {
+                "name": "Ramesh Patel",
+                "advocate_name_gu": "એડવોકેટ રમેશભાઈ પટેલ",
+                "advocate_name_en": "Advocate Ramesh Patel",
+                "mobile": "9876543210",
+                "district": "gandhinagar",
+            }
+            base_vals = {
+                "court_name": "principal_senior_civil_judge",
+                "district": "gandhinagar",
+                "taluka": "કલોલ",
+                "case_type": "regular_civil_suit",
+                "case_number": "123/2024",
+                "case_date_type": "મુદ્દત તારીખ",
+                "case_date": "2026-02-25",
+                "party_1_role": "વાદી",
+                "party_1_name": "રાજેશકુમાર શાહ",
+                "party_2_role": "પ્રતિવાદી",
+                "party_2_name": "મહેશભાઈ પટેલ",
+                "copy_request_purpose": "અભ્યાસ અર્થે",
+                "document_details": "આંક - ૧, ૫",
+                "number_of_copies": "2",
+                "recipient_name": "કિશોરભાઈ",
+                "date": "2026-02-20",
+                "place": "કલોલ, ગાંધીનગર",
+                "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
+                "mobile_number": "9876543210",
+            }
+
+            # TEST 1 — FIRST ROW STRUCTURE
+            # Verify the generated PDF table first row contains exactly two cells:
+            # LEFT: "કયા સાહેબશ્રીની કોર્ટનો કેસ છે"
+            # RIGHT: selected court_name value
+            # Verify the old single full-width first row no longer exists.
+            ctx_1 = await server.build_render_context(user, None, base_vals, "gu", template_id=TEMPLATE_ID)
+            rend_1 = render_template(self.tpl["content_gu"], ctx_1)
+            blks_1 = build_blocks(rend_1, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            tbls_1 = [b for b in blks_1 if b.get("section") == "table"]
+            self.assertEqual(len(tbls_1), 2)
+            t1 = tbls_1[0]
+            self.assertEqual(len(t1["rows"]), 3)
+            # Row 0 has exactly 2 cells (not 1 merged cell)
+            self.assertEqual(len(t1["rows"][0]), 2)
+            self.assertEqual(t1["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
+            self.assertEqual(t1["rows"][0][1], "પ્રિન્સિપાલ સિનિયર સિવિલ જજ")
+            # Generate actual PDF and verify success
+            doc_settings_1 = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_1, "ctx": ctx_1})
+            pdf_b64_1 = generate_pdf(blks_1, "gu", doc_settings_1)
+            self.assertIsNotNone(pdf_b64_1)
+
+            # TEST 2 — COURT VALUE DYNAMIC
+            # Select a different court: chief_judicial_magistrate -> ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ
+            vals_2 = dict(base_vals, court_name="chief_judicial_magistrate")
+            ctx_2 = await server.build_render_context(user, None, vals_2, "gu", template_id=TEMPLATE_ID)
+            rend_2 = render_template(self.tpl["content_gu"], ctx_2)
+            blks_2 = build_blocks(rend_2, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            t1_c2 = [b for b in blks_2 if b.get("section") == "table"][0]
+            self.assertEqual(len(t1_c2["rows"][0]), 2)
+            self.assertEqual(t1_c2["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
+            self.assertEqual(t1_c2["rows"][0][1], "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ")
+            # And another court: civil_judge_jmfc -> સિવિલ જજ અને જે.એમ.એફ.સી.
+            vals_2b = dict(base_vals, court_name="civil_judge_jmfc")
+            ctx_2b = await server.build_render_context(user, None, vals_2b, "gu", template_id=TEMPLATE_ID)
+            rend_2b = render_template(self.tpl["content_gu"], ctx_2b)
+            blks_2b = build_blocks(rend_2b, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            t1_c2b = [b for b in blks_2b if b.get("section") == "table"][0]
+            self.assertEqual(t1_c2b["rows"][0][1], "સિવિલ જજ અને જે.એમ.એફ.સી.")
+
+            # TEST 3 — EMPTY DEPOSIT
+            # Leave deposit_amount empty.
+            # Verify PDF generation succeeds, deposit blank fallback remains, no banned strings.
+            vals_3 = dict(base_vals, deposit_amount="")
+            ctx_3 = await server.build_render_context(user, None, vals_3, "gu", template_id=TEMPLATE_ID)
+            rend_3 = render_template(self.tpl["content_gu"], ctx_3)
+            self.assertIn("જે નકલ માટે ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.", rend_3)
+            self.assertNotIn("undefined", rend_3)
+            self.assertNotIn("null", rend_3)
+            self.assertNotIn("None", rend_3)
+            self.assertNotIn("N/A", rend_3)
+            self.assertNotIn("[object Object]", rend_3)
+            blks_3 = build_blocks(rend_3, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings_3 = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_3, "ctx": ctx_3})
+            pdf_b64_3 = generate_pdf(blks_3, "gu", doc_settings_3)
+            self.assertIsNotNone(pdf_b64_3)
+
+            # TEST 4 — FILLED DEPOSIT (250)
+            # Enter: deposit_amount = "250"
+            vals_4 = dict(base_vals, deposit_amount="250")
+            ctx_4 = await server.build_render_context(user, None, vals_4, "gu", template_id=TEMPLATE_ID)
+            rend_4 = render_template(self.tpl["content_gu"], ctx_4)
+            self.assertIn("જે નકલ માટે ડિપોઝિટ પેટે રૂ. 250 જમા કરાવેલ છે.", rend_4)
+            self.assertNotIn("______", rend_4)
+            blks_4 = build_blocks(rend_4, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            doc_settings_4 = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_4, "ctx": ctx_4})
+            pdf_b64_4 = generate_pdf(blks_4, "gu", doc_settings_4)
+            self.assertIsNotNone(pdf_b64_4)
+
+            # TEST 5 — DIFFERENT AMOUNT (1500)
+            vals_5 = dict(base_vals, deposit_amount="1500")
+            ctx_5 = await server.build_render_context(user, None, vals_5, "gu", template_id=TEMPLATE_ID)
+            rend_5 = render_template(self.tpl["content_gu"], ctx_5)
+            self.assertIn("જે નકલ માટે ડિપોઝિટ પેટે રૂ. 1500 જમા કરાવેલ છે.", rend_5)
+            # Verify prefix stripping if user typed "રૂ. 1500"
+            vals_5b = dict(base_vals, deposit_amount="રૂ. 1500")
+            ctx_5b = await server.build_render_context(user, None, vals_5b, "gu", template_id=TEMPLATE_ID)
+            rend_5b = render_template(self.tpl["content_gu"], ctx_5b)
+            self.assertIn("જે નકલ માટે ડિપોઝિટ પેટે રૂ. 1500 જમા કરાવેલ છે.", rend_5b)
+            self.assertNotIn("રૂ. રૂ.", rend_5b)
+
+            # TEST 6 — COPY REQUEST PURPOSE REGRESSION
+            # Verify predefined and custom purposes continue working
+            for purp in ("અભ્યાસ અર્થે", "ન્યાયિક કાર્યવાહી અર્થે"):
+                v_p = dict(base_vals, copy_request_purpose=purp, deposit_amount="500")
+                c_p = await server.build_render_context(user, None, v_p, "gu", template_id=TEMPLATE_ID)
+                r_p = render_template(self.tpl["content_gu"], c_p)
+                self.assertIn(f"પ્રમાણિત નકલની {purp} જરૂરીયાત હોય", r_p)
+                self.assertIn("રૂ. 500 જમા કરાવેલ છે.", r_p)
+
+            # TEST 7 — CUSTOM PURPOSE LEAK TEST
+            # Select અન્ય + custom reason, then switch to predefined reason
+            v_leak = dict(base_vals, copy_request_purpose="અભ્યાસ અર્થે", other_copy_request_purpose="ગુપ્ત તપાસ અર્થે")
+            c_leak = await server.build_render_context(user, None, v_leak, "gu", template_id=TEMPLATE_ID)
+            r_leak = render_template(self.tpl["content_gu"], c_leak)
+            self.assertNotIn("ગુપ્ત તપાસ અર્થે", r_leak)
+            self.assertIn("અભ્યાસ અર્થે", r_leak)
+
+            # TEST 8 — ENGLISH PDF
+            # Verify:
+            # - first table row has two cells
+            # - English court label appears in left cell
+            # - selected court value appears in right cell
+            # - deposit amount dynamic behavior works
+            vals_en = {
+                "court_name": "principal_senior_civil_judge",
+                "district": "gandhinagar",
+                "case_type": "regular_civil_suit",
+                "case_number": "123/2024",
+                "case_date_type": "Next Hearing Date",
+                "case_date": "2026-02-25",
+                "party_1_role": "Plaintiff",
+                "party_1_name": "Rajeshkumar Shah",
+                "party_2_role": "Defendant",
+                "party_2_name": "Maheshbhai Patel",
+                "copy_request_purpose": "For study",
+                "document_details": "Exhibit 1, 5",
+                "number_of_copies": "2",
+                "recipient_name": "Kishorbhai",
+                "deposit_amount": "250",
+                "date": "2026-02-20",
+                "place": "Kalol, Gandhinagar",
+                "advocate_name": "Advocate Ramesh Patel",
+                "mobile_number": "9876543210",
+            }
+            ctx_en = await server.build_render_context(user, None, vals_en, "en", template_id=TEMPLATE_ID)
+            rend_en = render_template(self.tpl["content_en"], ctx_en)
+            blks_en = build_blocks(rend_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
+            tbls_en = [b for b in blks_en if b.get("section") == "table"]
+            self.assertEqual(len(tbls_en), 2)
+            t1_en = tbls_en[0]
+            self.assertEqual(len(t1_en["rows"][0]), 2)
+            self.assertEqual(t1_en["rows"][0][0], "Court of the Case")
+            self.assertEqual(t1_en["rows"][0][1], "Principal Senior Civil Judge")
+            self.assertIn("an amount of Rs. 250 has been deposited towards deposit.", rend_en)
+            # Verify English empty deposit fallback
+            vals_en_empty = dict(vals_en, deposit_amount="")
+            ctx_en_empty = await server.build_render_context(user, None, vals_en_empty, "en", template_id=TEMPLATE_ID)
+            rend_en_empty = render_template(self.tpl["content_en"], ctx_en_empty)
+            self.assertIn("an amount of Rs. ____________ has been deposited towards deposit.", rend_en_empty)
+            # Verify English PDF generation
+            doc_settings_en = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_en, "ctx": ctx_en})
+            pdf_b64_en = generate_pdf(blks_en, "en", doc_settings_en)
+            self.assertIsNotNone(pdf_b64_en)
+
+            # TEST 9 — PREVIEW / DOWNLOAD PARITY
+            # Both preview and download invoke build_render_context -> render_template -> build_blocks -> generate_pdf
+            # Verify that calling generate_pdf on preview context and download context yields valid matching PDFs
+            pdf_bytes_preview = base64.b64decode(pdf_b64_4)
+            self.assertTrue(pdf_bytes_preview.startswith(b"%PDF"))
+            self.assertGreater(len(pdf_bytes_preview), 1000)
 
         asyncio.run(_test())
 

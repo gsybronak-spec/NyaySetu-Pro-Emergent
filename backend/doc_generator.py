@@ -846,11 +846,28 @@ def render_template(content_template: str, values: dict) -> str:
         "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
         or "Application for Obtaining Certified Copy" in content_template
     ):
+        is_gu = "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
         raw_rec = str(vals.get("recipient_name") or "").strip()
         banned = {"", "none", "null", "undefined", "n/a", "na", "required", "[object object]", "{{recipient_name}}"}
         if not raw_rec or raw_rec.lower() in banned:
-            is_gu = "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
             vals["recipient_name"] = "__________" if is_gu else "____________________"
+
+        raw_dep = str(vals.get("deposit_amount") or "").strip()
+        banned_dep = {"", "none", "null", "undefined", "n/a", "na", "required", "[object object]", "0", "{{deposit_amount}}"}
+        if not raw_dep or raw_dep.lower() in banned_dep:
+            vals["deposit_amount"] = "______" if is_gu else "____________"
+        else:
+            if raw_dep.startswith("રૂ."): raw_dep = raw_dep[len("રૂ."):].strip()
+            elif raw_dep.startswith("રૂ"): raw_dep = raw_dep[len("રૂ"):].strip()
+            elif raw_dep.lower().startswith("rs."): raw_dep = raw_dep[len("rs."):].strip()
+            elif raw_dep.lower().startswith("rs"): raw_dep = raw_dep[len("rs"):].strip()
+            elif raw_dep.lower().startswith("inr"): raw_dep = raw_dep[len("inr"):].strip()
+            vals["deposit_amount"] = raw_dep
+
+        if not vals.get("court_name") and vals.get("court"):
+            vals["court_name"] = vals["court"]
+        elif not vals.get("court_name") and vals.get("court_officer_detail"):
+            vals["court_name"] = vals["court_officer_detail"]
 
     result = content_template
     for k, v in vals.items():

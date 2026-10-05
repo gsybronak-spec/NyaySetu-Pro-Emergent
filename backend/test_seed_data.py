@@ -2731,6 +2731,15 @@ Place : {{taluka_place}}
                 "placeholder": "કોઈ અલગ વ્યક્તિનુ નામ",
             },
             {
+                "key": "deposit_amount",
+                "label_en": "Deposit Amount",
+                "label_gu": "ડિપોઝીટની રકમ",
+                "type": "text",
+                "required": False,
+                "placeholder": "દા.ત. ૨૫૦",
+                "placeholder_en": "e.g. 250",
+            },
+            {
                 "key": "date",
                 "label_en": "Date",
                 "label_gu": "તારીખ",
@@ -2808,7 +2817,7 @@ Place : {{taluka_place}}
 મુકામ :- {{place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
-[RIGHT]{{court_officer_detail}}
+[RIGHT]કયા સાહેબશ્રીની કોર્ટનો કેસ છે | {{court_name}}
 [RIGHT]{{case_type}} નં. | {{case_number}}
 [RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]
@@ -2828,7 +2837,7 @@ Place : {{taluka_place}}
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 
-સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{recipient_name}} ને આપશો. જે નકલ માટે ડિપોઝિટ પેટે રૂ. ______ જમા કરાવેલ છે.
+સદર નકલ અમો નીચે સહી કરનારને અથવા અમારા વતી {{recipient_name}} ને આપશો. જે નકલ માટે ડિપોઝિટ પેટે રૂ. {{deposit_amount}} જમા કરાવેલ છે.
 
 તારીખ : {{date}}
 સ્થળ : {{place}}
@@ -2840,7 +2849,7 @@ Place : {{taluka_place}}
 AT: {{place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
-[RIGHT]{{court_officer_detail}}
+[RIGHT]Court of the Case | {{court_name}}
 [RIGHT]{{case_type}} No. | {{case_number}}
 [RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]
@@ -2860,7 +2869,7 @@ From the aforesaid case, we require certified copies duly signed and sealed of t
 {{document_details}} | {{number_of_copies}}
 [TABLE_END]
 
-The said copies may please be delivered to the undersigned or to {{recipient_name}} on our behalf. For the said copies, an amount of Rs. ____________ has been deposited towards deposit.
+The said copies may please be delivered to the undersigned or to {{recipient_name}} on our behalf. For the said copies, an amount of Rs. {{deposit_amount}} has been deposited towards deposit.
 
 Date: {{date}}
 Place: {{place}}

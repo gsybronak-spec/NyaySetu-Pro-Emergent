@@ -5005,6 +5005,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "document_details", "number_of_copies", "recipient_name",
         "place", "advocate_name", "mobile_number",
         "copy_request_purpose", "other_copy_request_purpose",
+        "deposit_amount",
     ):
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
@@ -5019,6 +5020,24 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["recipient_name"] = raw_rec
         else:
             ctx["recipient_name"] = "__________" if language == "gu" else "____________________"
+
+        # Optional deposit_amount with fallback to underscores
+        raw_dep = str(ctx.get("deposit_amount") or values.get("deposit_amount") or "").strip()
+        banned_dep = {"", "none", "null", "undefined", "n/a", "na", "required", "[object object]", "0", "{{deposit_amount}}"}
+        if raw_dep and raw_dep.lower() not in banned_dep:
+            if raw_dep.startswith("રૂ."): raw_dep = raw_dep[len("રૂ."):].strip()
+            elif raw_dep.startswith("રૂ"): raw_dep = raw_dep[len("રૂ"):].strip()
+            elif raw_dep.lower().startswith("rs."): raw_dep = raw_dep[len("rs."):].strip()
+            elif raw_dep.lower().startswith("rs"): raw_dep = raw_dep[len("rs"):].strip()
+            elif raw_dep.lower().startswith("inr"): raw_dep = raw_dep[len("inr"):].strip()
+            ctx["deposit_amount"] = raw_dep
+        else:
+            ctx["deposit_amount"] = "______" if language == "gu" else "____________"
+
+        if not ctx.get("court_name") and ctx.get("court"):
+            ctx["court_name"] = ctx["court"]
+        elif not ctx.get("court_name") and ctx.get("court_officer_detail"):
+            ctx["court_name"] = ctx["court_officer_detail"]
 
         raw_purpose = str(ctx.get("copy_request_purpose") or values.get("copy_request_purpose") or "").strip()
         custom_purpose = str(ctx.get("other_copy_request_purpose") or values.get("other_copy_request_purpose") or values.get("copy_request_purpose_custom") or "").strip()
