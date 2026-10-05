@@ -866,8 +866,8 @@ def render_template(content_template: str, values: dict) -> str:
 
         if not vals.get("court_name") and vals.get("court"):
             vals["court_name"] = vals["court"]
-        elif not vals.get("court_name") and vals.get("court_officer_detail"):
-            vals["court_name"] = vals["court_officer_detail"]
+        elif not vals.get("court") and vals.get("court_name"):
+            vals["court"] = vals["court_name"]
 
     result = content_template
     for k, v in vals.items():

@@ -5036,8 +5036,9 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
         if not ctx.get("court_name") and ctx.get("court"):
             ctx["court_name"] = ctx["court"]
-        elif not ctx.get("court_name") and ctx.get("court_officer_detail"):
-            ctx["court_name"] = ctx["court_officer_detail"]
+        elif not ctx.get("court") and ctx.get("court_name"):
+            ctx["court"] = ctx["court_name"]
+        ctx["court_officer_detail"] = str(ctx.get("court_officer_detail") or values.get("court_officer_detail") or "").strip()
 
         raw_purpose = str(ctx.get("copy_request_purpose") or values.get("copy_request_purpose") or "").strip()
         custom_purpose = str(ctx.get("other_copy_request_purpose") or values.get("other_copy_request_purpose") or values.get("copy_request_purpose_custom") or "").strip()

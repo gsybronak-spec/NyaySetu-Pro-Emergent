@@ -2817,7 +2817,7 @@ Place : {{taluka_place}}
 મુકામ :- {{place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
-[RIGHT]કયા સાહેબશ્રીની કોર્ટનો કેસ છે | {{court_name}}
+[RIGHT]કયા સાહેબશ્રીની કોર્ટનો કેસ છે | {{court_officer_detail}}
 [RIGHT]{{case_type}} નં. | {{case_number}}
 [RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]
@@ -2849,7 +2849,7 @@ Place : {{taluka_place}}
 AT: {{place}}
 
 [TABLE_START cols="58.4,41.6" align="right,left"]
-[RIGHT]Court of the Case | {{court_name}}
+[RIGHT]Court of the Case | {{court_officer_detail}}
 [RIGHT]{{case_type}} No. | {{case_number}}
 [RIGHT]{{case_date_type}} | {{case_date}}
 [TABLE_END]

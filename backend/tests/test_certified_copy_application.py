@@ -202,10 +202,10 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         t1 = table_blocks[0]
         self.assertEqual(t1.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
         self.assertEqual(len(t1["rows"]), 3)
-        # Row 0: Two columns (Left: label, Right: selected court)
+        # Row 0: Two columns (Left: label, Right: court_officer_detail)
         self.assertEqual(len(t1["rows"][0]), 2)
         self.assertEqual(t1["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
-        self.assertEqual(t1["rows"][0][1], "{{court_name}}")
+        self.assertEqual(t1["rows"][0][1], "{{court_officer_detail}}")
         # Row 1: Case type label without redundant colon/dash
         self.assertEqual(t1["rows"][1][0], "{{case_type}} નં.")
         self.assertNotIn(":-", t1["rows"][1][0])
@@ -236,7 +236,7 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
         self.assertEqual(t1_en.get("meta"), {"cols": [58.4, 41.6], "align": ["right", "left"]})
         self.assertEqual(len(t1_en["rows"][0]), 2)
         self.assertEqual(t1_en["rows"][0][0], "Court of the Case")
-        self.assertEqual(t1_en["rows"][0][1], "{{court_name}}")
+        self.assertEqual(t1_en["rows"][0][1], "{{court_officer_detail}}")
         self.assertEqual(t1_en["rows"][1][0], "{{case_type}} No.")
         self.assertNotIn(":-", t1_en["rows"][1][0])
         self.assertNotIn(":", t1_en["rows"][1][0])
@@ -1315,13 +1315,14 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
                 "district": "gandhinagar",
             }
             base_vals = {
-                "court_name": "principal_senior_civil_judge",
+                "court_name": "chief_judicial_magistrate",
+                "court_officer_detail": "2nd JMFC",
                 "district": "gandhinagar",
                 "taluka": "કલોલ",
                 "case_type": "regular_civil_suit",
-                "case_number": "123/2024",
+                "case_number": "123",
                 "case_date_type": "મુદ્દત તારીખ",
-                "case_date": "2026-02-25",
+                "case_date": "2026-10-31",
                 "party_1_role": "વાદી",
                 "party_1_name": "રાજેશકુમાર શાહ",
                 "party_2_role": "પ્રતિવાદી",
@@ -1330,19 +1331,20 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
                 "document_details": "આંક - ૧, ૫",
                 "number_of_copies": "2",
                 "recipient_name": "કિશોરભાઈ",
-                "date": "2026-02-20",
+                "deposit_amount": "250",
+                "date": "2026-10-31",
                 "place": "કલોલ, ગાંધીનગર",
                 "advocate_name": "એડવોકેટ રમેશભાઈ પટેલ",
                 "mobile_number": "9876543210",
             }
 
-            # TEST 1 — FIRST ROW STRUCTURE
-            # Verify the generated PDF table first row contains exactly two cells:
-            # LEFT: "કયા સાહેબશ્રીની કોર્ટનો કેસ છે"
-            # RIGHT: selected court_name value
-            # Verify the old single full-width first row no longer exists.
+            # TEST 1 — TWO INDEPENDENT CONCEPTS:
+            # 1. Main Court Heading: court_name -> "મહેરબાન ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટમાં,"
+            # 2. Table Row 0 Right Cell: court_officer_detail -> "2nd JMFC"
+            # Crucial: Table right cell MUST NOT receive court_name!
             ctx_1 = await server.build_render_context(user, None, base_vals, "gu", template_id=TEMPLATE_ID)
             rend_1 = render_template(self.tpl["content_gu"], ctx_1)
+            self.assertIn("મહેરબાન ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટમાં,", rend_1)
             blks_1 = build_blocks(rend_1, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
             tbls_1 = [b for b in blks_1 if b.get("section") == "table"]
             self.assertEqual(len(tbls_1), 2)
@@ -1351,29 +1353,33 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
             # Row 0 has exactly 2 cells (not 1 merged cell)
             self.assertEqual(len(t1["rows"][0]), 2)
             self.assertEqual(t1["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
-            self.assertEqual(t1["rows"][0][1], "પ્રિન્સિપાલ સિનિયર સિવિલ જજ")
+            self.assertEqual(t1["rows"][0][1], "2nd JMFC")
+            self.assertNotEqual(t1["rows"][0][1], ctx_1["court_name"])
             # Generate actual PDF and verify success
             doc_settings_1 = get_doc_settings({**self.tpl["settings"], "page_size": "A4", "template_id": TEMPLATE_ID, "raw_content": rend_1, "ctx": ctx_1})
             pdf_b64_1 = generate_pdf(blks_1, "gu", doc_settings_1)
             self.assertIsNotNone(pdf_b64_1)
 
-            # TEST 2 — COURT VALUE DYNAMIC
-            # Select a different court: chief_judicial_magistrate -> ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ
-            vals_2 = dict(base_vals, court_name="chief_judicial_magistrate")
+            # TEST 2 — DYNAMIC VALUE FOR TABLE RIGHT CELL
+            # Changing court_officer_detail dynamically updates row 0 right cell:
+            vals_2 = dict(base_vals, court_officer_detail="Court of Shri A.B. Shah")
             ctx_2 = await server.build_render_context(user, None, vals_2, "gu", template_id=TEMPLATE_ID)
             rend_2 = render_template(self.tpl["content_gu"], ctx_2)
             blks_2 = build_blocks(rend_2, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
             t1_c2 = [b for b in blks_2 if b.get("section") == "table"][0]
             self.assertEqual(len(t1_c2["rows"][0]), 2)
             self.assertEqual(t1_c2["rows"][0][0], "કયા સાહેબશ્રીની કોર્ટનો કેસ છે")
-            self.assertEqual(t1_c2["rows"][0][1], "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ")
-            # And another court: civil_judge_jmfc -> સિવિલ જજ અને જે.એમ.એફ.સી.
+            self.assertEqual(t1_c2["rows"][0][1], "Court of Shri A.B. Shah")
+
+            # Changing court_name updates ONLY the main heading, not row 0 right cell
             vals_2b = dict(base_vals, court_name="civil_judge_jmfc")
             ctx_2b = await server.build_render_context(user, None, vals_2b, "gu", template_id=TEMPLATE_ID)
             rend_2b = render_template(self.tpl["content_gu"], ctx_2b)
+            self.assertIn("મહેરબાન સિવિલ જજ અને જે.એમ.એફ.સી. સાહેબશ્રીની કોર્ટમાં,", rend_2b)
             blks_2b = build_blocks(rend_2b, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
             t1_c2b = [b for b in blks_2b if b.get("section") == "table"][0]
-            self.assertEqual(t1_c2b["rows"][0][1], "સિવિલ જજ અને જે.એમ.એફ.સી.")
+            self.assertEqual(t1_c2b["rows"][0][1], "2nd JMFC")
+            self.assertNotEqual(t1_c2b["rows"][0][1], "સિવિલ જજ અને જે.એમ.એફ.સી.")
 
             # TEST 3 — EMPTY DEPOSIT
             # Leave deposit_amount empty.
@@ -1435,17 +1441,17 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
 
             # TEST 8 — ENGLISH PDF
             # Verify:
-            # - first table row has two cells
-            # - English court label appears in left cell
-            # - selected court value appears in right cell
+            # - main heading receives court_name
+            # - table right cell receives court_officer_detail (NOT court_name)
             # - deposit amount dynamic behavior works
             vals_en = {
                 "court_name": "principal_senior_civil_judge",
+                "court_officer_detail": "2nd JMFC",
                 "district": "gandhinagar",
                 "case_type": "regular_civil_suit",
-                "case_number": "123/2024",
+                "case_number": "123",
                 "case_date_type": "Next Hearing Date",
-                "case_date": "2026-02-25",
+                "case_date": "2026-10-31",
                 "party_1_role": "Plaintiff",
                 "party_1_name": "Rajeshkumar Shah",
                 "party_2_role": "Defendant",
@@ -1455,20 +1461,22 @@ class TestCertifiedCopyApplicationTemplate(unittest.TestCase):
                 "number_of_copies": "2",
                 "recipient_name": "Kishorbhai",
                 "deposit_amount": "250",
-                "date": "2026-02-20",
+                "date": "31/10/2026",
                 "place": "Kalol, Gandhinagar",
                 "advocate_name": "Advocate Ramesh Patel",
                 "mobile_number": "9876543210",
             }
             ctx_en = await server.build_render_context(user, None, vals_en, "en", template_id=TEMPLATE_ID)
             rend_en = render_template(self.tpl["content_en"], ctx_en)
+            self.assertIn("IN THE COURT OF THE HON'BLE Principal Senior Civil Judge,", rend_en)
             blks_en = build_blocks(rend_en, self.tpl["name_en"], self.tpl["name_gu"], self.tpl["settings"].get("block_align"))
             tbls_en = [b for b in blks_en if b.get("section") == "table"]
             self.assertEqual(len(tbls_en), 2)
             t1_en = tbls_en[0]
             self.assertEqual(len(t1_en["rows"][0]), 2)
             self.assertEqual(t1_en["rows"][0][0], "Court of the Case")
-            self.assertEqual(t1_en["rows"][0][1], "Principal Senior Civil Judge")
+            self.assertEqual(t1_en["rows"][0][1], "2nd JMFC")
+            self.assertNotEqual(t1_en["rows"][0][1], "Principal Senior Civil Judge")
             self.assertIn("an amount of Rs. 250 has been deposited towards deposit.", rend_en)
             # Verify English empty deposit fallback
             vals_en_empty = dict(vals_en, deposit_amount="")
