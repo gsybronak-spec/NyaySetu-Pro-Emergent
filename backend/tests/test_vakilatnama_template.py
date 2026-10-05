@@ -458,6 +458,75 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_b64 = doc_generator.generate_pdf([], "gu", settings=settings, template_id="vakilatnama_criminal", raw_content=rendered, ctx=ctx)
         self.assertIsNotNone(pdf_b64)
 
+    def test_17_published_templates_includes_both_vakilatnama(self):
+        """17. Verify _get_published_templates includes both vakilatnama_criminal and vakilatnama_civil."""
+        server.invalidate_published_templates_cache()
+        tpls = asyncio.run(server._get_published_templates())
+        crim = next((t for t in tpls if t.get("id") == "vakilatnama_criminal"), None)
+        civ = next((t for t in tpls if t.get("id") == "vakilatnama_civil"), None)
+        self.assertIsNotNone(crim, "vakilatnama_criminal must be present in published templates")
+        self.assertIsNotNone(civ, "vakilatnama_civil must be present in published templates")
+        self.assertEqual(len(crim.get("fields", [])), 18)
+        self.assertEqual(len(civ.get("fields", [])), 18)
+
+    def test_18_get_template_by_id_returns_canonical_vakilatnama(self):
+        """18. Verify _get_template_by_id returns canonical vakilatnama templates."""
+        crim = asyncio.run(server._get_template_by_id("vakilatnama_criminal"))
+        civ = asyncio.run(server._get_template_by_id("vakilatnama_civil"))
+        self.assertIsNotNone(crim)
+        self.assertIsNotNone(civ)
+        self.assertEqual(crim.get("id"), "vakilatnama_criminal")
+        self.assertEqual(civ.get("id"), "vakilatnama_civil")
+        self.assertEqual(len(crim.get("fields", [])), 18)
+        self.assertEqual(len(civ.get("fields", [])), 18)
+
+    def test_19_deleted_template_ids_protection(self):
+        """19. Verify vakilatnama templates are protected from historical tombstoning."""
+        deleted = asyncio.run(server._get_deleted_template_ids())
+        self.assertNotIn("vakilatnama_criminal", deleted)
+        self.assertNotIn("vakilatnama_civil", deleted)
+
+    def test_20_catalog_template_order_includes_both_vakilatnama(self):
+        """20. Verify get_catalog_template_order includes vakilatnama_criminal and vakilatnama_civil."""
+        order_res = asyncio.run(server.get_catalog_template_order())
+        order = order_res.get("template_order", [])
+        self.assertIn("vakilatnama_criminal", order)
+        self.assertIn("vakilatnama_civil", order)
+
+    def test_21_public_list_templates_api_response(self):
+        """21. Verify public list_templates API returns both templates under correct categories and titles."""
+        all_pub = asyncio.run(server.list_templates())
+        crim = next((t for t in all_pub if t["id"] == "vakilatnama_criminal"), None)
+        civ = next((t for t in all_pub if t["id"] == "vakilatnama_civil"), None)
+        self.assertIsNotNone(crim, "vakilatnama_criminal must be in public list_templates")
+        self.assertIsNotNone(civ, "vakilatnama_civil must be in public list_templates")
+
+        self.assertEqual(crim["name_gu"], "વકીલાતનામું (ક્રિમિનલ)")
+        self.assertEqual(crim["name_en"], "Vakalatnama (Criminal)")
+        self.assertEqual(crim["category"], "Criminal")
+
+        self.assertEqual(civ["name_gu"], "વકીલાતનામું (સિવિલ)")
+        self.assertEqual(civ["name_en"], "Vakalatnama (Civil)")
+        self.assertEqual(civ["category"], "Civil")
+
+        # Category filtering
+        crim_only = asyncio.run(server.list_templates(category="Criminal"))
+        self.assertTrue(any(t["id"] == "vakilatnama_criminal" for t in crim_only))
+        self.assertFalse(any(t["id"] == "vakilatnama_civil" for t in crim_only))
+
+        civ_only = asyncio.run(server.list_templates(category="Civil"))
+        self.assertTrue(any(t["id"] == "vakilatnama_civil" for t in civ_only))
+        self.assertFalse(any(t["id"] == "vakilatnama_criminal" for t in civ_only))
+
+    def test_22_seed_data_templates_includes_both(self):
+        """22. Verify seed_data.TEMPLATES includes vakilatnama_criminal and vakilatnama_civil."""
+        import seed_data
+        crim = next((t for t in seed_data.TEMPLATES if t.get("id") == "vakilatnama_criminal"), None)
+        civ = next((t for t in seed_data.TEMPLATES if t.get("id") == "vakilatnama_civil"), None)
+        self.assertIsNotNone(crim, "vakilatnama_criminal must be in seed_data.TEMPLATES")
+        self.assertIsNotNone(civ, "vakilatnama_civil must be in seed_data.TEMPLATES")
+
 
 if __name__ == "__main__":
     unittest.main()
+

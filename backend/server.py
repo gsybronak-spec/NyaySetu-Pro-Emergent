@@ -2657,7 +2657,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3229,6 +3229,28 @@ def _get_canonical_mudat_arji_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "mudat_arji"), None)
 
 
+def _get_canonical_vakilatnama_criminal_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "vakilatnama_criminal"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "vakilatnama_criminal"), None)
+
+
+def _get_canonical_vakilatnama_civil_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "vakilatnama_civil"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "vakilatnama_civil"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     _snap = await db.collection("system_settings").document("seed_complete").get()
@@ -3506,6 +3528,94 @@ async def _ensure_seed_complete() -> None:
                     if needs_update:
                         await doc_ref_mudat.update(update_dict)
                         invalidate_published_templates_cache()
+
+            doc_ref_vcrim = db.collection("templates").document("vakilatnama_criminal")
+            snap_vcrim = await doc_ref_vcrim.get()
+            vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+            if vcrim_seed:
+                if not snap_vcrim.exists:
+                    await doc_ref_vcrim.set({
+                        **vcrim_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_vcrim = snap_vcrim.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_vcrim.get("content_gu") != vcrim_seed["content_gu"]:
+                        update_dict["content_gu"] = vcrim_seed["content_gu"]
+                        needs_update = True
+                    if cur_vcrim.get("content_en") != vcrim_seed["content_en"]:
+                        update_dict["content_en"] = vcrim_seed["content_en"]
+                        needs_update = True
+                    if cur_vcrim.get("settings") != vcrim_seed["settings"]:
+                        update_dict["settings"] = vcrim_seed["settings"]
+                        needs_update = True
+                    if cur_vcrim.get("fields") != vcrim_seed.get("fields"):
+                        update_dict["fields"] = vcrim_seed["fields"]
+                        needs_update = True
+                    if cur_vcrim.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if cur_vcrim.get("category") != vcrim_seed.get("category"):
+                        update_dict["category"] = vcrim_seed["category"]
+                        needs_update = True
+                    if cur_vcrim.get("name_gu") != vcrim_seed.get("name_gu"):
+                        update_dict["name_gu"] = vcrim_seed["name_gu"]
+                        needs_update = True
+                    if cur_vcrim.get("name_en") != vcrim_seed.get("name_en"):
+                        update_dict["name_en"] = vcrim_seed["name_en"]
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_vcrim.update(update_dict)
+                        invalidate_published_templates_cache()
+
+            doc_ref_vciv = db.collection("templates").document("vakilatnama_civil")
+            snap_vciv = await doc_ref_vciv.get()
+            vciv_seed = _get_canonical_vakilatnama_civil_template()
+            if vciv_seed:
+                if not snap_vciv.exists:
+                    await doc_ref_vciv.set({
+                        **vciv_seed,
+                        "status": "published",
+                        "updated_at": now().isoformat(),
+                        "created_at": now().isoformat(),
+                    })
+                    invalidate_published_templates_cache()
+                else:
+                    cur_vciv = snap_vciv.to_dict()
+                    needs_update = False
+                    update_dict = {}
+                    if cur_vciv.get("content_gu") != vciv_seed["content_gu"]:
+                        update_dict["content_gu"] = vciv_seed["content_gu"]
+                        needs_update = True
+                    if cur_vciv.get("content_en") != vciv_seed["content_en"]:
+                        update_dict["content_en"] = vciv_seed["content_en"]
+                        needs_update = True
+                    if cur_vciv.get("settings") != vciv_seed["settings"]:
+                        update_dict["settings"] = vciv_seed["settings"]
+                        needs_update = True
+                    if cur_vciv.get("fields") != vciv_seed.get("fields"):
+                        update_dict["fields"] = vciv_seed["fields"]
+                        needs_update = True
+                    if cur_vciv.get("status") != "published":
+                        update_dict["status"] = "published"
+                        needs_update = True
+                    if cur_vciv.get("category") != vciv_seed.get("category"):
+                        update_dict["category"] = vciv_seed["category"]
+                        needs_update = True
+                    if cur_vciv.get("name_gu") != vciv_seed.get("name_gu"):
+                        update_dict["name_gu"] = vciv_seed["name_gu"]
+                        needs_update = True
+                    if cur_vciv.get("name_en") != vciv_seed.get("name_en"):
+                        update_dict["name_en"] = vciv_seed["name_en"]
+                        needs_update = True
+                    if needs_update:
+                        await doc_ref_vciv.update(update_dict)
+                        invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3529,7 +3639,7 @@ async def _get_published_templates() -> list:
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
             cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached) and any(t.get("id") == "dd_karavani_arji" for t in cached) and any(t.get("id") == "mudat_arji" for t in cached):
+            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached) and any(t.get("id") == "dd_karavani_arji" for t in cached) and any(t.get("id") == "mudat_arji" for t in cached) and any(t.get("id") == "vakilatnama_criminal" for t in cached) and any(t.get("id") == "vakilatnama_civil" for t in cached):
                 return cached
 
     deleted_ids = await _get_deleted_template_ids()
@@ -3746,6 +3856,82 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "vakilatnama_criminal" or t.get("template_id") == "vakilatnama_criminal"):
+                vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+                if vcrim_seed:
+                    needs_update = False
+                    if t.get("content_gu") != vcrim_seed["content_gu"]:
+                        t["content_gu"] = vcrim_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != vcrim_seed["content_en"]:
+                        t["content_en"] = vcrim_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != vcrim_seed["settings"]:
+                        t["settings"] = vcrim_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != vcrim_seed.get("fields"):
+                        t["fields"] = vcrim_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != vcrim_seed.get("name_gu"):
+                        t["name_gu"] = vcrim_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != vcrim_seed.get("name_en"):
+                        t["name_en"] = vcrim_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != vcrim_seed.get("category"):
+                        t["category"] = vcrim_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "vakilatnama_criminal")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
+            if (t.get("id") == "vakilatnama_civil" or t.get("template_id") == "vakilatnama_civil"):
+                vciv_seed = _get_canonical_vakilatnama_civil_template()
+                if vciv_seed:
+                    needs_update = False
+                    if t.get("content_gu") != vciv_seed["content_gu"]:
+                        t["content_gu"] = vciv_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != vciv_seed["content_en"]:
+                        t["content_en"] = vciv_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != vciv_seed["settings"]:
+                        t["settings"] = vciv_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != vciv_seed.get("fields"):
+                        t["fields"] = vciv_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != vciv_seed.get("name_gu"):
+                        t["name_gu"] = vciv_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != vciv_seed.get("name_en"):
+                        t["name_en"] = vciv_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != vciv_seed.get("category"):
+                        t["category"] = vciv_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "vakilatnama_civil")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -3858,6 +4044,38 @@ async def _get_published_templates() -> list:
                         }))
                     except Exception:
                         pass
+
+        found_v_crim = any((t.get("id") == "vakilatnama_criminal" or t.get("template_id") == "vakilatnama_criminal") for t in db_templates)
+        if not found_v_crim and "vakilatnama_criminal" not in deleted_ids:
+            v_crim_seed = _get_canonical_vakilatnama_criminal_template()
+            if v_crim_seed:
+                db_templates.append(dict(v_crim_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("vakilatnama_criminal").set({
+                            **v_crim_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_v_civ = any((t.get("id") == "vakilatnama_civil" or t.get("template_id") == "vakilatnama_civil") for t in db_templates)
+        if not found_v_civ and "vakilatnama_civil" not in deleted_ids:
+            v_civ_seed = _get_canonical_vakilatnama_civil_template()
+            if v_civ_seed:
+                db_templates.append(dict(v_civ_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("vakilatnama_civil").set({
+                            **v_civ_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
     
     if not db_templates and db is None:
         canonical_seeds = [
@@ -3869,6 +4087,8 @@ async def _get_published_templates() -> list:
             _get_canonical_exemption_arji_template(),
             _get_canonical_dd_karavani_arji_template(),
             _get_canonical_mudat_arji_template(),
+            _get_canonical_vakilatnama_criminal_template(),
+            _get_canonical_vakilatnama_civil_template(),
         ]
         canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
         v2_items = []
@@ -3902,7 +4122,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
     cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
         deleted_ids.discard(active_id)
         deleted_ids.discard(f"{active_id}_gu")
         deleted_ids.discard(f"{active_id}_en")
@@ -4143,6 +4363,82 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "vakilatnama_criminal" or template_id in ("vakilatnama_criminal", "vakilatnama_criminal_gu", "vakilatnama_criminal_en") or base_cand == "vakilatnama_criminal"):
+            vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+            if vcrim_seed:
+                needs_update = False
+                if t.get("content_gu") != vcrim_seed["content_gu"]:
+                    t["content_gu"] = vcrim_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != vcrim_seed["content_en"]:
+                    t["content_en"] = vcrim_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != vcrim_seed["settings"]:
+                    t["settings"] = vcrim_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != vcrim_seed.get("fields"):
+                    t["fields"] = vcrim_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != vcrim_seed.get("name_gu"):
+                    t["name_gu"] = vcrim_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != vcrim_seed.get("name_en"):
+                    t["name_en"] = vcrim_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != vcrim_seed.get("category"):
+                    t["category"] = vcrim_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
+        if (t.get("id") == "vakilatnama_civil" or template_id in ("vakilatnama_civil", "vakilatnama_civil_gu", "vakilatnama_civil_en") or base_cand == "vakilatnama_civil"):
+            vciv_seed = _get_canonical_vakilatnama_civil_template()
+            if vciv_seed:
+                needs_update = False
+                if t.get("content_gu") != vciv_seed["content_gu"]:
+                    t["content_gu"] = vciv_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != vciv_seed["content_en"]:
+                    t["content_en"] = vciv_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != vciv_seed["settings"]:
+                    t["settings"] = vciv_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != vciv_seed.get("fields"):
+                    t["fields"] = vciv_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != vciv_seed.get("name_gu"):
+                    t["name_gu"] = vciv_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != vciv_seed.get("name_en"):
+                    t["name_en"] = vciv_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != vciv_seed.get("category"):
+                    t["category"] = vciv_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -4179,6 +4475,16 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         mudat_seed = _get_canonical_mudat_arji_template()
         if mudat_seed and "mudat_arji" not in deleted_ids:
             return {**mudat_seed, "format_version": mudat_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "vakilatnama_criminal" or template_id in ("vakilatnama_criminal", "vakilatnama_criminal_gu", "vakilatnama_criminal_en")):
+        v_crim_seed = _get_canonical_vakilatnama_criminal_template()
+        if v_crim_seed and "vakilatnama_criminal" not in deleted_ids:
+            return {**v_crim_seed, "format_version": v_crim_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "vakilatnama_civil" or template_id in ("vakilatnama_civil", "vakilatnama_civil_gu", "vakilatnama_civil_en")):
+        v_civ_seed = _get_canonical_vakilatnama_civil_template()
+        if v_civ_seed and "vakilatnama_civil" not in deleted_ids:
+            return {**v_civ_seed, "format_version": v_civ_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -4334,6 +4640,40 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                     t["settings"] = mudat_seed["settings"]
                 if t.get("fields") != mudat_seed.get("fields"):
                     t["fields"] = mudat_seed["fields"]
+        if (t.get("id") == "vakilatnama_criminal" or t_id == "vakilatnama_criminal"):
+            vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+            if vcrim_seed:
+                if t.get("content_gu") != vcrim_seed["content_gu"]:
+                    t["content_gu"] = vcrim_seed["content_gu"]
+                if t.get("content_en") != vcrim_seed["content_en"]:
+                    t["content_en"] = vcrim_seed["content_en"]
+                if t.get("settings") != vcrim_seed["settings"]:
+                    t["settings"] = vcrim_seed["settings"]
+                if t.get("fields") != vcrim_seed.get("fields"):
+                    t["fields"] = vcrim_seed["fields"]
+                if t.get("name_gu") != vcrim_seed.get("name_gu"):
+                    t["name_gu"] = vcrim_seed["name_gu"]
+                if t.get("name_en") != vcrim_seed.get("name_en"):
+                    t["name_en"] = vcrim_seed["name_en"]
+                if t.get("category") != vcrim_seed.get("category"):
+                    t["category"] = vcrim_seed["category"]
+        if (t.get("id") == "vakilatnama_civil" or t_id == "vakilatnama_civil"):
+            vciv_seed = _get_canonical_vakilatnama_civil_template()
+            if vciv_seed:
+                if t.get("content_gu") != vciv_seed["content_gu"]:
+                    t["content_gu"] = vciv_seed["content_gu"]
+                if t.get("content_en") != vciv_seed["content_en"]:
+                    t["content_en"] = vciv_seed["content_en"]
+                if t.get("settings") != vciv_seed["settings"]:
+                    t["settings"] = vciv_seed["settings"]
+                if t.get("fields") != vciv_seed.get("fields"):
+                    t["fields"] = vciv_seed["fields"]
+                if t.get("name_gu") != vciv_seed.get("name_gu"):
+                    t["name_gu"] = vciv_seed["name_gu"]
+                if t.get("name_en") != vciv_seed.get("name_en"):
+                    t["name_en"] = vciv_seed["name_en"]
+                if t.get("category") != vciv_seed.get("category"):
+                    t["category"] = vciv_seed["category"]
         return {
             **t,
             "id": t.get("id") or t_id,
@@ -6282,7 +6622,7 @@ async def get_catalog_template_order():
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -8986,7 +9326,7 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji"):
+    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -10241,6 +10581,46 @@ async def seed_templates(force: bool = False) -> dict:
                         "content_en": mudat_seed["content_en"],
                         "settings": mudat_seed["settings"],
                         "fields": mudat_seed["fields"],
+                    })
+            if t["id"] == "vakilatnama_criminal":
+                vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+                if vcrim_seed and (
+                    existing.get("content_gu") != vcrim_seed["content_gu"]
+                    or existing.get("content_en") != vcrim_seed["content_en"]
+                    or existing.get("settings") != vcrim_seed["settings"]
+                    or existing.get("fields") != vcrim_seed.get("fields")
+                    or existing.get("name_gu") != vcrim_seed.get("name_gu")
+                    or existing.get("name_en") != vcrim_seed.get("name_en")
+                    or existing.get("category") != vcrim_seed.get("category")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": vcrim_seed["content_gu"],
+                        "content_en": vcrim_seed["content_en"],
+                        "settings": vcrim_seed["settings"],
+                        "fields": vcrim_seed["fields"],
+                        "name_gu": vcrim_seed["name_gu"],
+                        "name_en": vcrim_seed["name_en"],
+                        "category": vcrim_seed["category"],
+                    })
+            if t["id"] == "vakilatnama_civil":
+                vciv_seed = _get_canonical_vakilatnama_civil_template()
+                if vciv_seed and (
+                    existing.get("content_gu") != vciv_seed["content_gu"]
+                    or existing.get("content_en") != vciv_seed["content_en"]
+                    or existing.get("settings") != vciv_seed["settings"]
+                    or existing.get("fields") != vciv_seed.get("fields")
+                    or existing.get("name_gu") != vciv_seed.get("name_gu")
+                    or existing.get("name_en") != vciv_seed.get("name_en")
+                    or existing.get("category") != vciv_seed.get("category")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": vciv_seed["content_gu"],
+                        "content_en": vciv_seed["content_en"],
+                        "settings": vciv_seed["settings"],
+                        "fields": vciv_seed["fields"],
+                        "name_gu": vciv_seed["name_gu"],
+                        "name_en": vciv_seed["name_en"],
+                        "category": vciv_seed["category"],
                     })
             skipped_ids.append(t["id"])
             continue
