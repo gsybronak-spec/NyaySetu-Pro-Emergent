@@ -1816,6 +1816,63 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     return b64, meta
 
 
+def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_start, img_size, language):
+    """Render Advocate profile block as ONE clean vertical stack right-aligned to margin_l + max_width.
+
+    Sequence:
+    1. Advocate Name (18 pt Bold, Right-aligned)
+    2. Qualification (14 pt Bold, in parentheses e.g. (BA LLB))
+    3. Sanad / Enrollment Number (14 pt Bold e.g. G/522/2025)
+    4. Address (14 pt Bold, wrapping cleanly without character separation)
+    5. Email ID (14 pt Bold, only when provided)
+    6. Mobile Number (14 pt Bold, last line)
+
+    Uses NotoSansGujarati for Gujarati documents (natively supporting Gujarati, Latin, digits, punctuation)
+    and Times-Bold for English documents, completely preventing character fragmentation or font hopping.
+    """
+    adv_font = "NotoSansGujarati" if language == "gu" else "Times-Bold"
+    adv_name_size = 18.0
+    adv_detail_size = 14.0
+    adv_y = y_start
+    avail_hdr_w = max_width - img_size - 16.0  # Clear boundary from logo
+
+    for i, aln in enumerate(advocate_lines):
+        sz = adv_name_size if i == 0 else adv_detail_size
+        lead = 22.0 if i == 0 else 17.0
+
+        line_w = pdfmetrics.stringWidth(aln, adv_font, sz)
+        if line_w > avail_hdr_w and " " in aln:
+            words = aln.split()
+            sub_lines = []
+            cur_words = []
+            for w in words:
+                cand = " ".join(cur_words + [w])
+                if pdfmetrics.stringWidth(cand, adv_font, sz) <= avail_hdr_w or not cur_words:
+                    cur_words.append(w)
+                else:
+                    sub_lines.append(" ".join(cur_words))
+                    cur_words = [w]
+            if cur_words:
+                sub_lines.append(" ".join(cur_words))
+            for sl in sub_lines:
+                sl_w = pdfmetrics.stringWidth(sl, adv_font, sz)
+                sl_x = margin_l + max_width - sl_w
+                c.setFont(adv_font, sz)
+                c.drawString(sl_x, adv_y, sl)
+                if adv_font == "NotoSansGujarati":
+                    c.drawString(sl_x + 0.45, adv_y, sl)
+                adv_y -= lead
+        else:
+            cur_x = margin_l + max_width - line_w
+            c.setFont(adv_font, sz)
+            c.drawString(cur_x, adv_y, aln)
+            if adv_font == "NotoSansGujarati":
+                c.drawString(cur_x + 0.45, adv_y, aln)
+            adv_y -= lead
+
+    return adv_y
+
+
 def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings: dict = None, ctx: dict = None):
     """Specialized precision renderer for Vakalatnama documents to mirror the authoritative source PDFs."""
     register_fonts()
@@ -2026,7 +2083,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             f"સ્થળ : {p_val}" if language == "gu" else f"Place : {p_val}",
         ]
 
-    p_name = clean_labels((ctx.get("party_signature_name") or ctx.get("party_sign_name") or "").strip())
+    raw_pn = (ctx.get("party_signature_name") or ctx.get("party_sign_name") or "").strip()
+    p_name = clean_labels(raw_pn) if is_clean_val(raw_pn) else ""
     raw_an = (ctx.get("advocate_name") or (advocate_lines[0] if advocate_lines else "")).strip()
     if "ના એડવોકેટ" in raw_an or raw_an.startswith("Advocate for"):
         raw_an = (advocate_lines[0] if advocate_lines else "").strip()
@@ -2125,7 +2183,11 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                             cur_x = x_start
 
                         for g in w_shaped:
-                            if g["gid"] in gid_to_pua:
+                            if g.get("is_latin"):
+                                c.setFont("Times-Bold" if is_bold else "Times-Roman", size_pt)
+                                c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], g["text"])
+                                c.setFont(font_name, size_pt)
+                            elif g.get("gid") is not None and g["gid"] in gid_to_pua:
                                 ch = chr(gid_to_pua[g["gid"]])
                                 c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], ch)
                                 if is_bold:
@@ -2145,13 +2207,15 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                     if os.path.exists(justice_img_path):
                         c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
 
-                    adv_y = y
-                    avail_hdr_w = max_width - img_size - 16.0
-                    for i, aln in enumerate(advocate_lines):
-                        sz = adv_name_size if i == 0 else adv_detail_size
-                        lead = 22.0 if i == 0 else 17.0
-                        draw_hb_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=True)
-                        adv_y -= lead
+                    adv_y = _render_advocate_header_block(
+                        c=c,
+                        advocate_lines=advocate_lines,
+                        margin_l=margin_l,
+                        max_width=max_width,
+                        y_start=y,
+                        img_size=img_size,
+                        language=language,
+                    )
 
                     y = min(y - img_size - 8, adv_y - 8)
 
@@ -2209,7 +2273,11 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                             c.setFont(font_name, body_size)
                             for wi, w in enumerate(w_list):
                                 for g in w:
-                                    if g["gid"] in gid_to_pua:
+                                    if g.get("is_latin"):
+                                        c.setFont("Times-Roman", body_size)
+                                        c.drawString(cur_x + g["xoff"], y + g["yoff"], g["text"])
+                                        c.setFont(font_name, body_size)
+                                    elif g.get("gid") is not None and g["gid"] in gid_to_pua:
                                         ch = chr(gid_to_pua[g["gid"]])
                                         c.drawString(cur_x + g["xoff"], y + g["yoff"], ch)
                                     cur_x += g["adv"]
@@ -2246,27 +2314,32 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                     lbl_p_pre = "પક્ષકારનું નામ :- "
                     lbl_a_pre = "એડવોકેટનું નામ :- "
 
-                    draw_hb_line(lbl_p_pre, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
                     w_pre_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_pre, name_size))
                     if p_name:
-                        w_val_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, p_name, name_size))
-                        if w_pre_p + w_val_p <= col1_w:
-                            draw_hb_line(p_name, name_size, col1_x + w_pre_p, y_row2, align="left", width_limit=col1_w - w_pre_p)
+                        full_p = f"{lbl_p_pre}{p_name}"
+                        w_full_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, full_p, name_size))
+                        if w_full_p <= col1_w:
+                            draw_hb_line(full_p, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
                         else:
+                            draw_hb_line(lbl_p_pre, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
                             draw_hb_line(p_name, name_size, col1_x, y_row2 - 14.0, align="left", width_limit=col1_w)
                     else:
+                        # Case B: Blank underline visible
+                        draw_hb_line(lbl_p_pre, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
                         c.setLineWidth(0.8)
                         c.line(col1_x + w_pre_p + 2, y_row2 - 1, col1_x + col1_w - 5.0, y_row2 - 1)
 
-                    draw_hb_line(lbl_a_pre, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
                     w_pre_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_pre, name_size))
                     if a_name:
-                        w_val_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, a_name, name_size))
-                        if w_pre_a + w_val_a <= col2_w:
-                            draw_hb_line(a_name, name_size, col2_x + w_pre_a, y_row2, align="left", width_limit=col2_w - w_pre_a)
+                        full_a = f"{lbl_a_pre}{a_name}"
+                        w_full_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, full_a, name_size))
+                        if w_full_a <= col2_w:
+                            draw_hb_line(full_a, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
                         else:
+                            draw_hb_line(lbl_a_pre, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
                             draw_hb_line(a_name, name_size, col2_x, y_row2 - 14.0, align="left", width_limit=col2_w)
                     else:
+                        draw_hb_line(lbl_a_pre, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
                         c.setLineWidth(0.8)
                         c.line(col2_x + w_pre_a + 2, y_row2 - 1, margin_l + max_width, y_row2 - 1)
 
@@ -2327,7 +2400,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         for chunk in re.split(r"([A-Za-z0-9@_./\-+]+)", text):
             if not chunk:
                 continue
-            if re.search(r"[A-Za-z]", chunk):
+            if re.search(r"[A-Za-z0-9]", chunk):
                 tokens.append((chunk, en_f))
             else:
                 tokens.append((chunk, gu_f))
@@ -2405,32 +2478,15 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
     if os.path.exists(justice_img_path):
         c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
 
-    adv_y = y
-    avail_hdr_w = max_width - img_size - 16.0
-    for i, aln in enumerate(advocate_lines):
-        sz = adv_name_size if i == 0 else adv_detail_size
-        lead = 22.0 if i == 0 else 17.0
-        # Check if line needs wrapping (e.g. very long address or name)
-        lw = _get_token_width(aln, sz, is_bold=True)
-        if lw > avail_hdr_w and " " in aln:
-            words = aln.split()
-            sub_lines = []
-            cur_line = []
-            for w in words:
-                test_str = " ".join(cur_line + [w])
-                if _get_token_width(test_str, sz, is_bold=True) <= avail_hdr_w or not cur_line:
-                    cur_line.append(w)
-                else:
-                    sub_lines.append(" ".join(cur_line))
-                    cur_line = [w]
-            if cur_line:
-                sub_lines.append(" ".join(cur_line))
-            for sl in sub_lines:
-                draw_canvas_line(sl, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=True)
-                adv_y -= lead
-        else:
-            draw_canvas_line(aln, sz, margin_l, adv_y, align="right", width_limit=max_width, is_bold=True)
-            adv_y -= lead
+    adv_y = _render_advocate_header_block(
+        c=c,
+        advocate_lines=advocate_lines,
+        margin_l=margin_l,
+        max_width=max_width,
+        y_start=y,
+        img_size=img_size,
+        language=language,
+    )
 
     y = min(y - img_size - 8, adv_y - 8)
 
@@ -2511,29 +2567,34 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
     lbl_a_prefix = "એડવોકેટનું નામ :- " if language == "gu" else "Advocate's name :- "
 
     # Left Column: Party Name
-    draw_canvas_line(lbl_p_prefix, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
     w_p_pre = _get_token_width(lbl_p_prefix, name_size)
     if p_name:
-        w_p_val = _get_token_width(p_name, name_size)
-        if w_p_pre + w_p_val <= col1_w:
-            draw_canvas_line(p_name, name_size, col1_x + w_p_pre, y_row2, align="left", width_limit=col1_w - w_p_pre)
+        full_p = f"{lbl_p_prefix}{p_name}"
+        w_full_p = _get_token_width(full_p, name_size)
+        if w_full_p <= col1_w:
+            draw_canvas_line(full_p, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
         else:
+            draw_canvas_line(lbl_p_prefix, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
             draw_canvas_line(p_name, name_size, col1_x, y_row2 - 14.0, align="left", width_limit=col1_w)
     else:
+        # Case B: Blank underline visible
+        draw_canvas_line(lbl_p_prefix, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
         c.setLineWidth(0.8)
         c.line(col1_x + w_p_pre + 2, y_row2 - 1, col1_x + col1_w - 5.0, y_row2 - 1)
 
     # Right Column: Advocate Name
-    draw_canvas_line(lbl_a_prefix, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
     w_a_pre = _get_token_width(lbl_a_prefix, name_size)
     if a_name:
-        w_a_val = _get_token_width(a_name, name_size)
-        if w_a_pre + w_a_val <= col2_w:
-            draw_canvas_line(a_name, name_size, col2_x + w_a_pre, y_row2, align="left", width_limit=col2_w - w_a_pre)
+        full_a = f"{lbl_a_prefix}{a_name}"
+        w_full_a = _get_token_width(full_a, name_size)
+        if w_full_a <= col2_w:
+            draw_canvas_line(full_a, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
         else:
             # Wrap strictly within column 2, never shifting column 1
+            draw_canvas_line(lbl_a_prefix, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
             draw_canvas_line(a_name, name_size, col2_x, y_row2 - 14.0, align="left", width_limit=col2_w)
     else:
+        draw_canvas_line(lbl_a_prefix, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
         c.setLineWidth(0.8)
         c.line(col2_x + w_a_pre + 2, y_row2 - 1, margin_l + max_width, y_row2 - 1)
 

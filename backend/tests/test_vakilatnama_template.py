@@ -836,7 +836,80 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         txt_crim_gu = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_crim_gu)).decode("utf-8")
         self.assertIn("અરજીઓ", txt_crim_gu)
 
+    def test_31_party_signature_name_blank_vs_provided_conditional_logic(self):
+        """31. Verify Fix 2: party_signature_name conditional logic:
+        - Case A (provided): name replaces blank space, no underline.
+        - Case B (blank): blank underline is rendered, empty value is preserved in context.
+        """
+        user = {"advocate_name": "Adv. Test"}
+        vals_with_name = {
+            "template_id": "vakilatnama_civil",
+            "party_1_name": "રાજેશભાઈ પટેલ (વાદી)",
+            "party_signature_name": "દીપેશ મકવાણા",
+        }
+        ctx_a = asyncio.run(server.build_render_context(user, None, vals_with_name, "gu"))
+        self.assertEqual(ctx_a["party_signature_name"], "દીપેશ મકવાણા")
+
+        pdf_a_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_a)
+        raw_pdf_a = base64.b64decode(pdf_a_b64)
+        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf_a)), 1)
+        import subprocess
+        txt_a = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf_a).decode("utf-8")
+        self.assertIn("દીપેશ મકવાણા", txt_a)
+
+        # Case B: Blank party_signature_name explicitly supplied
+        vals_blank = {
+            "template_id": "vakilatnama_civil",
+            "party_1_name": "રાજેશભાઈ પટેલ (વાદી)",
+            "party_signature_name": "",
+        }
+        ctx_b = asyncio.run(server.build_render_context(user, None, vals_blank, "gu"))
+        self.assertEqual(ctx_b["party_signature_name"], "", "Explicit empty party_signature_name must NOT be overwritten by party_1_name")
+
+        pdf_b_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_b)
+        raw_pdf_b = base64.b64decode(pdf_b_b64)
+        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf_b)), 1)
+        txt_b = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf_b).decode("utf-8")
+        self.assertNotIn("રાજેશભાઈ પટેલ (વાદી)", txt_b.split("પક્ષકારની સહી")[-1])
+
+    def test_32_advocate_header_block_mixed_latin_and_gujarati(self):
+        """32. Verify Fix 1: Advocate profile header renders as clean vertical stack with mixed Gujarati/Latin,
+        including (BA LLB), G/522/2025, email, mobile, and address without character fragmentation or dropping.
+        """
+        ctx_full = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "૪૦૧, શિવાલિક પ્લાઝા, C.G. Road, અમદાવાદ",
+            "advocate_email": "advocate@example.com",
+            "advocate_mobile": "+91 9157094532",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "અમદાવાદ",
+            "place": "અમદાવાદ",
+            "case_type": "દિવાની કેસ",
+            "case_number": "૧૨૩/૨૦૨૫",
+            "party_1_role": "વાદી",
+            "party_1_name": "દીપેશ મકવાણા",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "સામાવાળા",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+            "party_signature_name": "દીપેશ મકવાણા",
+        }
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            pdf_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx_full)
+            raw_pdf = base64.b64decode(pdf_b64)
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf)), 1)
+            import subprocess
+            txt = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf).decode("utf-8")
+            self.assertIn("BA LLB", txt)
+            self.assertIn("G/522/2025", txt)
+            self.assertIn("advocate@example.com", txt)
+            self.assertIn("9157094532", txt)
+            self.assertIn("C.G. Road", txt)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

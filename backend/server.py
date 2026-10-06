@@ -5252,18 +5252,23 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
 
     # Vakalatnama specific fields: party_signature_name and advocate_for
-    if "party_signature_name" in values and values.get("party_signature_name") is not None:
+    if "party_signature_name" in values:
         ctx["party_signature_name"] = str(values.get("party_signature_name") or "").strip()
-    elif not ctx.get("party_signature_name"):
-        ctx["party_signature_name"] = str(ctx.get("party_sign_name") or "").strip()
-    if not ctx.get("party_signature_name"):
-        rep_side = ctx.get("representing_party") or ctx.get("advocate_side") or "party_1"
-        if rep_side in ("party_2", "opposite", "party2"):
-            ctx["party_signature_name"] = str(ctx.get("party_2_name") or ctx.get("opposite_party") or "").strip()
-        else:
-            ctx["party_signature_name"] = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
-    if ctx.get("party_signature_name") and not ctx.get("party_sign_name"):
         ctx["party_sign_name"] = ctx["party_signature_name"]
+    elif "party_sign_name" in values:
+        ctx["party_signature_name"] = str(values.get("party_sign_name") or "").strip()
+        ctx["party_sign_name"] = ctx["party_signature_name"]
+    else:
+        if not ctx.get("party_signature_name"):
+            ctx["party_signature_name"] = str(ctx.get("party_sign_name") or "").strip()
+        if not ctx.get("party_signature_name"):
+            rep_side = ctx.get("representing_party") or ctx.get("advocate_side") or "party_1"
+            if rep_side in ("party_2", "opposite", "party2"):
+                ctx["party_signature_name"] = str(ctx.get("party_2_name") or ctx.get("opposite_party") or "").strip()
+            else:
+                ctx["party_signature_name"] = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
+        if ctx.get("party_signature_name") and not ctx.get("party_sign_name"):
+            ctx["party_sign_name"] = ctx["party_signature_name"]
 
     raw_adv_for = ctx.get("advocate_for") or values.get("advocate_for")
     if raw_adv_for:
