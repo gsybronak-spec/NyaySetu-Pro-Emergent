@@ -56,10 +56,12 @@ const BASE_FIELD_KEYS = new Set([
   "advocate_qualification",
   "advocate_address",
   "advocate_mobile",
+  "advocate_enrollment_number",
   "advocate_enrollment_no",
   "advocate_sanad_no",
   "sanad_number",
   "bar_council_no",
+  "advocate_email",
 ]);
 
 const PARTY_1_ROLES = [
@@ -336,9 +338,11 @@ export default function TemplateApplication() {
       initialValues["advocate_address"] =
         (language === "gu" ? me?.office_address_gu : me?.office_address_en) || me?.office_address || me?.address || "";
       initialValues["advocate_mobile"] = me?.mobile || me?.phone || "";
-      initialValues["advocate_enrollment_no"] = me?.bar_council_no || me?.sanad_no || me?.enrollment_no || "";
+      initialValues["advocate_enrollment_no"] = me?.bar_council_no || me?.sanad_no || me?.sanad_number || me?.enrollment_no || "";
+      initialValues["advocate_enrollment_number"] = initialValues["advocate_enrollment_no"];
       initialValues["sanad_number"] = initialValues["advocate_enrollment_no"];
       initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
+      initialValues["advocate_email"] = me?.email || me?.advocate_email || "";
       if (templateId === "reopen_right_to_argue_application") {
         const dVal = initialValues["district"];
         const distObj = districts.find((d: any) => d.id === dVal || d.gu === dVal || d.en === dVal);

@@ -408,6 +408,16 @@ class ProfileUpdate(BaseModel):
     district: Optional[str] = Field(None, max_length=100)
     user_type: Optional[str] = Field(None, max_length=50)
     picture: Optional[str] = Field(None, max_length=500)
+    advocate_qualification: Optional[str] = Field(None, max_length=200)
+    qualification: Optional[str] = Field(None, max_length=200)
+    advocate_address: Optional[str] = Field(None, max_length=500)
+    office_address: Optional[str] = Field(None, max_length=500)
+    address: Optional[str] = Field(None, max_length=500)
+    advocate_mobile: Optional[str] = Field(None, max_length=20)
+    advocate_email: Optional[str] = Field(None, max_length=200)
+    advocate_enrollment_number: Optional[str] = Field(None, max_length=50)
+    sanad_number: Optional[str] = Field(None, max_length=50)
+    sanad_no: Optional[str] = Field(None, max_length=50)
     is_profile_complete: Optional[bool] = None
     profile_completed: Optional[bool] = None
 
@@ -5200,26 +5210,29 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx[k] = ctx.get(f"{k}_other") or ""
 
     # Auto-populate advocate profile values (language-aware)
-    adv_qual = (user.get("qualification_gu" if language == "gu" else "qualification_en") or user.get("qualification") or "").strip()
-    if not ctx.get("advocate_qualification"):
+    adv_qual = (user.get("qualification_gu" if language == "gu" else "qualification_en") or user.get("qualification") or user.get("advocate_qualification") or "").strip()
+    if "advocate_qualification" not in values:
         ctx["advocate_qualification"] = adv_qual
-    adv_addr = (user.get("office_address_gu" if language == "gu" else "office_address_en") or user.get("office_address") or user.get("address") or "").strip()
-    if not ctx.get("advocate_address"):
+    adv_addr = (user.get("office_address_gu" if language == "gu" else "office_address_en") or user.get("office_address") or user.get("address") or user.get("advocate_address") or "").strip()
+    if "advocate_address" not in values:
         ctx["advocate_address"] = adv_addr
-    adv_mob = (user.get("mobile") or user.get("phone") or "").strip()
-    if not ctx.get("advocate_mobile"):
+    adv_mob = (user.get("mobile") or user.get("phone") or user.get("advocate_mobile") or "").strip()
+    if "advocate_mobile" not in values:
         ctx["advocate_mobile"] = adv_mob
-    adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("enrollment_no") or "").strip()
-    if not ctx.get("advocate_enrollment_number"):
+    adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("sanad_number") or user.get("enrollment_no") or user.get("advocate_enrollment_number") or "").strip()
+    if "advocate_enrollment_number" not in values:
         ctx["advocate_enrollment_number"] = adv_bar
-    if not ctx.get("advocate_enrollment_no"):
+    if "advocate_enrollment_no" not in values:
         ctx["advocate_enrollment_no"] = adv_bar
-    if not ctx.get("advocate_sanad_no"):
+    if "advocate_sanad_no" not in values:
         ctx["advocate_sanad_no"] = adv_bar
-    if not ctx.get("sanad_number"):
+    if "sanad_number" not in values:
         ctx["sanad_number"] = adv_bar
-    if not ctx.get("bar_council_no"):
+    if "bar_council_no" not in values:
         ctx["bar_council_no"] = adv_bar
+    adv_email = (user.get("advocate_email") or user.get("email") or "").strip()
+    if "advocate_email" not in values:
+        ctx["advocate_email"] = adv_email
     if not ctx.get("advocate_logo"):
         ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
 

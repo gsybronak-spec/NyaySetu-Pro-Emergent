@@ -4831,6 +4831,17 @@ Place : {{place}}
                 "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
             },
             {
+                "key": "advocate_enrollment_number",
+                "label_en": "Sanad / Enrollment No.",
+                "label_gu": "સનદ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_enrollment_number",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
                 "key": "advocate_address",
                 "label_en": "Advocate Address",
                 "label_gu": "સરનામું",
@@ -4842,6 +4853,17 @@ Place : {{place}}
                 "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
             },
             {
+                "key": "advocate_email",
+                "label_en": "Advocate Email ID",
+                "label_gu": "ઈમેઈલ આઈડી",
+                "type": "text",
+                "required": False,
+                "source": "advocate_email",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ઈમેઈલ આઈડી (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
                 "key": "advocate_mobile",
                 "label_en": "Advocate Mobile No.",
                 "label_gu": "મોબાઇલ નં.",
@@ -4851,17 +4873,6 @@ Place : {{place}}
                 "auto_fill": True,
                 "mode": ["saved_case", "direct_template"],
                 "description_gu": "મોબાઈલ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
-            },
-            {
-                "key": "advocate_enrollment_number",
-                "label_en": "Sanad / Enrollment No.",
-                "label_gu": "સનદ નં.",
-                "type": "text",
-                "required": False,
-                "source": "advocate_enrollment_number",
-                "auto_fill": True,
-                "mode": ["saved_case", "direct_template"],
-                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
             },
             {
                 "key": "court_name",
@@ -5084,8 +5095,8 @@ Place : {{place}}
             "page_size": "A4",
             "margin_top_cm": 2.0,
             "margin_bottom_cm": 2.0,
-            "margin_left_cm": 3.0,
-            "margin_right_cm": 3.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
             "font_family": "Lohit Gujarati",
             "gujarati_font": "LohitGujarati",
             "gujarati_font_docx": "Lohit Gujarati",
@@ -5095,17 +5106,18 @@ Place : {{place}}
             "heading_size": 15,
             "body_size_en": 14,
             "heading_size_en": 16,
-            "line_spacing": 18.0,
-            "paragraph_spacing": 6.0,
+            "line_spacing": 18.5,
+            "paragraph_spacing": 12.0,
             "first_line_indent_pt": 28.35,
             "is_vakalatnama": True,
             "variant": "criminal",
         },
         "content_gu": """{{advocate_name}}
 {{advocate_qualification}}
-{{advocate_address}}
-{{advocate_mobile}}
 {{advocate_enrollment_number}}
+{{advocate_address}}
+{{advocate_email}}
+{{advocate_mobile}}
 ------------------------------------------------------------
 વકીલાતનામું
 મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
@@ -5127,9 +5139,10 @@ Place : {{place}}
 પક્ષકારનું નામ :- {{party_signature_name}}                  એડવોકેટનું નામ :- {{advocate_name}}""",
         "content_en": """{{advocate_name}}
 {{advocate_qualification}}
-{{advocate_address}}
-{{advocate_mobile}}
 {{advocate_enrollment_number}}
+{{advocate_address}}
+{{advocate_email}}
+{{advocate_mobile}}
 ------------------------------------------------------------
 VAKALATNAMA
 IN THE COURT OF THE HON'BLE {{court_name}},
@@ -5188,6 +5201,17 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
                 "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
             },
             {
+                "key": "advocate_enrollment_number",
+                "label_en": "Sanad / Enrollment No.",
+                "label_gu": "સનદ નં.",
+                "type": "text",
+                "required": False,
+                "source": "advocate_enrollment_number",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
                 "key": "advocate_address",
                 "label_en": "Advocate Address",
                 "label_gu": "સરનામું",
@@ -5199,6 +5223,17 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
                 "description_gu": "ડે ટા બેઝ પ્રમાણે ઓટોમેટીક ખાલી ગુજરાતી હોય તો ગુજરાતી અને ઈંગલીશ હોય તો ઈંગલીશ એનુ ધ્યાન રાખવાનુ (ઓટોસેવ પણ એડીટેબલ)",
             },
             {
+                "key": "advocate_email",
+                "label_en": "Advocate Email ID",
+                "label_gu": "ઈમેઈલ આઈડી",
+                "type": "text",
+                "required": False,
+                "source": "advocate_email",
+                "auto_fill": True,
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ઈમેઈલ આઈડી (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
+            },
+            {
                 "key": "advocate_mobile",
                 "label_en": "Advocate Mobile No.",
                 "label_gu": "મોબાઇલ નં.",
@@ -5208,17 +5243,6 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
                 "auto_fill": True,
                 "mode": ["saved_case", "direct_template"],
                 "description_gu": "મોબાઈલ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
-            },
-            {
-                "key": "advocate_enrollment_number",
-                "label_en": "Sanad / Enrollment No.",
-                "label_gu": "સનદ નં.",
-                "type": "text",
-                "required": False,
-                "source": "advocate_enrollment_number",
-                "auto_fill": True,
-                "mode": ["saved_case", "direct_template"],
-                "description_gu": "સનદ નં (ટેક્ષ બોક્ષ)(ઓટોસેવ પણ એડીટેબલ)",
             },
             {
                 "key": "court_name",
@@ -5441,8 +5465,8 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
             "page_size": "A4",
             "margin_top_cm": 2.0,
             "margin_bottom_cm": 2.0,
-            "margin_left_cm": 3.0,
-            "margin_right_cm": 3.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
             "font_family": "Lohit Gujarati",
             "gujarati_font": "LohitGujarati",
             "gujarati_font_docx": "Lohit Gujarati",
@@ -5452,17 +5476,18 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
             "heading_size": 15,
             "body_size_en": 14,
             "heading_size_en": 16,
-            "line_spacing": 18.0,
-            "paragraph_spacing": 6.0,
+            "line_spacing": 18.5,
+            "paragraph_spacing": 12.0,
             "first_line_indent_pt": 28.35,
             "is_vakalatnama": True,
             "variant": "civil",
         },
         "content_gu": """{{advocate_name}}
 {{advocate_qualification}}
-{{advocate_address}}
-{{advocate_mobile}}
 {{advocate_enrollment_number}}
+{{advocate_address}}
+{{advocate_email}}
+{{advocate_mobile}}
 ------------------------------------------------------------
 વકીલાતનામું
 મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
@@ -5484,9 +5509,10 @@ Party's name :- {{party_signature_name}}                  Advocate's name :- {{a
 પક્ષકારનું નામ :- {{party_signature_name}}                  એડવોકેટનું નામ :- {{advocate_name}}""",
         "content_en": """{{advocate_name}}
 {{advocate_qualification}}
-{{advocate_address}}
-{{advocate_mobile}}
 {{advocate_enrollment_number}}
+{{advocate_address}}
+{{advocate_email}}
+{{advocate_mobile}}
 ------------------------------------------------------------
 VAKALATNAMA
 IN THE COURT OF THE HON'BLE {{court_name}},

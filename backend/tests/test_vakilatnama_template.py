@@ -89,13 +89,14 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.tpl_civ["category"], "Civil")
 
     def test_02_field_count_and_exact_order(self):
-        """2. Verify exact 18 fields in exact Page 1 canonical order for both variants."""
+        """2. Verify exact 19 fields in exact canonical order for both variants."""
         expected_keys = [
             "advocate_name",
             "advocate_qualification",
-            "advocate_address",
-            "advocate_mobile",
             "advocate_enrollment_number",
+            "advocate_address",
+            "advocate_email",
+            "advocate_mobile",
             "court_name",
             "district",
             "taluka",
@@ -113,13 +114,13 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         crim_keys = [f["key"] for f in self.tpl_crim["fields"]]
         civ_keys = [f["key"] for f in self.tpl_civ["fields"]]
 
-        self.assertEqual(len(crim_keys), 18, f"Criminal fields count must be 18, got {len(crim_keys)}")
-        self.assertEqual(len(civ_keys), 18, f"Civil fields count must be 18, got {len(civ_keys)}")
+        self.assertEqual(len(crim_keys), 19, f"Criminal fields count must be 19, got {len(crim_keys)}")
+        self.assertEqual(len(civ_keys), 19, f"Civil fields count must be 19, got {len(civ_keys)}")
         self.assertEqual(crim_keys, expected_keys, "Criminal field keys do not match canonical sequence")
         self.assertEqual(civ_keys, expected_keys, "Civil field keys do not match canonical sequence")
 
     def test_03_field_optionality_and_types(self):
-        """3. Verify required vs optional fields and field types match Page 1 specifications."""
+        """3. Verify required vs optional fields and field types match specifications."""
         for tpl in (self.tpl_crim, self.tpl_civ):
             f_map = {f["key"]: f for f in tpl["fields"]}
 
@@ -139,15 +140,20 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
 
             # Optional fields
             self.assertFalse(f_map["advocate_qualification"]["required"])
-            self.assertFalse(f_map["advocate_address"]["required"])
-            self.assertFalse(f_map["advocate_mobile"]["required"])
             self.assertFalse(f_map["advocate_enrollment_number"]["required"])
+            self.assertFalse(f_map["advocate_address"]["required"])
+            self.assertFalse(f_map["advocate_email"]["required"])
+            self.assertFalse(f_map["advocate_mobile"]["required"])
             self.assertFalse(f_map["taluka"]["required"])
             self.assertFalse(f_map["place"]["required"])
 
             # Types
             self.assertEqual(f_map["advocate_name"]["type"], "text")
+            self.assertEqual(f_map["advocate_qualification"]["type"], "text")
+            self.assertEqual(f_map["advocate_enrollment_number"]["type"], "text")
             self.assertEqual(f_map["advocate_address"]["type"], "textarea")
+            self.assertEqual(f_map["advocate_email"]["type"], "text")
+            self.assertEqual(f_map["advocate_mobile"]["type"], "text")
             self.assertEqual(f_map["court_name"]["type"], "select")
             self.assertEqual(f_map["district"]["type"], "select")
             self.assertEqual(f_map["taluka"]["type"], "select")
@@ -276,24 +282,25 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn(expected_para2_en, self.tpl_civ["content_en"])
 
     def test_11_single_page_settings_margins(self):
-        """11. Verify canonical margin settings: 3cm left/right, 2cm top/bottom, A4 page size."""
+        """11. Verify canonical margin settings: 4.0cm left/right, 2.0cm top/bottom, A4 page size."""
         for tpl in (self.tpl_crim, self.tpl_civ):
             s = tpl["settings"]
             self.assertEqual(s["page_size"], "A4")
-            self.assertEqual(s["margin_left_cm"], 3.0)
-            self.assertEqual(s["margin_right_cm"], 3.0)
+            self.assertEqual(s["margin_left_cm"], 4.0)
+            self.assertEqual(s["margin_right_cm"], 4.0)
             self.assertEqual(s["margin_top_cm"], 2.0)
             self.assertEqual(s["margin_bottom_cm"], 2.0)
             self.assertTrue(s.get("is_vakalatnama"))
 
     def test_12_pdf_generation_criminal_gujarati(self):
-        """12. Verify valid PDF generation for Criminal Vakalatnama in Gujarati."""
+        """12. Verify valid 1-page PDF generation for Criminal Vakalatnama in Gujarati."""
         ctx = {
             "advocate_name": "હિતેશ કે. જાદવ",
             "advocate_qualification": "બી.કોમ., એલએલ.બી.",
-            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
-            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
             "advocate_enrollment_number": "જી/૧૨૩૪/૨૦૧૦",
+            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
+            "advocate_email": "hitesh.advocate@example.com",
+            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
             "court_name": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
             "district": "ગાંધીનગર",
             "taluka": "કલોલ",
@@ -320,15 +327,18 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_bytes = base64.b64decode(pdf_b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 10000)
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        self.assertEqual(page_count, 1, f"Criminal Gujarati PDF must be strictly 1 page, got {page_count}")
 
     def test_13_pdf_generation_civil_gujarati(self):
-        """13. Verify valid PDF generation for Civil Vakalatnama in Gujarati."""
+        """13. Verify valid 1-page PDF generation for Civil Vakalatnama in Gujarati."""
         ctx = {
             "advocate_name": "હિતેશ કે. જાદવ",
             "advocate_qualification": "બી.કોમ., એલએલ.બી.",
-            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
-            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
             "advocate_enrollment_number": "જી/૧૨૩૪/૨૦૧૦",
+            "advocate_address": "૪૦૨, હાઈકોર્ટ કોમ્પલેક્સ, સોલા, અમદાવાદ",
+            "advocate_email": "hitesh.advocate@example.com",
+            "advocate_mobile": "૯૮૭૬૫૪૩૨૧૦",
             "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
             "district": "અમદાવાદ",
             "taluka": "",
@@ -355,15 +365,18 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_bytes = base64.b64decode(pdf_b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 10000)
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        self.assertEqual(page_count, 1, f"Civil Gujarati PDF must be strictly 1 page, got {page_count}")
 
     def test_14_pdf_generation_criminal_english(self):
-        """14. Verify valid PDF generation for Criminal Vakalatnama in English."""
+        """14. Verify valid 1-page PDF generation for Criminal Vakalatnama in English."""
         ctx = {
             "advocate_name": "Adv. Hitesh K. Jadav",
             "advocate_qualification": "B.Com., LL.B.",
-            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
-            "advocate_mobile": "9876543210",
             "advocate_enrollment_number": "G/1234/2010",
+            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
+            "advocate_email": "hitesh.advocate@example.com",
+            "advocate_mobile": "9876543210",
             "court_name": "Chief Judicial Magistrate",
             "district": "Gandhinagar",
             "taluka": "Kalol",
@@ -390,15 +403,18 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_bytes = base64.b64decode(pdf_b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 10000)
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        self.assertEqual(page_count, 1, f"Criminal English PDF must be strictly 1 page, got {page_count}")
 
     def test_15_pdf_generation_civil_english(self):
-        """15. Verify valid PDF generation for Civil Vakalatnama in English."""
+        """15. Verify valid 1-page PDF generation for Civil Vakalatnama in English."""
         ctx = {
             "advocate_name": "Adv. Hitesh K. Jadav",
             "advocate_qualification": "B.Com., LL.B.",
-            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
-            "advocate_mobile": "9876543210",
             "advocate_enrollment_number": "G/1234/2010",
+            "advocate_address": "402, High Court Complex, Sola, Ahmedabad",
+            "advocate_email": "hitesh.advocate@example.com",
+            "advocate_mobile": "9876543210",
             "court_name": "Principal Senior Civil Judge",
             "district": "Ahmedabad",
             "taluka": "",
@@ -425,6 +441,8 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_bytes = base64.b64decode(pdf_b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertGreater(len(pdf_bytes), 10000)
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        self.assertEqual(page_count, 1, f"Civil English PDF must be strictly 1 page, got {page_count}")
 
     def test_16_double_prefix_prevention(self):
         """16. Verify double advocate title prefix (એડવોકેટશ્રી એડવોકેટ) is cleanly prevented."""
@@ -459,26 +477,26 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(pdf_b64)
 
     def test_17_published_templates_includes_both_vakilatnama(self):
-        """17. Verify _get_published_templates includes both vakilatnama_criminal and vakilatnama_civil."""
+        """17. Verify _get_published_templates includes both vakilatnama_criminal and vakilatnama_civil with 19 fields."""
         server.invalidate_published_templates_cache()
         tpls = asyncio.run(server._get_published_templates())
         crim = next((t for t in tpls if t.get("id") == "vakilatnama_criminal"), None)
         civ = next((t for t in tpls if t.get("id") == "vakilatnama_civil"), None)
         self.assertIsNotNone(crim, "vakilatnama_criminal must be present in published templates")
         self.assertIsNotNone(civ, "vakilatnama_civil must be present in published templates")
-        self.assertEqual(len(crim.get("fields", [])), 18)
-        self.assertEqual(len(civ.get("fields", [])), 18)
+        self.assertEqual(len(crim.get("fields", [])), 19)
+        self.assertEqual(len(civ.get("fields", [])), 19)
 
     def test_18_get_template_by_id_returns_canonical_vakilatnama(self):
-        """18. Verify _get_template_by_id returns canonical vakilatnama templates."""
+        """18. Verify _get_template_by_id returns canonical vakilatnama templates with 19 fields."""
         crim = asyncio.run(server._get_template_by_id("vakilatnama_criminal"))
         civ = asyncio.run(server._get_template_by_id("vakilatnama_civil"))
         self.assertIsNotNone(crim)
         self.assertIsNotNone(civ)
         self.assertEqual(crim.get("id"), "vakilatnama_criminal")
         self.assertEqual(civ.get("id"), "vakilatnama_civil")
-        self.assertEqual(len(crim.get("fields", [])), 18)
-        self.assertEqual(len(civ.get("fields", [])), 18)
+        self.assertEqual(len(crim.get("fields", [])), 19)
+        self.assertEqual(len(civ.get("fields", [])), 19)
 
     def test_19_deleted_template_ids_protection(self):
         """19. Verify vakilatnama templates are protected from historical tombstoning."""
@@ -525,6 +543,158 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         civ = next((t for t in seed_data.TEMPLATES if t.get("id") == "vakilatnama_civil"), None)
         self.assertIsNotNone(crim, "vakilatnama_criminal must be in seed_data.TEMPLATES")
         self.assertIsNotNone(civ, "vakilatnama_civil must be in seed_data.TEMPLATES")
+
+    def test_23_advocate_profile_auto_fill_and_application_overrides(self):
+        """23. Verify advocate profile auto-fills, application overrides take precedence, and empty overrides do not revert."""
+        user_profile = {
+            "name": "J. M. Jadav",
+            "advocate_name_gu": "એડવોકેટ જે એમ જાદવ",
+            "advocate_name_en": "Adv. J. M. Jadav",
+            "qualification_gu": "બીએ એલએલબી",
+            "qualification_en": "BA LLB",
+            "office_address_gu": "૪૦૨, સરદાર પટેલ ભવન, અમદાવાદ",
+            "office_address_en": "402, Sardar Patel Bhavan, Ahmedabad",
+            "bar_council_no": "G/522/2025",
+            "email": "jadav.advocate@example.com",
+            "mobile": "9157094532",
+        }
+
+        # A. Full auto-fill when values dict has no advocate keys
+        ctx_auto = asyncio.run(server.build_render_context(user_profile, None, {}, "gu", "vakilatnama_criminal"))
+        self.assertEqual(ctx_auto["advocate_name"], "એડવોકેટ જે એમ જાદવ")
+        self.assertEqual(ctx_auto["advocate_qualification"], "બીએ એલએલબી")
+        self.assertEqual(ctx_auto["advocate_address"], "૪૦૨, સરદાર પટેલ ભવન, અમદાવાદ")
+        self.assertEqual(ctx_auto["advocate_enrollment_number"], "G/522/2025")
+        self.assertEqual(ctx_auto["advocate_email"], "jadav.advocate@example.com")
+        self.assertEqual(ctx_auto["advocate_mobile"], "9157094532")
+
+        # B. Application override: user edits values in application form
+        custom_values = {
+            "advocate_name": "એડવોકેટ રમેશ પટેલ",
+            "advocate_qualification": "LL.M.",
+            "advocate_address": "નવી કોર્ટ બિલ્ડીંગ, ગાંધીનગર",
+            "advocate_email": "ramesh.custom@example.com",
+            "advocate_mobile": "9898989898",
+            "advocate_enrollment_number": "G/999/2021",
+        }
+        ctx_custom = asyncio.run(server.build_render_context(user_profile, None, custom_values, "gu", "vakilatnama_criminal"))
+        self.assertEqual(ctx_custom["advocate_name"], "એડવોકેટ રમેશ પટેલ")
+        self.assertEqual(ctx_custom["advocate_qualification"], "LL.M.")
+        self.assertEqual(ctx_custom["advocate_address"], "નવી કોર્ટ બિલ્ડીંગ, ગાંધીનગર")
+        self.assertEqual(ctx_custom["advocate_email"], "ramesh.custom@example.com")
+        self.assertEqual(ctx_custom["advocate_mobile"], "9898989898")
+        self.assertEqual(ctx_custom["advocate_enrollment_number"], "G/999/2021")
+
+        # C. User explicitly clears email in application: should NOT revert to profile email
+        cleared_values = {
+            "advocate_email": "",
+            "advocate_qualification": "",
+        }
+        ctx_cleared = asyncio.run(server.build_render_context(user_profile, None, cleared_values, "gu", "vakilatnama_criminal"))
+        self.assertEqual(ctx_cleared["advocate_email"], "")
+        self.assertEqual(ctx_cleared["advocate_qualification"], "")
+
+    def test_24_advocate_header_field_order_and_clean_omission(self):
+        """24. Verify exact advocate header order, qualification parentheses, email omission, and leak-proof rendering."""
+        ctx_full = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "૪૦૨, સરદાર પટેલ ભવન, ગાંધીનગર",
+            "advocate_email": "jadav.test@example.com",
+            "advocate_mobile": "9157094532",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "place": "ગાંધીનગર",
+            "case_type": "સ્પેશિયલ દિવાની મુકદમો",
+            "case_number": "૨૦૫/૨૦૨૩",
+            "party_1_role": "વાદી",
+            "party_1_name": "મહેશભાઈ વ્યાસ",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "દિનેશભાઈ સોની",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+            "party_signature_name": "મહેશભાઈ વ્યાસ",
+        }
+        pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_full)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", pdf_bytes)), 1)
+
+        # Omission test: empty email, empty qualification, empty sanad -> no None/null/undefined leak
+        ctx_sparse = {
+            "advocate_name": "Adv. J. M. Jadav",
+            "advocate_qualification": None,
+            "advocate_enrollment_number": "",
+            "advocate_address": "402, High Court Complex, Ahmedabad",
+            "advocate_email": "",
+            "advocate_mobile": "9157094532",
+            "court_name": "Chief Judicial Magistrate",
+            "district": "Ahmedabad",
+            "place": "Ahmedabad",
+            "case_type": "Criminal Case",
+            "case_number": "101/2024",
+            "party_1_role": "Complainant",
+            "party_1_name": "Rajeshbhai Patel",
+            "party_2_role": "Accused",
+            "party_2_name": "Sureshbhai Shah",
+            "advocate_for": "Complainant",
+            "date": "06/10/2026",
+            "party_signature_name": "Rajeshbhai Patel",
+        }
+        pdf_sparse_b64, _ = doc_generator.generate_pdf_detailed([], "en", settings=self.tpl_crim["settings"], template_id="vakilatnama_criminal", ctx=ctx_sparse)
+        sparse_bytes = base64.b64decode(pdf_sparse_b64)
+        clean_text_bytes = sparse_bytes.replace(b"/PageMode /UseNone", b"")
+        self.assertNotIn(b"None", clean_text_bytes)
+        self.assertNotIn(b"null", sparse_bytes)
+        self.assertNotIn(b"undefined", sparse_bytes)
+        self.assertNotIn(b"[object Object]", sparse_bytes)
+
+    def test_25_multiline_long_address_one_page_fit(self):
+        """25. Verify long multiline advocate address wraps cleanly without causing a second page."""
+        ctx_long_addr = {
+            "advocate_name": "Adv. Rameshchandra P. Bhatt",
+            "advocate_qualification": "B.Com., LL.B., Advocate",
+            "advocate_enrollment_number": "G/12345/2015",
+            "advocate_address": "Office No. 504, 5th Floor, High Court Chamber Building, Opp. Gujarat High Court, Sola-Science City Road, Sola, Ahmedabad - 380060, Gujarat, India",
+            "advocate_email": "ramesh.bhatt.lawchambers@example.com",
+            "advocate_mobile": "9876543210",
+            "court_name": "Principal Senior Civil Judge",
+            "district": "Ahmedabad",
+            "place": "Ahmedabad",
+            "case_type": "Special Civil Suit",
+            "case_number": "501/2025",
+            "party_1_role": "Plaintiff",
+            "party_1_name": "Mukeshbhai Shantilal Shah",
+            "party_2_role": "Defendant",
+            "party_2_name": "Kiritbhai Govindbhai Parmar",
+            "advocate_for": "Plaintiff",
+            "date": "06/10/2026",
+            "party_signature_name": "Mukeshbhai Shantilal Shah",
+        }
+        pdf_b64, _ = doc_generator.generate_pdf_detailed([], "en", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_long_addr)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+        self.assertEqual(page_count, 1, f"Long address must fit within strictly 1 page, got {page_count}")
+
+    def test_26_dynamic_advocate_name_below_signature(self):
+        """26. Verify advocate name below signature dynamically reflects the application advocate name."""
+        ctx1 = {
+            "advocate_name": "એડવોકેટ કલ્પેશ પટેલ",
+            "party_signature_name": "અરવિંદભાઈ શાહ",
+            "court_name": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ",
+            "district": "ગાંધીનગર",
+            "place": "ગાંધીનગર",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "101/2024",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "અરવિંદભાઈ શાહ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "ભાવેશ પટેલ",
+            "advocate_for": "ફરીયાદી",
+            "date": "06/10/2026",
+        }
+        pdf_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_crim["settings"], template_id="vakilatnama_criminal", ctx=ctx1)
+        self.assertIsNotNone(pdf_b64)
 
 
 if __name__ == "__main__":
