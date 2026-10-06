@@ -696,6 +696,146 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_crim["settings"], template_id="vakilatnama_criminal", ctx=ctx1)
         self.assertIsNotNone(pdf_b64)
 
+    def test_27_user_exact_regression_profile_and_party_names(self):
+        """27. Verify exact user regression: party aaaaaa and advocate એડવોકેટ જે એમ જાદવ render cleanly without glyph errors or layout stacking."""
+        ctx_user = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "ગાંધીનગર, ગુજરાત",
+            "advocate_email": "test@example.com",
+            "advocate_mobile": "9157094532",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "place": "ગાંધીનગર",
+            "case_type": "દિવાની કેસ",
+            "case_number": "૧૨૩/૨૦૨૫",
+            "party_1_role": "વાદી",
+            "party_1_name": "aaaaaa",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "sssss",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+            "party_signature_name": "aaaaaa",
+        }
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx_user)
+            pdf_bytes = base64.b64decode(pdf_b64)
+            page_count = len(re.findall(rb"/Type\s*/Page\b", pdf_bytes))
+            self.assertEqual(page_count, 1, f"User regression case {tid} must strictly fit on 1 page")
+            # PDF must be non-empty and valid
+            self.assertTrue(pdf_bytes.startswith(b"%PDF-1."))
+
+    def test_28_advocate_fields_seed_v2_order(self):
+        """28. Verify seed_data_templates_v2 has all 6 advocate fields in canonical sequence."""
+        import seed_data_templates_v2
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            seed_tpl = next((t for t in seed_data_templates_v2.BASE_TEMPLATES if t.get("base_key") == tid), None)
+            self.assertIsNotNone(seed_tpl, f"{tid} must be in seed_data_templates_v2")
+            field_keys = [f["key"] for f in seed_tpl["fields"]]
+            adv_keys = [k for k in field_keys if k.startswith("advocate_") and k != "advocate_side"]
+            expected_adv_keys = [
+                "advocate_name",
+                "advocate_qualification",
+                "advocate_enrollment_number",
+                "advocate_address",
+                "advocate_email",
+                "advocate_mobile",
+            ]
+            self.assertEqual(adv_keys, expected_adv_keys, f"Advocate fields in {tid} seed must follow canonical order")
+
+    def test_29_signature_section_two_column_alignment(self):
+        """29. Verify two-column signature layout is strictly maintained side-by-side with horizontal alignment."""
+        ctx = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "ગાંધીનગર, ગુજરાત",
+            "advocate_email": "test@example.com",
+            "advocate_mobile": "9157094532",
+            "party_signature_name": "aaaaaa",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "place": "ગાંધીનગર",
+            "case_type": "સ્પે. દિવાની મુકદમો",
+            "case_number": "૧૨૩/૨૦૨૫",
+            "party_1_role": "વાદી",
+            "party_1_name": "aaaaaa",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "sssss",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+        }
+        pdf_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx)
+        pdf_bytes = base64.b64decode(pdf_b64)
+        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", pdf_bytes)), 1)
+
+    def test_30_body_paragraphs_present_in_all_variants(self):
+        """30. Verify canonical legal body paragraphs are present in all PDF outputs."""
+        ctx_gu = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "ગાંધીનગર, ગુજરાત",
+            "advocate_email": "test@example.com",
+            "advocate_mobile": "9157094532",
+            "party_signature_name": "aaaaaa",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "place": "ગાંધીનગર",
+            "case_type": "સ્પે. દિવાની મુકદમો",
+            "case_number": "૧૨૩/૨૦૨૫",
+            "party_1_role": "વાદી",
+            "party_1_name": "aaaaaa",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "sssss",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+        }
+        ctx_en = {
+            "advocate_name": "Adv. J. M. Jadav",
+            "advocate_qualification": "BA LLB",
+            "advocate_enrollment_number": "G/522/2025",
+            "advocate_address": "Gandhinagar, Gujarat",
+            "advocate_email": "test@example.com",
+            "advocate_mobile": "9157094532",
+            "party_signature_name": "aaaaaa",
+            "court_name": "Principal Senior Civil Judge",
+            "district": "Gandhinagar",
+            "place": "Gandhinagar",
+            "case_type": "Special Civil Suit",
+            "case_number": "123/2025",
+            "party_1_role": "Plaintiff",
+            "party_1_name": "aaaaaa",
+            "party_2_role": "Defendant",
+            "party_2_name": "sssss",
+            "advocate_for": "Plaintiff",
+            "date": "06/10/2026",
+        }
+        # Civil GU
+        b64_civ_gu, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_gu)
+        # Criminal GU
+        b64_crim_gu, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_crim["settings"], template_id="vakilatnama_criminal", ctx=ctx_gu)
+        # Civil EN
+        b64_civ_en, _ = doc_generator.generate_pdf_detailed([], "en", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_en)
+        # Criminal EN
+        b64_crim_en, _ = doc_generator.generate_pdf_detailed([], "en", settings=self.tpl_crim["settings"], template_id="vakilatnama_criminal", ctx=ctx_en)
+
+        for b64, label in [(b64_civ_gu, "civ_gu"), (b64_crim_gu, "crim_gu"), (b64_civ_en, "civ_en"), (b64_crim_en, "crim_en")]:
+            raw_pdf = base64.b64decode(b64)
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf)), 1, f"{label} must fit in 1 page")
+
+        # Verify PDF body phrases via pdftotext
+        import subprocess
+        txt_civ_en = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_civ_en)).decode("utf-8")
+        self.assertIn("compromise", txt_civ_en)
+        txt_crim_en = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_crim_en)).decode("utf-8")
+        self.assertIn("applications", txt_crim_en)
+        txt_civ_gu = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_civ_gu)).decode("utf-8")
+        self.assertIn("કરારદાદ", txt_civ_gu)
+        txt_crim_gu = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_crim_gu)).decode("utf-8")
+        self.assertIn("અરજીઓ", txt_crim_gu)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1989,6 +1989,35 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                 cleaned_body = re.sub(r"Advocate\s+Adv\.\s*", "Advocate ", cleaned_body)
                 body_lines.append(cleaned_body)
 
+    if not body_lines:
+        adv_for = ctx.get("advocate_for") or ("વાદી" if language == "gu" else "Plaintiff")
+        raw_adv_n = (ctx.get("advocate_name") or (advocate_lines[0] if advocate_lines else "")).strip()
+        is_crim = "criminal" in (settings.get("template_id") or "").lower() or settings.get("variant") == "criminal"
+        if language == "gu":
+            adv_disp = re.sub(r"^એડવોકેટ\s+", "", raw_adv_n)
+            if is_crim:
+                body_lines = [
+                    f"અમો {adv_for} તરીકે ઉપર દર્શાવેલ કેસમાં એડવોકેટશ્રી {adv_disp}, ને અમારા વતી હાજર રહેવા, અરજીઓ કરવા, પુરશીશ આપવા, દસ્તાવેજો રજૂ કરવા, પુરાવા આપવા, સાક્ષીઓની તપાસ તથા ઉલટતપાસ કરવા, સમાધાન કરવા, પ્રમાણિત નકલ મેળવવા અપીલ કરવા, રિવિઝન કરવા તેમજ અન્ય કાયદેસરની કાર્યવાહી કરવા અને સદર કેસ સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.",
+                    "અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે."
+                ]
+            else:
+                body_lines = [
+                    f"અમો {adv_for} તરીકે ઉપર દર્શાવેલ દાવામાં એડવોકેટશ્રી {adv_disp}, ને અમારા વતી કરારદાદ કબુલ કરવા તથા કોર્ટમાં હાજર રહેવા, દસ્તાવેજો કરવા, પૈસા રજુ કરવા, પૈસા પરત લેવા, તેમના નામનો કોર્ટફીઝ રીફંડનો દાખલો લેવા, રકમો લેવા, અમારા વતી દાવો પરત ખેંચી લેવા, અપીલ કરવા તેમજ સદર દાવા સંબંધે જરૂરી તમામ કાયદેસર કાર્યવાહી કરવા માટે સત્તા અને અધિકાર આપીએ છીએ.",
+                    "અમો સદર એડવોકેટશ્રી દ્વારા કરવામાં આવતી અમારા વતીની કાયદેસરની કાર્યવાહીને સ્વીકારીએ છીએ અને તે અમારા માટે બંધનકર્તા રહેશે."
+                ]
+        else:
+            adv_disp = re.sub(r"^Adv(\.|ocate)?\s*", "", raw_adv_n)
+            if is_crim:
+                body_lines = [
+                    f"We, as {adv_for}, in the above-mentioned case, hereby empower and authorize Advocate Shri {adv_disp}, to appear on our behalf, to file applications, to submit purshish, to produce documents, to give evidence, to examine and cross-examine witnesses, to effect compromise, to obtain certified copies, to file appeals, to file revisions as well as to carry out other legal proceedings and to conduct all necessary legal proceedings in connection with the said case.",
+                    "We accept all legal proceedings conducted by the said Advocate Shri on our behalf and the same shall remain binding upon us."
+                ]
+            else:
+                body_lines = [
+                    f"We, as {adv_for}, in the above-mentioned suit, hereby empower and authorize Advocate Shri {adv_disp}, to accept compromise on our behalf and to appear before the Court, to execute documents, to deposit money, to receive refund of money, to obtain certificate of court-fees refund in his name, to receive amounts, to withdraw the suit on our behalf, to file appeals as well as to conduct all necessary legal proceedings in connection with the said suit.",
+                    "We accept all legal proceedings conducted by the said Advocate Shri on our behalf and the same shall remain binding upon us."
+                ]
+
     if not date_lines:
         d_val = ctx.get("date") or ctx.get("date_display") or ""
         p_val = ctx.get("place") or ctx.get("taluka_place") or ""
@@ -2015,8 +2044,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         versus_size = 13.0
         body_size = 13.0
         date_size = 13.0
-        sig_size = 13.0
-        name_size = 13.0
+        sig_size = 11.5
+        name_size = 11.0
         body_line_h = 18.0
         body_indent = 28.35
     else:
@@ -2030,8 +2059,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         versus_size = 14.0
         body_size = 14.0
         date_size = 14.0
-        sig_size = 14.0
-        name_size = 14.0
+        sig_size = 12.0
+        name_size = 11.5
         body_line_h = 18.5
         body_indent = 28.35
 
@@ -2196,44 +2225,50 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                         y -= 18.0
                     y -= 8.0
 
-                    # Signatures
-                    draw_hb_line(lbl_p_sig, sig_size, margin_l, y, align="left", width_limit=col_w)
+                    # Column boundaries
+                    col1_x = margin_l
+                    col1_w = 165.0
+                    col2_x = margin_l + 175.0
+                    col2_w = max_width - 175.0
+
+                    # Row 1: Signatures
+                    draw_hb_line(lbl_p_sig, sig_size, col1_x, y, align="left", width_limit=col1_w)
                     c.setLineWidth(0.8)
                     w_sig_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_sig, sig_size))
-                    c.line(margin_l + w_sig_p + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+                    c.line(col1_x + w_sig_p + 2, y - 1, col1_x + col1_w - 5.0, y - 1)
 
-                    draw_hb_line(lbl_a_sig, sig_size, margin_l + col_w, y, align="left", width_limit=col_w)
+                    draw_hb_line(lbl_a_sig, sig_size, col2_x, y, align="left", width_limit=col2_w)
                     w_sig_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_sig, sig_size))
-                    c.line(margin_l + col_w + w_sig_a + 2, y - 1, margin_l + max_width, y - 1)
-                    y -= 28.0
+                    c.line(col2_x + w_sig_a + 2, y - 1, margin_l + max_width, y - 1)
 
-                    # Names
-                    w_name_p_full = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_name, name_size))
-                    w_name_a_full = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_name, name_size))
-                    if w_name_p_full > col_w - 8.0 or w_name_a_full > col_w - 8.0:
-                        lbl_p_pre = "પક્ષકારનું નામ :- "
-                        lbl_a_pre = "એડવોકેટનું નામ :- "
-                        draw_hb_line(lbl_p_pre, name_size, margin_l, y, align="left", width_limit=col_w)
-                        draw_hb_line(lbl_a_pre, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-                        y -= 16.0
-                        if p_name:
-                            draw_hb_line(p_name, name_size, margin_l, y, align="left", width_limit=col_w)
+                    # Row 2: Names (strictly aligned baseline)
+                    y_row2 = y - 24.0
+                    lbl_p_pre = "પક્ષકારનું નામ :- "
+                    lbl_a_pre = "એડવોકેટનું નામ :- "
+
+                    draw_hb_line(lbl_p_pre, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
+                    w_pre_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_pre, name_size))
+                    if p_name:
+                        w_val_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, p_name, name_size))
+                        if w_pre_p + w_val_p <= col1_w:
+                            draw_hb_line(p_name, name_size, col1_x + w_pre_p, y_row2, align="left", width_limit=col1_w - w_pre_p)
                         else:
-                            c.line(margin_l, y - 1, margin_l + col_w - 15.0, y - 1)
-                        if a_name:
-                            draw_hb_line(a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-                        else:
-                            c.line(margin_l + col_w, y - 1, margin_l + max_width, y - 1)
+                            draw_hb_line(p_name, name_size, col1_x, y_row2 - 14.0, align="left", width_limit=col1_w)
                     else:
-                        draw_hb_line(lbl_p_name, name_size, margin_l, y, align="left", width_limit=col_w)
-                        if not p_name:
-                            w_name_p = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_p_name, name_size))
-                            c.line(margin_l + w_name_p + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+                        c.setLineWidth(0.8)
+                        c.line(col1_x + w_pre_p + 2, y_row2 - 1, col1_x + col1_w - 5.0, y_row2 - 1)
 
-                        draw_hb_line(lbl_a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-                        if not a_name:
-                            w_name_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_name, name_size))
-                            c.line(margin_l + col_w + w_name_a + 2, y - 1, margin_l + max_width, y - 1)
+                    draw_hb_line(lbl_a_pre, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
+                    w_pre_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_pre, name_size))
+                    if a_name:
+                        w_val_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, a_name, name_size))
+                        if w_pre_a + w_val_a <= col2_w:
+                            draw_hb_line(a_name, name_size, col2_x + w_pre_a, y_row2, align="left", width_limit=col2_w - w_pre_a)
+                        else:
+                            draw_hb_line(a_name, name_size, col2_x, y_row2 - 14.0, align="left", width_limit=col2_w)
+                    else:
+                        c.setLineWidth(0.8)
+                        c.line(col2_x + w_pre_a + 2, y_row2 - 1, margin_l + max_width, y_row2 - 1)
 
                     c.save()
                     try:
@@ -2256,45 +2291,73 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
     c = pdfcanvas.Canvas(buf, pagesize=pagesize)
     registered = pdfmetrics.getRegisteredFontNames()
     if language == "gu":
-        family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
-        # LohitGujarati lacks Latin alphabet glyphs (A-Z, a-z), which causes boxes for advocate degree, sanad, email.
-        # NotoSansGujarati covers both Gujarati and Latin scripts seamlessly.
-        if (family == "LohitGujarati" or not family) and "NotoSansGujarati" in registered:
-            font_normal = "NotoSansGujarati"
-        else:
-            font_normal = family if family in registered else ("NotoSansGujarati" if "NotoSansGujarati" in registered else "Helvetica")
+        family = _gujarati_font_family(s.get("gujarati_font", "LohitGujarati"))
+        font_normal = family if family in registered else ("LohitGujarati" if "LohitGujarati" in registered else "NotoSansGujarati")
         font_bold = f"{font_normal}-Bold" if f"{font_normal}-Bold" in registered else font_normal
+        latin_normal = _resolve_latin_fallback_font(bold=False)
+        latin_bold = _resolve_latin_fallback_font(bold=True)
     else:
         font_normal = "Times-Roman"
         font_bold = "Times-Bold"
+        latin_normal = "Times-Roman"
+        latin_bold = "Times-Bold"
 
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
+    def _get_canvas_tokens(text: str, is_bold: bool = False):
+        if not text:
+            return []
+        if language != "gu":
+            return [(text, font_bold if is_bold else font_normal)]
+
+        has_gu = bool(re.search(r"[\u0A80-\u0AFF]", text))
+        has_en = bool(re.search(r"[A-Za-z]", text))
+        gu_f = font_bold if is_bold else font_normal
+        en_f = latin_bold if is_bold else latin_normal
+
+        # Pure Latin (e.g. degrees, emails, phone numbers, pure English names)
+        if not has_gu:
+            return [(text, en_f if has_en else gu_f)]
+        # Pure Gujarati
+        if not has_en:
+            return [(text, gu_f)]
+
+        # Mixed tokens
+        tokens = []
+        for chunk in re.split(r"([A-Za-z0-9@_./\-+]+)", text):
+            if not chunk:
+                continue
+            if re.search(r"[A-Za-z]", chunk):
+                tokens.append((chunk, en_f))
+            else:
+                tokens.append((chunk, gu_f))
+        return tokens
+
+    def _get_token_width(text: str, size_pt: float, is_bold: bool = False) -> float:
+        toks = _get_canvas_tokens(text, is_bold)
+        return sum(stringWidth(chunk, fn, size_pt) for chunk, fn in toks)
+
     def draw_canvas_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
-        if not text.strip():
+        if not text or not text.strip():
             return
-        fname = font_bold if is_bold else font_normal
-        if language == "gu" and ("Lohit" in fname) and re.search(r"[A-Za-z]", text):
-            if not re.search(r"[\u0A80-\u0AFF]", text):
-                fname = _resolve_latin_fallback_font(is_bold)
-            elif "NotoSansGujarati" in registered:
-                fname = "NotoSansGujarati-Bold" if is_bold else "NotoSansGujarati"
-        c.setFont(fname, size_pt)
-        lw = stringWidth(text, fname, size_pt)
+        toks = _get_canvas_tokens(text, is_bold)
+        lw = sum(stringWidth(chunk, fn, size_pt) for chunk, fn in toks)
         if align == "center":
             cur_x = x_start + (width_limit - lw) / 2.0
         elif align == "right":
             cur_x = x_start + width_limit - lw
         else:
             cur_x = x_start
-        c.drawString(cur_x, y_pos, text)
+        start_x = cur_x
+        for chunk, fn in toks:
+            c.setFont(fn, size_pt)
+            c.drawString(cur_x, y_pos, chunk)
+            cur_x += stringWidth(chunk, fn, size_pt)
         if underline:
             c.setLineWidth(1.0)
-            c.line(cur_x, y_pos - 2.5, cur_x + lw, y_pos - 2.5)
+            c.line(start_x, y_pos - 2.5, start_x + lw, y_pos - 2.5)
 
     def draw_canvas_paragraph(para_text, size_pt, x_start, y_pos, width_limit=max_width, line_height=18.0, indent_pt=28.35):
-        fname = font_normal
-        c.setFont(fname, size_pt)
         words = para_text.strip().split()
         if not words:
             return y_pos
@@ -2308,8 +2371,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             line_w = 0.0
             while i < len(words):
                 w = words[i]
-                w_w = stringWidth(w, fname, size_pt)
-                space_w = stringWidth(" ", fname, size_pt) if line_words else 0.0
+                w_w = _get_token_width(w, size_pt, is_bold=False)
+                space_w = _get_token_width(" ", size_pt, is_bold=False) if line_words else 0.0
                 if line_w + space_w + w_w <= avail or not line_words:
                     line_words.append(w)
                     line_w += space_w + w_w
@@ -2319,13 +2382,17 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             is_last = (i >= len(words))
             cur_x = x_start + cur_indent
             if not is_last and len(line_words) > 1:
-                total_word_w = sum(stringWidth(w, fname, size_pt) for w in line_words)
+                total_word_w = sum(_get_token_width(w, size_pt, is_bold=False) for w in line_words)
                 space_adv = (avail - total_word_w) / max(len(line_words) - 1, 1)
             else:
-                space_adv = stringWidth(" ", fname, size_pt)
+                space_adv = _get_token_width(" ", size_pt, is_bold=False)
             for w in line_words:
-                c.drawString(cur_x, cur_y, w)
-                cur_x += stringWidth(w, fname, size_pt) + space_adv
+                toks = _get_canvas_tokens(w, is_bold=False)
+                for chunk, fn in toks:
+                    c.setFont(fn, size_pt)
+                    c.drawString(cur_x, cur_y, chunk)
+                    cur_x += stringWidth(chunk, fn, size_pt)
+                cur_x += space_adv
             cur_y -= line_height
             line_idx += 1
         return cur_y
@@ -2344,14 +2411,14 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         sz = adv_name_size if i == 0 else adv_detail_size
         lead = 22.0 if i == 0 else 17.0
         # Check if line needs wrapping (e.g. very long address or name)
-        lw = stringWidth(aln, font_bold, sz)
+        lw = _get_token_width(aln, sz, is_bold=True)
         if lw > avail_hdr_w and " " in aln:
             words = aln.split()
             sub_lines = []
             cur_line = []
             for w in words:
                 test_str = " ".join(cur_line + [w])
-                if stringWidth(test_str, font_bold, sz) <= avail_hdr_w or not cur_line:
+                if _get_token_width(test_str, sz, is_bold=True) <= avail_hdr_w or not cur_line:
                     cur_line.append(w)
                 else:
                     sub_lines.append(" ".join(cur_line))
@@ -2418,50 +2485,57 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         y -= 18.0
     y -= 8.0
 
-    # Side-by-side Signatures
+    # Column boundaries
+    col1_x = margin_l
+    col1_w = 165.0
+    col2_x = margin_l + 175.0
+    col2_w = max_width - 175.0  # 193.5 pt
+
+    # Row 1: Side-by-side Signatures
     lbl_p_sig = "પક્ષકારની સહી :- " if language == "gu" else "Party's signature :- "
     lbl_a_sig = "એડવોકેટની સહી :- " if language == "gu" else "Advocate's signature :- "
-    draw_canvas_line(lbl_p_sig, sig_size, margin_l, y, align="left", width_limit=col_w)
+
+    draw_canvas_line(lbl_p_sig, sig_size, col1_x, y, align="left", width_limit=col1_w)
     c.setLineWidth(0.8)
-    w_p_sig = stringWidth(lbl_p_sig, font_normal, sig_size)
-    c.line(margin_l + w_p_sig + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+    w_p_sig = _get_token_width(lbl_p_sig, sig_size)
+    c.line(col1_x + w_p_sig + 2, y - 1, col1_x + col1_w - 5.0, y - 1)
 
-    draw_canvas_line(lbl_a_sig, sig_size, margin_l + col_w, y, align="left", width_limit=col_w)
-    w_a_sig = stringWidth(lbl_a_sig, font_normal, sig_size)
-    c.line(margin_l + col_w + w_a_sig + 2, y - 1, margin_l + max_width, y - 1)
-    y -= 28.0
+    draw_canvas_line(lbl_a_sig, sig_size, col2_x, y, align="left", width_limit=col2_w)
+    w_a_sig = _get_token_width(lbl_a_sig, sig_size)
+    c.line(col2_x + w_a_sig + 2, y - 1, margin_l + max_width, y - 1)
 
-    # Side-by-side Names
-    lbl_p_name_prefix = "પક્ષકારનું નામ :- " if language == "gu" else "Party's name :- "
-    lbl_a_name_prefix = "એડવોકેટનું નામ :- " if language == "gu" else "Advocate's name :- "
-    lbl_p_name = f"{lbl_p_name_prefix}{p_name}" if p_name else lbl_p_name_prefix
-    lbl_a_name = f"{lbl_a_name_prefix}{a_name}" if a_name else lbl_a_name_prefix
+    # Row 2: Side-by-side Names (strictly aligned baseline)
+    y_row2 = y - 24.0
 
-    w_p_full = stringWidth(lbl_p_name, font_normal, name_size)
-    w_a_full = stringWidth(lbl_a_name, font_normal, name_size)
+    lbl_p_prefix = "પક્ષકારનું નામ :- " if language == "gu" else "Party's name :- "
+    lbl_a_prefix = "એડવોકેટનું નામ :- " if language == "gu" else "Advocate's name :- "
 
-    if w_p_full > col_w - 8.0 or w_a_full > col_w - 8.0:
-        draw_canvas_line(lbl_p_name_prefix, name_size, margin_l, y, align="left", width_limit=col_w)
-        draw_canvas_line(lbl_a_name_prefix, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-        y -= 16.0
-        if p_name:
-            draw_canvas_line(p_name, name_size, margin_l, y, align="left", width_limit=col_w)
+    # Left Column: Party Name
+    draw_canvas_line(lbl_p_prefix, name_size, col1_x, y_row2, align="left", width_limit=col1_w)
+    w_p_pre = _get_token_width(lbl_p_prefix, name_size)
+    if p_name:
+        w_p_val = _get_token_width(p_name, name_size)
+        if w_p_pre + w_p_val <= col1_w:
+            draw_canvas_line(p_name, name_size, col1_x + w_p_pre, y_row2, align="left", width_limit=col1_w - w_p_pre)
         else:
-            c.line(margin_l, y - 1, margin_l + col_w - 15.0, y - 1)
-        if a_name:
-            draw_canvas_line(a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-        else:
-            c.line(margin_l + col_w, y - 1, margin_l + max_width, y - 1)
+            draw_canvas_line(p_name, name_size, col1_x, y_row2 - 14.0, align="left", width_limit=col1_w)
     else:
-        draw_canvas_line(lbl_p_name, name_size, margin_l, y, align="left", width_limit=col_w)
-        if not p_name:
-            w_p_name = stringWidth(lbl_p_name, font_normal, name_size)
-            c.line(margin_l + w_p_name + 2, y - 1, margin_l + col_w - 15.0, y - 1)
+        c.setLineWidth(0.8)
+        c.line(col1_x + w_p_pre + 2, y_row2 - 1, col1_x + col1_w - 5.0, y_row2 - 1)
 
-        draw_canvas_line(lbl_a_name, name_size, margin_l + col_w, y, align="left", width_limit=col_w)
-        if not a_name:
-            w_a_name = stringWidth(lbl_a_name, font_normal, name_size)
-            c.line(margin_l + col_w + w_a_name + 2, y - 1, margin_l + max_width, y - 1)
+    # Right Column: Advocate Name
+    draw_canvas_line(lbl_a_prefix, name_size, col2_x, y_row2, align="left", width_limit=col2_w)
+    w_a_pre = _get_token_width(lbl_a_prefix, name_size)
+    if a_name:
+        w_a_val = _get_token_width(a_name, name_size)
+        if w_a_pre + w_a_val <= col2_w:
+            draw_canvas_line(a_name, name_size, col2_x + w_a_pre, y_row2, align="left", width_limit=col2_w - w_a_pre)
+        else:
+            # Wrap strictly within column 2, never shifting column 1
+            draw_canvas_line(a_name, name_size, col2_x, y_row2 - 14.0, align="left", width_limit=col2_w)
+    else:
+        c.setLineWidth(0.8)
+        c.line(col2_x + w_a_pre + 2, y_row2 - 1, margin_l + max_width, y_row2 - 1)
 
     c.save()
     b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
@@ -2494,7 +2568,10 @@ def generate_pdf_detailed(blocks: list, language: str = "en", settings: dict = N
                 full_content = r_content or "\n".join(b.get("text", "") for b in blocks)
                 if not full_content.strip() and tid in ("vakilatnama_civil", "vakilatnama_criminal"):
                     try:
-                        from test_seed_data import TEMPLATES
+                        try:
+                            from backend.test_seed_data import TEMPLATES
+                        except ImportError:
+                            from test_seed_data import TEMPLATES
                         for t_seed in TEMPLATES:
                             if t_seed["id"] == tid:
                                 t_str = t_seed["content_gu"] if language == "gu" else t_seed["content_en"]

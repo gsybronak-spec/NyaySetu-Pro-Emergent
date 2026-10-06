@@ -217,6 +217,17 @@ export default function TemplateApplication() {
 
   const isUnlimited = Boolean(userProfile?.unlimited_access || userProfile?.is_owner || userProfile?.is_partner);
 
+  const isVakalatnama = useMemo(() => {
+    return (
+      templateId === "vakilatnama_criminal" ||
+      templateId === "vakilatnama_civil" ||
+      templateId?.startsWith("vakilatnama") ||
+      template?.id === "vakilatnama_criminal" ||
+      template?.id === "vakilatnama_civil" ||
+      Boolean(template?.settings?.is_vakalatnama)
+    );
+  }, [templateId, template]);
+
   const draftTimer = useRef<any>(null);
   const initialLoadDone = useRef<boolean>(false);
 
@@ -334,11 +345,25 @@ export default function TemplateApplication() {
         initialValues["advocate_name"] = advName;
       }
       initialValues["advocate_qualification"] =
-        (language === "gu" ? me?.qualification_gu : me?.qualification_en) || me?.qualification || "";
+        (language === "gu" ? me?.qualification_gu : me?.qualification_en) ||
+        me?.qualification ||
+        me?.advocate_qualification ||
+        "";
       initialValues["advocate_address"] =
-        (language === "gu" ? me?.office_address_gu : me?.office_address_en) || me?.office_address || me?.address || "";
-      initialValues["advocate_mobile"] = me?.mobile || me?.phone || "";
-      initialValues["advocate_enrollment_no"] = me?.bar_council_no || me?.sanad_no || me?.sanad_number || me?.enrollment_no || "";
+        (language === "gu" ? me?.office_address_gu : me?.office_address_en) ||
+        me?.office_address ||
+        me?.address ||
+        me?.advocate_address ||
+        "";
+      initialValues["advocate_mobile"] =
+        me?.mobile || me?.phone || me?.advocate_mobile || "";
+      initialValues["advocate_enrollment_no"] =
+        me?.bar_council_no ||
+        me?.sanad_no ||
+        me?.sanad_number ||
+        me?.enrollment_no ||
+        me?.advocate_enrollment_number ||
+        "";
       initialValues["advocate_enrollment_number"] = initialValues["advocate_enrollment_no"];
       initialValues["sanad_number"] = initialValues["advocate_enrollment_no"];
       initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
@@ -644,6 +669,18 @@ export default function TemplateApplication() {
       }
     }
 
+    if (out["advocate_enrollment_number"] && !out["advocate_enrollment_no"]) {
+      out["advocate_enrollment_no"] = out["advocate_enrollment_number"];
+    }
+    if (out["advocate_enrollment_no"] && !out["advocate_enrollment_number"]) {
+      out["advocate_enrollment_number"] = out["advocate_enrollment_no"];
+    }
+    if (out["advocate_enrollment_number"]) {
+      out["sanad_number"] = out["advocate_enrollment_number"];
+      out["bar_council_no"] = out["advocate_enrollment_number"];
+      out["advocate_sanad_no"] = out["advocate_enrollment_number"];
+    }
+
     return out;
   };
 
@@ -820,8 +857,13 @@ export default function TemplateApplication() {
       }
     }
     if (!values.date) missing.push("date");
+    if (isVakalatnama && !values.advocate_name?.trim()) {
+      if (!missing.includes("advocate_name")) {
+        missing.push("advocate_name");
+      }
+    }
     return missing;
-  }, [caseId, values, appSpecificFields, templateId, hasRepresentingParty]);
+  }, [caseId, values, appSpecificFields, templateId, hasRepresentingParty, isVakalatnama]);
 
   const genPreview = async () => {
     if (missingRequired.length > 0) {
@@ -1471,6 +1513,77 @@ export default function TemplateApplication() {
               </View>
             )}
 
+            {/* Vakalatnama: Dedicated Advocate Details Section */}
+            {isVakalatnama && (
+              <View style={{ marginBottom: Spacing.lg }}>
+                <Text style={[styles.lbl, { color: colors.onSurface, marginBottom: Spacing.xs }]}>
+                  {language === "gu" ? "એડવોકેટ વિગત" : "Advocate Details"}
+                </Text>
+                <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>
+                  {language === "gu"
+                    ? "પ્રોફાઇલમાંથી મેળવેલ વિગતો — આ વકીલાતનામા માટે જરૂર મુજબ ફેરફાર કરી શકો છો"
+                    : "Pre-filled from advocate profile — edit if needed for this Vakalatnama."}
+                </Text>
+
+                <Field
+                  testID="field-advocate_name"
+                  label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
+                  placeholder={language === "gu" ? "દા.ત. એડવોકેટ જે એમ જાદવ" : "e.g. Adv. J M Jadav"}
+                  value={values.advocate_name || ""}
+                  onChangeText={(v) => update("advocate_name", v)}
+                />
+
+                <Field
+                  testID="field-advocate_qualification"
+                  label={language === "gu" ? "લાયકાત" : "Qualification (Optional)"}
+                  placeholder={language === "gu" ? "દા.ત. B.A., LL.B." : "e.g. B.A., LL.B."}
+                  value={values.advocate_qualification || ""}
+                  onChangeText={(v) => update("advocate_qualification", v)}
+                />
+
+                <Field
+                  testID="field-advocate_enrollment_number"
+                  label={language === "gu" ? "સનદ / એનરોલમેન્ટ નંબર" : "Sanad / Enrollment Number (Optional)"}
+                  placeholder={language === "gu" ? "દા.ત. G/522/2025" : "e.g. G/522/2025"}
+                  value={values.advocate_enrollment_number || values.advocate_enrollment_no || values.sanad_number || ""}
+                  onChangeText={(v) => {
+                    update("advocate_enrollment_number", v);
+                    update("advocate_enrollment_no", v);
+                    update("sanad_number", v);
+                    update("bar_council_no", v);
+                  }}
+                />
+
+                <Field
+                  testID="field-advocate_address"
+                  label={language === "gu" ? "એડવોકેટ સરનામું" : "Advocate Address (Optional)"}
+                  placeholder={language === "gu" ? "ઓફિસનું સરનામું દાખલ કરો" : "Enter office address"}
+                  value={values.advocate_address || ""}
+                  multiline
+                  numberOfLines={3}
+                  onChangeText={(v) => update("advocate_address", v)}
+                />
+
+                <Field
+                  testID="field-advocate_email"
+                  label={language === "gu" ? "ઇમેઇલ આઇડી" : "Email ID (Optional)"}
+                  placeholder={language === "gu" ? "દા.ત. advocate@example.com" : "e.g. advocate@example.com"}
+                  value={values.advocate_email || ""}
+                  keyboardType="email-address"
+                  onChangeText={(v) => update("advocate_email", v)}
+                />
+
+                <Field
+                  testID="field-advocate_mobile"
+                  label={language === "gu" ? "મોબાઇલ નંબર" : "Mobile Number (Optional)"}
+                  placeholder={language === "gu" ? "દા.ત. 9876543210" : "e.g. 9876543210"}
+                  value={values.advocate_mobile || ""}
+                  keyboardType="phone-pad"
+                  onChangeText={(v) => update("advocate_mobile", v)}
+                />
+              </View>
+            )}
+
             {/* No-Case Mode: Render dynamic Base / Header Fields */}
             {!caseId && (
               <View style={{ marginBottom: Spacing.lg }}>
@@ -1633,7 +1746,7 @@ export default function TemplateApplication() {
                   }}
                 />
 
-                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && (
+                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && !isVakalatnama && (
                   <Field
                     testID="field-advocate_name"
                     label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}

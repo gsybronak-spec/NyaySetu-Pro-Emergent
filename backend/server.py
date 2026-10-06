@@ -5219,17 +5219,32 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     adv_mob = (user.get("mobile") or user.get("phone") or user.get("advocate_mobile") or "").strip()
     if "advocate_mobile" not in values:
         ctx["advocate_mobile"] = adv_mob
-    adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("sanad_number") or user.get("enrollment_no") or user.get("advocate_enrollment_number") or "").strip()
-    if "advocate_enrollment_number" not in values:
-        ctx["advocate_enrollment_number"] = adv_bar
-    if "advocate_enrollment_no" not in values:
-        ctx["advocate_enrollment_no"] = adv_bar
-    if "advocate_sanad_no" not in values:
-        ctx["advocate_sanad_no"] = adv_bar
-    if "sanad_number" not in values:
-        ctx["sanad_number"] = adv_bar
-    if "bar_council_no" not in values:
-        ctx["bar_council_no"] = adv_bar
+    bar_val_in_values = (
+        values.get("advocate_enrollment_number")
+        or values.get("advocate_enrollment_no")
+        or values.get("advocate_sanad_no")
+        or values.get("sanad_number")
+        or values.get("bar_council_no")
+    )
+    if bar_val_in_values is not None and str(bar_val_in_values).strip():
+        sync_bar = str(bar_val_in_values).strip()
+        ctx["advocate_enrollment_number"] = sync_bar
+        ctx["advocate_enrollment_no"] = sync_bar
+        ctx["advocate_sanad_no"] = sync_bar
+        ctx["sanad_number"] = sync_bar
+        ctx["bar_council_no"] = sync_bar
+    else:
+        adv_bar = (user.get("bar_council_no") or user.get("sanad_no") or user.get("sanad_number") or user.get("enrollment_no") or user.get("advocate_enrollment_number") or "").strip()
+        if "advocate_enrollment_number" not in values:
+            ctx["advocate_enrollment_number"] = adv_bar
+        if "advocate_enrollment_no" not in values:
+            ctx["advocate_enrollment_no"] = adv_bar
+        if "advocate_sanad_no" not in values:
+            ctx["advocate_sanad_no"] = adv_bar
+        if "sanad_number" not in values:
+            ctx["sanad_number"] = adv_bar
+        if "bar_council_no" not in values:
+            ctx["bar_council_no"] = adv_bar
     adv_email = (user.get("advocate_email") or user.get("email") or "").strip()
     if "advocate_email" not in values:
         ctx["advocate_email"] = adv_email
@@ -5241,6 +5256,12 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["party_signature_name"] = str(values.get("party_signature_name") or "").strip()
     elif not ctx.get("party_signature_name"):
         ctx["party_signature_name"] = str(ctx.get("party_sign_name") or "").strip()
+    if not ctx.get("party_signature_name"):
+        rep_side = ctx.get("representing_party") or ctx.get("advocate_side") or "party_1"
+        if rep_side in ("party_2", "opposite", "party2"):
+            ctx["party_signature_name"] = str(ctx.get("party_2_name") or ctx.get("opposite_party") or "").strip()
+        else:
+            ctx["party_signature_name"] = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
     if ctx.get("party_signature_name") and not ctx.get("party_sign_name"):
         ctx["party_sign_name"] = ctx["party_signature_name"]
 
