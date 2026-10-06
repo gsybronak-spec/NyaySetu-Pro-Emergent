@@ -1827,27 +1827,69 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
     5. Email ID (14 pt Bold, only when provided)
     6. Mobile Number (14 pt Bold, last line)
 
-    Uses NotoSansGujarati for Gujarati documents (natively supporting Gujarati, Latin, digits, punctuation)
-    and Times-Bold for English documents, completely preventing character fragmentation or font hopping.
+    Uses Lohit Gujarati for all Gujarati text (matching canonical NyaySetu Pro templates)
+    and Latin fallback font (e.g. Times-Bold / LiberationSerif-Bold) for Latin glyphs,
+    degrees, enrollment numbers, emails, and phone numbers.
     """
-    adv_font = "NotoSansGujarati" if language == "gu" else "Times-Bold"
     adv_name_size = 18.0
     adv_detail_size = 14.0
     adv_y = y_start
     avail_hdr_w = max_width - img_size - 16.0  # Clear boundary from logo
 
+    registered = pdfmetrics.getRegisteredFontNames()
+    if language == "gu":
+        gu_font = "LohitGujarati" if "LohitGujarati" in registered else "NotoSansGujarati"
+        latin_font = _resolve_latin_fallback_font(bold=True)
+    else:
+        gu_font = "Times-Bold"
+        latin_font = "Times-Bold"
+
+    def _get_hdr_tokens(text: str):
+        if not text:
+            return []
+        if language != "gu":
+            return [(text, latin_font)]
+        has_gu = bool(re.search(r"[\u0A80-\u0AFF]", text))
+        has_en = bool(re.search(r"[A-Za-z@]", text))
+        if not has_gu:
+            return [(text, latin_font if (has_en or any(c in text for c in ('@', 'G', 'B', 'L', '/'))) else gu_font)]
+        if not has_en:
+            return [(text, gu_font)]
+        tokens = []
+        for chunk in re.split(r"([A-Za-z0-9@_./\-+]+)", text):
+            if not chunk:
+                continue
+            if re.search(r"[A-Za-z@]", chunk):
+                tokens.append((chunk, latin_font))
+            else:
+                tokens.append((chunk, gu_font))
+        return tokens
+
+    def _get_hdr_width(text: str, sz: float) -> float:
+        toks = _get_hdr_tokens(text)
+        return sum(pdfmetrics.stringWidth(chunk, fn, sz) for chunk, fn in toks)
+
+    def _draw_hdr_line(text: str, sz: float, y_pos: float):
+        toks = _get_hdr_tokens(text)
+        lw = sum(pdfmetrics.stringWidth(chunk, fn, sz) for chunk, fn in toks)
+        cur_x = margin_l + max_width - lw
+        for chunk, fn in toks:
+            c.setFont(fn, sz)
+            c.drawString(cur_x, y_pos, chunk)
+            cur_x += pdfmetrics.stringWidth(chunk, fn, sz)
+
     for i, aln in enumerate(advocate_lines):
         sz = adv_name_size if i == 0 else adv_detail_size
         lead = 22.0 if i == 0 else 17.0
 
-        line_w = pdfmetrics.stringWidth(aln, adv_font, sz)
+        line_w = _get_hdr_width(aln, sz)
         if line_w > avail_hdr_w and " " in aln:
             words = aln.split()
             sub_lines = []
             cur_words = []
             for w in words:
                 cand = " ".join(cur_words + [w])
-                if pdfmetrics.stringWidth(cand, adv_font, sz) <= avail_hdr_w or not cur_words:
+                if _get_hdr_width(cand, sz) <= avail_hdr_w or not cur_words:
                     cur_words.append(w)
                 else:
                     sub_lines.append(" ".join(cur_words))
@@ -1855,19 +1897,10 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
             if cur_words:
                 sub_lines.append(" ".join(cur_words))
             for sl in sub_lines:
-                sl_w = pdfmetrics.stringWidth(sl, adv_font, sz)
-                sl_x = margin_l + max_width - sl_w
-                c.setFont(adv_font, sz)
-                c.drawString(sl_x, adv_y, sl)
-                if adv_font == "NotoSansGujarati":
-                    c.drawString(sl_x + 0.45, adv_y, sl)
+                _draw_hdr_line(sl, sz, adv_y)
                 adv_y -= lead
         else:
-            cur_x = margin_l + max_width - line_w
-            c.setFont(adv_font, sz)
-            c.drawString(cur_x, adv_y, aln)
-            if adv_font == "NotoSansGujarati":
-                c.drawString(cur_x + 0.45, adv_y, aln)
+            _draw_hdr_line(aln, sz, adv_y)
             adv_y -= lead
 
     return adv_y
@@ -2036,7 +2069,24 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         clean_ln = clean_labels(ln)
         if clean_ln.startswith("તારીખ") or clean_ln.startswith("તા.") or clean_ln.startswith("સ્થળ") or clean_ln.startswith("Date") or clean_ln.startswith("Place"):
             date_lines.append(clean_ln)
-        elif "સહી" in clean_ln or "signature" in clean_ln.lower() or "પક્ષકારનું નામ" in clean_ln or "party's name" in clean_ln.lower() or "એડવોકેટનું નામ" in clean_ln or "advocate's name" in clean_ln.lower():
+        elif (
+            "સહી" in clean_ln
+            or "signature" in clean_ln.lower()
+            or "પક્ષકારનું નામ" in clean_ln
+            or "પક્ષકારનુ નામ" in clean_ln
+            or "એડવોકેટનું નામ" in clean_ln
+            or "એડવોકેટનુ નામ" in clean_ln
+            or "party's name" in clean_ln.lower()
+            or "party name" in clean_ln.lower()
+            or "name of party" in clean_ln.lower()
+            or "client's name" in clean_ln.lower()
+            or "client name" in clean_ln.lower()
+            or "name of client" in clean_ln.lower()
+            or "advocate's name" in clean_ln.lower()
+            or "advocate name" in clean_ln.lower()
+            or "name of advocate" in clean_ln.lower()
+            or bool(re.search(r"(?:પક્ષકાર|એડવોકેટ)[નુંનુ]\s*નામ", clean_ln))
+        ):
             pass
         else:
             if clean_ln.strip():
@@ -2134,9 +2184,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
     if language == "gu" and has_uharfbuzz:
         try:
-            family = _gujarati_font_family(s.get("gujarati_font", "NotoSansGujarati"))
-            if family == "LohitGujarati":
-                family = "NotoSansGujarati"
+            family = _gujarati_font_family(s.get("gujarati_font", "LohitGujarati"))
             hb_font = _new_hb_font(family)
             if hb_font:
                 upem = hb_font.face.upem

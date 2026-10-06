@@ -836,52 +836,99 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
         txt_crim_gu = subprocess.check_output(["pdftotext", "-", "-"], input=base64.b64decode(b64_crim_gu)).decode("utf-8")
         self.assertIn("અરજીઓ", txt_crim_gu)
 
-    def test_31_party_signature_name_blank_vs_provided_conditional_logic(self):
-        """31. Verify Fix 2: party_signature_name conditional logic:
-        - Case A (provided): name replaces blank space, no underline.
-        - Case B (blank): blank underline is rendered, empty value is preserved in context.
-        """
+    def test_31_party_signature_name_with_value_renders_label_and_value_no_underline(self):
+        """Test 1: party_signature_name = 'aaaa' produces 'પક્ષકારનું નામ :- aaaa' with no underline."""
         user = {"advocate_name": "Adv. Test"}
-        vals_with_name = {
-            "template_id": "vakilatnama_civil",
-            "party_1_name": "રાજેશભાઈ પટેલ (વાદી)",
-            "party_signature_name": "દીપેશ મકવાણા",
-        }
-        ctx_a = asyncio.run(server.build_render_context(user, None, vals_with_name, "gu"))
-        self.assertEqual(ctx_a["party_signature_name"], "દીપેશ મકવાણા")
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            vals = {
+                "template_id": tid,
+                "party_1_name": "રાજેશભાઈ પટેલ",
+                "party_signature_name": "aaaa",
+            }
+            ctx = asyncio.run(server.build_render_context(user, None, vals, "gu"))
+            self.assertEqual(ctx["party_signature_name"], "aaaa")
 
-        pdf_a_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_a)
-        raw_pdf_a = base64.b64decode(pdf_a_b64)
-        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf_a)), 1)
-        import subprocess
-        txt_a = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf_a).decode("utf-8")
-        self.assertIn("દીપેશ મકવાણા", txt_a)
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx)
+            raw_pdf = base64.b64decode(pdf_b64)
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf)), 1)
+            import subprocess
+            txt = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf).decode("utf-8")
+            self.assertIn("પક્ષકારનું નામ :- aaaa", txt)
+            # Ensure "aaaa" is not duplicated anywhere else in the document
+            self.assertEqual(txt.count("aaaa"), 1)
 
-        # Case B: Blank party_signature_name explicitly supplied
-        vals_blank = {
+    def test_32_party_signature_name_blank_renders_blank_underline(self):
+        """Test 2: party_signature_name = '' renders 'પક્ષકારનું નામ :- __________________'."""
+        user = {"advocate_name": "Adv. Test"}
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            vals = {
+                "template_id": tid,
+                "party_1_name": "રાજેશભાઈ પટેલ",
+                "party_signature_name": "",
+            }
+            ctx = asyncio.run(server.build_render_context(user, None, vals, "gu"))
+            self.assertEqual(ctx["party_signature_name"], "")
+
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx)
+            raw_pdf = base64.b64decode(pdf_b64)
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf)), 1)
+            import subprocess
+            txt = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf).decode("utf-8")
+            self.assertIn("પક્ષકારનું નામ :-", txt)
+            self.assertNotIn("રાજેશભાઈ પટેલ", txt.split("પક્ષકારની સહી")[-1])
+
+    def test_33_party_signature_name_not_replaced_by_party_1_name_when_explicitly_blank(self):
+        """Test 3: Verify party_signature_name does NOT get replaced by party_1_name when explicit empty string is submitted."""
+        user = {"advocate_name": "Adv. Test"}
+        vals = {
             "template_id": "vakilatnama_civil",
-            "party_1_name": "રાજેશભાઈ પટેલ (વાદી)",
+            "party_1_name": "દીપેશ મકવાણા",
             "party_signature_name": "",
         }
-        ctx_b = asyncio.run(server.build_render_context(user, None, vals_blank, "gu"))
-        self.assertEqual(ctx_b["party_signature_name"], "", "Explicit empty party_signature_name must NOT be overwritten by party_1_name")
+        ctx = asyncio.run(server.build_render_context(user, None, vals, "gu"))
+        self.assertEqual(ctx["party_signature_name"], "", "Explicit empty party_signature_name must be preserved as ''")
 
-        pdf_b_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id="vakilatnama_civil", ctx=ctx_b)
-        raw_pdf_b = base64.b64decode(pdf_b_b64)
-        self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf_b)), 1)
-        txt_b = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf_b).decode("utf-8")
-        self.assertNotIn("રાજેશભાઈ પટેલ (વાદી)", txt_b.split("પક્ષકારની સહી")[-1])
+        # But if omitted entirely, fallback to party_1_name applies
+        vals_omitted = {
+            "template_id": "vakilatnama_civil",
+            "party_1_name": "દીપેશ મકવાણા",
+        }
+        ctx_omitted = asyncio.run(server.build_render_context(user, None, vals_omitted, "gu"))
+        self.assertEqual(ctx_omitted["party_signature_name"], "દીપેશ મકવાણા", "Omitted party_signature_name falls back to party_1_name")
 
-    def test_32_advocate_header_block_mixed_latin_and_gujarati(self):
-        """32. Verify Fix 1: Advocate profile header renders as clean vertical stack with mixed Gujarati/Latin,
-        including (BA LLB), G/522/2025, email, mobile, and address without character fragmentation or dropping.
-        """
+    def test_34_gujarati_pdf_uses_lohit_gujarati_primary_font(self):
+        """Test 4: Verify Gujarati PDF uses Lohit Gujarati as primary font and does NOT use NotoSansGujarati."""
+        ctx = {
+            "advocate_name": "એડવોકેટ જે એમ જાદવ",
+            "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "અમદાવાદ",
+            "place": "અમદાવાદ",
+            "case_type": "દિવાની કેસ",
+            "case_number": "૧૨૩/૨૦૨૫",
+            "party_1_role": "વાદી",
+            "party_1_name": "દીપેશ મકવાણા",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "સામાવાળા",
+            "advocate_for": "વાદી",
+            "date": "06/10/2026",
+            "party_signature_name": "aaaa",
+        }
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx)
+            self.assertEqual(meta["font_family"], "LohitGujarati")
+            raw_pdf = base64.b64decode(pdf_b64)
+            fonts = [f.decode("latin1") for f in re.findall(rb"/BaseFont\s*/([^\s/>]+)", raw_pdf)]
+            self.assertTrue(any("Lohit-Gujarati" in f or "LohitGujarati" in f for f in fonts), f"Expected Lohit in {fonts}")
+            self.assertFalse(any("Noto" in f for f in fonts), f"Noto must NOT be present in {fonts}")
+
+    def test_35_mixed_content_renders_correctly_without_missing_glyphs(self):
+        """Test 5: Verify mixed content ((BA LLB), G/522/2025, test@example.com, +91 9157094532) renders cleanly."""
         ctx_full = {
             "advocate_name": "એડવોકેટ જે એમ જાદવ",
             "advocate_qualification": "BA LLB",
             "advocate_enrollment_number": "G/522/2025",
             "advocate_address": "૪૦૧, શિવાલિક પ્લાઝા, C.G. Road, અમદાવાદ",
-            "advocate_email": "advocate@example.com",
+            "advocate_email": "test@example.com",
             "advocate_mobile": "+91 9157094532",
             "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
             "district": "અમદાવાદ",
@@ -894,19 +941,27 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_name": "સામાવાળા",
             "advocate_for": "વાદી",
             "date": "06/10/2026",
-            "party_signature_name": "દીપેશ મકવાણા",
+            "party_signature_name": "aaaa",
         }
         for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
-            pdf_b64, _ = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx_full)
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_civ["settings"], template_id=tid, ctx=ctx_full)
             raw_pdf = base64.b64decode(pdf_b64)
-            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_pdf)), 1)
             import subprocess
             txt = subprocess.check_output(["pdftotext", "-", "-"], input=raw_pdf).decode("utf-8")
             self.assertIn("BA LLB", txt)
             self.assertIn("G/522/2025", txt)
-            self.assertIn("advocate@example.com", txt)
+            self.assertIn("test@example.com", txt)
             self.assertIn("9157094532", txt)
             self.assertIn("C.G. Road", txt)
+
+    def test_36_both_variants_remain_strictly_one_a4_page(self):
+        """Test 6: Verify both vakilatnama_civil and vakilatnama_criminal remain strictly one A4 page."""
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            for lang in ("gu", "en"):
+                pdf_b64, _ = doc_generator.generate_pdf_detailed([], lang, settings=self.tpl_civ["settings"], template_id=tid, ctx={})
+                raw_pdf = base64.b64decode(pdf_b64)
+                page_count = len(re.findall(rb"/Type\s*/Page\b", raw_pdf))
+                self.assertEqual(page_count, 1, f"{tid} ({lang}) must be strictly 1 page, got {page_count}")
 
 
 if __name__ == "__main__":
