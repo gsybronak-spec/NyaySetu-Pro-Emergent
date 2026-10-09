@@ -370,10 +370,9 @@ export default function TemplateApplication() {
       initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
       initialValues["advocate_email"] = me?.email || me?.advocate_email || "";
       if (isVakalatnama) {
-        initialValues["party_signature_name"] =
-          initialValues["party_signature_name"] !== undefined
-            ? initialValues["party_signature_name"]
-            : "";
+        if (initialValues["party_signature_name"] === undefined) {
+          delete initialValues["party_signature_name"];
+        }
       }
       if (templateId === "reopen_right_to_argue_application") {
         const dVal = initialValues["district"];
@@ -1793,7 +1792,7 @@ export default function TemplateApplication() {
               <Field
                 testID="field-party_signature_name"
                 label={language === "gu" ? "પક્ષકારનું નામ (સહી કરનાર) (વૈકલ્પિક)" : "Name of Party Signing (Optional)"}
-                placeholder={language === "gu" ? "ખાલી રાખશો તો સહી માટે ખાલી લીટી આવશે" : "Leave blank to render blank underline for signing"}
+                placeholder={values.party_1_name ? values.party_1_name : (language === "gu" ? "ખાલી રાખશો તો સહી માટે ખાલી લીટી આવશે" : "Leave blank to render blank underline for signing")}
                 value={values.party_signature_name !== undefined ? values.party_signature_name : ""}
                 onChangeText={(v) => update("party_signature_name", v)}
               />

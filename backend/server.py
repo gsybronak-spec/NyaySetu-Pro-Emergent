@@ -5252,10 +5252,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
 
     # Vakalatnama specific fields: party_signature_name and advocate_for
-    if "party_signature_name" in values:
+    if "party_signature_name" in values and values.get("party_signature_name") is not None:
         ctx["party_signature_name"] = str(values.get("party_signature_name") or "").strip()
         ctx["party_sign_name"] = ctx["party_signature_name"]
-    elif "party_sign_name" in values:
+    elif "party_sign_name" in values and values.get("party_sign_name") is not None:
         ctx["party_signature_name"] = str(values.get("party_sign_name") or "").strip()
         ctx["party_sign_name"] = ctx["party_signature_name"]
     else:
