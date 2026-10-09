@@ -20,6 +20,17 @@ interface User {
   bar_council_no?: string | null;
   advocate_name_en?: string | null;
   advocate_name_gu?: string | null;
+  qualification?: string | null;
+  advocate_qualification?: string | null;
+  qualification_en?: string | null;
+  qualification_gu?: string | null;
+  office_address?: string | null;
+  advocate_address?: string | null;
+  office_address_en?: string | null;
+  office_address_gu?: string | null;
+  permanent_address?: string | null;
+  signature_url?: string | null;
+  court?: string | null;
   state?: string | null;
   district?: string | null;
   user_type?: string | null;

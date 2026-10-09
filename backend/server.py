@@ -413,6 +413,8 @@ class ProfileUpdate(BaseModel):
     advocate_address: Optional[str] = Field(None, max_length=500)
     office_address: Optional[str] = Field(None, max_length=500)
     address: Optional[str] = Field(None, max_length=500)
+    permanent_address: Optional[str] = Field(None, max_length=500)
+    signature_url: Optional[str] = Field(None, max_length=500)
     advocate_mobile: Optional[str] = Field(None, max_length=20)
     advocate_email: Optional[str] = Field(None, max_length=200)
     advocate_enrollment_number: Optional[str] = Field(None, max_length=50)
@@ -708,6 +710,28 @@ def is_unlimited_user(user: Optional[dict]) -> bool:
     return False
 
 
+def _is_profile_complete(user: Optional[dict]) -> bool:
+    """Check whether a user profile has all required professional details saved in the database."""
+    if not user or not isinstance(user, dict):
+        return False
+    has_name = bool((user.get("name") or (user.get("first_name") and user.get("last_name")) or "").strip())
+    has_mobile = bool((user.get("mobile") or user.get("advocate_mobile") or "").strip())
+    has_email = bool((user.get("email") or user.get("advocate_email") or "").strip())
+    has_state = bool((user.get("state") or "").strip())
+    has_district = bool((user.get("district") or "").strip())
+    user_type = (user.get("user_type") or ("Advocate" if user.get("bar_council_no") else None) or "").strip()
+    if not user_type:
+        return False
+    if user_type == "Advocate":
+        has_bar = bool((user.get("bar_council_no") or user.get("sanad_number") or user.get("advocate_enrollment_number") or user.get("sanad_no") or "").strip())
+        has_adv_gu = bool((user.get("advocate_name_gu") or "").strip())
+        has_adv_en = bool((user.get("advocate_name_en") or "").strip())
+        has_qual = bool((user.get("qualification") or user.get("advocate_qualification") or "").strip())
+        has_office = bool((user.get("office_address") or user.get("advocate_address") or user.get("address") or "").strip())
+        return bool(has_name and has_mobile and has_email and has_state and has_district and has_bar and has_adv_gu and has_adv_en and has_qual and has_office)
+    return bool(has_name and has_mobile and has_email and has_state and has_district and user_type)
+
+
 def _public_user(user: Optional[dict]) -> dict:
     """User object safe for clients: strips the password hash and flags whether a
     password is set (so the UI can offer Set Password for legacy OTP-only users)."""
@@ -717,27 +741,8 @@ def _public_user(user: Optional[dict]) -> dict:
     u["id"] = str(user.get("id") or "")
     u["has_password"] = bool(user.get("password_hash"))
     
-    # Profile completeness evaluation
-    if user.get("profile_completed") is True or user.get("is_profile_complete") is True:
-        is_complete = True
-    else:
-        has_name = bool(user.get("name") or (user.get("first_name") and user.get("last_name")))
-        has_mobile = bool(user.get("mobile"))
-        has_state = bool(user.get("state"))
-        has_district = bool(user.get("district"))
-        user_type = user.get("user_type") or ("Advocate" if user.get("bar_council_no") else None)
-        has_user_type = bool(user_type)
-        has_bar = bool(user.get("bar_council_no")) if user_type == "Advocate" else True
-        has_adv_gu = bool((user.get("advocate_name_gu") or "").strip())
-        has_adv_en = bool((user.get("advocate_name_en") or "").strip())
-        has_adv_names = (has_adv_gu and has_adv_en) if user_type == "Advocate" else True
-
-        # Existing mobile/password users registered before this requirement
-        if user.get("provider") != "google" and has_mobile and has_name and has_adv_names:
-            is_complete = True
-        else:
-            is_complete = bool(has_name and has_mobile and has_state and has_district and has_user_type and has_bar and has_adv_names)
-
+    # Profile completeness evaluated authoritatively from saved professional fields
+    is_complete = _is_profile_complete(user)
     u["profile_completed"] = is_complete
     u["is_profile_complete"] = is_complete
     unlimited = is_unlimited_user(user)
@@ -780,8 +785,8 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         elif len(parts) >= 3:
             first_name, middle_name, last_name = parts[0], " ".join(parts[1:-1]), parts[-1]
 
-    # If mobile and name are provided at registration, profile is complete.
-    is_comp = bool(mobile and (name or (first_name and last_name)))
+    # Newly created users must complete role & professional onboarding
+    is_comp = False
 
     user = {
         "id": user_id,
@@ -1953,6 +1958,36 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
                 elif u_type:
                     updates["advocate_name_en"] = full
 
+    if "email" in updates and updates["email"]:
+        clean_email = str(updates["email"]).strip()
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+            raise HTTPException(400, "Please enter a valid email address.")
+        updates["email"] = clean_email
+        updates["advocate_email"] = clean_email
+    elif "advocate_email" in updates and updates["advocate_email"]:
+        clean_email = str(updates["advocate_email"]).strip()
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+            raise HTTPException(400, "Please enter a valid email address.")
+        updates["email"] = clean_email
+        updates["advocate_email"] = clean_email
+
+    if "qualification" in updates or "advocate_qualification" in updates:
+        qual = (updates.get("qualification") or updates.get("advocate_qualification") or "").strip()
+        updates["qualification"] = qual
+        updates["advocate_qualification"] = qual
+
+    if "office_address" in updates or "advocate_address" in updates or "address" in updates:
+        addr = (updates.get("office_address") or updates.get("advocate_address") or updates.get("address") or "").strip()
+        updates["office_address"] = addr
+        updates["advocate_address"] = addr
+
+    if "bar_council_no" in updates or "sanad_number" in updates or "advocate_enrollment_number" in updates:
+        bar_no = (updates.get("bar_council_no") or updates.get("sanad_number") or updates.get("advocate_enrollment_number") or updates.get("sanad_no") or "").strip()
+        updates["bar_council_no"] = bar_no
+        updates["sanad_number"] = bar_no
+        updates["advocate_enrollment_number"] = bar_no
+        updates["sanad_no"] = bar_no
+
     if "mobile" in updates and updates["mobile"]:
         clean_mobile = re.sub(r"\D", "", str(updates["mobile"]))
         if clean_mobile.startswith("91") and len(clean_mobile) == 12:
@@ -1971,6 +2006,7 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             if existing:
                 raise HTTPException(400, "This mobile number is already registered with another account.")
         updates["mobile"] = clean_mobile
+        updates["advocate_mobile"] = clean_mobile
 
     if "user_type" in updates and updates["user_type"]:
         valid_roles = ["Advocate", "Legal Professional", "Law Student", "Other"]
@@ -1981,33 +2017,32 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             if "bar_council_no" in updates and not (updates["bar_council_no"] or "").strip():
                 raise HTTPException(400, "Bar Council / Enrollment Number is required for Advocates.")
 
-    # Auto-detect profile completeness
-    check_name = updates.get("name") or user.get("name") or (updates.get("first_name") and updates.get("last_name"))
-    check_mobile = updates.get("mobile") or user.get("mobile")
-    check_state = updates.get("state") or user.get("state")
-    check_district = updates.get("district") or user.get("district")
-    check_type = updates.get("user_type") or user.get("user_type")
-    check_bar = bool((updates.get("bar_council_no") or user.get("bar_council_no") or "").strip()) if check_type == "Advocate" else True
-    check_adv_gu = bool((updates.get("advocate_name_gu") or user.get("advocate_name_gu") or "").strip())
-    check_adv_en = bool((updates.get("advocate_name_en") or user.get("advocate_name_en") or "").strip())
-    check_adv_names = (check_adv_gu and check_adv_en) if check_type == "Advocate" else True
+    # Merged user state for authoritative completeness check
+    merged = {**user, **updates}
+    merged_type = (merged.get("user_type") or ("Advocate" if merged.get("bar_council_no") else None) or "").strip()
 
-    # If explicitly completing profile as an advocate, both names are required
-    if (req.profile_completed is True or req.is_profile_complete is True) and check_type == "Advocate":
-        if not check_adv_gu:
+    # If explicitly completing profile as an advocate, all required professional fields must be present
+    if (req.profile_completed is True or req.is_profile_complete is True) and merged_type == "Advocate":
+        if not bool((merged.get("advocate_name_gu") or "").strip()):
             raise HTTPException(400, "Advocate Name (Gujarati) is required.")
-        if not check_adv_en:
+        if not bool((merged.get("advocate_name_en") or "").strip()):
             raise HTTPException(400, "Advocate Name (English) is required.")
+        if not bool((merged.get("bar_council_no") or merged.get("sanad_number") or "").strip()):
+            raise HTTPException(400, "Bar Council / Enrollment Number is required for Advocates.")
+        if not bool((merged.get("qualification") or merged.get("advocate_qualification") or "").strip()):
+            raise HTTPException(400, "Educational Qualification is required for Advocates.")
+        if not bool((merged.get("office_address") or merged.get("advocate_address") or "").strip()):
+            raise HTTPException(400, "Office Address is required for Advocates.")
+        if not bool((merged.get("email") or merged.get("advocate_email") or "").strip()):
+            raise HTTPException(400, "Email Address is required.")
+        if not bool((merged.get("state") or "").strip()):
+            raise HTTPException(400, "State is required.")
+        if not bool((merged.get("district") or "").strip()):
+            raise HTTPException(400, "District / City is required.")
 
-    if check_name and check_mobile and check_state and check_district and check_type and check_bar and check_adv_names:
-        updates["profile_completed"] = True
-        updates["is_profile_complete"] = True
-    elif req.profile_completed is not None:
-        updates["profile_completed"] = req.profile_completed and check_adv_names
-        updates["is_profile_complete"] = req.profile_completed and check_adv_names
-    elif req.is_profile_complete is not None:
-        updates["profile_completed"] = req.is_profile_complete and check_adv_names
-        updates["is_profile_complete"] = req.is_profile_complete and check_adv_names
+    is_comp = _is_profile_complete(merged)
+    updates["profile_completed"] = is_comp
+    updates["is_profile_complete"] = is_comp
 
     if updates:
         await db.collection('users').document(user["id"]).set(updates, merge=True)
@@ -5213,12 +5248,18 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     adv_qual = (user.get("qualification_gu" if language == "gu" else "qualification_en") or user.get("qualification") or user.get("advocate_qualification") or "").strip()
     if "advocate_qualification" not in values:
         ctx["advocate_qualification"] = adv_qual
+    if "qualification" not in values:
+        ctx["qualification"] = adv_qual
     adv_addr = (user.get("office_address_gu" if language == "gu" else "office_address_en") or user.get("office_address") or user.get("address") or user.get("advocate_address") or "").strip()
     if "advocate_address" not in values:
         ctx["advocate_address"] = adv_addr
+    if "office_address" not in values:
+        ctx["office_address"] = adv_addr
     adv_mob = (user.get("mobile") or user.get("phone") or user.get("advocate_mobile") or "").strip()
     if "advocate_mobile" not in values:
         ctx["advocate_mobile"] = adv_mob
+    if "mobile_number" not in values:
+        ctx["mobile_number"] = adv_mob
     bar_val_in_values = (
         values.get("advocate_enrollment_number")
         or values.get("advocate_enrollment_no")

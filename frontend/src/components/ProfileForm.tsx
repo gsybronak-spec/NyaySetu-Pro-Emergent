@@ -71,12 +71,16 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   const [middleName, setMiddleName] = useState(user?.middle_name || parsedNames.middle || "");
   const [lastName, setLastName] = useState(user?.last_name || parsedNames.last || "");
   const [mobile, setMobile] = useState(user?.mobile || "");
+  const [email, setEmail] = useState(user?.email || "");
   const [gender, setGender] = useState<string>(user?.gender || "");
   const [dob, setDob] = useState(user?.dob || "");
   const [userType, setUserType] = useState<string>(user?.user_type || "Advocate");
   const [barCouncilNo, setBarCouncilNo] = useState(user?.bar_council_no || "");
   const [advocateNameEn, setAdvocateNameEn] = useState(user?.advocate_name_en || "");
   const [advocateNameGu, setAdvocateNameGu] = useState(user?.advocate_name_gu || "");
+  const [qualification, setQualification] = useState(user?.qualification || user?.advocate_qualification || "");
+  const [officeAddress, setOfficeAddress] = useState(user?.office_address || user?.advocate_address || "");
+  const [permanentAddress, setPermanentAddress] = useState(user?.permanent_address || "");
   const [state, setState] = useState(user?.state || "Gujarat");
   const [district, setDistrict] = useState<string | null>(user?.district || null);
   const [districts, setDistricts] = useState<any[]>([]);
@@ -108,16 +112,20 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
       if (user.middle_name || parsedNames.middle) setMiddleName(user.middle_name || parsedNames.middle || "");
       if (user.last_name || parsedNames.last) setLastName(user.last_name || parsedNames.last || "");
       if (user.mobile) setMobile(user.mobile);
+      if (user.email) setEmail(user.email);
       if (user.gender) setGender(user.gender);
       if (user.dob) setDob(user.dob);
       if (user.user_type) setUserType(user.user_type);
       if (user.bar_council_no) setBarCouncilNo(user.bar_council_no);
       if (user.advocate_name_en) setAdvocateNameEn(user.advocate_name_en);
       if (user.advocate_name_gu) setAdvocateNameGu(user.advocate_name_gu);
+      if (user.qualification || user.advocate_qualification) setQualification(user.qualification || user.advocate_qualification || "");
+      if (user.office_address || user.advocate_address) setOfficeAddress(user.office_address || user.advocate_address || "");
+      if (user.permanent_address) setPermanentAddress(user.permanent_address);
       if (user.state) setState(user.state);
       if (user.district) setDistrict(user.district);
     }
-  }, [user?.id, user?.name, user?.mobile, user?.district, user?.bar_council_no, user?.user_type, user?.advocate_name_en, user?.advocate_name_gu]);
+  }, [user?.id, user?.name, user?.mobile, user?.email, user?.district, user?.bar_council_no, user?.user_type, user?.advocate_name_en, user?.advocate_name_gu, user?.qualification, user?.advocate_qualification, user?.office_address, user?.advocate_address, user?.permanent_address]);
 
   const handleSave = async () => {
     setErr(null);
@@ -143,6 +151,11 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
       setErr("Please enter a valid 10-digit Indian mobile number (e.g. 9876543210).");
       return;
     }
+    const cleanEmail = email.trim();
+    if (!cleanEmail || !cleanEmail.includes("@") || !cleanEmail.split("@")[1]?.includes(".")) {
+      setErr("Please enter a valid email address (e.g. advocate@example.com).");
+      return;
+    }
     if (!userType) {
       setErr("Please select your User Type / Role.");
       return;
@@ -158,6 +171,14 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
       }
       if (!advocateNameGu.trim()) {
         setErr("એડવોકેટનું પૂરું નામ ગુજરાતીમાં દાખલ કરવું ફરજિયાત છે (Advocate Full Name in Gujarati is required, e.g. એડવોકેટ રમેશ પટેલ).");
+        return;
+      }
+      if (!qualification.trim()) {
+        setErr("Educational Qualification is required for Advocates (e.g. B.Com., LL.B. / LL.M.).");
+        return;
+      }
+      if (!officeAddress.trim()) {
+        setErr("Office Address is required for Advocates (e.g. Chamber No. 12, District Court Compound).");
         return;
       }
     }
@@ -185,9 +206,17 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
         advocate_name_gu: finalAdvNameGu,
         gender: gender || undefined,
         dob: dob.trim() || undefined,
-        email: user?.email || undefined,
+        email: cleanEmail,
+        advocate_email: cleanEmail,
         user_type: userType,
         bar_council_no: userType === "Advocate" ? barCouncilNo.trim() : undefined,
+        sanad_number: userType === "Advocate" ? barCouncilNo.trim() : undefined,
+        advocate_enrollment_number: userType === "Advocate" ? barCouncilNo.trim() : undefined,
+        qualification: userType === "Advocate" ? qualification.trim() : undefined,
+        advocate_qualification: userType === "Advocate" ? qualification.trim() : undefined,
+        office_address: userType === "Advocate" ? officeAddress.trim() : undefined,
+        advocate_address: userType === "Advocate" ? officeAddress.trim() : undefined,
+        permanent_address: permanentAddress.trim() || undefined,
         state: state.trim() || "Gujarat",
         district: district,
         picture: user?.picture || undefined,
@@ -385,6 +414,18 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
               onChangeText={setMobile}
             />
 
+            {/* Email Address */}
+            <Field
+              testID="setup-email"
+              label="Email Address *"
+              labelColor="#D1D8E5"
+              placeholder="e.g. advocate.patel@gmail.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
+            />
+
             {/* Optional Gender & Date of Birth */}
             <View style={{ marginBottom: Spacing.md }}>
               <Text style={styles.fieldLabel}>Gender (Optional)</Text>
@@ -452,7 +493,7 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
               </View>
             </View>
 
-            {/* Bar Council / Enrollment Number & Bilingual Advocate Names (Required for Advocates) */}
+            {/* Bar Council / Enrollment Number, Bilingual Advocate Names, Qualification & Office Address (Required for Advocates) */}
             {userType === "Advocate" && (
               <>
                 <Field
@@ -479,6 +520,24 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
                   value={advocateNameGu}
                   onChangeText={setAdvocateNameGu}
                 />
+                <Field
+                  testID="setup-qualification"
+                  label="Educational Qualification *"
+                  labelColor="#D1D8E5"
+                  placeholder="e.g. B.Com., LL.B. / LL.M."
+                  value={qualification}
+                  onChangeText={setQualification}
+                />
+                <Field
+                  testID="setup-office-address"
+                  label="Office Address *"
+                  labelColor="#D1D8E5"
+                  placeholder="e.g. 204, Lawyers Chambers, District Court Compound"
+                  multiline
+                  numberOfLines={3}
+                  value={officeAddress}
+                  onChangeText={setOfficeAddress}
+                />
               </>
             )}
 
@@ -502,6 +561,17 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
                 label: `${d.en} / ${d.gu}`,
               }))}
               onChange={setDistrict}
+            />
+
+            <Field
+              testID="setup-permanent-address"
+              label="Permanent Address (Optional)"
+              labelColor="#D1D8E5"
+              placeholder="Residential / Permanent Address"
+              multiline
+              numberOfLines={2}
+              value={permanentAddress}
+              onChangeText={setPermanentAddress}
             />
 
             <View style={styles.infoBanner}>

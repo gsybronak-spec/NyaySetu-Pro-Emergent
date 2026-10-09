@@ -350,14 +350,17 @@ export default function TemplateApplication() {
         me?.qualification ||
         me?.advocate_qualification ||
         "";
+      initialValues["qualification"] = initialValues["advocate_qualification"];
       initialValues["advocate_address"] =
         (language === "gu" ? me?.office_address_gu : me?.office_address_en) ||
         me?.office_address ||
         me?.address ||
         me?.advocate_address ||
         "";
+      initialValues["office_address"] = initialValues["advocate_address"];
       initialValues["advocate_mobile"] =
         me?.mobile || me?.phone || me?.advocate_mobile || "";
+      initialValues["mobile_number"] = initialValues["advocate_mobile"];
       initialValues["advocate_enrollment_no"] =
         me?.bar_council_no ||
         me?.sanad_no ||
