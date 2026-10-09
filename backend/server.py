@@ -5743,6 +5743,8 @@ def validate_template_requirements(t: dict, ctx: dict, language: str = "en") -> 
             continue
         if key == "case_number" and t.get("id") == "jamin_bond" and ctx.get("crime_reg_number"):
             continue
+        if key in ("party_signature_name", "party_sign_name"):
+            continue
         val = ctx.get(key)
         if val is None or str(val).strip() == "":
             lbl = (f.get("label_gu") if language == "gu" else f.get("label_en")) or f.get("label_en") or key
@@ -5803,7 +5805,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
         "raw_content": rendered,
         "ctx": ctx,
     })
-    pdf_b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
+    pdf_b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
     return {
         "content": rendered,
         "blocks": blocks,
@@ -5894,11 +5896,11 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             # Image export: rasterize the EXACT document PDF (same layout,
             # margins, fonts, shaping) into per-page PNGs. Single page -> one
             # PNG; multiple pages -> a ZIP of page-1.png ... page-N.png.
-            pages = generate_document_images(blocks, req.language, doc_settings)
+            pages = generate_document_images(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             b64, mime, img_filename = build_image_payload(pages, (req.filename or "document").rsplit(".", 1)[0])
             gen_meta = {"engine": "rasterize", "font_family": _resolve_gujarati_font_family_doc(doc_settings)}
         else:
-            b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
+            b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             mime = "application/pdf"
     except Exception as e:
         if not unlimited:

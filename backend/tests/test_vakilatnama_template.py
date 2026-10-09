@@ -1055,6 +1055,63 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
                 page_count = len(re.findall(rb"/Type\s*/Page\b", raw_pdf))
                 self.assertEqual(page_count, 1, f"Realistic test {tid} ({lang}) must fit in strictly 1 page, got {page_count}")
 
+    def test_39_doc_settings_preserves_ctx_and_renders_party_name_in_pdf(self):
+        """39. Verify get_doc_settings preserves ctx and generated PDF renders party name in Scenarios A, B, and C."""
+        user = {
+            "id": "test-adv-user",
+            "advocate_name": "Adv. Ronak Solanki",
+            "advocate_name_gu": "એડવોકેટ રોનક સોલંકી",
+            "name": "Ronak Solanki",
+            "unlimited_access": True,
+            "is_owner": True,
+        }
+        base_vals = {
+            "court": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
+            "district": "અમદાવાદ",
+            "taluka": "અમદાવાદ",
+            "case_type": "દિવાની કેસ",
+            "case_number": "123/2026",
+            "party_1_role": "વાદી",
+            "party_1_name": "રમેશભાઈ પટેલ",
+            "party_2_role": "પ્રતિવાદી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "વાદી",
+            "representing_party": "party_1",
+            "advocate_name": "એડવોકેટ રોનક સોલંકી",
+        }
+        class Req:
+            def __init__(self, tid, vals):
+                self.template_id = tid
+                self.case_id = None
+                self.language = "gu"
+                self.page_size = "A4"
+                self.values = vals
+
+        for tid in ("vakilatnama_civil", "vakilatnama_criminal"):
+            # Scenario A: omitted party_signature_name -> renders party_1_name
+            vals_a = dict(base_vals)
+            res_a = asyncio.run(server.preview_application(Req(tid, vals_a), user=user))
+            raw_a = base64.b64decode(res_a["pdf_base64"])
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_a)), 1)
+
+            # Scenario B: custom party_signature_name
+            vals_b = dict(base_vals)
+            vals_b["party_signature_name"] = "કલ્પેશભાઈ પટેલ (મુખત્યાર)"
+            res_b = asyncio.run(server.preview_application(Req(tid, vals_b), user=user))
+            raw_b = base64.b64decode(res_b["pdf_base64"])
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_b)), 1)
+
+            # Scenario C: explicitly blank party_signature_name
+            vals_c = dict(base_vals)
+            vals_c["party_signature_name"] = ""
+            res_c = asyncio.run(server.preview_application(Req(tid, vals_c), user=user))
+            raw_c = base64.b64decode(res_c["pdf_base64"])
+            self.assertEqual(len(re.findall(rb"/Type\s*/Page\b", raw_c)), 1)
+
+            # Difference in byte length proves party names are rendered in A & B and absent in C
+            self.assertTrue(len(raw_a) > len(raw_c), f"{tid}: Scenario A must have more bytes than blank Scenario C")
+            self.assertTrue(len(raw_b) > len(raw_a), f"{tid}: Scenario B must have more bytes than Scenario A")
+
 
 if __name__ == "__main__":
     unittest.main()

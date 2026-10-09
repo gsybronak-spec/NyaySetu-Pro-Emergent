@@ -249,6 +249,8 @@ def get_doc_settings(overrides: dict = None) -> dict:
                        "body_size", "heading_size", "body_size_en", "heading_size_en", "paragraph_spacing",
                        "first_line_indent_pt", "alignment", "format_version"):
                 settings[k] = v
+            else:
+                settings[k] = v
 
     # Final defensive guard: ensure line_spacing is never less than body_size
     try:
@@ -2065,6 +2067,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
     body_lines = []
     date_lines = []
+    extracted_pn = ""
     for ln in rest_lines:
         clean_ln = clean_labels(ln)
         if clean_ln.startswith("તારીખ") or clean_ln.startswith("તા.") or clean_ln.startswith("સ્થળ") or clean_ln.startswith("Date") or clean_ln.startswith("Place"):
@@ -2087,6 +2090,12 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             or "name of advocate" in clean_ln.lower()
             or bool(re.search(r"(?:પક્ષકાર|એડવોકેટ)[નુંનુ]\s*નામ", clean_ln))
         ):
+            if not extracted_pn and ("party" in clean_ln.lower() or "પક્ષકાર" in clean_ln):
+                m = re.search(r"(?:પક્ષકાર[નુંનુ]\s*નામ|Party(?:'s)?\s*name)\s*[:-]\s*([^\s_].*?)(?:\s+(?:એડવોકેટ[નુંનુ]\s*નામ|Advocate(?:'s)?\s*name)\b|$)", clean_ln)
+                if m:
+                    cand = m.group(1).strip()
+                    if cand and not cand.startswith("_") and is_clean_val(cand):
+                        extracted_pn = cand
             pass
         else:
             if clean_ln.strip():
@@ -2138,7 +2147,13 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
     elif "party_sign_name" in ctx and ctx.get("party_sign_name") is not None:
         raw_pn = str(ctx.get("party_sign_name") or "").strip()
     else:
-        raw_pn = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
+        rep_side = ctx.get("representing_party") or ctx.get("advocate_side") or "party_1"
+        if rep_side in ("party_2", "opposite", "party2"):
+            raw_pn = str(ctx.get("party_2_name") or ctx.get("opposite_party") or "").strip()
+        else:
+            raw_pn = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
+        if not raw_pn and extracted_pn:
+            raw_pn = extracted_pn
     p_name = clean_labels(raw_pn) if is_clean_val(raw_pn) else ""
     raw_an = (ctx.get("advocate_name") or (advocate_lines[0] if advocate_lines else "")).strip()
     if "ના એડવોકેટ" in raw_an or raw_an.startswith("Advocate for"):
