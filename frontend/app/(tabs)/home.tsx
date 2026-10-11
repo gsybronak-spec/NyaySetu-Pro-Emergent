@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,9 +25,10 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState(() => ({ balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }));
-  const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
-    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).slice(0, 10)
+  const [allTemplatePairs, setAllTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
+    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder())
   );
+  const [visibleHomeCount, setVisibleHomeCount] = useState<number>(10);
   const [totalTemplateCount, setTotalTemplateCount] = useState<number>(() =>
     getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).length
   );
@@ -53,7 +54,7 @@ export default function Home() {
     if (w && typeof w === "object") setWallet(w);
     setDrafts(Array.isArray(drs) ? drs : []);
     const active = getActiveTemplatePairs(tpls, order);
-    setTemplatePairs(active.slice(0, 10));
+    setAllTemplatePairs(active);
     setTotalTemplateCount(active.length);
     setLoadError(failed);
     // Desktop dashboard only — avoid extra API calls on the mobile home screen.
@@ -66,6 +67,18 @@ export default function Home() {
       setApplications(Array.isArray(hs) ? hs : []);
     }
   }, [isDesktop]);
+
+  const templatePairs = useMemo(() => {
+    return allTemplatePairs.slice(0, visibleHomeCount);
+  }, [allTemplatePairs, visibleHomeCount]);
+
+  const hasMoreHome = visibleHomeCount < allTemplatePairs.length;
+  const remainingHomeCount = Math.max(0, allTemplatePairs.length - visibleHomeCount);
+  const nextHomeBatchSize = Math.min(10, remainingHomeCount);
+
+  const handleHomeSeeMore = () => {
+    setVisibleHomeCount((prev) => prev + 10);
+  };
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -282,14 +295,29 @@ export default function Home() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable
-                testID="desktop-see-more-templates"
-                onPress={() => router.push("/(tabs)/templates")}
-                style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
-              >
-                <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ ({totalTemplateCount})</Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFF" />
-              </Pressable>
+              {hasMoreHome ? (
+                <Pressable
+                  testID="desktop-see-more-templates"
+                  onPress={handleHomeSeeMore}
+                  style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+                >
+                  <Text style={styles.seeMoreBtnText}>
+                    See More / વધુ જુઓ ({nextHomeBatchSize} more — {remainingHomeCount} remaining)
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#FFF" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  testID="desktop-see-more-templates"
+                  onPress={() => router.push("/(tabs)/templates")}
+                  style={[styles.seeMoreBtn, { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.seeMoreBtnText, { color: colors.onSurface }]}>
+                    All {totalTemplateCount} Templates Loaded • View Catalog / સંપૂર્ણ કેટલોગ જુઓ
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color={colors.brandPrimary} />
+                </Pressable>
+              )}
             </>
           )}
         </View>
@@ -482,14 +510,29 @@ export default function Home() {
                   </Pressable>
                 ))}
               </View>
-              <Pressable
-                testID="home-see-more-templates"
-                onPress={() => router.push("/(tabs)/templates")}
-                style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
-              >
-                <Text style={styles.seeMoreBtnText}>See More / બધા Templates જુઓ ({totalTemplateCount})</Text>
-                <Ionicons name="arrow-forward" size={18} color="#FFF" />
-              </Pressable>
+              {hasMoreHome ? (
+                <Pressable
+                  testID="home-see-more-templates"
+                  onPress={handleHomeSeeMore}
+                  style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
+                >
+                  <Text style={styles.seeMoreBtnText}>
+                    See More / વધુ જુઓ ({nextHomeBatchSize} more — {remainingHomeCount} remaining)
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#FFF" />
+                </Pressable>
+              ) : (
+                <Pressable
+                  testID="home-see-more-templates"
+                  onPress={() => router.push("/(tabs)/templates")}
+                  style={[styles.seeMoreBtn, { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
+                >
+                  <Text style={[styles.seeMoreBtnText, { color: colors.onSurface }]}>
+                    All {totalTemplateCount} Templates Loaded • View Catalog / સંપૂર્ણ કેટલોગ જુઓ
+                  </Text>
+                  <Ionicons name="arrow-forward" size={18} color={colors.brandPrimary} />
+                </Pressable>
+              )}
             </>
           )}
         </View>

@@ -30,6 +30,14 @@ export default function Templates() {
   const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
 
+  const PAGE_SIZE = 10;
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+
+  // Reset pagination when search query or category filter changes
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [debouncedQ, cat]);
+
   // Debounce search query by 150ms to prevent expensive re-renders while typing
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -111,6 +119,18 @@ export default function Templates() {
     return searchTemplatePairs(debouncedQ, cat, favoriteIds, orderedBasePairs);
   }, [debouncedQ, cat, favoriteIds, orderedBasePairs]);
 
+  const displayedPairs = useMemo(() => {
+    return matchedPairs.slice(0, visibleCount);
+  }, [matchedPairs, visibleCount]);
+
+  const hasMore = visibleCount < matchedPairs.length;
+  const remainingCount = Math.max(0, matchedPairs.length - visibleCount);
+  const nextBatchSize = Math.min(PAGE_SIZE, remainingCount);
+
+  const handleSeeMore = () => {
+    setVisibleCount((prev) => prev + PAGE_SIZE);
+  };
+
   const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail"];
 
   const openTemplate = (id: string, e?: any) => {
@@ -128,7 +148,7 @@ export default function Templates() {
         subtitle={
           orderedBasePairs.length === 0
             ? "0 Authoritative Court Applications"
-            : `${orderedBasePairs.length} Authoritative Court Applications — ગુજરાતી & English`
+            : `Showing ${displayedPairs.length} of ${matchedPairs.length} Authoritative Court Applications — ગુજરાતી & English`
         }
         actions={
           <View style={[styles.dSearch, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
@@ -210,57 +230,81 @@ export default function Templates() {
             )}
           </View>
         ) : (
-          <View style={styles.dGrid}>
-            {matchedPairs.map(({ pair, is_favorite }) => (
-              <Pressable
-                key={pair.baseKey}
-                testID={`tpl-pair-${pair.baseKey}`}
-                onPress={() => setSelectedPair(pair)}
-                style={({ pressed }) => [
-                  styles.dCard,
-                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                  pressed && { opacity: 0.9 },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
+          <>
+            <View style={styles.dGrid}>
+              {displayedPairs.map(({ pair, is_favorite }) => (
+                <Pressable
+                  key={pair.baseKey}
+                  testID={`tpl-pair-${pair.baseKey}`}
+                  onPress={() => setSelectedPair(pair)}
+                  style={({ pressed }) => [
+                    styles.dCard,
+                    { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                      <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                        <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "700" }}>{pair.category}</Text>
+                      </View>
+                      <Pressable
+                        testID={`tpl-fav-${pair.baseKey}`}
+                        hitSlop={8}
+                        onPress={(e) => toggleFavorite(pair, e)}
+                        style={styles.favBtn}
+                      >
+                        <Ionicons
+                          name={is_favorite ? "star" : "star-outline"}
+                          size={20}
+                          color={is_favorite ? "#E5A93C" : colors.muted}
+                        />
+                      </Pressable>
                     </View>
-                    <Pressable
-                      testID={`tpl-fav-${pair.baseKey}`}
-                      hitSlop={8}
-                      onPress={(e) => toggleFavorite(pair, e)}
-                      style={styles.favBtn}
-                    >
-                      <Ionicons
-                        name={is_favorite ? "star" : "star-outline"}
-                        size={20}
-                        color={is_favorite ? "#E5A93C" : colors.muted}
-                      />
-                    </Pressable>
+
+                    {/* Clean Legal Titles */}
+                    <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
+                      {pair.name_gu}
+                    </Text>
+                    <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, fontWeight: "600" }} numberOfLines={2}>
+                      {pair.name_en}
+                    </Text>
+                    <Text style={{ color: colors.muted, fontSize: 11, marginTop: 6, opacity: 0.85 }} numberOfLines={2}>
+                      {pair.description_gu}
+                    </Text>
                   </View>
 
-                  {/* Clean Legal Titles */}
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.sm, fontSize: 15, lineHeight: 22 }} numberOfLines={2}>
-                    {pair.name_gu}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, fontWeight: "600" }} numberOfLines={2}>
-                    {pair.name_en}
-                  </Text>
-                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: 6, opacity: 0.85 }} numberOfLines={2}>
-                    {pair.description_gu}
-                  </Text>
-                </View>
+                  {/* Subtle Action Cue */}
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+                    <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                    <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
+                  </View>
+                </Pressable>
+              ))}
+            </View>
 
-                {/* Subtle Action Cue */}
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                  <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
-                  <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
-                </View>
-              </Pressable>
-            ))}
-          </View>
+            {hasMore ? (
+              <View style={styles.seeMoreContainer}>
+                <Pressable
+                  testID="see-more-templates"
+                  onPress={handleSeeMore}
+                  style={({ pressed }) => [
+                    styles.seeMoreBtn,
+                    { backgroundColor: colors.brandPrimary },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.seeMoreBtnText}>
+                    See More / વધુ જુઓ ({nextBatchSize} more)
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="#FFF" />
+                </Pressable>
+                <Text style={[styles.paginationHint, { color: colors.muted }]}>
+                  Showing {displayedPairs.length} of {matchedPairs.length} applications
+                </Text>
+              </View>
+            ) : null}
+          </>
         )}
         <LanguageSelectModal
           visible={selectedPair !== null}
@@ -288,7 +332,7 @@ export default function Templates() {
         <Text style={{ color: colors.muted, fontSize: 12 }}>
           {orderedBasePairs.length === 0
             ? "0 applications"
-            : `${matchedPairs.length} of ${orderedBasePairs.length} applications`}
+            : `Showing ${displayedPairs.length} of ${matchedPairs.length} applications`}
         </Text>
       </View>
 
@@ -380,12 +424,9 @@ export default function Templates() {
       ) : (
         <FlatList
           style={{ flex: 1 }}
-          data={matchedPairs}
+          data={displayedPairs}
           keyExtractor={(item) => item.pair.baseKey}
           numColumns={2}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
           removeClippedSubviews={Platform.OS !== "web"}
           columnWrapperStyle={styles.mobileColWrapper}
           keyboardShouldPersistTaps="handled"
@@ -449,6 +490,29 @@ export default function Templates() {
               </Pressable>
             );
           }}
+          ListFooterComponent={
+            hasMore ? (
+              <View style={styles.seeMoreContainerMobile}>
+                <Pressable
+                  testID="see-more-templates"
+                  onPress={handleSeeMore}
+                  style={({ pressed }) => [
+                    styles.seeMoreBtnMobile,
+                    { backgroundColor: colors.brandPrimary },
+                    pressed && { opacity: 0.9 },
+                  ]}
+                >
+                  <Text style={styles.seeMoreBtnText}>
+                    See More / વધુ જુઓ ({nextBatchSize} more)
+                  </Text>
+                  <Ionicons name="chevron-down" size={16} color="#FFF" />
+                </Pressable>
+                <Text style={[styles.paginationHint, { color: colors.muted }]}>
+                  Showing {displayedPairs.length} of {matchedPairs.length} applications
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
       <LanguageSelectModal
@@ -593,5 +657,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     minHeight: 180,
     justifyContent: "space-between",
+  },
+  seeMoreContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: Spacing.xl,
+    marginBottom: Spacing.xxl,
+    gap: Spacing.xs,
+  },
+  seeMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    gap: Spacing.xs,
+    minWidth: 260,
+  },
+  seeMoreBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  paginationHint: {
+    fontSize: 12,
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  seeMoreContainerMobile: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: Spacing.md,
+    gap: Spacing.xs,
+  },
+  seeMoreBtnMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: 12,
+    borderRadius: Radius.md,
+    gap: Spacing.xs,
+    width: "100%",
   },
 });
