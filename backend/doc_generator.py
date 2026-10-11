@@ -848,6 +848,40 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
 def render_template(content_template: str, values: dict) -> str:
     vals = dict(values or {})
+
+    # Universal bidirectional alias resolution for court, place, date, and party roles
+    if not vals.get("court") and vals.get("court_name"):
+        vals["court"] = vals["court_name"]
+    elif not vals.get("court_name") and vals.get("court"):
+        vals["court_name"] = vals["court"]
+
+    if not vals.get("taluka_place") and vals.get("place"):
+        vals["taluka_place"] = vals["place"]
+    elif not vals.get("place") and vals.get("taluka_place"):
+        vals["place"] = vals["taluka_place"]
+
+    if not vals.get("date_display") and vals.get("date"):
+        vals["date_display"] = vals["date"]
+    elif not vals.get("date") and vals.get("date_display"):
+        vals["date"] = vals["date_display"]
+
+    if not vals.get("selected_party_role") and vals.get("advocate_for_role"):
+        vals["selected_party_role"] = vals["advocate_for_role"]
+    elif not vals.get("advocate_for_role") and vals.get("selected_party_role"):
+        vals["advocate_for_role"] = vals["selected_party_role"]
+
+    if not vals.get("party_line") and vals.get("party_1_role") and vals.get("party_1_name"):
+        vals["party_line"] = f"{vals['party_1_role']} :- {vals['party_1_name']}".strip(" :-")
+    if not vals.get("opposite_party_line") and vals.get("party_2_role") and vals.get("party_2_name"):
+        vals["opposite_party_line"] = f"{vals['party_2_role']} :- {vals['party_2_name']}".strip(" :-")
+
+    if "police_station_crime_no" not in vals:
+        vals["police_station_crime_no"] = ""
+    if "return_reason" not in vals:
+        vals["return_reason"] = ""
+    if "enclosure_line" not in vals:
+        vals["enclosure_line"] = ""
+
     if (
         "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
         or "Application for Obtaining Certified Copy" in content_template
@@ -869,11 +903,6 @@ def render_template(content_template: str, values: dict) -> str:
             elif raw_dep.lower().startswith("rs"): raw_dep = raw_dep[len("rs"):].strip()
             elif raw_dep.lower().startswith("inr"): raw_dep = raw_dep[len("inr"):].strip()
             vals["deposit_amount"] = raw_dep
-
-        if not vals.get("court_name") and vals.get("court"):
-            vals["court_name"] = vals["court"]
-        elif not vals.get("court") and vals.get("court_name"):
-            vals["court"] = vals["court_name"]
 
     result = content_template
     for k, v in vals.items():

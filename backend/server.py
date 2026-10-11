@@ -5236,6 +5236,32 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["case_status_clause"] = ""
             ctx["tense"] = "is"
 
+    # Map case_status_phrase for English documents
+    csp = ctx.get("case_status_phrase")
+    if csp:
+        if language == "en":
+            if csp in ("ચાલવા પર છે", "ચાલુ", "Pending", "Ongoing"):
+                ctx["case_status_phrase"] = "pending"
+            elif csp in ("ફેંસલ થયેલ છે", "Disposed", "Decided"):
+                ctx["case_status_phrase"] = "disposed of"
+
+    # Map warrant_kind for English documents
+    wk = ctx.get("warrant_kind")
+    if wk and language == "en":
+        wk_map = {"સમન્સ": "Summons", "વોરંટ": "Warrant", "નોટીસ": "Notice"}
+        if wk in wk_map:
+            ctx["warrant_kind"] = wk_map[wk]
+
+    # Enclosure line for document production / acceptance
+    if ctx.get("documents_produced"):
+        encl_val = str(ctx["documents_produced"]).strip()
+        if encl_val:
+            ctx["enclosure_line"] = f"\n\nબિડાણ :- {encl_val}" if language == "gu" else f"\n\nEnclosure :- {encl_val}"
+        else:
+            ctx["enclosure_line"] = ""
+    else:
+        ctx["enclosure_line"] = ""
+
     # Conditional "અન્ય/Other" fields (v2 catalog): when a select/radio is set
     # to "other", the companion "<key>_other" text field holds the real value
     # and replaces it in the rendered document (never prints the literal
@@ -5745,6 +5771,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
+            ctx[k] = ""
+
+    for k, v in list(ctx.items()):
+        if v is None:
             ctx[k] = ""
 
     return ctx

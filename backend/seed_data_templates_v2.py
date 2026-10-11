@@ -318,15 +318,16 @@ Place : {{place}}
     },
     {
         "base_key": "document_parat_levani_arji",
-        "aliases": ["document_return", "parat", "return document", "દસ્તાવેજ પરત", "પરત મેળવવા"],
+        "aliases": ["document_return_application", "document_return", "parat", "return document", "દસ્તાવેજ પરત", "પરત મેળવવા"],
         "name_gu": "દસ્તાવેજ પરત મેળવવા બાબતની અરજી",
         "name_en": "Application for Return of Documents",
         "category": "General",
         "description": "Application to return original documents produced on court record with undertaking.",
         "fields": [
             {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'case_status_phrase', 'label_en': 'Case Status (Ongoing / Completed)', 'label_gu': 'કેસની સ્થિતિ (ચાલુ / પૂર્ણ થયેલ)', 'type': 'select', 'required': True, 'options': [{'value': 'ચાલુ', 'label_en': 'Ongoing', 'label_gu': 'ચાલુ'}, {'value': 'પૂર્ણ થયેલ', 'label_en': 'Completed / Disposed', 'label_gu': 'પૂર્ણ થયેલ'}]},
+            {'key': 'case_status_phrase', 'label_en': 'Case Status (Ongoing / Completed)', 'label_gu': 'કેસની સ્થિતિ (ચાલવા પર / ફેંસલ થયેલ)', 'type': 'select', 'required': True, 'options': [{'value': 'ચાલવા પર છે', 'label_en': 'Pending / Ongoing', 'label_gu': 'ચાલવા પર છે'}, {'value': 'ફેંસલ થયેલ છે', 'label_en': 'Disposed / Decided', 'label_gu': 'ફેંસલ થયેલ છે'}]},
             {'key': 'document_details', 'label_en': 'Details of documents to be returned', 'label_gu': 'પરત મેળવવાના મૂળ દસ્તાવેજોની વિગત', 'type': 'textarea', 'required': True},
+            {'key': 'return_reason', 'label_en': 'Reason for return of documents', 'label_gu': 'ક્યા કારણસર પરત જોઈએ છીએ તેની વિગત', 'type': 'textarea', 'required': True},
             {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
@@ -342,12 +343,13 @@ Place : {{place}}
 
 સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટમા {{case_status_phrase}}. સદર કામમાં {{document_details}} રજૂ કરવામાં આવેલ, જે દસ્તાવેજની હવે કેસના હેતુ માટે જરૂરીયાત ન હોય અને અમોને તે દસ્તાવેજની ખુબ જ જરૂરીયાત હોય તેમજ દસ્તાવેજ પરત મેળવવો ન્યાયના હિતમાં હોય, જેથી સદર દસ્તાવેજ પરત આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટમા {{case_status_phrase}}. સદર કામમાં {{document_details}} રજૂ કરવામાં આવેલ, જે દસ્તાવેજની અમોને {{return_reason}} અમોને અમારો અસલ દસ્તાવેજ/દસ્તાવેજો પરત જોઈતા હોઈ આજરોજ અમો સદર દસ્તાવેજોની ખરી નકલો રજુ કરતા હોઈ તો ઉપરોક્ત અસલ દસ્તાવેજો અમો ને આપવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -361,23 +363,24 @@ SUBJECT: APPLICATION FOR RETURN OF ORIGINAL DOCUMENTS
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court, in which {{document_details}} have been produced. The said case being {{case_status_phrase}}, it is necessary for our client to obtain back the said documents. It is therefore prayed that this Hon'ble Court may be pleased to pass an appropriate order returning the said documents to our client.
+The said case is {{case_status_phrase}} before this Hon'ble Court. In the said matter, {{document_details}} was/were produced on record. The applicant requires the said document(s) because {{return_reason}}. As we require our original document(s) and are producing true copies thereof on record today, it is prayed that this Hon'ble Court may be pleased to return the aforementioned original documents to us.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "document_swikaravani_arji",
         "aliases": ["document_on_record", "production", "દસ્તાવેજ રજૂ", "દસ્તાવેજ સ્વીકારવા", "record par"],
-        "name_gu": "દસ્તાવેજ રજૂ કરવા / સ્વીકારવાની અરજી",
-        "name_en": "Application for Production and Acceptance of Documents",
+        "name_gu": "દસ્તાવેજી પુરાવા રજુ કરવા પરવાનગી અરજી",
+        "name_en": "Application for Permission to Produce Documentary Evidence",
         "category": "General",
         "description": "Application to produce and accept documents on court record as evidence.",
         "fields": [
             {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'documents_produced', 'label_en': 'List of documents produced', 'label_gu': 'રજૂ કરેલ દસ્તાવેજી પુરાવાની યાદી', 'type': 'textarea', 'required': True},
+            {'key': 'documents_produced', 'label_en': 'List of documents produced (Optional)', 'label_gu': 'રજૂ કરેલ દસ્તાવેજી પુરાવાની યાદી (મરજિયાત)', 'type': 'textarea', 'required': False},
             {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
         "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
@@ -389,18 +392,17 @@ Place : {{taluka_place}}
 વિરુદ્ધ
 {{opposite_party_line}}
 
-બાબત :- દસ્તાવેજી પુરાવા સ્વીકારી રેકર્ડ પર લેવા બાબતે...
+બાબત :- દસ્તાવેજી પુરાવા રજુ કરવા પરવાનગી અરજી
 
 સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આ અરજી સાથે રજુ કરેલ દસ્તાવેજી પુરાવાની જરૂરિયાત હોવાથી રજૂ કરવામાં આવે છે. સદર દસ્તાવેજી પુરાવા ન્યાયના હિતમાં હોય, અને સદર પુરાવા રેકર્ડ પર લેવાથી કેસની ન્યાયિક કાર્યવાહી કરવામાં સહાયરૂપ થશે. આથી આપ નામદાર કોર્ટ આ અરજી સાથે રજૂ કરેલ પુરાવા રેકર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આ અરજી સાથે રજૂ કરેલ દસ્તાવેજી પુરાવાની જરૂરિયાત હોવાથી, દસ્તાવેજી પુરાવા રજૂ કરવામાં આવે છે. સદર પુરાવાઓ જુબાનીમા રેફર કરેલા હોવાથી તેમજ સદર દસ્તાવેજી પુરાવા રજુ કરવા ન્યાયના હિતમાં હોય આથી આપ નામદાર કોર્ટ આ અરજી સાથે રજૂ કરેલ દસ્તાવેજી પુરાવા રજુ કરવા પરવાનગી આપવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ
-
-બિડાણ :- {{documents_produced}}""",
+----------
+{{selected_party_role}} ના એડવોકેટ{{enclosure_line}}""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -410,18 +412,17 @@ AT {{taluka_place}}
 Versus
 {{opposite_party_line}}
 
-SUBJECT: APPLICATION TO ACCEPT DOCUMENTARY EVIDENCE ON RECORD
+SUBJECT: APPLICATION FOR PERMISSION TO PRODUCE DOCUMENTARY EVIDENCE
 
 In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court. The documentary evidence produced along with this application is necessary for the case and is being produced herewith. As the said documentary evidence is in the interest of justice and taking the said evidence on record will assist in the judicial proceedings of the case, it is therefore prayed that this Hon'ble Court may be pleased to take the evidence produced along with this application on record and pass appropriate orders.
+The said case is pending before this Hon'ble Court. As the documentary evidence produced along with this application is necessary in the said case, documentary evidence is being produced herewith. Since the said evidence has been referred to in the deposition and producing the said documentary evidence is in the interest of justice, it is therefore prayed that this Hon'ble Court may be pleased to grant permission to produce the documentary evidence produced along with this application.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}
-
-Enclosure :- {{documents_produced}}""",
+----------
+Advocate for {{selected_party_role}}{{enclosure_line}}""",
     },
     {
         "base_key": "exemption_arji",
@@ -505,7 +506,8 @@ Place : {{taluka_place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -524,7 +526,8 @@ The said case is pending before this Hon'ble Court. Despite the right of {{targe
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "fs_no_haq_kholvani_arji",
@@ -552,12 +555,13 @@ Place : {{taluka_place}}
 
 સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો એફ. એસ. કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} કારણોસર એફ. એસ. થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી તેમજ યોગ્ય હોવાથી તથા એફ. એસ. કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો એફ. એસ. કરવાનો હક ફરીથી ખોલી અમોને એફ.એસ. કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો એફ. એસ. કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} કારણોસર એફ. એસ. થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા એફ. એસ. કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો એફ. એસ. કરવાનો હક ફરીથી ખોલી અમોને એફ.એસ. કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -609,7 +613,8 @@ Place : {{taluka_place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- આરોપી ના એડવોકેટ""",
+----------
+આરોપી ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 {{case_type}} No. : {{case_number}}
@@ -628,7 +633,8 @@ In connection with the abovementioned {{case_or_crime}}, an order has been passe
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for the Accused""",
+----------
+Advocate for the Accused""",
     },
     {
         "base_key": "kam_board_par_levani_arji",
@@ -662,7 +668,8 @@ Place : {{taluka_place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -681,7 +688,8 @@ The said case is pending before this Hon'ble Court and the next date is fixed on
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "id": "mudat_arji",
@@ -1048,7 +1056,8 @@ Place : {{place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1067,7 +1076,8 @@ The said case is pending before this Hon'ble Court. In the said case, the testim
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "samadhan_purshish",
@@ -1077,6 +1087,7 @@ Place : {{taluka_place}}
         "category": "Civil",
         "description": "Joint purshis submitted by both parties recording amicable settlement and terms of compromise.",
         "fields": [
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
             {'key': 'settlement_terms', 'label_en': 'Settlement terms / conditions (e.g. subject to conditions...)', 'label_gu': 'સમાધાનની શરતો (દા.ત. શરતો ને આધીન / એવી શરત ને આધીન)', 'type': 'textarea', 'required': True},
             {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
         ],
@@ -1091,14 +1102,15 @@ Place : {{taluka_place}}
 
 સમાધાન પુરસીસ
 
-સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટ પુરસીસ થી જાહેર કરીએ છીએ કે.....
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટ આપ નામદાર કોર્ટમાં પુરસીસ થી જાહેર કરીએ છીએ કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસના પક્ષકારો વચ્ચે {{settlement_terms}} પરસ્પર સમાધાન થયેલ છે. બંને પક્ષકારોએ પોતાની સ્વતંત્ર ઇચ્છાથી તથા કોઈપણ જાતના દબાણ, ધાકધમકી કે લાલચ વગર સદર સમાધાન કરેલ છે અને સદર સમાધાન મુજબ આગળની કાર્યવાહી કરવા બંને પક્ષકારો સંમત છે. સદર સમાધાન પુરસીસ રેકોર્ડ પર લઈ યોગ્ય કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસના પક્ષકારો વચ્ચે {{settlement_terms}} પરસ્પર સમાધાન થયેલ છે. બંને પક્ષકારોએ પોતાની સ્વતંત્ર ઇચ્છાથી તથા કોઈપણ જાતના દબાણ, ધાકધમકી કે લાલચ વગર સમાધાન કરેલ છે અને સમાધાન મુજબ આગળની કાર્યવાહી કરવા બંને પક્ષકારો સંમત છે. સદર સમાધાન પુરસીસ રેકોર્ડ પર લઈ યોગ્ય કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1110,14 +1122,15 @@ Versus
 
 COMPROMISE PURSHIS
 
-In the above matter, we, the advocate for {{selected_party_role}}, hereby declare by this purshis before this Hon'ble Court that:
+In the above matter, we, the advocate for {{selected_party_role}}, hereby declare by purshis before this Hon'ble Court that:
 
 The said case is pending before this Hon'ble Court. A mutual compromise has been arrived at between the parties {{settlement_terms}}. Both parties have entered into the said compromise voluntarily of their own free will and without any coercion, threat or undue influence, and both parties agree to proceed further in terms of the said compromise. It is therefore prayed that this Hon'ble Court may be pleased to take this compromise purshis on record and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "ulat_tapas_no_haq_bandh_karavani_arji",
@@ -1151,7 +1164,8 @@ Place : {{taluka_place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1170,7 +1184,8 @@ The said case is pending before this Hon'ble Court, and though the examination-i
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "ulat_tapas_no_haq_kholvani_arji",
@@ -1198,12 +1213,13 @@ Place : {{taluka_place}}
 
 સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો ઉલટતપાસ કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} હોવાના કારણોસર થઈ શકેલ નહી તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટતપાસ કરવાની તક મળવી એ ન્યાયના હિતમા હોય, અમોનો ઉલટતપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટતપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો ઉલટતપાસ કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} કારણોસર થઈ શકેલ નહી તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટતપાસ કરવાની તક મળવી એ ન્યાયના હિતમા હોય, અમોનો ઉલટતપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટતપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1222,7 +1238,8 @@ The said case is pending before this Hon'ble Court, wherein our right of cross-e
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "undertaking",
@@ -1248,14 +1265,15 @@ Place : {{taluka_place}}
 
 બાંહેધરી
 
-સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+સદર કામમા અમો {{selected_party_role}} ના એડવોકેટ આપ નામદાર કોર્ટને બાંહેધરી આપીએ છીએ કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આપ નામદાર કોર્ટના હુકમ મુજબ {{undertaking_subject}} જે અંગે અમો નીચે સહી કરનાર તરફથી આ બાંહેધરી આપવામાં આવે છે કે, {{undertaking_details}} નું પાલન કરીશું તથા સદર કેસમાં આપ નામદાર કોર્ટના અન્ય હુકમો તથા નિર્દેશોનું પાલન કરીશું. જેથી સદર બાંહેધરી રેકોર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં આપ નામદાર કોર્ટના હુકમ મુજબ {{undertaking_subject}} જે અંગે અમો નીચે સહી કરનાર તરફથી આ બાંહેધરી આપવામાં આવે છે કે, {{undertaking_details}} નુ પાલન કરીશું તથા સદર કેસમાં આપ નામદાર કોર્ટના અન્ય હુકમો તથા નિર્દેશોનું પાલન કરીશું. જેથી સદર બાંહેધરી રેકોર્ડ પર લઈ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1267,14 +1285,15 @@ Versus
 
 UNDERTAKING
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+In the above matter, we, the advocate for {{selected_party_role}}, give this undertaking to this Hon'ble Court that:
 
 The said case is pending before this Hon'ble Court. Pursuant to the order of this Hon'ble Court regarding {{undertaking_subject}}, the undersigned hereby gives this undertaking that we shall comply with {{undertaking_details}} and shall comply with other orders and directions of this Hon'ble Court in the said case. It is therefore prayed that this Hon'ble Court may be pleased to take the said undertaking on record and pass appropriate orders.
 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "vakilatnama_civil",
@@ -1425,7 +1444,8 @@ Name of Client :-       Name of Advocate :-""",
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1444,7 +1464,8 @@ The said case is pending before this Hon'ble Court. In the said case, {{warrant_
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "warrant_rad_karvani_arji",
@@ -1478,7 +1499,8 @@ Place : {{taluka_place}}
 તારીખ : {{date_display}}
 સ્થળ : {{taluka_place}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
+----------
+{{selected_party_role}} ના એડવોકેટ""",
         "content_en": """IN THE COURT OF {{court}},
 AT {{taluka_place}}
 
@@ -1497,7 +1519,8 @@ The said case is pending before this Hon'ble Court. In the said case, a warrant 
 Date : {{date_display}}
 Place : {{taluka_place}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+----------
+Advocate for {{selected_party_role}}""",
     },
 ]
 
