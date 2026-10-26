@@ -5960,7 +5960,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.
     # Regular users consume exactly 1 credit for final downloads.
     unlimited = is_unlimited_user(user)
-    if not unlimited:
+    if not unlimited and db is not None:
         _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
         if not _snap:
             raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
@@ -6093,20 +6093,21 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     }
 
     # Parallelize post-generation persistence tasks to reduce latency by ~1-1.5 seconds
-    post_gen_tasks = [
-        db.collection('applications').document(app_id).set(_doc),
-        db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
-        db.collection('drafts').document(f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}").delete(),
-    ]
-    if req.case_id:
-        post_gen_tasks.append(
-            db.collection("cases").document(req.case_id).set({
-                "last_used_template": t["name_en"], 
-                "updated_at": now().isoformat(),
-                "application_count": firestore.Increment(1)
-            }, merge=True)
-        )
-    await asyncio.gather(*post_gen_tasks, return_exceptions=True)
+    if db is not None:
+        post_gen_tasks = [
+            db.collection('applications').document(app_id).set(_doc),
+            db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
+            db.collection('drafts').document(f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}").delete(),
+        ]
+        if req.case_id:
+            post_gen_tasks.append(
+                db.collection("cases").document(req.case_id).set({
+                    "last_used_template": t["name_en"], 
+                    "updated_at": now().isoformat(),
+                    "application_count": firestore.Increment(1)
+                }, merge=True)
+            )
+        await asyncio.gather(*post_gen_tasks, return_exceptions=True)
 
     resp = {"filename": filename, "mime_type": mime, "base64": b64}
     if gen_meta:
