@@ -295,13 +295,14 @@ export default function CaseDetail() {
           templateNameEn={selectedPair?.name_en}
           category={selectedPair?.category}
           onSelect={(lang) => {
-            if (selectedPair) {
-              const effectiveId = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+            const pair = selectedPair;
+            setSelectedPair(null);
+            if (pair) {
+              const effectiveId = lang === "gu" ? pair.guId : pair.enId;
               router.push({
                 pathname: "/template/[id]",
                 params: { id: effectiveId, case_id: c.id, lang },
               });
-              setSelectedPair(null);
             }
           }}
         />
@@ -416,13 +417,14 @@ export default function CaseDetail() {
         templateNameEn={selectedPair?.name_en}
         category={selectedPair?.category}
         onSelect={(lang) => {
-          if (selectedPair) {
-            const effectiveId = lang === "gu" ? selectedPair.guId : selectedPair.enId;
+          const pair = selectedPair;
+          setSelectedPair(null);
+          if (pair) {
+            const effectiveId = lang === "gu" ? pair.guId : pair.enId;
             router.push({
               pathname: "/template/[id]",
               params: { id: effectiveId, case_id: c.id, lang },
             });
-            setSelectedPair(null);
           }
         }}
       />

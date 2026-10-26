@@ -2702,7 +2702,15 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in (
+        "document_exhibit_application", "aanke_padvani_arji", "certified_copy_application", "certified_report",
+        "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application",
+        "dd_karavani_arji", "document_parat_levani_arji", "document_swikaravani_arji", "exemption_arji",
+        "fs_no_haq_bandh_karvani_arji", "fs_no_haq_kholvani_arji", "jamin_bond_swikarvani_arji",
+        "kam_board_par_levani_arji", "mudat_arji", "saaxi_ne_summons", "samadhan_purshish",
+        "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "undertaking",
+        "vakilatnama_civil", "vakilatnama_criminal", "warrant_no_hath_bido_apvani_arji", "warrant_rad_karvani_arji",
+    ):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -4122,32 +4130,52 @@ async def _get_published_templates() -> list:
                     except Exception:
                         pass
     
-    if not db_templates and db is None:
-        canonical_seeds = [
-            _get_canonical_exhibit_template(),
-            _get_canonical_certified_copy_template(),
-            _get_canonical_closing_purshish_template(),
-            _get_canonical_closing_argument_right_template(),
-            _get_canonical_reopen_right_to_argue_template(),
-            _get_canonical_exemption_arji_template(),
-            _get_canonical_dd_karavani_arji_template(),
-            _get_canonical_mudat_arji_template(),
-            _get_canonical_vakilatnama_criminal_template(),
-            _get_canonical_vakilatnama_civil_template(),
-        ]
-        canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
-        v2_items = []
-        for t in TEMPLATES_V2:
-            base = t.get("base_key") or (t.get("id")[:-3] if t.get("id", "").endswith(("_gu", "_en")) else t.get("id"))
-            if base in canonicals_by_id:
-                if not any(x.get("id") == base for x in v2_items):
-                    v2_items.append(canonicals_by_id[base])
-            else:
-                v2_items.append(t)
-        for cid, cseed in canonicals_by_id.items():
-            if not any(x.get("id") == cid for x in v2_items):
-                v2_items.append(cseed)
+    canonical_seeds = [
+        _get_canonical_exhibit_template(),
+        _get_canonical_certified_copy_template(),
+        _get_canonical_closing_purshish_template(),
+        _get_canonical_closing_argument_right_template(),
+        _get_canonical_reopen_right_to_argue_template(),
+        _get_canonical_exemption_arji_template(),
+        _get_canonical_dd_karavani_arji_template(),
+        _get_canonical_mudat_arji_template(),
+        _get_canonical_vakilatnama_criminal_template(),
+        _get_canonical_vakilatnama_civil_template(),
+    ]
+    canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
+    v2_items = []
+    for t in TEMPLATES_V2:
+        base = t.get("base_key") or (t.get("id")[:-3] if t.get("id", "").endswith(("_gu", "_en")) else t.get("id"))
+        if base in canonicals_by_id:
+            if not any(x.get("id") == base for x in v2_items):
+                v2_items.append(canonicals_by_id[base])
+        else:
+            v2_items.append(t)
+    for cid, cseed in canonicals_by_id.items():
+        if not any(x.get("id") == cid for x in v2_items):
+            v2_items.append(cseed)
+
+    if not db_templates:
         db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+    else:
+        existing_ids = {t.get("id") for t in db_templates if t.get("id")}
+        existing_tids = {t.get("template_id") for t in db_templates if t.get("template_id")}
+        for t in v2_items:
+            tid = t.get("id")
+            if tid and tid not in deleted_ids and tid not in existing_ids and tid not in existing_tids:
+                item = {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+                db_templates.append(item)
+                existing_ids.add(tid)
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(tid).set({
+                            **item,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
 
     db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
@@ -4167,7 +4195,15 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
     cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in (
+        "document_exhibit_application", "aanke_padvani_arji", "certified_copy_application", "certified_report",
+        "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application",
+        "dd_karavani_arji", "document_parat_levani_arji", "document_swikaravani_arji", "exemption_arji",
+        "fs_no_haq_bandh_karvani_arji", "fs_no_haq_kholvani_arji", "jamin_bond_swikarvani_arji",
+        "kam_board_par_levani_arji", "mudat_arji", "saaxi_ne_summons", "samadhan_purshish",
+        "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "undertaking",
+        "vakilatnama_civil", "vakilatnama_criminal", "warrant_no_hath_bido_apvani_arji", "warrant_rad_karvani_arji",
+    ):
         deleted_ids.discard(active_id)
         deleted_ids.discard(f"{active_id}_gu")
         deleted_ids.discard(f"{active_id}_en")
@@ -4530,6 +4566,13 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         v_civ_seed = _get_canonical_vakilatnama_civil_template()
         if v_civ_seed and "vakilatnama_civil" not in deleted_ids:
             return {**v_civ_seed, "format_version": v_civ_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t:
+        for cand in lookup_candidates:
+            for item in TEMPLATES_V2:
+                if cand in (item.get("id"), item.get("template_id"), item.get("base_key"), item.get("slug")):
+                    if item.get("id") not in deleted_ids:
+                        return {**item, "format_version": item.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     return None
 
@@ -5851,7 +5894,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
     _validate_page_size(page_size)
     case = None
-    if req.case_id:
+    if req.case_id and db is not None:
         _snap = await db.collection("cases").document(req.case_id).get()
         case = _snap.to_dict() if _snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))
@@ -5908,7 +5951,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     _validate_page_size(page_size)
 
     case = None
-    if req.case_id:
+    if req.case_id and db is not None:
         _case_snap = await db.collection("cases").document(req.case_id).get()
         case = _case_snap.to_dict() if _case_snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))

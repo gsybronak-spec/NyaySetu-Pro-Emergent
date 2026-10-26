@@ -850,7 +850,7 @@ export default function TemplateApplication() {
         if (!values.custom_court_name_en?.trim()) missing.push("custom_court_name_en");
       }
       if (!values.case_type) missing.push("case_type");
-      if (!values.case_number && templateId !== "jamin_bond") missing.push("case_number");
+      if (!values.case_number && !templateId.startsWith("jamin_bond")) missing.push("case_number");
       if (!values.party_name && !values.party_1_name) missing.push("party_name");
       if (!values.opposite_party && !values.party_2_name) missing.push("opposite_party");
       if (!values.advocate_name) missing.push("advocate_name");
@@ -905,7 +905,7 @@ export default function TemplateApplication() {
     }
     setBusy(true);
     try {
-      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
+      const res = await api.previewApp({ template_id: resolveTemplateId(templateId, language) || templateId, case_id: caseId, language, values: toDocValues(values) });
       setPreview(res.content);
       setBlocks(res.blocks || []);
       if (res?.pdf_base64) {
@@ -926,7 +926,7 @@ export default function TemplateApplication() {
     setPreviewLoading(true);
     try {
       const res = await api.previewApp({
-        template_id: templateId,
+        template_id: resolveTemplateId(templateId, activeLang) || templateId,
         case_id: caseId,
         language: activeLang,
         values: toDocValues(activeValues),
@@ -998,7 +998,7 @@ export default function TemplateApplication() {
     setNotice(null);
     try {
       const res = await api.downloadApp({
-        template_id: templateId,
+        template_id: resolveTemplateId(templateId, language) || templateId,
         case_id: caseId,
         language,
         values: toDocValues(values),
@@ -1053,8 +1053,8 @@ export default function TemplateApplication() {
   const renderFieldInput = (f: any) => {
     if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason") return null;
     if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
-    const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
-    const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en || o.label_gu);
+    const label = (language === "gu" ? (f.label_gu || f.label_en || f.label || f.key) : (f.label_en || f.label_gu || f.label || f.key)) + (f.required ? " *" : "");
+    const pickLabel = (o: any) => typeof o === "string" ? o : (language === "gu" ? (o.label_gu || o.label_en || o.label || o.value || o.id || o.key || "") : (o.label_en || o.label_gu || o.label || o.value || o.id || o.key || ""));
     const fvalue = values[f.key];
 
     if (f.type === "date") {
