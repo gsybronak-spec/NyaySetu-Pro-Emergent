@@ -46,7 +46,7 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "plans", "settings", "system_settings"]
 
 SEED_IDS = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
-assert "affidavit" in SEED_IDS and len(SEED_IDS) == 45
+assert "affidavit" in SEED_IDS and len(SEED_IDS) == 50
 
 
 @pytest_asyncio.fixture(scope="function")

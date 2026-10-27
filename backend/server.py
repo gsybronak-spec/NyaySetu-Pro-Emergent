@@ -619,6 +619,8 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     if cached_user is not None:
         user = dict(cached_user)
     else:
+        if db is None:
+            raise HTTPException(503, "Database service unavailable")
         _snap = await db.collection('users').document(user_id).get()
         user = _snap.to_dict() if _snap.exists else None
         if not user:
@@ -4590,6 +4592,11 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
         t_id = template_id
         t_ver = template_version
 
+    if db is None:
+        if t_ver is not None:
+            raise HTTPException(503, "Database service unavailable")
+        return await _get_template_by_id(t_id)
+
     if t_ver is not None:
         try:
             t_ver_int = int(t_ver)
@@ -6017,7 +6024,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             mime = "application/pdf"
     except Exception as e:
-        if not unlimited:
+        if not unlimited and db is not None:
             # Refund credit on generation failure — user must not be unfairly charged
             wallet_doc = None
             async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
