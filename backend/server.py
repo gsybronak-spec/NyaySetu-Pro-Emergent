@@ -2783,7 +2783,8 @@ def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
 
 
 async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
-    """Return set of permanently deleted catalog item / template IDs (tombstones)."""
+    """Return set of permanently deleted catalog item / template IDs (tombstones).
+    Raises HTTPException(503) if database read fails so callers never treat read errors as empty tombstones."""
     if db is None:
         return set()
     try:
@@ -2794,7 +2795,10 @@ async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
         return {d["id"] for d in docs if "id" in d}
     except Exception as e:
         logger.warning(f"Failed to fetch deleted catalog items: {e}")
-        return set()
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database service unavailable: failed to read catalog tombstones ({e})"
+        )
 
 
 async def _get_deleted_template_ids() -> set[str]:
@@ -2826,15 +2830,24 @@ async def _get_deleted_template_ids() -> set[str]:
 
 
 async def _load_catalog(kind: str) -> list:
-    """DB catalog entries if the collection has any, else the seed list
-    (backward compat for uninitialized databases).
-    Cached in-memory to prevent repeated Firestore roundtrips on static catalogs.
-    Filters out tombstones and sorts by sort_order."""
+    """DB catalog entries from Firestore.
+    If cached in-memory, returns the warm cache.
+    If database is unavailable and no warm cache exists, raises HTTPException(503).
+    Does NOT fall back to static seed lists as authoritative live catalog data,
+    preventing resurrection of deleted/inactive records and omission of admin-created records."""
     if kind in _CATALOG_CACHE:
         return _CATALOG_CACHE[kind]
+
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(status_code=404, detail=f"Unknown catalog kind '{kind}'")
+
     coll, seed_list = _CATALOG_KINDS[kind]
-    deleted_ids = await _get_deleted_catalog_ids(kind)
-    if db is not None:
+
+    if db is None:
+        raise HTTPException(status_code=503, detail=f"Database service unavailable: catalog '{kind}' cannot be loaded.")
+
+    try:
+        deleted_ids = await _get_deleted_catalog_ids(kind)
         items = [d.to_dict() async for d in db.collection(coll).stream()]
         items = [i for i in items if i.get("id") not in deleted_ids]
         if kind == "courts":
@@ -2846,40 +2859,90 @@ async def _load_catalog(kind: str) -> list:
                 if isinstance(c, dict) and c.get("id"):
                     _COURT_MAP[c["id"]] = c
             return items
-        if items:
-            items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
-            _CATALOG_CACHE[kind] = items
-            return items
-    res = [dict(x, active=True) for x in seed_list if x.get("id") not in deleted_ids]
-    res.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("en", "")))
-    _CATALOG_CACHE[kind] = res
-    return res
+
+        items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
+        _CATALOG_CACHE[kind] = items
+        return items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Database read failed for catalog '{kind}': {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database service unavailable: failed to load live catalog '{kind}'"
+        )
+
+
+_CATALOG_MAPS_SYNCED: bool = False
+
+
+def _init_default_catalog_maps() -> None:
+    """Populate in-memory catalog maps from static seed lists if they are unpopulated.
+    Ensures labels, validation, and location lookups are available on cold start with 0 DB reads."""
+    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP
+    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+    if not _CASE_TYPE_MAP:
+        _CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
+    if not _LAW_MAP:
+        _LAW_MAP = {l["id"]: l for l in LAWS}
+    if not _DISTRICT_MAP:
+        _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
+    if not _TALUKA_MAP:
+        _TALUKA_MAP = {t["id"]: t for t in TALUKAS}
+    if not _COURT_MAP:
+        _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
+        _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
+        _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **{c["id"]: c for c in COURTS}}
+    if not _PS_MAP:
+        _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
+    _VALID_CASE_TYPE_IDS = set(_CASE_TYPE_MAP.keys())
+    _VALID_LAW_IDS = set(_LAW_MAP.keys())
+    _VALID_DISTRICT_IDS = set(_DISTRICT_MAP.keys())
+    _VALID_TALUKA_IDS = set(_TALUKA_MAP.keys())
+    _VALID_COURT_IDS = set(_COURT_MAP.keys())
+    _VALID_PS_IDS = set(_PS_MAP.keys())
+    _build_location_lookup()
+
+
+# Initialize default static catalog maps immediately at module import
+_init_default_catalog_maps()
 
 
 async def _refresh_catalog_maps() -> None:
-    """Rebuild in-memory catalog maps + valid-id sets from MongoDB. Called at
+    """Rebuild in-memory catalog maps + valid-id sets from database. Called at
     startup and after every admin catalog mutation so labels, validation and
     document rendering see admin-managed entries immediately."""
-    _invalidate_catalog_cache()
-    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
-    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
-    _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}
-    _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
-    _DISTRICT_MAP = {d["id"]: d for d in await _load_catalog("districts")}
-    _TALUKA_MAP = {t["id"]: t for t in await _load_catalog("talukas")}
-    _loaded_courts = {c["id"]: c for c in await _load_catalog("courts")}
-    _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
-    _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
-    _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_courts}
-    _ACTIVE_COURT_IDS = {c["id"] for c in _loaded_courts.values() if c.get("active") is not False}
-    _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
-    _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
-    _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
-    _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
-    _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
-    _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
-    _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
-    _build_location_lookup()
+    global _CATALOG_MAPS_SYNCED
+    try:
+        case_types = await _load_catalog("case-types")
+        laws = await _load_catalog("laws")
+        districts = await _load_catalog("districts")
+        talukas = await _load_catalog("talukas")
+        loaded_courts = await _load_catalog("courts")
+        police_stations = await _load_catalog("police-stations")
+
+        global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
+        global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+        _CASE_TYPE_MAP = {c["id"]: c for c in case_types}
+        _LAW_MAP = {l["id"]: l for l in laws}
+        _DISTRICT_MAP = {d["id"]: d for d in districts}
+        _TALUKA_MAP = {t["id"]: t for t in talukas}
+        _loaded_court_map = {c["id"]: c for c in loaded_courts}
+        _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
+        _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
+        _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_court_map}
+        _ACTIVE_COURT_IDS = {c["id"] for c in _loaded_court_map.values() if c.get("active") is not False}
+        _PS_MAP = {p["id"]: p for p in police_stations}
+        _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
+        _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
+        _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+        _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
+        _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
+        _VALID_PS_IDS = {p["id"]: p for p in _PS_MAP.values()}
+        _build_location_lookup()
+        _CATALOG_MAPS_SYNCED = True
+    except Exception as err:
+        logger.warning(f"Error refreshing catalog maps from database (retaining existing in-memory maps): {err}")
 
 
 def _catalog_public(item: dict) -> dict:
@@ -2950,6 +3013,11 @@ MAX_TEMPLATE_VALUES_TOTAL = 100_000  # max total chars in template values dict
 
 def validate_case_refs(data: dict, existing: Optional[dict] = None):
     """Validate catalog reference IDs. Raises HTTPException on invalid."""
+    if not _CATALOG_MAPS_SYNCED:
+        raise HTTPException(
+            status_code=503,
+            detail="Catalog service unavailable: database synchronization pending. Please retry shortly."
+        )
     cid = data.get("case_type_id")
     if cid and cid != "other" and cid not in _VALID_CASE_TYPE_IDS:
         if not (existing and existing.get("case_type_id") == cid):
@@ -5037,7 +5105,11 @@ async def resolve_court_label(raw_court: Optional[str], language: str, case: Opt
     lang = "gu" if language == "gu" else "en"
 
     # 1. Fetch catalog entries from Admin Court Catalog
-    catalog_courts = await _load_catalog("courts")
+    catalog_courts = []
+    try:
+        catalog_courts = await _load_catalog("courts")
+    except Exception:
+        catalog_courts = []
 
     # 2. Collect candidate values to inspect
     candidates: list[str] = []
@@ -7129,7 +7201,26 @@ async def global_search(q: str, user=Depends(get_user)):
 @app.get("/")
 @app.get("/healthz")
 async def root():
-    return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0"}
+    return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0", "database": "not_checked"}
+
+
+@app.get("/readyz")
+@api.get("/health/ready")
+async def readiness():
+    """Readiness probe: explicitly verifies database connectivity with a lightweight check.
+    Returns 200 with {'ready': True, 'database': 'connected'} if reachable.
+    Returns 503 with {'ready': False, 'database': 'unavailable'} if unreachable or quota exceeded."""
+    if db is None:
+        raise HTTPException(status_code=503, detail={"ready": False, "database": "unconfigured"})
+    try:
+        _snap = await db.collection("system_settings").document("seed_complete").get()
+        return {"ready": True, "database": "connected"}
+    except Exception as e:
+        logger.warning(f"Readiness check failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={"ready": False, "database": "unavailable", "error": "database_unavailable"}
+        )
 
 
 # ============================================================
@@ -10724,13 +10815,16 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
     return {"migrated": migrated, "skipped": skipped, "total": len(templates)}
 
 
-async def seed_templates(force: bool = False) -> dict:
+async def seed_templates(force: bool = False, mark_system_seed_complete: bool = False) -> dict:
     """One-time idempotent initialization of seed templates into db.templates."""
     if not force and not _is_auto_seed_enabled():
         logger.info("Template auto-seed is disabled in production. Skipping.")
         return {"success": True, "skipped": True, "message": "Auto-seed disabled"}
 
-    _d = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "seed_complete")).limit(1).stream()]; setting = _d[0].to_dict() if _d else None
+    _d = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "templates_seed_complete")).limit(1).stream()]; setting = _d[0].to_dict() if _d else None
+    if not setting:
+        _d2 = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "seed_complete")).limit(1).stream()]
+        setting = _d2[0].to_dict() if _d2 else None
     all_seeds = _get_all_seed_templates()
     if not force:
         template_count = len([d async for d in db.collection('templates').stream()])
@@ -10977,15 +11071,21 @@ async def seed_templates(force: bool = False) -> dict:
         inserted += 1
 
     rev_res = await migrate_templates_to_revisions(db)
-    await db.collection('system_settings').document("seed_complete").set({"key": "seed_complete", "value": True, "completed_at": ts},
+    await db.collection('system_settings').document("templates_seed_complete").set(
+        {"key": "templates_seed_complete", "value": True, "completed_at": ts}
     )
+    if mark_system_seed_complete:
+        await db.collection('system_settings').document("seed_complete").set(
+            {"key": "seed_complete", "value": True, "completed_at": ts}
+        )
     if inserted:
-        logger.info(f"Initialized {inserted} seed templates into db.templates (seed_complete=True).")
+        logger.info(f"Initialized {inserted} seed templates into db.templates (templates_seed_complete=True, seed_complete={mark_system_seed_complete}).")
         invalidate_published_templates_cache()
 
     return {
         "success": True,
-        "seed_complete": True,
+        "seed_complete": mark_system_seed_complete,
+        "templates_seed_complete": True,
         "total_seed_templates": len(all_seeds),
         "created": inserted,
         "skipped": len(skipped_ids),
@@ -10999,8 +11099,12 @@ async def seed_templates(force: bool = False) -> dict:
 @admin_api.post("/templates/migrate-seed")
 async def admin_migrate_seed(admin=Depends(require_super_admin)):
     """One-time migration: copy all seed templates into Firestore and create initial revisions.
+    NOTE: Seeds templates and revisions only. Plans, catalogs, and super admin accounts
+    require their own separate controlled initialization processes.
+    Does NOT mark global system_settings/seed_complete=True to prevent partial initialization
+    from masking unseeded collections.
     Idempotent — does NOT overwrite existing templates."""
-    return await seed_templates(force=True)
+    return await seed_templates(force=True, mark_system_seed_complete=False)
 
 
 # ============================================================
@@ -11045,26 +11149,37 @@ async def seed_catalogs():
 async def seed_plans():
     """Idempotently seed the plans collection from the static catalog.
     Only inserts when the collection is empty — never overwrites admin edits."""
-    count = len([d async for d in db.collection('plans').stream()])
-    if count > 0:
+    if db is None:
         return
+    try:
+        # Bounded existence check: 1 read instead of full collection scan
+        _first = [d async for d in db.collection('plans').limit(1).stream()]
+        if _first:
+            return
+    except Exception as e:
+        logger.warning(f"Unable to check plans collection for seeding (bypassing): {e}")
+        return
+
     ts = now().isoformat()
-    for p in PLANS:
-        _doc = {
-            "id": p["id"],
-            "name": p["name"],
-            "price": p["price"],
-            "credits": p["credits"],
-            "popular": p.get("popular", False),
-            "active": True,
-            "created_at": ts,
-            "updated_at": ts,
-        }
-        _doc_id = _doc.get("id") or str(uuid.uuid4())
-        _doc["id"] = _doc_id
-        await db.collection("plans").document(_doc_id).set(_doc)
-    logger.info(f"Seeded {len(PLANS)} plans.")
-    invalidate_plans_cache()
+    try:
+        for p in PLANS:
+            _doc = {
+                "id": p["id"],
+                "name": p["name"],
+                "price": p["price"],
+                "credits": p["credits"],
+                "popular": p.get("popular", False),
+                "active": True,
+                "created_at": ts,
+                "updated_at": ts,
+            }
+            _doc_id = _doc.get("id") or str(uuid.uuid4())
+            _doc["id"] = _doc_id
+            await db.collection("plans").document(_doc_id).set(_doc)
+        logger.info(f"Seeded {len(PLANS)} plans.")
+        invalidate_plans_cache()
+    except Exception as e:
+        logger.warning(f"Failed to write seed plans: {e}")
 
 
 async def seed_super_admin():
@@ -11232,33 +11347,87 @@ async def _ensure_ttl_index(coll, field: str, required_seconds: int):
     pass
 
 
+async def _check_seed_complete() -> Optional[bool]:
+    """Check system_settings/seed_complete state with bounded retry (max 1 retry).
+    Returns True if confirmed seeded, False if confirmed unseeded, None if check failed (transient error / 429)."""
+    if db is None:
+        return True
+
+    for attempt in range(2):
+        try:
+            _snap = await db.collection("system_settings").document("seed_complete").get()
+            if not _snap.exists:
+                return False
+            data = _snap.to_dict() or {}
+            return data.get("value") is True
+        except Exception as e:
+            err_str = str(e)
+            is_transient = "429" in err_str or "ResourceExhausted" in type(e).__name__ or "Quota exceeded" in err_str or "Unavailable" in type(e).__name__ or "DeadlineExceeded" in type(e).__name__
+            if attempt == 0 and is_transient:
+                logger.warning("Transient error/429 reading system_settings/seed_complete on startup. Retrying once after 500ms...")
+                await asyncio.sleep(0.5)
+                continue
+            logger.warning(f"Unable to verify seed_complete state on startup (attempt {attempt + 1}/2): {e}")
+            return None
+    return None
+
+
 @app.on_event("startup")
 async def create_indexes():
-    """Verify database initialization on startup."""
+    """Verify database initialization on startup safely without crashing serverless cold starts."""
     logger.info("Firestore indexes: managed via firestore.indexes.json and Cloud Firestore.")
+    _init_default_catalog_maps()
+
     if db is None:
         return
 
-    # Check existing authoritative initialization state in system_settings/seed_complete
-    is_seeded = False
     try:
-        _snap = await db.collection("system_settings").document("seed_complete").get()
-        is_seeded = _snap.exists and _snap.to_dict().get("value") is True
-    except Exception as e:
-        logger.warning(f"Unable to check seed_complete state on startup: {e}")
+        # Check existing authoritative initialization state in system_settings/seed_complete
+        is_seeded = await _check_seed_complete()
 
-    if is_seeded:
-        logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding/migration bypassed.")
-        await seed_super_admin()
-        await _refresh_catalog_maps()
-    else:
-        # First-time / uninitialized database setup only
-        logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")
-        await seed_plans()
-        await seed_catalogs()
-        await seed_super_admin()
-        await seed_templates()
-        await migrate_templates_to_revisions(db)
+        if is_seeded is True:
+            logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding bypassed.")
+            # In serverless production, super_admin is already seeded; avoid cold-start queries.
+            if not os.environ.get("VERCEL") and not _PRODUCTION:
+                try:
+                    await seed_super_admin()
+                except Exception as err:
+                    logger.warning(f"seed_super_admin non-critical startup error: {err}")
+        elif is_seeded is None:
+            # Firestore returned 429 ResourceExhausted or network error.
+            # A transient read failure must NOT be interpreted as proof that the database is uninitialized!
+            logger.warning(
+                "Unable to verify seed_complete on startup due to Firestore quota/network error. "
+                "Bypassing startup seeding to protect database from cascading failure."
+            )
+        else:
+            # is_seeded is False (document exists and value is False, or document does not exist)
+            if _is_auto_seed_enabled():
+                logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")
+                try:
+                    await seed_plans()
+                    await seed_catalogs()
+                    await seed_super_admin()
+                    await seed_templates(force=True, mark_system_seed_complete=False)
+                    await migrate_templates_to_revisions(db)
+                    # Mark global database initialization complete ONLY after all required components succeed:
+                    await db.collection('system_settings').document("seed_complete").set({
+                        "key": "seed_complete",
+                        "value": True,
+                        "completed_at": now().isoformat(),
+                        "components": ["plans", "catalogs", "super_admin", "templates", "revisions"]
+                    })
+                except Exception as seed_err:
+                    logger.error(f"First-time seeding encountered error: {seed_err}")
+            else:
+                logger.warning(
+                    "Database seed_complete is False, but automatic startup seeding is disabled in production "
+                    "(TEMPLATE_AUTO_SEED != true). Run explicit seed via POST /api/admin/templates/migrate-seed "
+                    "or set TEMPLATE_AUTO_SEED=true."
+                )
+    except Exception as exc:
+        # Startup event hook must NEVER crash the serverless container
+        logger.error(f"Non-fatal error in startup initialization hook: {exc}", exc_info=True)
 
 
 @app.on_event("shutdown")
