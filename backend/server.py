@@ -102,6 +102,103 @@ def _is_templates_disabled() -> bool:
     is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "false").lower() == "true"
     return (not is_test) and is_disabled
 
+CANONICAL_TEMPLATE_IDS = [
+    "document_exhibit_application",
+    "aanke_padvani_arji",
+    "certified_copy_application",
+    "certified_report",
+    "closing_purshish",
+    "closing_argument_right_application",
+    "reopen_right_to_argue_application",
+    "dd_karavani_arji",
+    "document_parat_levani_arji",
+    "document_swikaravani_arji",
+    "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji",
+    "mudat_arji",
+    "saaxi_ne_summons",
+    "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking",
+    "vakilatnama_civil",
+    "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji",
+]
+
+TEMPLATE_CANONICAL_MAP = {
+    # 21 Gujarati variants
+    "aanke_padvani_arji_gu": "aanke_padvani_arji",
+    "certified_report_gu": "certified_report",
+    "closing_purshish_gu": "closing_purshish",
+    "dd_karavani_arji_gu": "dd_karavani_arji",
+    "document_parat_levani_arji_gu": "document_parat_levani_arji",
+    "document_swikaravani_arji_gu": "document_swikaravani_arji",
+    "exemption_arji_gu": "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji_gu": "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji_gu": "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji_gu": "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji_gu": "kam_board_par_levani_arji",
+    "mudat_arji_gu": "mudat_arji",
+    "saaxi_ne_summons_gu": "saaxi_ne_summons",
+    "samadhan_purshish_gu": "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji_gu": "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji_gu": "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking_gu": "undertaking",
+    "vakilatnama_civil_gu": "vakilatnama_civil",
+    "vakilatnama_criminal_gu": "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji_gu": "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji_gu": "warrant_rad_karvani_arji",
+
+    # 21 English variants
+    "aanke_padvani_arji_en": "aanke_padvani_arji",
+    "certified_report_en": "certified_report",
+    "closing_purshish_en": "closing_purshish",
+    "dd_karavani_arji_en": "dd_karavani_arji",
+    "document_parat_levani_arji_en": "document_parat_levani_arji",
+    "document_swikaravani_arji_en": "document_swikaravani_arji",
+    "exemption_arji_en": "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji_en": "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji_en": "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji_en": "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji_en": "kam_board_par_levani_arji",
+    "mudat_arji_en": "mudat_arji",
+    "saaxi_ne_summons_en": "saaxi_ne_summons",
+    "samadhan_purshish_en": "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji_en": "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji_en": "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking_en": "undertaking",
+    "vakilatnama_civil_en": "vakilatnama_civil",
+    "vakilatnama_criminal_en": "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji_en": "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji_en": "warrant_rad_karvani_arji",
+
+    # Ghost stubs
+    "document_exhibit_application_gu": "document_exhibit_application",
+    "document_exhibit_application_en": "document_exhibit_application",
+
+    # Legacy aliases
+    "document_return_application": "document_parat_levani_arji",
+    "document_exhibit": "document_exhibit_application",
+}
+
+def resolve_canonical_template_id(template_id: str) -> str:
+    """Map any historical, variant, or legacy template ID to its canonical base ID."""
+    if not template_id:
+        return template_id
+    tid = str(template_id).strip()
+    if tid in TEMPLATE_CANONICAL_MAP:
+        return TEMPLATE_CANONICAL_MAP[tid]
+    if tid.endswith("_gu") or tid.endswith("_en"):
+        base = tid[:-3]
+        if base in CANONICAL_TEMPLATE_IDS:
+            return base
+    return tid
+
 def _get_all_seed_templates():
     if "PYTEST_CURRENT_TEST" in os.environ:
         try:
@@ -111,11 +208,19 @@ def _get_all_seed_templates():
         except Exception:
             pass
     base_seeds = []
+    seen = set()
+    # 1. First add the 10 canonical base templates from seed_data.TEMPLATES
+    for t in TEMPLATES:
+        tid = t.get("id")
+        if tid in CANONICAL_TEMPLATE_IDS and tid not in seen:
+            base_seeds.append(dict(t))
+            seen.add(tid)
+    # 2. Add remaining 15 authoritative templates
     try:
         from authoritative_catalog_42 import BASE_TEMPLATES
         for b in BASE_TEMPLATES:
             bk = b.get("base_key")
-            if bk:
+            if bk and bk in CANONICAL_TEMPLATE_IDS and bk not in seen:
                 base_seeds.append({
                     "id": bk,
                     "slug": bk,
@@ -134,9 +239,10 @@ def _get_all_seed_templates():
                     "status": "published",
                     "source": "seed",
                 })
+                seen.add(bk)
     except Exception:
         pass
-    return [*TEMPLATES, *TEMPLATES_V2, *base_seeds]
+    return base_seeds
 
 # ============================================================
 # DATABASE: Firestore via Firebase Admin SDK
@@ -3308,6 +3414,8 @@ def _get_canonical_vakilatnama_civil_template() -> Optional[dict]:
 
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
+    if db is None:
+        return
     _snap = await db.collection("system_settings").document("seed_complete").get()
     setting = _snap.to_dict() if _snap.exists else None
     if not setting or setting.get("value") is not True:
@@ -4132,55 +4240,37 @@ async def _get_published_templates() -> list:
                     except Exception:
                         pass
     
-    canonical_seeds = [
-        _get_canonical_exhibit_template(),
-        _get_canonical_certified_copy_template(),
-        _get_canonical_closing_purshish_template(),
-        _get_canonical_closing_argument_right_template(),
-        _get_canonical_reopen_right_to_argue_template(),
-        _get_canonical_exemption_arji_template(),
-        _get_canonical_dd_karavani_arji_template(),
-        _get_canonical_mudat_arji_template(),
-        _get_canonical_vakilatnama_criminal_template(),
-        _get_canonical_vakilatnama_civil_template(),
-    ]
-    canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
-    v2_items = []
-    for t in TEMPLATES_V2:
-        base = t.get("base_key") or (t.get("id")[:-3] if t.get("id", "").endswith(("_gu", "_en")) else t.get("id"))
-        if base in canonicals_by_id:
-            if not any(x.get("id") == base for x in v2_items):
-                v2_items.append(canonicals_by_id[base])
+    canonical_seeds_all = _get_all_seed_templates()
+    canonical_map = {t["id"]: t for t in canonical_seeds_all if t.get("id")}
+
+    # Exclude deleted templates and legacy _gu / _en variants
+    filtered_db_templates = []
+    seen_canonical = set()
+    for t in db_templates:
+        tid = t.get("id") or t.get("template_id")
+        if not tid or tid in deleted_ids:
+            continue
+        # Skip legacy suffixed records from published list
+        if tid.endswith(("_gu", "_en")) and resolve_canonical_template_id(tid) != tid:
+            continue
+        canon_id = resolve_canonical_template_id(tid)
+        if canon_id in seen_canonical:
+            continue
+        seen_canonical.add(canon_id)
+        if canon_id in canonical_map:
+            merged = dict(canonical_map[canon_id])
+            merged.update({k: v for k, v in t.items() if v is not None})
+            filtered_db_templates.append(merged)
         else:
-            v2_items.append(t)
-    for cid, cseed in canonicals_by_id.items():
-        if not any(x.get("id") == cid for x in v2_items):
-            v2_items.append(cseed)
+            filtered_db_templates.append(t)
 
-    if not db_templates:
-        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
-    else:
-        existing_ids = {t.get("id") for t in db_templates if t.get("id")}
-        existing_tids = {t.get("template_id") for t in db_templates if t.get("template_id")}
-        for t in v2_items:
-            tid = t.get("id")
-            if tid and tid not in deleted_ids and tid not in existing_ids and tid not in existing_tids:
-                item = {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
-                db_templates.append(item)
-                existing_ids.add(tid)
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document(tid).set({
-                            **item,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
+    for cid, cseed in canonical_map.items():
+        if cid in CANONICAL_TEMPLATE_IDS and cid not in seen_canonical and cid not in deleted_ids:
+            filtered_db_templates.append(dict(cseed))
+            seen_canonical.add(cid)
 
-    db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
-    res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
+    filtered_db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
+    res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in filtered_db_templates]
 
     with _PUBLISHED_TEMPLATES_LOCK:
         _PUBLISHED_TEMPLATES_CACHE["data"] = res
@@ -4194,25 +4284,18 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     if _is_templates_disabled():
         return None
     deleted_ids = await _get_deleted_template_ids()
+    canon_cand = resolve_canonical_template_id(template_id)
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
-    cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
+    cand_set = {template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in (
-        "document_exhibit_application", "aanke_padvani_arji", "certified_copy_application", "certified_report",
-        "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application",
-        "dd_karavani_arji", "document_parat_levani_arji", "document_swikaravani_arji", "exemption_arji",
-        "fs_no_haq_bandh_karvani_arji", "fs_no_haq_kholvani_arji", "jamin_bond_swikarvani_arji",
-        "kam_board_par_levani_arji", "mudat_arji", "saaxi_ne_summons", "samadhan_purshish",
-        "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "undertaking",
-        "vakilatnama_civil", "vakilatnama_criminal", "warrant_no_hath_bido_apvani_arji", "warrant_rad_karvani_arji",
-    ):
+    for active_id in CANONICAL_TEMPLATE_IDS:
         deleted_ids.discard(active_id)
         deleted_ids.discard(f"{active_id}_gu")
         deleted_ids.discard(f"{active_id}_en")
     if cand_set.intersection(deleted_ids):
         return None
 
-    lookup_candidates = list(dict.fromkeys([template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"]))
+    lookup_candidates = list(dict.fromkeys([template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"]))
 
     # Fast path: check in-memory cached published templates first (<0.1ms)
     try:
@@ -4592,6 +4675,8 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
         t_id = template_id
         t_ver = template_version
 
+    canon_id = resolve_canonical_template_id(t_id)
+
     if db is None:
         if t_ver is not None:
             raise HTTPException(503, "Database service unavailable")
@@ -4643,9 +4728,14 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                 "format_version": old_v.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
             }
 
-    # Fallback to current template in db.templates
+    # Fallback to current template in db.templates or canonical template
     _snap = await db.collection("templates").document(t_id).get()
     t = _snap.to_dict() if _snap.exists else None
+    if not t and canon_id and canon_id != t_id:
+        _snap_c = await db.collection("templates").document(canon_id).get()
+        t = _snap_c.to_dict() if _snap_c.exists else None
+    if not t:
+        t = await _get_template_by_id(canon_id or t_id)
     if t:
         if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application"):
             ex_seed = _get_canonical_exhibit_template()
@@ -6784,11 +6874,18 @@ async def get_catalog_template_order():
     if order is None or not isinstance(order, list):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
-    order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
-        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
-            order.append(active_id)
-    return {"template_order": order}
+    canonical_order = []
+    seen_in_order = set()
+    for tid in (order or []):
+        cid = resolve_canonical_template_id(tid)
+        if cid and cid not in seen_in_order and cid in CANONICAL_TEMPLATE_IDS and cid not in deleted_ids:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    for cid in CANONICAL_TEMPLATE_IDS:
+        if cid not in seen_in_order and cid not in deleted_ids:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    return {"template_order": canonical_order}
 
 
 
@@ -9488,11 +9585,18 @@ async def admin_get_template_order(admin=Depends(get_admin)):
     if order is None or not isinstance(order, list):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
-    order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
-        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
-            order.append(active_id)
-    return {"template_order": order}
+    canonical_order = []
+    seen_in_order = set()
+    for tid in (order or []):
+        cid = resolve_canonical_template_id(tid)
+        if cid and cid not in seen_in_order and cid in CANONICAL_TEMPLATE_IDS and cid not in deleted_ids:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    for cid in CANONICAL_TEMPLATE_IDS:
+        if cid not in seen_in_order and cid not in deleted_ids:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    return {"template_order": canonical_order}
 
 
 @admin_api.put("/template-order")
@@ -9500,26 +9604,35 @@ async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_a
     """Update the authoritative template display order in settings and persist sort_order on templates."""
     if not isinstance(req.template_order, list):
         raise HTTPException(422, "template_order must be a list of string IDs")
+    canonical_order = []
+    seen_in_order = set()
+    for tid in req.template_order:
+        cid = resolve_canonical_template_id(tid)
+        if cid and cid not in seen_in_order and cid in CANONICAL_TEMPLATE_IDS:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    for cid in CANONICAL_TEMPLATE_IDS:
+        if cid not in seen_in_order:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
     ts = now().isoformat()
     if db is not None:
         await db.collection('settings').document("template_display_order").set({
-            "value": req.template_order,
+            "value": canonical_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
-        for idx, tid in enumerate(req.template_order):
+        for idx, tid in enumerate(canonical_order):
             await db.collection("templates").document(tid).set({
                 "sort_order": idx,
                 "updated_at": ts,
                 "updated_by": admin["id"]
             }, merge=True)
-            if not tid.endswith("_gu") and not tid.endswith("_en"):
-                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
-    await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
-    return {"success": True, "template_order": req.template_order}
+    await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(canonical_order)})
+    return {"success": True, "template_order": canonical_order}
 
 
 @admin_api.put("/templates/reorder")
@@ -9528,22 +9641,31 @@ async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require
     order = req.order if req.order is not None else (req.template_order or [])
     if not isinstance(order, list):
         raise HTTPException(422, "order must be a list of string IDs")
+    canonical_order = []
+    seen_in_order = set()
+    for tid in order:
+        cid = resolve_canonical_template_id(tid)
+        if cid and cid not in seen_in_order and cid in CANONICAL_TEMPLATE_IDS:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
+    for cid in CANONICAL_TEMPLATE_IDS:
+        if cid not in seen_in_order:
+            canonical_order.append(cid)
+            seen_in_order.add(cid)
     ts = now().isoformat()
     if db is not None:
         await db.collection('settings').document("template_display_order").set({
-            "value": order,
+            "value": canonical_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
-        for idx, tid in enumerate(order):
+        for idx, tid in enumerate(canonical_order):
             await db.collection("templates").document(tid).set({
                 "sort_order": idx,
                 "updated_at": ts,
                 "updated_by": admin["id"]
             }, merge=True)
-            if not tid.endswith("_gu") and not tid.endswith("_en"):
-                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
     await create_admin_audit_log(
@@ -9551,9 +9673,9 @@ async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require
         action="templates_reorder",
         entity_type="template",
         entity_id="catalog_order",
-        metadata={"count": len(order)},
+        metadata={"count": len(canonical_order)},
     )
-    return {"success": True, "template_order": order}
+    return {"success": True, "template_order": canonical_order}
 
 
 
@@ -9655,8 +9777,11 @@ async def admin_list_templates(
             if not tid or tid in deleted_ids:
                 continue
             doc_data["id"] = tid
+            # Exclude legacy variant records from normal catalog view
+            if tid.endswith(("_gu", "_en")) and resolve_canonical_template_id(tid) != tid:
+                continue
             # If doc is a seed template or stub, merge seed definition while preserving existing values
-            seed_match = seed_map.get(tid) or seed_map.get(tid.replace("_gu", "").replace("_en", ""))
+            seed_match = seed_map.get(tid) or seed_map.get(resolve_canonical_template_id(tid))
             if seed_match:
                 base = dict(seed_match)
                 base.update({k: v for k, v in doc_data.items() if v is not None})
@@ -9670,10 +9795,12 @@ async def admin_list_templates(
             seen_ids.add(tid)
             all_db.append(doc_data)
 
-    # Include any seed templates not yet materialized in Firestore
+    # Include any canonical seed templates not yet materialized in Firestore
     for tid, s_tpl in seed_map.items():
-        if tid not in seen_ids:
+        if tid not in seen_ids and tid in CANONICAL_TEMPLATE_IDS:
             all_db.append(dict(s_tpl, status="seed", source="seed"))
+
+    all_db = [t for t in all_db if not (t.get("id", "").endswith(("_gu", "_en")) and resolve_canonical_template_id(t.get("id", "")) != t.get("id", ""))]
 
     # Set status and source for unedited seed templates
     for t in all_db:

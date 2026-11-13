@@ -58,14 +58,9 @@ export default function Templates() {
   const [orderDragOverIdx, setOrderDragOverIdx] = useState<number | null>(null);
 
   const handleOpenOrderModal = async () => {
-    const validIds = new Set(templates.map(t => t.id));
-    const initialPairs = validIds.size > 0
-      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-      : [...ADMIN_TEMPLATE_PAIRS];
-
     setOrderModal({
       open: true,
-      pairs: initialPairs,
+      pairs: [...ADMIN_TEMPLATE_PAIRS],
       loading: true,
       saving: false,
       successMsg: '',
@@ -75,10 +70,7 @@ export default function Templates() {
       const res = await adminApi.getTemplateOrder();
       const order = res?.template_order || [];
       const ordered = getOrderedAdminPairs(order);
-      const filtered = validIds.size > 0
-        ? ordered.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-        : ordered;
-      setOrderModal(prev => prev ? { ...prev, pairs: filtered, loading: false } : null);
+      setOrderModal(prev => prev ? { ...prev, pairs: ordered, loading: false } : null);
     } catch (err: any) {
       setOrderModal(prev => prev ? { ...prev, loading: false, error: 'Failed to fetch current order: ' + err.message } : null);
     }
@@ -141,11 +133,7 @@ export default function Templates() {
 
   const resetToDefaultOrder = () => {
     if (!orderModal) return;
-    const validIds = new Set(templates.map(t => t.id));
-    const defaults = validIds.size > 0
-      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-      : [...ADMIN_TEMPLATE_PAIRS];
-    setOrderModal({ ...orderModal, pairs: defaults, successMsg: '', error: '' });
+    setOrderModal({ ...orderModal, pairs: [...ADMIN_TEMPLATE_PAIRS], successMsg: '', error: '' });
   };
 
   const handleSaveOrder = async () => {
@@ -157,8 +145,9 @@ export default function Templates() {
       setOrderModal(prev => prev ? {
         ...prev,
         saving: false,
-        successMsg: '✅ Display order updated successfully! The first 10 items will appear on the Home Page and all 21 in the Main Catalog.',
+        successMsg: '✅ Display order updated successfully! The first 10 items will appear on the Home Page and all 25 in the Main Catalog.',
       } : null);
+      loadTemplates();
     } catch (err: any) {
       setOrderModal(prev => prev ? { ...prev, saving: false, error: err.message || 'Failed to save order' } : null);
     }
@@ -1143,7 +1132,7 @@ export default function Templates() {
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.25rem' }}>📐 Template Placement & Display Order / પ્લેસમેન્ટ ક્રમ</h2>
                 <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#6b7280' }}>
-                  Authoritative ordering for all 21 templates. The <strong>first 10 templates</strong> appear on the Home Page.
+                  Authoritative ordering for all 25 templates. The <strong>first 10 templates</strong> appear on the Home Page.
                 </p>
               </div>
               <button
@@ -1239,7 +1228,7 @@ export default function Templates() {
                               border: isTop10 ? '1px solid #fde68a' : '1px solid #e5e7eb',
                             }}
                           >
-                            {isTop10 ? '🏠 Home (1-10)' : 'Catalog (11-21)'}
+                            {isTop10 ? '🏠 Home (1-10)' : 'Catalog (11-25)'}
                           </span>
                         </div>
 
