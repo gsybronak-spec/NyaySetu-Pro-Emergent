@@ -153,8 +153,18 @@ async def download(client, lawyer, template_id, page_size=None, values=None):
 
 async def test_seed_affidavit_defaults_to_legal(client, clean_db):
     lawyer = await create_lawyer()
-    r = await download(client, lawyer, "affidavit",
-                       values={"declarant_name": "Test", "facts": "facts", "place": "Ahmedabad"})
+    r = await download(
+        client,
+        lawyer,
+        "affidavit",
+        values={
+            "deponent_name": "Ramesh Kumar",
+            "father_name": "Suresh Kumar",
+            "age": 38,
+            "address": "123 Court Road, Ahmedabad",
+            "statement": "Facts and statements declared on oath.",
+        },
+    )
     assert r.status_code == 200, r.text
     w, h = pdf_mediabox(base64.b64decode(r.json()["base64"]))
     assert abs(w - 612) < 2 and abs(h - 1008) < 2, f"expected Legal, got {w}x{h}"
@@ -170,8 +180,19 @@ async def test_seed_adjournment_defaults_to_a4(client, clean_db):
 
 async def test_request_page_size_overrides_template(client, clean_db):
     lawyer = await create_lawyer()
-    r = await download(client, lawyer, "affidavit", page_size="A4",
-                       values={"declarant_name": "Test", "facts": "facts", "place": "Ahmedabad"})
+    r = await download(
+        client,
+        lawyer,
+        "affidavit",
+        page_size="A4",
+        values={
+            "deponent_name": "Ramesh Kumar",
+            "father_name": "Suresh Kumar",
+            "age": 38,
+            "address": "123 Court Road, Ahmedabad",
+            "statement": "Facts and statements declared on oath.",
+        },
+    )
     assert r.status_code == 200, r.text
     w, h = pdf_mediabox(base64.b64decode(r.json()["base64"]))
     assert abs(w - 595) < 3 and abs(h - 842) < 3, f"expected A4 override, got {w}x{h}"
@@ -263,9 +284,10 @@ async def test_admin_list_shows_all_seed_templates_with_partial_db(client, clean
         assert sid in ids, f"seed template {sid} missing from admin list"
     assert "db_only_one" in ids
     assert len(ids) == len(SEED_IDS) + 1  # no duplicates
-    # Seeds are marked as seed source
-    seed_item = next(t for t in items if t["id"] == "adjournment" and t.get("status") == "seed")
+    # Seeds are marked as seed source; once materialized in Firestore their status is published
+    seed_item = next(t for t in items if t["id"] == "adjournment" and t.get("source") == "seed")
     assert seed_item["source"] == "seed"
+    assert seed_item["status"] == "published"
 
 
 async def test_admin_list_db_overrides_seed_by_id(client, clean_db):
@@ -286,11 +308,25 @@ async def test_admin_list_db_overrides_seed_by_id(client, clean_db):
 
 
 async def test_admin_list_status_filter_seed(client, clean_db):
+    # Clear only the test Firestore templates collection to create an unmaterialized seed scenario
+    async for d in server.db.collection("templates").stream():
+        await d.reference.delete()
+    # Mark seed as complete so _ensure_seed_complete does not auto-populate during the request
+    await server.db.collection("system_settings").document("seed_complete").set({"key": "seed_complete", "value": True})
+    await server.db.collection("system_settings").document("templates_seed_complete").set({"key": "templates_seed_complete", "value": True})
+
     _, admin_token = await create_admin()
     r = await client.get("/api/admin/templates?status=seed", headers=H(admin_token))
+    assert r.status_code == 200
     items = r.json()
-    assert len(items) == len(SEED_IDS)
+    expected_seed_ids = {
+        tid for tid in server.CANONICAL_TEMPLATE_IDS
+        if any(t["id"] == tid or t["id"].replace("_gu", "").replace("_en", "") == tid for t in [*TEMPLATES, *TEMPLATES_V2])
+    }
+    assert len(items) == len(expected_seed_ids)
     assert all(t["status"] == "seed" for t in items)
+    assert all(t["source"] == "seed" for t in items)
+    assert {t["id"] for t in items} == expected_seed_ids
 
 
 async def test_editing_seed_creates_draft_without_touching_others(client, clean_db):
