@@ -409,6 +409,82 @@ _SETTINGS_CACHE: dict = {
 _SETTINGS_CACHE_LOCK = threading.Lock()
 _SETTINGS_CACHE_TTL_SEC = 300.0
 
+_CACHE_REVISIONS: dict[str, int] = {"templates": 0, "catalog": 0, "plans": 0, "settings": 0}
+_LAST_REVISION_CHECK_TS: float = 0.0
+_REVISION_CHECK_LOCK = threading.Lock()
+_REVISION_CHECK_INTERVAL_SEC: float = 10.0
+
+def _record_local_revision_bump(component: str) -> None:
+    with _REVISION_CHECK_LOCK:
+        _CACHE_REVISIONS[component] = _CACHE_REVISIONS.get(component, 0) + 1
+
+async def _commit_batch_with_revision(batch, component: str, extra_components: Optional[list] = None) -> None:
+    """Atomically commit a Firestore batch containing data writes and the cache revision increment(s).
+    Guarantees that the data write and cache revision increment succeed together or fail together.
+    Raises HTTPException(503) if db or batch is unexpectedly unavailable in a mutation path."""
+    if db is None or batch is None:
+        raise HTTPException(503, "Database service unavailable")
+    cv_ref = db.collection("system_settings").document("cache_version")
+    payload = {component: firestore.Increment(1), "updated_at": now().isoformat()}
+    if extra_components:
+        for ec in extra_components:
+            payload[ec] = firestore.Increment(1)
+    batch.set(cv_ref, payload, merge=True)
+    commit_res = batch.commit()
+    if hasattr(commit_res, "__await__"):
+        await commit_res
+    _record_local_revision_bump(component)
+    if extra_components:
+        for ec in extra_components:
+            _record_local_revision_bump(ec)
+
+async def _bump_cache_revision(component: str) -> None:
+    """Increment component cache revision in Firestore and update local revision.
+    Fallback when an atomic batch is not used directly."""
+    if db is None:
+        return
+    try:
+        await db.collection("system_settings").document("cache_version").set(
+            {component: firestore.Increment(1), "updated_at": now().isoformat()},
+            merge=True
+        )
+        _record_local_revision_bump(component)
+    except Exception as e:
+        logger.warning(f"Failed to increment cache revision for {component}: {e}")
+
+async def _sync_cross_instance_cache(component: Optional[str] = None) -> None:
+    """Check if cross-instance cache revisions in Firestore have changed.
+    Debounced to run at most once every 10 seconds per container instance.
+    Invalidates only the relevant local caches on revision bump."""
+    global _LAST_REVISION_CHECK_TS
+    if db is None:
+        return
+    now_ts = time.time()
+    with _REVISION_CHECK_LOCK:
+        if now_ts - _LAST_REVISION_CHECK_TS < _REVISION_CHECK_INTERVAL_SEC:
+            return
+        _LAST_REVISION_CHECK_TS = now_ts
+
+    try:
+        snap = await db.collection("system_settings").document("cache_version").get()
+        if not snap.exists:
+            return
+        data = snap.to_dict() or {}
+        with _REVISION_CHECK_LOCK:
+            for comp, inv_fn in (
+                ("templates", invalidate_published_templates_cache),
+                ("catalog", _invalidate_catalog_cache),
+                ("plans", invalidate_plans_cache),
+                ("settings", invalidate_settings_cache),
+            ):
+                remote_rev = data.get(comp, 0)
+                local_rev = _CACHE_REVISIONS.get(comp, 0)
+                if remote_rev > local_rev:
+                    inv_fn()
+                    _CACHE_REVISIONS[comp] = remote_rev
+    except Exception as e:
+        logger.warning(f"Cross-instance cache revision check failed: {e}")
+
 def invalidate_settings_cache(key: Optional[str] = None):
     with _SETTINGS_CACHE_LOCK:
         if key:
@@ -419,6 +495,7 @@ def invalidate_settings_cache(key: Optional[str] = None):
 async def _get_setting(key: str):
     """Resolve an operational setting: DB value if present, else the default.
     Cached in-memory with a short 60s TTL for per-instance efficiency."""
+    await _sync_cross_instance_cache("settings")
     now_ts = time.time()
     with _SETTINGS_CACHE_LOCK:
         cached = _SETTINGS_CACHE.get(key)
@@ -2579,6 +2656,7 @@ async def _load_plans() -> list:
     """DB plans if any exist, else the seed PLANS (backward compat when the
     plans collection has not been initialized).
     Cached in-memory with 60s TTL."""
+    await _sync_cross_instance_cache("plans")
     now_ts = time.time()
     with _PLANS_CACHE_LOCK:
         if _PLANS_CACHE["data"] is not None and now_ts < _PLANS_CACHE["expires_at"]:
@@ -2769,13 +2847,19 @@ _CATALOG_KINDS = {
 _CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
 
 _CATALOG_CACHE: dict[str, list] = {}
+_CATALOG_CACHE_EXPIRES: dict[str, float] = {}
+_CATALOG_CACHE_LOCK = threading.Lock()
+_CATALOG_CACHE_TTL_SEC: float = 60.0
 
 def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
-    global _CATALOG_CACHE
-    if kind:
-        _CATALOG_CACHE.pop(kind, None)
-    else:
-        _CATALOG_CACHE.clear()
+    global _CATALOG_CACHE, _CATALOG_CACHE_EXPIRES
+    with _CATALOG_CACHE_LOCK:
+        if kind:
+            _CATALOG_CACHE.pop(kind, None)
+            _CATALOG_CACHE_EXPIRES.pop(kind, None)
+        else:
+            _CATALOG_CACHE.clear()
+            _CATALOG_CACHE_EXPIRES.clear()
 
 
 async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
@@ -2827,12 +2911,16 @@ async def _get_deleted_template_ids() -> set[str]:
 
 async def _load_catalog(kind: str) -> list:
     """DB catalog entries from Firestore.
-    If cached in-memory, returns the warm cache.
+    If cached in-memory and unexpired, returns the warm cache.
     If database is unavailable and no warm cache exists, raises HTTPException(503).
     Does NOT fall back to static seed lists as authoritative live catalog data,
     preventing resurrection of deleted/inactive records and omission of admin-created records."""
-    if kind in _CATALOG_CACHE:
-        return _CATALOG_CACHE[kind]
+    await _sync_cross_instance_cache("catalog")
+
+    now_ts = time.time()
+    with _CATALOG_CACHE_LOCK:
+        if kind in _CATALOG_CACHE and now_ts < _CATALOG_CACHE_EXPIRES.get(kind, float("inf")):
+            return list(_CATALOG_CACHE[kind])
 
     if kind not in _CATALOG_KINDS:
         raise HTTPException(status_code=404, detail=f"Unknown catalog kind '{kind}'")
@@ -2840,6 +2928,9 @@ async def _load_catalog(kind: str) -> list:
     coll, seed_list = _CATALOG_KINDS[kind]
 
     if db is None:
+        with _CATALOG_CACHE_LOCK:
+            if kind in _CATALOG_CACHE:
+                return list(_CATALOG_CACHE[kind])
         raise HTTPException(status_code=503, detail=f"Database service unavailable: catalog '{kind}' cannot be loaded.")
 
     try:
@@ -2850,19 +2941,26 @@ async def _load_catalog(kind: str) -> list:
             # Admin Court Catalog is 100% the single source of truth.
             # When connected to DB, never resurrect seed list if collection is empty.
             items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
-            _CATALOG_CACHE[kind] = items
+            with _CATALOG_CACHE_LOCK:
+                _CATALOG_CACHE[kind] = items
+                _CATALOG_CACHE_EXPIRES[kind] = now_ts + _CATALOG_CACHE_TTL_SEC
             for c in items:
                 if isinstance(c, dict) and c.get("id"):
                     _COURT_MAP[c["id"]] = c
-            return items
+            return list(items)
 
         items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
-        _CATALOG_CACHE[kind] = items
-        return items
+        with _CATALOG_CACHE_LOCK:
+            _CATALOG_CACHE[kind] = items
+            _CATALOG_CACHE_EXPIRES[kind] = now_ts + _CATALOG_CACHE_TTL_SEC
+        return list(items)
     except HTTPException:
         raise
     except Exception as e:
         logger.warning(f"Database read failed for catalog '{kind}': {e}")
+        with _CATALOG_CACHE_LOCK:
+            if kind in _CATALOG_CACHE:
+                return list(_CATALOG_CACHE[kind])
         raise HTTPException(
             status_code=503,
             detail=f"Database service unavailable: failed to load live catalog '{kind}'"
@@ -3499,9 +3597,11 @@ def invalidate_published_templates_cache():
 async def _get_published_templates() -> list:
     """Return published templates from db.templates ONLY (single source of truth).
     Hides draft, archived, or deleted templates.
-    Cached in-memory with TTL."""
+    Cached in-memory with TTL.
+    Never overwrites existing Admin-managed template documents with seed constants."""
     if _is_templates_disabled():
         return []
+    await _sync_cross_instance_cache("templates")
     now_ts = time.time()
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
@@ -3514,436 +3614,7 @@ async def _get_published_templates() -> list:
     if db is not None:
         db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
         db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
-        for t in db_templates:
-            if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application"):
-                ex_seed = _get_canonical_exhibit_template()
-                if ex_seed:
-                    needs_update = False
-                    if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
-                        t["content_gu"] = ex_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != ex_seed["content_en"]:
-                        t["content_en"] = ex_seed["content_en"]
-                        needs_update = True
-                    if (t.get("settings") or {}).get("line_spacing") != 19.5:
-                        t["settings"] = ex_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != ex_seed.get("fields"):
-                        t["fields"] = ex_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "document_exhibit_application")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application"):
-                cc_seed = _get_canonical_certified_copy_template()
-                if cc_seed:
-                    needs_update = False
-                    if t.get("content_gu") != cc_seed["content_gu"]:
-                        t["content_gu"] = cc_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != cc_seed["content_en"]:
-                        t["content_en"] = cc_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != cc_seed["settings"]:
-                        t["settings"] = cc_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != cc_seed.get("fields"):
-                        t["fields"] = cc_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "certified_copy_application")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "closing_purshish" or t.get("template_id") == "closing_purshish"):
-                cp_seed = _get_canonical_closing_purshish_template()
-                if cp_seed:
-                    needs_update = False
-                    if t.get("content_gu") != cp_seed["content_gu"]:
-                        t["content_gu"] = cp_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != cp_seed["content_en"]:
-                        t["content_en"] = cp_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != cp_seed["settings"]:
-                        t["settings"] = cp_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != cp_seed.get("fields"):
-                        t["fields"] = cp_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "closing_purshish")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "closing_argument_right_application" or t.get("template_id") == "closing_argument_right_application"):
-                car_seed = _get_canonical_closing_argument_right_template()
-                if car_seed:
-                    needs_update = False
-                    if t.get("content_gu") != car_seed["content_gu"]:
-                        t["content_gu"] = car_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != car_seed["content_en"]:
-                        t["content_en"] = car_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != car_seed["settings"]:
-                        t["settings"] = car_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != car_seed.get("fields"):
-                        t["fields"] = car_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "closing_argument_right_application")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "reopen_right_to_argue_application" or t.get("template_id") == "reopen_right_to_argue_application"):
-                rr_seed = _get_canonical_reopen_right_to_argue_template()
-                if rr_seed:
-                    needs_update = False
-                    if t.get("content_gu") != rr_seed["content_gu"]:
-                        t["content_gu"] = rr_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != rr_seed["content_en"]:
-                        t["content_en"] = rr_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != rr_seed["settings"]:
-                        t["settings"] = rr_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != rr_seed.get("fields"):
-                        t["fields"] = rr_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "reopen_right_to_argue_application")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "exemption_arji" or t.get("template_id") == "exemption_arji"):
-                ex_seed = _get_canonical_exemption_arji_template()
-                if ex_seed:
-                    needs_update = False
-                    if t.get("content_gu") != ex_seed["content_gu"]:
-                        t["content_gu"] = ex_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != ex_seed["content_en"]:
-                        t["content_en"] = ex_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != ex_seed["settings"]:
-                        t["settings"] = ex_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != ex_seed.get("fields"):
-                        t["fields"] = ex_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "exemption_arji")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "dd_karavani_arji" or t.get("template_id") == "dd_karavani_arji"):
-                dd_seed = _get_canonical_dd_karavani_arji_template()
-                if dd_seed:
-                    needs_update = False
-                    if t.get("content_gu") != dd_seed["content_gu"]:
-                        t["content_gu"] = dd_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != dd_seed["content_en"]:
-                        t["content_en"] = dd_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != dd_seed["settings"]:
-                        t["settings"] = dd_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != dd_seed.get("fields"):
-                        t["fields"] = dd_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "dd_karavani_arji")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "mudat_arji" or t.get("template_id") == "mudat_arji"):
-                mudat_seed = _get_canonical_mudat_arji_template()
-                if mudat_seed:
-                    needs_update = False
-                    if t.get("content_gu") != mudat_seed["content_gu"]:
-                        t["content_gu"] = mudat_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != mudat_seed["content_en"]:
-                        t["content_en"] = mudat_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != mudat_seed["settings"]:
-                        t["settings"] = mudat_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != mudat_seed.get("fields"):
-                        t["fields"] = mudat_seed["fields"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "mudat_arji")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "vakilatnama_criminal" or t.get("template_id") == "vakilatnama_criminal"):
-                vcrim_seed = _get_canonical_vakilatnama_criminal_template()
-                if vcrim_seed:
-                    needs_update = False
-                    if t.get("content_gu") != vcrim_seed["content_gu"]:
-                        t["content_gu"] = vcrim_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != vcrim_seed["content_en"]:
-                        t["content_en"] = vcrim_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != vcrim_seed["settings"]:
-                        t["settings"] = vcrim_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != vcrim_seed.get("fields"):
-                        t["fields"] = vcrim_seed["fields"]
-                        needs_update = True
-                    if t.get("name_gu") != vcrim_seed.get("name_gu"):
-                        t["name_gu"] = vcrim_seed["name_gu"]
-                        needs_update = True
-                    if t.get("name_en") != vcrim_seed.get("name_en"):
-                        t["name_en"] = vcrim_seed["name_en"]
-                        needs_update = True
-                    if t.get("category") != vcrim_seed.get("category"):
-                        t["category"] = vcrim_seed["category"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "vakilatnama_criminal")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                                "name_gu": t["name_gu"],
-                                "name_en": t["name_en"],
-                                "category": t["category"],
-                            }))
-                        except Exception:
-                            pass
-            if (t.get("id") == "vakilatnama_civil" or t.get("template_id") == "vakilatnama_civil"):
-                vciv_seed = _get_canonical_vakilatnama_civil_template()
-                if vciv_seed:
-                    needs_update = False
-                    if t.get("content_gu") != vciv_seed["content_gu"]:
-                        t["content_gu"] = vciv_seed["content_gu"]
-                        needs_update = True
-                    if t.get("content_en") != vciv_seed["content_en"]:
-                        t["content_en"] = vciv_seed["content_en"]
-                        needs_update = True
-                    if t.get("settings") != vciv_seed["settings"]:
-                        t["settings"] = vciv_seed["settings"]
-                        needs_update = True
-                    if t.get("fields") != vciv_seed.get("fields"):
-                        t["fields"] = vciv_seed["fields"]
-                        needs_update = True
-                    if t.get("name_gu") != vciv_seed.get("name_gu"):
-                        t["name_gu"] = vciv_seed["name_gu"]
-                        needs_update = True
-                    if t.get("name_en") != vciv_seed.get("name_en"):
-                        t["name_en"] = vciv_seed["name_en"]
-                        needs_update = True
-                    if t.get("category") != vciv_seed.get("category"):
-                        t["category"] = vciv_seed["category"]
-                        needs_update = True
-                    if needs_update and db is not None:
-                        try:
-                            asyncio.create_task(db.collection("templates").document(t.get("id", "vakilatnama_civil")).update({
-                                "content_gu": t["content_gu"],
-                                "content_en": t["content_en"],
-                                "settings": t["settings"],
-                                "fields": t["fields"],
-                                "name_gu": t["name_gu"],
-                                "name_en": t["name_en"],
-                                "category": t["category"],
-                            }))
-                        except Exception:
-                            pass
 
-        found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
-        if not found_cc and "certified_copy_application" not in deleted_ids:
-            cc_seed = _get_canonical_certified_copy_template()
-            if cc_seed:
-                db_templates.append(dict(cc_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("certified_copy_application").set({
-                            **cc_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_cp = any((t.get("id") == "closing_purshish" or t.get("template_id") == "closing_purshish") for t in db_templates)
-        if not found_cp and "closing_purshish" not in deleted_ids:
-            cp_seed = _get_canonical_closing_purshish_template()
-            if cp_seed:
-                db_templates.append(dict(cp_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("closing_purshish").set({
-                            **cp_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_car = any((t.get("id") == "closing_argument_right_application" or t.get("template_id") == "closing_argument_right_application") for t in db_templates)
-        if not found_car and "closing_argument_right_application" not in deleted_ids:
-            car_seed = _get_canonical_closing_argument_right_template()
-            if car_seed:
-                db_templates.append(dict(car_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("closing_argument_right_application").set({
-                            **car_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_rr = any((t.get("id") == "reopen_right_to_argue_application" or t.get("template_id") == "reopen_right_to_argue_application") for t in db_templates)
-        if not found_rr and "reopen_right_to_argue_application" not in deleted_ids:
-            rr_seed = _get_canonical_reopen_right_to_argue_template()
-            if rr_seed:
-                db_templates.append(dict(rr_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("reopen_right_to_argue_application").set({
-                            **rr_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_ex = any((t.get("id") == "exemption_arji" or t.get("template_id") == "exemption_arji") for t in db_templates)
-        if not found_ex and "exemption_arji" not in deleted_ids:
-            ex_seed = _get_canonical_exemption_arji_template()
-            if ex_seed:
-                db_templates.append(dict(ex_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("exemption_arji").set({
-                            **ex_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_dd = any((t.get("id") == "dd_karavani_arji" or t.get("template_id") == "dd_karavani_arji") for t in db_templates)
-        if not found_dd and "dd_karavani_arji" not in deleted_ids:
-            dd_seed = _get_canonical_dd_karavani_arji_template()
-            if dd_seed:
-                db_templates.append(dict(dd_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("dd_karavani_arji").set({
-                            **dd_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_mudat = any((t.get("id") == "mudat_arji" or t.get("template_id") == "mudat_arji") for t in db_templates)
-        if not found_mudat and "mudat_arji" not in deleted_ids:
-            mudat_seed = _get_canonical_mudat_arji_template()
-            if mudat_seed:
-                db_templates.append(dict(mudat_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("mudat_arji").set({
-                            **mudat_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_v_crim = any((t.get("id") == "vakilatnama_criminal" or t.get("template_id") == "vakilatnama_criminal") for t in db_templates)
-        if not found_v_crim and "vakilatnama_criminal" not in deleted_ids:
-            v_crim_seed = _get_canonical_vakilatnama_criminal_template()
-            if v_crim_seed:
-                db_templates.append(dict(v_crim_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("vakilatnama_criminal").set({
-                            **v_crim_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-
-        found_v_civ = any((t.get("id") == "vakilatnama_civil" or t.get("template_id") == "vakilatnama_civil") for t in db_templates)
-        if not found_v_civ and "vakilatnama_civil" not in deleted_ids:
-            v_civ_seed = _get_canonical_vakilatnama_civil_template()
-            if v_civ_seed:
-                db_templates.append(dict(v_civ_seed))
-                if db is not None:
-                    try:
-                        asyncio.create_task(db.collection("templates").document("vakilatnama_civil").set({
-                            **v_civ_seed,
-                            "status": "published",
-                            "updated_at": now().isoformat(),
-                            "created_at": now().isoformat(),
-                        }))
-                    except Exception:
-                        pass
-    
     canonical_seeds_all = _get_all_seed_templates()
     canonical_map = {t["id"]: t for t in canonical_seeds_all if t.get("id")}
 
@@ -8818,7 +8489,10 @@ async def admin_create_plan(req: AdminPlanReq, admin=Depends(require_super_admin
     }
     doc_id = str(uuid.uuid4())
     doc["id"] = doc_id
-    await db.collection('plans').document(doc_id).set(doc)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('plans').document(doc_id), doc)
+        await _commit_batch_with_revision(batch, "plans")
     await create_admin_audit_log(
         admin=admin,
         action="plan_create",
@@ -8854,8 +8528,11 @@ async def admin_update_plan(plan_id: str, req: AdminPlanReq, admin=Depends(requi
         "updated_by": admin["id"],
         "updated_at": ts,
     }
-    await db.collection('plans').document(plan_id).set(updates, merge=True)
-    updated = (await db.collection('plans').document(plan_id).get()).to_dict()
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('plans').document(plan_id), updates, merge=True)
+        await _commit_batch_with_revision(batch, "plans")
+    updated = {**existing, **updates}
     await create_admin_audit_log(
         admin=admin,
         action="plan_update",
@@ -8882,7 +8559,10 @@ async def admin_activate_plan(plan_id: str, admin=Depends(require_super_admin)):
         existing = {**seed, "active": True, "created_at": ts}
         doc_id = existing.get('id') or str(uuid.uuid4()); _doc_copy = existing.copy(); _doc_copy['id'] = doc_id; await db.collection('plans').document(doc_id).set(_doc_copy)
     
-    await db.collection('plans').document(plan_id).set({"active": True, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('plans').document(plan_id), {"active": True, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "plans")
     await create_admin_audit_log(
         admin=admin,
         action="plan_activate",
@@ -8891,7 +8571,7 @@ async def admin_activate_plan(plan_id: str, admin=Depends(require_super_admin)):
         old_value={"active": existing.get("active")},
         new_value={"active": True},
     )
-    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
+    updated = {**existing, "active": True, "updated_at": ts, "updated_by": admin["id"]}
     invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(updated)}
 
@@ -8908,7 +8588,10 @@ async def admin_deactivate_plan(plan_id: str, admin=Depends(require_super_admin)
         existing = {**seed, "active": True, "created_at": ts}
         doc_id = existing.get('id') or str(uuid.uuid4()); _doc_copy = existing.copy(); _doc_copy['id'] = doc_id; await db.collection('plans').document(doc_id).set(_doc_copy)
     
-    await db.collection('plans').document(plan_id).set({"active": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('plans').document(plan_id), {"active": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "plans")
     await create_admin_audit_log(
         admin=admin,
         action="plan_deactivate",
@@ -8917,7 +8600,7 @@ async def admin_deactivate_plan(plan_id: str, admin=Depends(require_super_admin)
         old_value={"active": existing.get("active")},
         new_value={"active": False},
     )
-    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('plans').document(plan_id).get())
+    updated = {**existing, "active": False, "updated_at": ts, "updated_by": admin["id"]}
     invalidate_plans_cache()
     return {"success": True, "plan": _plan_public(updated)}
 
@@ -8992,7 +8675,12 @@ async def admin_create_catalog_item(kind: str, req: CatalogItemReq,
     coll = _CATALOG_KINDS[kind][0]
     item_id = _catalog_item_id(req.en)
     doc = _build_catalog_doc(kind, req, admin, item_id)
-    doc_id = doc.get('id') or str(uuid.uuid4()); _doc_copy = doc.copy(); _doc_copy['id'] = doc_id; await db.collection(coll).document(doc_id).set(_doc_copy)
+    doc_id = doc.get('id') or str(uuid.uuid4()); _doc_copy = doc.copy(); _doc_copy['id'] = doc_id
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection(coll).document(doc_id), _doc_copy)
+        await _commit_batch_with_revision(batch, "catalog")
+    _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -9014,25 +8702,43 @@ async def admin_reorder_catalog(kind: str, req: CatalogReorderReq, admin=Depends
     coll = _CATALOG_KINDS[kind][0]
     ts = now().isoformat()
     if db is not None:
+        batch = db.batch()
         for idx, item_id in enumerate(req.order):
-            await db.collection(coll).document(item_id).set({
+            batch.set(db.collection(coll).document(item_id), {
                 "sort_order": idx,
                 "updated_at": ts,
                 "updated_by": admin["id"]
             }, merge=True)
+        await _commit_batch_with_revision(batch, "catalog")
     _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     items = await _load_catalog(kind)
     return {"success": True, "items": [{**i, "active": i.get("active") is not False} for i in items]}
 
 
+MAX_CATALOG_BULK_DELETE_LIMIT = 200
+
+
 @admin_api.post("/catalog/{kind}/bulk-delete")
 async def admin_bulk_delete_catalog_items(kind: str, req: CatalogBulkDeleteReq, admin=Depends(require_super_admin)):
-    """Bulk permanently delete catalog items with operation-count based Firestore batching."""
+    """Bulk permanently delete catalog items within a single atomic Firestore batch.
+    Enforces maximum request ceiling of 200 items to guarantee atomic all-or-nothing execution."""
     if kind not in _CATALOG_KINDS:
         raise HTTPException(404, f"Unknown catalog kind '{kind}'")
 
+    if len(req.ids) > MAX_CATALOG_BULK_DELETE_LIMIT:
+        raise HTTPException(
+            400,
+            f"Bulk delete exceeds maximum limit of {MAX_CATALOG_BULK_DELETE_LIMIT} items per request (received {len(req.ids)})"
+        )
+
     clean_ids = _sanitize_bulk_ids(req.ids)
+    if len(clean_ids) > MAX_CATALOG_BULK_DELETE_LIMIT:
+        raise HTTPException(
+            400,
+            f"Bulk delete exceeds maximum limit of {MAX_CATALOG_BULK_DELETE_LIMIT} items per request (received {len(clean_ids)})"
+        )
+
     if not clean_ids:
         return {"success": True, "deleted_count": 0, "failed_count": 0, "deleted_ids": [], "failed_ids": []}
 
@@ -9041,7 +8747,7 @@ async def admin_bulk_delete_catalog_items(kind: str, req: CatalogBulkDeleteReq, 
     failed_ids = []
 
     ts = now().isoformat()
-    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+    batch = db.batch() if db is not None else None
 
     for item_id in clean_ids:
         ref = ""
@@ -9076,10 +8782,10 @@ async def admin_bulk_delete_catalog_items(kind: str, req: CatalogBulkDeleteReq, 
             failed_ids.append({"id": item_id, "reason": f"Referenced by {ref}"})
             continue
 
-        if db is not None:
-            await batch_mgr.add_delete(db.collection(coll).document(item_id))
+        if db is not None and batch is not None:
+            batch.delete(db.collection(coll).document(item_id))
             tombstone_id = f"{kind}:{item_id}"
-            await batch_mgr.add_set(db.collection("deleted_catalog_items").document(tombstone_id), {
+            batch.set(db.collection("deleted_catalog_items").document(tombstone_id), {
                 "id": item_id,
                 "kind": kind,
                 "deleted_at": ts,
@@ -9087,9 +8793,10 @@ async def admin_bulk_delete_catalog_items(kind: str, req: CatalogBulkDeleteReq, 
             })
         deleted_ids.append(item_id)
 
-    await batch_mgr.commit()
-    _invalidate_catalog_cache(kind)
-    await _refresh_catalog_maps()
+    if deleted_ids:
+        await _commit_batch_with_revision(batch, "catalog")
+        _invalidate_catalog_cache(kind)
+        await _refresh_catalog_maps()
 
     await create_admin_audit_log(
         admin=admin,
@@ -9130,7 +8837,11 @@ async def admin_update_catalog_item(kind: str, item_id: str, req: CatalogItemReq
         updates["district_id"] = req.district_id or "generic"
     elif kind == "laws" and req.sections is not None:
         updates["sections"] = [s.model_dump() for s in req.sections]
-    await db.collection(coll).document(item_id).set(updates, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection(coll).document(item_id), updates, merge=True)
+        await _commit_batch_with_revision(batch, "catalog")
+    _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     _d = await db.collection(coll).document(item_id).get(); updated = _d.to_dict() if _d.exists else None
     await create_admin_audit_log(
@@ -9155,7 +8866,11 @@ async def admin_set_catalog_status(kind: str, item_id: str, req: CatalogStatusRe
     _d = await db.collection(coll).document(item_id).get(); existing = _d.to_dict() if _d.exists else None
     if not existing:
         raise HTTPException(404, "Catalog entry not found")
-    await db.collection(coll).document(item_id).set({"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection(coll).document(item_id), {"active": req.active, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
+        await _commit_batch_with_revision(batch, "catalog")
+    _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
         admin=admin,
@@ -9212,17 +8927,22 @@ async def admin_delete_catalog_item(kind: str, item_id: str, hard: bool = False,
         if ref:
             raise HTTPException(409, f"Cannot permanently delete '{item_id}' because it is currently referenced by {ref}. Please mark it as Inactive instead.")
             
-        await db.collection(coll).document(item_id).delete()
-        if db is not None:
+        batch = db.batch() if db is not None else None
+        if batch is not None:
+            batch.delete(db.collection(coll).document(item_id))
             tombstone_id = f"{kind}:{item_id}"
-            await db.collection("deleted_catalog_items").document(tombstone_id).set({
+            batch.set(db.collection("deleted_catalog_items").document(tombstone_id), {
                 "id": item_id,
                 "kind": kind,
                 "deleted_at": now().isoformat(),
                 "deleted_by": admin["id"],
             })
+            await _commit_batch_with_revision(batch, "catalog")
     else:
-        await db.collection(coll).document(item_id).set({"active": False, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
+        batch = db.batch() if db is not None else None
+        if batch is not None:
+            batch.set(db.collection(coll).document(item_id), {"active": False, "updated_by": admin["id"], "updated_at": now().isoformat()}, merge=True)
+            await _commit_batch_with_revision(batch, "catalog")
     _invalidate_catalog_cache(kind)
     await _refresh_catalog_maps()
     await create_admin_audit_log(
@@ -9289,7 +9009,10 @@ async def admin_update_setting(key: str, req: SettingsUpdateReq,
     if key == "default_page_size":
         value = str(value).upper()
     _validate_setting_value(key, value)
-    await db.collection('settings').document(key).set({"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('settings').document(key), {"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
+        await _commit_batch_with_revision(batch, "settings")
     invalidate_settings_cache(key)
     await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
     t = _setting_type(key)
@@ -9343,17 +9066,19 @@ async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_a
             seen_in_order.add(cid)
     ts = now().isoformat()
     if db is not None:
-        await db.collection('settings').document("template_display_order").set({
+        batch = db.batch()
+        batch.set(db.collection('settings').document("template_display_order"), {
             "value": canonical_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
         for idx, tid in enumerate(canonical_order):
-            await db.collection("templates").document(tid).set({
+            batch.set(db.collection("templates").document(tid), {
                 "sort_order": idx,
                 "updated_at": ts,
                 "updated_by": admin["id"]
             }, merge=True)
+        await _commit_batch_with_revision(batch, "templates", extra_components=["settings"])
 
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
@@ -9380,17 +9105,19 @@ async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require
             seen_in_order.add(cid)
     ts = now().isoformat()
     if db is not None:
-        await db.collection('settings').document("template_display_order").set({
+        batch = db.batch()
+        batch.set(db.collection('settings').document("template_display_order"), {
             "value": canonical_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
         for idx, tid in enumerate(canonical_order):
-            await db.collection("templates").document(tid).set({
+            batch.set(db.collection("templates").document(tid), {
                 "sort_order": idx,
                 "updated_at": ts,
                 "updated_by": admin["id"]
             }, merge=True)
+        await _commit_batch_with_revision(batch, "templates", extra_components=["settings"])
 
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
@@ -9609,27 +9336,43 @@ async def admin_list_templates(
     }
 
 
+MAX_TEMPLATE_BULK_DELETE_LIMIT = 50
+
+
 @admin_api.post("/templates/bulk-delete")
 async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(require_super_admin)):
-    """Bulk permanently delete templates with operation-count based Firestore batching.
+    """Bulk permanently delete templates within a single atomic Firestore batch.
+    Enforces maximum request ceiling of 50 templates to guarantee atomic all-or-nothing execution.
     Safely deletes template document and language variant documents, records tombstones,
     and prunes template_display_order."""
+    if len(req.ids) > MAX_TEMPLATE_BULK_DELETE_LIMIT:
+        raise HTTPException(
+            400,
+            f"Bulk delete exceeds maximum limit of {MAX_TEMPLATE_BULK_DELETE_LIMIT} templates per request (received {len(req.ids)})"
+        )
+
     clean_ids = _sanitize_bulk_ids(req.ids)
+    if len(clean_ids) > MAX_TEMPLATE_BULK_DELETE_LIMIT:
+        raise HTTPException(
+            400,
+            f"Bulk delete exceeds maximum limit of {MAX_TEMPLATE_BULK_DELETE_LIMIT} templates per request (received {len(clean_ids)})"
+        )
+
     if not clean_ids:
         return {"success": True, "deleted_count": 0, "failed_count": 0, "deleted_ids": [], "failed_ids": []}
 
     deleted_ids = []
     failed_ids = []
     ts = now().isoformat()
-    batch_mgr = FirestoreBatchManager(db, max_ops=400)
+    batch = db.batch() if db is not None else None
 
     for template_id in clean_ids:
         base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
         target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
-        if db is not None:
+        if db is not None and batch is not None:
             for tid in target_ids:
-                await batch_mgr.add_delete(db.collection("templates").document(tid))
-                await batch_mgr.add_set(db.collection("deleted_catalog_items").document(f"template:{tid}"), {
+                batch.delete(db.collection("templates").document(tid))
+                batch.set(db.collection("deleted_catalog_items").document(f"template:{tid}"), {
                     "id": tid,
                     "kind": "template",
                     "deleted_at": ts,
@@ -9638,7 +9381,7 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
         deleted_ids.append(template_id)
 
     # Prune from template_display_order
-    if db is not None and deleted_ids:
+    if db is not None and batch is not None and deleted_ids:
         curr_order = await _get_setting("template_display_order")
         if isinstance(curr_order, list):
             del_set = set(deleted_ids)
@@ -9648,16 +9391,17 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
                 del_set.add(f"{d}_en")
             filtered_order = [x for x in curr_order if x not in del_set]
             if len(filtered_order) != len(curr_order):
-                await batch_mgr.add_set(db.collection("settings").document("template_display_order"), {
+                batch.set(db.collection("settings").document("template_display_order"), {
                     "value": filtered_order,
                     "updated_at": ts,
                     "updated_by": admin["id"],
                 }, merge=True)
 
-    await batch_mgr.commit()
-    invalidate_settings_cache("template_display_order")
-    invalidate_published_templates_cache()
-    _invalidate_catalog_cache()
+    if deleted_ids:
+        await _commit_batch_with_revision(batch, "templates", extra_components=["settings"])
+        invalidate_settings_cache("template_display_order")
+        invalidate_published_templates_cache()
+        _invalidate_catalog_cache()
 
     await create_admin_audit_log(
         admin=admin,
@@ -9776,7 +9520,11 @@ async def admin_create_template(req: AdminTemplateCreate, admin=Depends(require_
         "updated_at": ts,
         "published_at": None,
     }
-    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
+    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('templates').document(doc_id), _doc_copy)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_create",
@@ -9876,7 +9624,11 @@ async def admin_import_word_create(req: WordImportCreateReq, admin=Depends(requi
         "updated_at": ts,
         "published_at": None,
     }
-    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id; await db.collection('templates').document(doc_id).set(_doc_copy)
+    doc_id = template_doc.get('id') or str(uuid.uuid4()); _doc_copy = template_doc.copy(); _doc_copy['id'] = doc_id
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('templates').document(doc_id), _doc_copy)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_import",
@@ -9920,7 +9672,10 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
         updates["updated_at"] = now().isoformat()
         updates["source"] = "admin_edited" if t.get("source") != "admin_created" else t["source"]
         updates["locked"] = False
-        await db.collection('templates').document(template_id).set(updates, merge=True)
+        batch = db.batch() if db is not None else None
+        if batch is not None:
+            batch.set(db.collection('templates').document(template_id), updates, merge=True)
+            await _commit_batch_with_revision(batch, "templates")
         await create_admin_audit_log(
             admin=admin,
             action="template_update",
@@ -9930,7 +9685,7 @@ async def admin_update_template(template_id: str, req: AdminTemplateUpdate, admi
             new_value={**t, **updates},
             metadata={"field_count": len(updates.get("fields", t.get("fields", [])))},
         )
-    updated = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
+    updated = {**t, **updates}
     invalidate_published_templates_cache()
     return updated
 
@@ -10004,19 +9759,20 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
         "created_by": admin["id"],
         "published_at": ts,
     }
-    # Save snapshot into template_revisions (and keep template_versions in sync)
-    await db.collection('template_revisions').document(f'{ template_id }_{ current_version }').set(revision_doc,
-    )
-    await db.collection("template_versions").document(f"{template_id}_{current_version}").set(revision_doc)
-    await db.collection('templates').document(template_id).set({
+    # Atomically save snapshot into template_revisions, template_versions, templates, and increment cache revision
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('template_revisions').document(f'{ template_id }_{ current_version }'), revision_doc)
+        batch.set(db.collection("template_versions").document(f"{template_id}_{current_version}"), revision_doc)
+        batch.set(db.collection('templates').document(template_id), {
             "status": "published",
             "version": current_version,
             "locked": True,
             "published_at": ts,
             "updated_at": ts,
-            "updated_by": admin["id"],},
-            merge=True
-    )
+            "updated_by": admin["id"],
+        }, merge=True)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_publish",
@@ -10024,7 +9780,7 @@ async def admin_publish_template(template_id: str, admin=Depends(require_super_a
         entity_id=template_id,
         metadata={"version": current_version},
     )
-    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    updated = {**t, "status": "published", "version": current_version, "locked": True, "published_at": ts, "updated_at": ts, "updated_by": admin["id"]}
     invalidate_published_templates_cache()
     return {"success": True, "template": updated, "validation": validation}
 
@@ -10037,14 +9793,17 @@ async def admin_unpublish_template(template_id: str, admin=Depends(require_super
     if not t:
         raise HTTPException(404, "Template not found")
     ts = now().isoformat()
-    await db.collection('templates').document(template_id).set({"status": "draft", "locked": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('templates').document(template_id), {"status": "draft", "locked": False, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_unpublish",
         entity_type="template",
         entity_id=template_id,
     )
-    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    updated = {**t, "status": "draft", "locked": False, "updated_at": ts, "updated_by": admin["id"]}
     invalidate_published_templates_cache()
     return {"success": True, "template": updated}
 
@@ -10056,7 +9815,10 @@ async def admin_archive_template(template_id: str, admin=Depends(require_super_a
     t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
     if not t:
         raise HTTPException(404, "Template not found")
-    await db.collection('templates').document(template_id).set({"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('templates').document(template_id), {"status": "archived", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(admin=admin, action="template_archive", entity_type="template", entity_id=template_id)
     invalidate_published_templates_cache()
     return {"success": True, "status": "archived"}
@@ -10069,9 +9831,12 @@ async def admin_restore_template(template_id: str, admin=Depends(require_super_a
     _d = await db.collection("templates").document(template_id).get(); t = _d.to_dict() if _d.exists else None
     if not t:
         raise HTTPException(404, "Template not found")
-    await db.collection('templates').document(template_id).set({"status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.set(db.collection('templates').document(template_id), {"status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(admin=admin, action="template_restore", entity_type="template", entity_id=template_id)
-    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    updated = {**t, "status": "published", "updated_at": now().isoformat(), "updated_by": admin["id"]}
     invalidate_published_templates_cache()
     return {"success": True, "status": "published", "template": updated}
 
@@ -10087,27 +9852,28 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     
     base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
     target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
-    for tid in target_ids:
-        await db.collection('templates').document(tid).delete()
-        if db is not None:
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        for tid in target_ids:
+            batch.delete(db.collection('templates').document(tid))
             tombstone_id = f"template:{tid}"
-            await db.collection("deleted_catalog_items").document(tombstone_id).set({
+            batch.set(db.collection("deleted_catalog_items").document(tombstone_id), {
                 "id": tid,
                 "kind": "template",
                 "deleted_at": now().isoformat(),
                 "deleted_by": admin["id"],
             })
-    if db is not None:
         curr_order = await _get_setting("template_display_order")
         if isinstance(curr_order, list):
             filtered_order = [x for x in curr_order if x not in target_ids]
             if len(filtered_order) != len(curr_order):
-                await db.collection("settings").document("template_display_order").set({
+                batch.set(db.collection("settings").document("template_display_order"), {
                     "value": filtered_order,
                     "updated_at": now().isoformat(),
                     "updated_by": admin["id"],
                 }, merge=True)
                 invalidate_settings_cache("template_display_order")
+        await _commit_batch_with_revision(batch, "templates")
 
     await create_admin_audit_log(
         admin=admin,
@@ -10146,7 +9912,10 @@ async def admin_remove_shadow_draft(template_id: str, confirm: Optional[bool] = 
     doc_snap = await doc_ref.get()
     if not doc_snap.exists or doc_snap.to_dict().get("status") != status:
         raise HTTPException(404, "Shadow record not found")
-    await doc_ref.delete()
+    batch = db.batch() if db is not None else None
+    if batch is not None:
+        batch.delete(doc_ref)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_shadow_draft_delete",
@@ -10259,9 +10028,10 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
             "created_at": t.get("created_at") or ts,
             "published_at": t.get("published_at") or ts,
         }
-        await db.collection('template_revisions').document(f'{ template_id }_{ t["version"] }').set(prev_version_doc,
-        )
-        await db.collection("template_versions").document(f"{template_id}_{t['version']}").set(prev_version_doc)
+        batch = db.batch() if db is not None else None
+        if batch is not None:
+            batch.set(db.collection('template_revisions').document(f'{ template_id }_{ t["version"] }'), prev_version_doc)
+            batch.set(db.collection("template_versions").document(f"{template_id}_{t['version']}"), prev_version_doc)
 
     full_draft = {
         **t,
@@ -10273,7 +10043,9 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
         "updated_by": admin["id"],
         "updated_at": ts,
     }
-    await db.collection('templates').document(template_id).set(full_draft)
+    if batch is not None:
+        batch.set(db.collection('templates').document(template_id), full_draft)
+        await _commit_batch_with_revision(batch, "templates")
     await create_admin_audit_log(
         admin=admin,
         action="template_clone",
@@ -10281,7 +10053,7 @@ async def admin_clone_template(template_id: str, req: Optional[AdminCloneReq] = 
         entity_id=template_id,
         metadata={"as_new_template": False, "new_version": new_version},
     )
-    _d = await db.collection("templates").document(template_id).get(); updated = _d.to_dict() if _d.exists else None
+    updated = full_draft
     invalidate_published_templates_cache()
     return {"success": True, "template": updated, "new_version": new_version}
 
@@ -10304,7 +10076,11 @@ async def admin_bulk_template_status(req: AdminTemplateBulkStatusReq, admin=Depe
     target_status = "archived" if action == "archive" else "published"
     ts = now().isoformat()
     __docs = [d async for d in db.collection('templates').where(filter=firestore.FieldFilter('id', 'in', req.template_ids)).stream()]
-    for d in __docs: await d.reference.set({"status": target_status, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+    if db is not None and __docs:
+        batch = db.batch()
+        for d in __docs:
+            batch.set(d.reference, {"status": target_status, "updated_at": ts, "updated_by": admin["id"]}, merge=True)
+        await _commit_batch_with_revision(batch, "templates")
     class Res: matched_count = len(__docs); modified_count = len(__docs)
     res = Res()
     await create_admin_audit_log(
@@ -10746,6 +10522,14 @@ _CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(","
 
 _CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://([a-zA-Z0-9_-]+\.)*(nyaysetupro\.in|vercel\.app)$"
 
+@app.middleware("http")
+async def add_admin_cache_control_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/admin"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
@@ -10759,7 +10543,8 @@ app.add_middleware(
 
 def _cors_headers_for_request(request: Request) -> dict:
     """Ensure CORS headers are present on exception responses so browsers never mask
-    server errors or validation failures as network errors."""
+    server errors or validation failures as network errors. Also ensures Admin API error
+    responses receive Cache-Control: no-store."""
     origin = request.headers.get("origin") or ""
     headers = {
         "Access-Control-Allow-Credentials": "true",
@@ -10768,6 +10553,9 @@ def _cors_headers_for_request(request: Request) -> dict:
     }
     if origin:
         headers["Access-Control-Allow-Origin"] = origin
+    if request.url.path.startswith("/api/admin"):
+        headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        headers["Pragma"] = "no-cache"
     return headers
 
 

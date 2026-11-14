@@ -25,11 +25,42 @@ const CACHEABLE_GET_PREFIXES = [
 const CACHE_TTL_MS = 60000; // 60 seconds
 const FAST_CACHE_TTL_MS = 15000; // 15 seconds for dynamic user data (cases, wallet, drafts)
 
+const scopeGenerations = new Map<string, number>();
+let globalGeneration = 0;
+
+function getScopeForPath(path: string): string {
+  for (const prefix of CACHEABLE_GET_PREFIXES) {
+    if (path.startsWith(prefix)) {
+      return prefix;
+    }
+  }
+  return path.split("?")[0];
+}
+
+export function getCacheGeneration(path?: string): number {
+  if (!path) return globalGeneration;
+  const scope = getScopeForPath(path);
+  return (scopeGenerations.get(scope) || 0) + globalGeneration;
+}
+
+export const _apiGetCacheForTesting = apiGetCache;
+
 export function invalidateApiCache(prefix?: string) {
   if (!prefix) {
+    globalGeneration++;
     apiGetCache.clear();
     apiInFlightGet.clear();
     return;
+  }
+  let matched = false;
+  for (const scope of CACHEABLE_GET_PREFIXES) {
+    if (scope.startsWith(prefix) || prefix.startsWith(scope) || scope.includes(prefix) || prefix.includes(scope)) {
+      scopeGenerations.set(scope, (scopeGenerations.get(scope) || 0) + 1);
+      matched = true;
+    }
+  }
+  if (!matched) {
+    scopeGenerations.set(prefix, (scopeGenerations.get(prefix) || 0) + 1);
   }
   for (const key of apiGetCache.keys()) {
     if (key.includes(prefix)) {
@@ -336,9 +367,10 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
   const token = await getToken();
   const cacheKey = `${path}::${token || "anon"}`;
 
+  const isCatalogOrTemplates = path.startsWith("/templates") || path.startsWith("/catalog/");
   const isDynamicFast = path.startsWith("/wallet") || path.startsWith("/cases") || path.startsWith("/drafts");
-  const ttl = isDynamicFast ? FAST_CACHE_TTL_MS : CACHE_TTL_MS;
-  const swrMaxAge = isDynamicFast ? 60000 : 300000;
+  const ttl = isCatalogOrTemplates ? 15000 : (isDynamicFast ? FAST_CACHE_TTL_MS : CACHE_TTL_MS);
+  const swrMaxAge = isCatalogOrTemplates ? 30000 : (isDynamicFast ? 60000 : 300000);
 
   const cached = apiGetCache.get(cacheKey);
   if (cached) {
@@ -349,10 +381,13 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     // SWR: return cached data immediately and refresh in background
     if (age < swrMaxAge) {
       if (!apiInFlightGet.has(cacheKey)) {
+        const bgCapturedGen = getCacheGeneration(path);
         const bgPromise = (async () => {
           try {
             const fresh = await rawRequest(path, method, body, timeoutMs, isRetry);
-            apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+            if (bgCapturedGen === getCacheGeneration(path)) {
+              apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+            }
           } catch {
             // Keep existing cache on network failure
           } finally {
@@ -370,10 +405,13 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     return inFlight;
   }
 
+  const capturedGeneration = getCacheGeneration(path);
   const promise = (async () => {
     try {
       const data = await rawRequest(path, method, body, timeoutMs, isRetry);
-      apiGetCache.set(cacheKey, { data, timestamp: Date.now() });
+      if (capturedGeneration === getCacheGeneration(path)) {
+        apiGetCache.set(cacheKey, { data, timestamp: Date.now() });
+      }
       return data;
     } finally {
       apiInFlightGet.delete(cacheKey);
