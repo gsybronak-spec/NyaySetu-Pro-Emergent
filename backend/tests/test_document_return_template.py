@@ -48,6 +48,31 @@ API = "/api"
 TEMPLATE_ID = "document_return_application"
 
 
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def seed_legacy_document_return(monkeypatch):
+    doc_ref = server.db.collection("templates").document(TEMPLATE_ID)
+    snap = await doc_ref.get()
+    orig_data = snap.to_dict() if snap.exists else None
+
+    canon_map = {k: v for k, v in server.TEMPLATE_CANONICAL_MAP.items() if k != TEMPLATE_ID}
+    monkeypatch.setattr(server, "TEMPLATE_CANONICAL_MAP", canon_map)
+
+    legacy_tpl = next((t for t in server.TEMPLATES if t["id"] == TEMPLATE_ID), None)
+    if legacy_tpl:
+        data = dict(legacy_tpl)
+        data["status"] = "published"
+        await doc_ref.set(data)
+        server.invalidate_published_templates_cache()
+
+    yield
+
+    if orig_data:
+        await doc_ref.set(orig_data)
+    else:
+        await doc_ref.delete()
+    server.invalidate_published_templates_cache()
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client():
     transport = ASGITransport(app=app)
@@ -368,7 +393,7 @@ class TestDocumentGeneration:
         import base64 as _b64
         captured = {}
 
-        def fake_pdf(blocks, language, settings):
+        def fake_pdf(blocks, language, settings, **kwargs):
             captured["settings"] = settings
             return _b64.b64encode(b"%PDF-1.4 fake").decode(), {"engine": "fake"}
 

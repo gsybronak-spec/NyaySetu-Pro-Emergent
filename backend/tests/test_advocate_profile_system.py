@@ -64,7 +64,7 @@ class _MockHTTPException(Exception):
         super().__init__(f"{status_code}: {detail}")
 
 fastapi_mock = sys.modules.get('fastapi')
-if fastapi_mock:
+if isinstance(fastapi_mock, MagicMock):
     fastapi_mock.FastAPI = _MockFastAPI
     fastapi_mock.APIRouter = _MockRouter
     fastapi_mock.HTTPException = _MockHTTPException

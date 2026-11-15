@@ -224,22 +224,22 @@ async def test_google_exchange_disabled_user_rejected(client, clean_db, google_c
 # Legacy Emergent endpoint production fail-safe
 # ============================================================
 
-async def test_google_session_fails_safe_in_production_without_url(client, clean_db):
-    server._PRODUCTION = True
-    server.GOOGLE_SESSION_URL = ""
+async def test_google_session_fails_safe_in_production_without_url(client, clean_db, monkeypatch):
+    monkeypatch.setattr(server, "_PRODUCTION", True)
+    monkeypatch.setattr(server, "GOOGLE_SESSION_URL", "")
     r = await client.post("/api/auth/google-session",
                           json={"session_id": "anything"})
     assert r.status_code == 503
     assert "not configured" in r.json()["detail"].lower()
 
 
-async def test_google_session_still_works_in_dev_with_legacy_url(client, clean_db):
+async def test_google_session_still_works_in_dev_with_legacy_url(client, clean_db, monkeypatch):
     # Legacy path with a (stubbed) reachable upstream -> same 401 contract as before
     async def fake_legacy_get(url: str, headers: dict = None):
         return 404, {}
     # We only assert the endpoint is not short-circuited when a URL is configured.
     # The upstream call hits the real demo endpoint in dev, so expect a 401-style
     # result rather than the 503 fail-safe.
-    server.GOOGLE_SESSION_URL = "http://127.0.0.1:1/unreachable"
+    monkeypatch.setattr(server, "GOOGLE_SESSION_URL", "http://127.0.0.1:1/unreachable")
     r = await client.post("/api/auth/google-session", json={"session_id": "fake"})
     assert r.status_code in (401, 503)  # either upstream 401 or service-unavailable

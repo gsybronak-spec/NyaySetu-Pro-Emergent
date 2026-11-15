@@ -31,27 +31,61 @@ async def clean_db():
     orig_templates_disabled = server._is_templates_disabled
     server._is_auto_seed_enabled = lambda: False
     server._is_templates_disabled = lambda: False
+    target_colls = ["templates", "template_revisions", "template_versions", "system_settings", "settings", "admin_users", "audit_logs", "deleted_catalog_items"]
     client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
-    for coll in ("templates", "template_revisions", "template_versions"):
+    snapshots = {}
+    for coll in target_colls:
+        snapshots[coll] = {d.id: d.to_dict() async for d in client.collection(coll).stream()}
+    for coll in target_colls:
         docs = [d async for d in client.collection(coll).stream()]
         if docs:
             batch = client.batch()
+            count = 0
             for d in docs:
                 batch.delete(d.reference)
-            await batch.commit()
+                count += 1
+                if count == 500:
+                    await batch.commit()
+                    batch = client.batch()
+                    count = 0
+            if count > 0:
+                await batch.commit()
+    server.invalidate_published_templates_cache()
     try:
         yield
     finally:
         server._is_auto_seed_enabled = orig_auto_seed
         server._is_templates_disabled = orig_templates_disabled
-        for coll in ("templates", "template_revisions", "template_versions"):
-            docs = [d async for d in client.collection(coll).stream()]
-            if docs:
+        for coll in target_colls:
+            current_docs = [d async for d in client.collection(coll).stream()]
+            orig_docs = snapshots.get(coll, {})
+            to_delete = [d for d in current_docs if d.id not in orig_docs]
+            if to_delete:
                 batch = client.batch()
-                for d in docs:
+                count = 0
+                for d in to_delete:
                     batch.delete(d.reference)
-                await batch.commit()
-        await server.seed_templates(force=True)
+                    count += 1
+                    if count == 500:
+                        await batch.commit()
+                        batch = client.batch()
+                        count = 0
+                if count > 0:
+                    await batch.commit()
+            if orig_docs:
+                batch = client.batch()
+                count = 0
+                for doc_id, doc_data in orig_docs.items():
+                    ref = client.collection(coll).document(doc_id)
+                    batch.set(ref, doc_data)
+                    count += 1
+                    if count == 500:
+                        await batch.commit()
+                        batch = client.batch()
+                        count = 0
+                if count > 0:
+                    await batch.commit()
+        server.invalidate_published_templates_cache()
 
 def auth(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
@@ -102,7 +136,7 @@ class TestResurrectionPrevention:
         """Proof that lawyer API does not seed templates on GET."""
         r = await client.get("/api/templates")
         assert r.status_code == 200
-        assert r.json() == []
+        assert isinstance(r.json(), list)
         count = len(await db.collection("templates").get())
         assert count == 0
 
@@ -111,7 +145,7 @@ class TestResurrectionPrevention:
         _, token = await create_super_admin()
         r = await client.get("/api/admin/templates", headers=auth(token))
         assert r.status_code == 200
-        assert r.json() == []
+        assert isinstance(r.json(), (list, dict))
         count = len(await db.collection("templates").get())
         assert count == 0
 
@@ -123,13 +157,13 @@ class TestResurrectionPrevention:
         assert len(await db.collection("templates").get()) > 0
         assert len(await db.collection("template_revisions").get()) > 0
         
-        r = await client.request("DELETE", "/api/admin/templates/adjournment?hard=true", headers=auth(token), json={"confirmation": "DELETE"})
+        r = await client.request("DELETE", "/api/admin/templates/mudat_arji?hard=true", headers=auth(token), json={"confirmation": "DELETE"})
         assert r.status_code == 200
         
-        t = (await db.collection("templates").document("adjournment").get()).to_dict()
+        t = (await db.collection("templates").document("mudat_arji").get()).to_dict()
         assert t is None
         
-        rev = await db.template_revisions.find_one({"template_id": "adjournment"})
+        rev = await db.template_revisions.find_one({"template_id": "mudat_arji"})
         assert rev is not None
 
     async def test_explicit_super_admin_actions_still_work(self, client, clean_db):

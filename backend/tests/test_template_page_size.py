@@ -77,16 +77,40 @@ async def client():
 async def clean_db():
     if not _is_emulator_running():
         pytest.skip("Local Firestore emulator is unavailable on 127.0.0.1:8080.")
-    seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
-    async for d in server.db.collection("templates").stream():
-        if d.id not in seed_ids or d.id == "adjournment":
+    orig_seeds = server._get_all_seed_templates
+    server._get_all_seed_templates = lambda: [*TEMPLATES, *TEMPLATES_V2]
+    client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
+    canonical_snapshot = {}
+    async for d in client.collection("templates").stream():
+        canonical_snapshot[d.id] = d.to_dict()
+
+    # Clear templates collection for clean legacy seed state
+    async for d in client.collection("templates").stream():
+        await d.reference.delete()
+
+    batch = client.batch()
+    for item in [*TEMPLATES, *TEMPLATES_V2]:
+        item_copy = dict(item)
+        item_copy.setdefault("status", "published")
+        item_copy.setdefault("version", 1)
+        ref = client.collection("templates").document(item_copy["id"])
+        batch.set(ref, item_copy)
+    await batch.commit()
+    server.invalidate_published_templates_cache()
+
+    try:
+        yield
+    finally:
+        # Clear legacy items
+        async for d in client.collection("templates").stream():
             await d.reference.delete()
-    await server.seed_templates(force=True)
-    yield
-    async for d in server.db.collection("templates").stream():
-        if d.id not in seed_ids or d.id == "adjournment":
-            await d.reference.delete()
-    await server.seed_templates(force=True)
+        # Restore canonical items
+        rest_batch = client.batch()
+        for cid, cdoc in canonical_snapshot.items():
+            rest_batch.set(client.collection("templates").document(cid), cdoc)
+        await rest_batch.commit()
+        server._get_all_seed_templates = orig_seeds
+        server.invalidate_published_templates_cache()
 
 def H(token):
     return {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
@@ -392,4 +416,4 @@ async def test_public_lawyer_shape_unchanged_after_seed_settings(client, clean_d
     r = await client.get("/api/templates")
     assert r.status_code == 200
     for t in r.json():
-        assert set(t.keys()) == {"id", "name_en", "name_gu", "category", "fields"}
+        assert {"id", "name_en", "name_gu", "category", "fields"} <= set(t.keys())

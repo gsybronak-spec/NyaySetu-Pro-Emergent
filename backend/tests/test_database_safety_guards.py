@@ -171,7 +171,7 @@ class TestDatabaseSafetyGuards(unittest.IsolatedAsyncioTestCase):
         user_data = {"id": self.test_user_id, "active": True, "role": "advocate"}
         req = server.DownloadReq(
             template_id="mudat_arji",
-            values={"court_name": "Test Court"},
+            values={"court_name": "Test Court", "advocate_side": "applicant", "reason": "illness", "date": "2026-02-15"},
             language="gu",
             format="pdf",
         )

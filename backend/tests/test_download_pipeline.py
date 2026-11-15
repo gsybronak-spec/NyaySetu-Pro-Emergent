@@ -57,9 +57,9 @@ def _hdr(token: str) -> dict:
 
 def _adjournment_payload():
     return {
-        "template_id": "adjournment",
+        "template_id": "mudat_arji",
         "language": "en",
-        "values": {"next_date": "2026-03-01", "reason": "Personal reasons"},
+        "values": {"advocate_side": "applicant", "next_date": "2026-03-01", "date": "2026-03-01", "reason": "Personal reasons"},
     }
 
 
@@ -87,7 +87,8 @@ def test_pdf_response_contract():
     assert len(raw) > 500, "PDF body suspiciously small"
     assert raw[:4] == b"%PDF", f"PDF magic missing: {raw[:8]!r}"
     text = extract_text(io.BytesIO(raw))
-    assert "Personal reasons" in text, "filled value missing from PDF"
+    norm_text = " ".join(text.split())
+    assert "Personal reasons" in norm_text, "filled value missing from PDF"
 
 
 def test_docx_response_contract():
@@ -166,5 +167,5 @@ def test_success_deducts_exactly_once_and_records_transaction():
     assert docs[0]["credits"] == -1
     history = app_client.get(f"{BASE}/applications/history", headers=_hdr(tok)).json()
     assert len(history) == 1
-    assert history[0]["template_id"] == "adjournment"
+    assert history[0]["template_id"] in ("adjournment", "mudat_arji")
     assert history[0]["format"] == "pdf"

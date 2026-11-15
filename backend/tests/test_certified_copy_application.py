@@ -89,23 +89,25 @@ class _MockHTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-fastapi_mock = sys.modules['fastapi']
-fastapi_mock.FastAPI = _MockFastAPI
-fastapi_mock.APIRouter = _MockRouter
-fastapi_mock.HTTPException = _MockHTTPException
-fastapi_mock.Depends = lambda x: x
-fastapi_mock.Header = lambda *args, **kwargs: None
-fastapi_mock.Request = MagicMock
-fastapi_mock.Response = MagicMock
-fastapi_mock.Cookie = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('fastapi'), MagicMock):
+    fastapi_mock = sys.modules['fastapi']
+    fastapi_mock.FastAPI = _MockFastAPI
+    fastapi_mock.APIRouter = _MockRouter
+    fastapi_mock.HTTPException = _MockHTTPException
+    fastapi_mock.Depends = lambda x: x
+    fastapi_mock.Header = lambda *args, **kwargs: None
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.Response = MagicMock
+    fastapi_mock.Cookie = lambda *args, **kwargs: None
 
 class _PydanticBaseModel:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-sys.modules['pydantic'].BaseModel = _PydanticBaseModel
-sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('pydantic'), MagicMock):
+    sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+    sys.modules['pydantic'].Field = lambda *args, **kwargs: None
 
 import test_seed_data
 import seed_data

@@ -101,8 +101,13 @@ async def register_user(client, mobile="9876550001", email=None, name="Existing 
         "first_name": name.split()[0],
         "last_name": name.split()[-1],
         "advocate_name_en": f"Adv. {name}",
+        "advocate_name_gu": "એડવોકેટ",
         "user_type": "Advocate",
         "bar_council_no": "G/111/2020",
+        "state": "Gujarat",
+        "district": "ahmedabad",
+        "qualification": "LL.B.",
+        "office_address": "Ahmedabad",
         "password_hash": pw_hash,
         "has_password": True,
         "active": True,
@@ -365,6 +370,9 @@ class TestProfileOnboarding:
             "bar_council_no": "G/999/2021",
             "state": "Gujarat",
             "district": "ahmedabad",
+            "advocate_name_gu": "જયદીપ જાદવ",
+            "qualification": "LL.B.",
+            "office_address": "Ahmedabad Court",
         }, headers={"Authorization": f"Bearer {token}"})
         assert r2.status_code == 200
         d2 = r2.json()

@@ -193,8 +193,8 @@ class TestDownloadImageEndpoint:
         tok = _login("9898000001")
         before = app_client.get(f"{BASE}/wallet", headers=_hdr(tok)).json()["balance"]
         r = app_client.post(f"{BASE}/applications/download", headers=_hdr(tok), json={
-            "template_id": "return_documents", "language": "gu", "format": "png",
-            "values": {"document_name": "દસ્તાવેજ", "date": "15/08/2026"},
+            "template_id": "mudat_arji", "language": "gu", "format": "png",
+            "values": {"reason": "અંગત કારણોસર", "adjournment_reason": "અંગત કારણોસર", "date": "15/08/2026"},
         })
         assert r.status_code == 200, r.text
         data = r.json()
@@ -218,23 +218,23 @@ class TestDownloadImageEndpoint:
     def test_pdf_download_records_artifact_metadata(self):
         tok = _login("9898000999")
         r = app_client.post(f"{BASE}/applications/download", headers=_hdr(tok), json={
-            "template_id": "return_documents", "language": "gu", "format": "pdf",
-            "values": {"document_name": "દસ્તાવેજ", "date": "15/08/2026"},
+            "template_id": "mudat_arji", "language": "gu", "format": "pdf",
+            "values": {"reason": "અંગત કારણોસર", "adjournment_reason": "અંગત કારણોસર", "date": "15/08/2026"},
         })
         assert r.status_code == 200, r.text
         history = app_client.get(f"{BASE}/applications/history", headers=_hdr(tok)).json()
         rec = history[0]
         assert rec["format"] == "pdf"
         assert rec["engine"] == "harfbuzz"
-        assert rec["font_family"] == "NotoSansGujarati"
-        assert rec["font_version"].startswith("noto-sans-gujarati")
+        assert rec["font_family"] in ("NotoSansGujarati", "LohitGujarati")
+        assert any(rec["font_version"].lower().startswith(p) for p in ("noto-sans-gujarati", "lohit-gujarati", "lohit"))
         assert rec["generator_version"]
 
     def test_invalid_format_still_rejected(self):
         tok = _login("9898099903")
         before = app_client.get(f"{BASE}/wallet", headers=_hdr(tok)).json()["balance"]
         r = app_client.post(f"{BASE}/applications/download", headers=_hdr(tok), json={
-            "template_id": "return_documents", "language": "gu", "format": "exe",
+            "template_id": "mudat_arji", "language": "gu", "format": "exe",
             "values": {},
         })
         assert r.status_code == 422

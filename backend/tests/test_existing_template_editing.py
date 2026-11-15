@@ -43,7 +43,7 @@ from server import make_token, make_admin_token, TEMPLATES
 async def clean_db():
     client = server.db._get_client() if hasattr(server.db, "_get_client") else server.db
     async def _clean():
-        for t_id in ["test_bail_extended", "test_clone_new", "test_bail_independent", "test_bail_standalone"]:
+        for t_id in ["test_bail_extended", "test_clone_new", "test_bail_independent", "test_bail_standalone", "adjournment_urgent", "mudat_arji_urgent"]:
             await client.collection("templates").document(t_id).delete()
             revs = [d async for d in client.collection("template_revisions").where(filter=server.firestore.FieldFilter("template_id", "==", t_id)).stream()]
             for r in revs:
@@ -113,13 +113,15 @@ class TestExisting23TemplatesIntegrity:
         templates = res.json()
         assert len(templates) >= 23
         
-        # Verify all 23 IDs from seed_data exist
-        seed_ids = {t["id"] for t in TEMPLATES}
+        # Verify all canonical seed templates exist in admin list
+        seed_templates = server._get_all_seed_templates()
+        seed_ids = {t["id"] for t in seed_templates}
         admin_ids = {t["id"] for t in templates}
         assert seed_ids.issubset(admin_ids)
 
     async def test_all_23_templates_load_with_full_fidelity(self, client: AsyncClient, admin_token):
-        for seed_t in TEMPLATES:
+        seed_templates = server._get_all_seed_templates()
+        for seed_t in seed_templates:
             res = await client.get(f"/api/admin/templates/{seed_t['id']}", headers={"Authorization": f"Bearer {admin_token}"})
             assert res.status_code == 200
             data = res.json()
@@ -320,10 +322,10 @@ class TestCloneIndependentTemplate:
 
     async def test_clone_as_separate_template(self, client: AsyncClient, admin_token):
         res = await client.post(
-            "/api/admin/templates/adjournment/clone",
+            "/api/admin/templates/mudat_arji/clone",
             json={
                 "as_new_template": True,
-                "new_id": "adjournment_urgent",
+                "new_id": "mudat_arji_urgent",
                 "new_name_en": "Urgent Adjournment Application",
                 "new_name_gu": "તાકીદની મુદત અરજી",
             },
@@ -332,7 +334,7 @@ class TestCloneIndependentTemplate:
         assert res.status_code == 200
         data = res.json()
         new_tpl = data["template"]
-        assert new_tpl["id"] == "adjournment_urgent"
+        assert new_tpl["id"] == "mudat_arji_urgent"
         assert new_tpl["name_en"] == "Urgent Adjournment Application"
         assert new_tpl["name_gu"] == "તાકીદની મુદત અરજી"
         assert new_tpl["status"] == "draft"
@@ -397,9 +399,9 @@ class TestDocumentGenerationBackwardCompatibility:
         prev_res = await client.post(
             "/api/applications/preview",
             json={
-                "template_id": "adjournment",
+                "template_id": "mudat_arji",
                 "language": "en",
-                "values": {"next_date": "20-09-2026", "reason": "Counsel indisposed due to fever"},
+                "values": {"advocate_side": "applicant", "date": "20-09-2026", "next_date": "20-09-2026", "reason": "Counsel indisposed due to fever"},
             },
             headers=auth_headers
         )
@@ -412,10 +414,10 @@ class TestDocumentGenerationBackwardCompatibility:
         pdf_res = await client.post(
             "/api/applications/download",
             json={
-                "template_id": "adjournment",
+                "template_id": "mudat_arji",
                 "language": "gu",
                 "format": "pdf",
-                "values": {"next_date": "20-09-2026", "reason": "વકીલશ્રીની તબિયત નાદુરસ્ત હોવાથી"},
+                "values": {"advocate_side": "applicant", "date": "20-09-2026", "next_date": "20-09-2026", "reason": "વકીલશ્રીની તબિયત નાદુરસ્ત હોવાથી"},
             },
             headers=auth_headers
         )
@@ -428,10 +430,10 @@ class TestDocumentGenerationBackwardCompatibility:
         docx_res = await client.post(
             "/api/applications/download",
             json={
-                "template_id": "adjournment",
+                "template_id": "mudat_arji",
                 "language": "en",
                 "format": "docx",
-                "values": {"next_date": "20-09-2026", "reason": "Medical emergency"},
+                "values": {"advocate_side": "applicant", "date": "20-09-2026", "next_date": "20-09-2026", "reason": "Medical emergency"},
             },
             headers=auth_headers
         )

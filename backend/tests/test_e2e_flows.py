@@ -231,24 +231,24 @@ class TestFlowC_SingleApplication:
         h = H(token)
         # Single application: no case_id required
         r = await client.post(f"{API}/applications/preview", headers=h,
-                              json={"template_id": "adjournment", "language": "en",
-                                    "values": {"next_date": "20-01-2026", "reason": "Illness"}})
+                              json={"template_id": "mudat_arji", "language": "en",
+                                    "values": {"next_date": "20-01-2026", "adjournment_reason": "Illness", "reason": "Illness"}})
         assert r.status_code == 200, r.text
         content = r.json()["content"]
-        assert "Illness" in content and "ADJOURNMENT" in content.upper()
+        assert "illness" in content.lower() and "ADJOURNMENT" in content.upper()
 
         wb = (await client.get(f"{API}/wallet", headers=h)).json()["balance"]
         # PDF download consumes exactly one credit
         r = await client.post(f"{API}/applications/download", headers=h,
-                              json={"template_id": "adjournment", "language": "en", "format": "pdf",
-                                    "values": {"next_date": "20-01-2026", "reason": "E2E"}})
+                              json={"template_id": "mudat_arji", "language": "en", "format": "pdf",
+                                    "values": {"next_date": "20-01-2026", "adjournment_reason": "E2E", "reason": "E2E"}})
         assert r.status_code == 200
         raw = base64.b64decode(r.json()["base64"])
         assert raw.startswith(b"%PDF")
         # DOCX download consumes exactly one credit
         r = await client.post(f"{API}/applications/download", headers=h,
-                              json={"template_id": "adjournment", "language": "gu", "format": "docx",
-                                    "values": {"next_date": "૨૦-૦૧-૨૦૨૬", "reason": "ટેસ્ટ"}})
+                              json={"template_id": "mudat_arji", "language": "gu", "format": "docx",
+                                    "values": {"next_date": "૨૦-૦૧-૨૦૨૬", "adjournment_reason": "ટેસ્ટ", "reason": "ટેસ્ટ"}})
         assert r.status_code == 200
         raw = base64.b64decode(r.json()["base64"])
         assert raw[:2] == b"PK"
@@ -270,9 +270,9 @@ class TestFlowD_FullCaseApplication:
         h = H(token)
         # Case-driven application: template consumes the case
         r = await client.post(f"{API}/applications/preview", headers=h,
-                              json={"template_id": "adjournment", "case_id": case_id,
+                              json={"template_id": "mudat_arji", "case_id": case_id,
                                     "language": "en",
-                                    "values": {"next_date": "25-02-2026", "reason": "Hearing clash"}})
+                                    "values": {"next_date": "25-02-2026", "adjournment_reason": "Hearing clash", "other_adjournment_reason": "Hearing clash", "reason": "Hearing clash"}})
         assert r.status_code == 200, r.text
         content = r.json()["content"]
         # Autofilled case data appears with human-readable labels, not raw ids
@@ -287,9 +287,9 @@ class TestFlowD_FullCaseApplication:
         # PDF + DOCX from the same logical data
         for fmt in ("pdf", "docx"):
             r = await client.post(f"{API}/applications/download", headers=h,
-                                  json={"template_id": "adjournment", "case_id": case_id,
+                                  json={"template_id": "mudat_arji", "case_id": case_id,
                                         "language": "en", "format": fmt,
-                                        "values": {"next_date": "25-02-2026", "reason": "Hearing clash"}})
+                                        "values": {"next_date": "25-02-2026", "adjournment_reason": "Hearing clash", "other_adjournment_reason": "Hearing clash", "reason": "Hearing clash"}})
             assert r.status_code == 200
             raw = base64.b64decode(r.json()["base64"])
             assert raw.startswith(b"%PDF" if fmt == "pdf" else b"PK")

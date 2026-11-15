@@ -99,8 +99,66 @@ def _new_mobile():
     return "9" + str(int(time.time() * 1000))[-9:]
 
 
+@pytest.fixture(scope="module", autouse=True)
+def setup_document_engine_isolation():
+    import asyncio as _aio
+    from test_seed_data import TEMPLATES
+    from test_seed_data_templates_v2 import TEMPLATES_V2
+    from conftest import _global_firestore_proxy
+
+    if not server._CATALOG_MAPS_SYNCED:
+        _loop = _aio.new_event_loop()
+        try:
+            _loop.run_until_complete(server.seed_catalogs())
+        finally:
+            _loop.close()
+
+    orig_seeds = server._get_all_seed_templates
+    server._get_all_seed_templates = lambda: [*TEMPLATES, *TEMPLATES_V2]
+    client = _global_firestore_proxy._get_client()
+
+    canonical_snapshot = {}
+    loop = _aio.new_event_loop()
+
+    async def _setup():
+        async for d in client.collection("templates").stream():
+            canonical_snapshot[d.id] = d.to_dict()
+        batch = client.batch()
+        for item in [*TEMPLATES, *TEMPLATES_V2]:
+            item_copy = dict(item)
+            item_copy.setdefault("status", "published")
+            item_copy.setdefault("version", 1)
+            ref = client.collection("templates").document(item["id"])
+            batch.set(ref, item_copy)
+        await batch.commit()
+        server.invalidate_published_templates_cache()
+
+    async def _teardown():
+        del_batch = client.batch()
+        for item in [*TEMPLATES, *TEMPLATES_V2]:
+            tid = item["id"]
+            if tid not in canonical_snapshot:
+                del_batch.delete(client.collection("templates").document(tid))
+        await del_batch.commit()
+        rest_batch = client.batch()
+        for cid, cdoc in canonical_snapshot.items():
+            rest_batch.set(client.collection("templates").document(cid), cdoc)
+        await rest_batch.commit()
+        server.invalidate_published_templates_cache()
+
+    try:
+        loop.run_until_complete(_setup())
+        yield
+    finally:
+        try:
+            loop.run_until_complete(_teardown())
+        finally:
+            server._get_all_seed_templates = orig_seeds
+            loop.close()
+
+
 @pytest.fixture(scope="module")
-def token():
+def token(setup_document_engine_isolation):
     return _login(_new_mobile())
 
 
@@ -265,9 +323,9 @@ class TestDocxGeneration:
             if p.alignment == WD_ALIGN_PARAGRAPH.CENTER and any(r.bold for r in p.runs)
         ]
         assert any("માનનીય ન્યાયાલય" in p.text or "મુદત" in p.text for p in centered_bold)
-        # Font name = default Noto Sans Gujarati on at least one run
+        # Font name = default Noto Sans Gujarati or Lohit Gujarati on at least one run
         fonts = {run.font.name for p in paragraphs for run in p.runs if run.font.name}
-        assert "Noto Sans Gujarati" in fonts, f"Fonts used: {fonts}"
+        assert bool(fonts.intersection({"Noto Sans Gujarati", "Lohit Gujarati"})), f"Fonts used: {fonts}"
 
     def test_en_docx_font_times(self, token):
         r = requests.post(

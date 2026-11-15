@@ -65,15 +65,16 @@ class _MockHTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-fastapi_mock = sys.modules['fastapi']
-fastapi_mock.FastAPI = _MockFastAPI
-fastapi_mock.APIRouter = _MockRouter
-fastapi_mock.HTTPException = _MockHTTPException
-fastapi_mock.Depends = lambda x: x
-fastapi_mock.Header = lambda *args, **kwargs: None
-fastapi_mock.Request = MagicMock
-fastapi_mock.Response = MagicMock
-fastapi_mock.Cookie = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('fastapi'), MagicMock):
+    fastapi_mock = sys.modules['fastapi']
+    fastapi_mock.FastAPI = _MockFastAPI
+    fastapi_mock.APIRouter = _MockRouter
+    fastapi_mock.HTTPException = _MockHTTPException
+    fastapi_mock.Depends = lambda x: x
+    fastapi_mock.Header = lambda *args, **kwargs: None
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.Response = MagicMock
+    fastapi_mock.Cookie = lambda *args, **kwargs: None
 
 class _PydanticBaseModel:
     def __init__(self, **kwargs):
@@ -82,8 +83,9 @@ class _PydanticBaseModel:
     def model_dump(self, **kwargs):
         return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
 
-sys.modules['pydantic'].BaseModel = _PydanticBaseModel
-sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('pydantic'), MagicMock):
+    sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+    sys.modules['pydantic'].Field = lambda *args, **kwargs: None
 
 import server
 from test_seed_data_templates_v2 import TEMPLATES_V2
@@ -112,6 +114,11 @@ class MockFirestoreDoc:
 
     async def update(self, data):
         self._data.update(data)
+        return self
+
+    async def delete(self):
+        self._data.clear()
+        self.exists = False
         return self
 
 
@@ -153,6 +160,11 @@ class MockFirestoreDB:
 
 class TestCaseDraftValidationArchitecture(unittest.TestCase):
     def setUp(self):
+        self.orig_db = server.db
+        self.orig_synced = server._CATALOG_MAPS_SYNCED
+        server._CATALOG_MAPS_SYNCED = True
+        if not server._VALID_CASE_TYPE_IDS:
+            server._init_default_catalog_maps()
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.mock_db = MockFirestoreDB()
@@ -167,7 +179,11 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
         }
 
     def tearDown(self):
-        self.loop.close()
+        try:
+            self.loop.close()
+        finally:
+            server.db = self.orig_db
+            server._CATALOG_MAPS_SYNCED = self.orig_synced
 
     # 1. Case Create succeeds with only case_number
     def test_01_case_create_with_only_case_number(self):
@@ -353,7 +369,7 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
         }
         # Context missing police_station
         ctx_missing = {"reason": "Medical grounds"}
-        with self.assertRaises(_MockHTTPException) as ctx_err:
+        with self.assertRaises((server.HTTPException, _MockHTTPException)) as ctx_err:
             server.validate_template_requirements(mock_template_with_required_ps, ctx_missing, language="en")
         self.assertEqual(ctx_err.exception.status_code, 400)
         self.assertIn("Police Station", ctx_err.exception.detail)
@@ -392,7 +408,7 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
                 custom_court_name_gu=None,
                 custom_court_name_en=None,
             )
-            with self.assertRaises(_MockHTTPException):
+            with self.assertRaises((server.HTTPException, _MockHTTPException)):
                 await server.create_case(req_invalid, user=self.test_user)
         self.loop.run_until_complete(_run())
 

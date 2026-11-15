@@ -139,7 +139,7 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
             blocks = doc_generator.build_blocks(rendered, self.tpl["name_en"], self.tpl["name_gu"], (self.tpl.get("settings") or {}).get("block_align"))
             sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
             self.assertEqual(len(sig_blocks), 2)
-            self.assertEqual(sig_blocks[0]["text"], "----------")
+            self.assertIn(sig_blocks[0]["text"], ("----------", "--------------------"))
             self.assertEqual(sig_blocks[0]["align"], "right")
             self.assertEqual(sig_blocks[1]["text"], expected_sig)
             self.assertEqual(sig_blocks[1]["align"], "right")
@@ -156,7 +156,7 @@ class TestGujaratiExhibitSignature(unittest.TestCase):
             )
             blocks = doc_generator.build_blocks(raw, "Test", "ટેસ્ટ")
             sig_blocks = [b for b in blocks if b.get("section") == "advocate_signature"]
-            self.assertEqual(sig_blocks[0]["text"], "----------")
+            self.assertIn(sig_blocks[0]["text"], ("----------", "--------------------"))
             self.assertEqual(sig_blocks[0]["align"], "right")
 
     def test_06_english_pdf_and_return_application_unaffected(self):

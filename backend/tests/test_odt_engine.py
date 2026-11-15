@@ -48,17 +48,21 @@ def _login(mobile: str) -> str:
 
 def _adjournment_payload(**overrides):
     payload = {
-        "template_id": "adjournment",
+        "template_id": "mudat_arji",
         "language": "en",
         "values": {
             "next_date": "15-08-2026",
             "reason": "Personal reasons",
-            "court": "District Court, Ahmedabad",
+            "adjournment_reason": "Personal reasons",
+            "court_name": "District Court, Ahmedabad",
             "district": "Ahmedabad",
             "case_type": "Civil Suit",
             "case_number": "123/2026",
+            "party_1_name": "Ramesh Patel",
             "party_name": "Ramesh Patel",
             "today": "01-08-2026",
+            "date": "01-08-2026",
+            "place": "Ahmedabad",
             "advocate_name": "Adv. A. Sharma",
         },
         "format": "odt",

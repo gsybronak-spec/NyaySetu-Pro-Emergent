@@ -114,38 +114,49 @@ async def lawyer_template_count(client):
 
 
 class TestShadowDraftRemoval:
+    @pytest_asyncio.fixture(autouse=True)
+    async def preserve_seed_template(self):
+        doc_snap = await db.collection("templates").document("mudat_arji").get()
+        orig_data = doc_snap.to_dict() if doc_snap.exists else None
+        yield
+        if orig_data:
+            await db.collection("templates").document("mudat_arji").set(orig_data)
+        else:
+            await db.collection("templates").document("mudat_arji").delete()
+        server.invalidate_published_templates_cache()
+
     @pytest.mark.asyncio
     async def test_regular_admin_cannot_remove_shadow(self, client, clean_db):
-        sdoc = await shadow_doc("document_return_application")
+        sdoc = await shadow_doc("mudat_arji")
         await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="admin")  # regular admin
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 403, r.text
         # record untouched
-        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
+        assert (await db.collection("templates").document("mudat_arji").get()).to_dict() is not None
 
     @pytest.mark.asyncio
     async def test_super_admin_removes_valid_draft_shadow(self, client, clean_db):
-        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
+        sdoc = await shadow_doc("mudat_arji"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft",
                                 headers=H(token))
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["success"] is True
         assert body["removed_status"] == "draft"
-        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is None
+        assert (await db.collection("templates").document("mudat_arji").get()).to_dict() is None
 
     @pytest.mark.asyncio
     async def test_published_template_refused(self, client, clean_db):
-        sdoc = await shadow_doc("document_return_application", "published"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
+        sdoc = await shadow_doc("mudat_arji", "published"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 409, r.text
         assert "ublished" in r.json()["detail"]
-        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
+        assert (await db.collection("templates").document("mudat_arji").get()).to_dict() is not None
 
     @pytest.mark.asyncio
     async def test_non_seed_template_refused(self, client, clean_db):
@@ -166,29 +177,32 @@ class TestShadowDraftRemoval:
 
     @pytest.mark.asyncio
     async def test_archived_shadow_requires_confirmation(self, client, clean_db):
-        sdoc = await shadow_doc("document_return_application", "archived"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
+        sdoc = await shadow_doc("mudat_arji", "archived"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
         # without confirm -> 400, record kept
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft",
                                 headers=H(token))
         assert r.status_code == 400, r.text
-        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is not None
+        assert (await db.collection("templates").document("mudat_arji").get()).to_dict() is not None
         # with confirm -> removed
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft?confirm=true",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft?confirm=true",
                                 headers=H(token))
         assert r.status_code == 200, r.text
-        assert (await db.collection("templates").document("document_return_application").get()).to_dict() is None
+        assert (await db.collection("templates").document("mudat_arji").get()).to_dict() is None
 
     @pytest.mark.asyncio
     async def test_audit_log_created(self, client, clean_db):
-        sdoc = await shadow_doc("document_return_application"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
+        sdoc = await shadow_doc("mudat_arji"); await db.collection("templates").document(sdoc["id"]).set(sdoc)
         _, token = await create_admin(role="super_admin")
-        r = await client.delete(f"{ADMIN}/templates/document_return_application/draft",
+        r = await client.delete(f"{ADMIN}/templates/mudat_arji/draft",
                                 headers=H(token))
         assert r.status_code == 200, r.text
-        entry = await db.audit_logs.find_one({"action": "template_shadow_draft_delete"})
+        r_audit = await client.get(f"{ADMIN}/audit-logs", headers=H(token))
+        assert r_audit.status_code == 200
+        logs = r_audit.json().get("items") or r_audit.json()
+        entry = next((e for e in logs if e.get("action") == "template_shadow_draft_delete"), None)
         assert entry is not None
-        assert entry["target"] == "document_return_application"
+        assert entry.get("target") == "mudat_arji" or entry.get("entity_id") == "mudat_arji"
         assert entry["metadata"]["removed_status"] == "draft"
 
 

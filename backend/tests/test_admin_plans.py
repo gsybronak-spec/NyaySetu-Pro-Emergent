@@ -208,7 +208,9 @@ async def test_super_admin_can_update_plan(client, clean_db):
 # Active/inactive
 # ============================================================
 
-async def test_deactivate_hides_and_blocks_purchase(client, clean_db):
+async def test_deactivate_hides_and_blocks_purchase(client, clean_db, monkeypatch):
+    monkeypatch.setattr(server, "_razorpay_enabled", lambda: False, raising=False)
+    monkeypatch.setattr(server, "_PRODUCTION", False, raising=False)
     lawyer = await create_lawyer("9876500001")
     lawyer_tok = make_token(lawyer["id"])
     lh = {"Authorization": f"Bearer {lawyer_tok}"}

@@ -946,7 +946,7 @@ Advocate of {{selected_party_role}}
         "id": "vakilatnama_civil",
         "name_en": "Vakalatnama (Civil)",
         "name_gu": "વકીલાતનામું (સિવિલ)",
-        "category": "General",
+        "category": "Civil",
         "aliases": ["vakilatnama", "વકીલાતનામું", "vakalatnama civil"],
         "fields": [
             {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",

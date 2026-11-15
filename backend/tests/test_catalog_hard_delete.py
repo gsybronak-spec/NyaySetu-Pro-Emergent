@@ -44,17 +44,27 @@ async def app_client(clean_db):
 async def super_admin_token(app_client, clean_db):
     admin_id = str(uuid.uuid4())
     hash_pwd = bcrypt.hashpw("NyaySetu@Admin2026!".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    await clean_db.admin_users.insert_one({"id": admin_id, "email": "admin@nyaysetu.com", "role": "super_admin", "password_hash": hash_pwd, "active": True})
-    res = await app_client.post("/api/admin/auth/login", json={"email": "admin@nyaysetu.com", "password": "NyaySetu@Admin2026!"})
-    assert res.status_code == 200, res.text
-    return res.json()["token"]
+    await server.db.collection("admin_users").document(admin_id).set({
+        "id": admin_id,
+        "email": "admin@nyaysetu.com",
+        "role": "super_admin",
+        "password_hash": hash_pwd,
+        "active": True,
+        "created_at": server.now().isoformat(),
+    })
+    return server.make_admin_token(admin_id, "admin@nyaysetu.com", "super_admin")
 
 @pytest.fixture
 async def lawyer_token(app_client, clean_db):
-    await clean_db.users.insert_one({"id": "lawyer_1", "role": "lawyer", "mobile": "9999999999"})
-    await clean_db.otps.insert_one({"mobile": "9999999999", "otp": "123456"})
-    res = await app_client.post("/api/auth/verify-otp", json={"mobile": "9999999999", "otp": "123456"})
-    return res.json()["token"]
+    user_id = "lawyer_1"
+    await server.db.collection("users").document(user_id).set({
+        "id": user_id,
+        "role": "lawyer",
+        "mobile": "9999999999",
+        "active": True,
+        "created_at": server.now().isoformat(),
+    })
+    return server.make_token(user_id)
 
 @pytest.mark.asyncio
 class TestCatalogHardDelete:

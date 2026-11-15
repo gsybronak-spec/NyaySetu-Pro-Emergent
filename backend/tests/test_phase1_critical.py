@@ -51,9 +51,48 @@ async def client():
         yield c
 
 
-@pytest_asyncio.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
-    yield
+    from test_seed_data import TEMPLATES
+    from test_seed_data_templates_v2 import TEMPLATES_V2
+    from conftest import _global_firestore_proxy
+
+    if not server._CATALOG_MAPS_SYNCED:
+        await server.seed_catalogs()
+
+    orig_seeds = server._get_all_seed_templates
+    server._get_all_seed_templates = lambda: [*TEMPLATES, *TEMPLATES_V2]
+    client = _global_firestore_proxy._get_client()
+
+    canonical_snapshot = {}
+    async for d in client.collection("templates").stream():
+        canonical_snapshot[d.id] = d.to_dict()
+
+    batch = client.batch()
+    for item in [*TEMPLATES, *TEMPLATES_V2]:
+        item_copy = dict(item)
+        item_copy.setdefault("status", "published")
+        item_copy.setdefault("version", 1)
+        ref = client.collection("templates").document(item["id"])
+        batch.set(ref, item_copy)
+    await batch.commit()
+    server.invalidate_published_templates_cache()
+
+    try:
+        yield
+    finally:
+        del_batch = client.batch()
+        for item in [*TEMPLATES, *TEMPLATES_V2]:
+            tid = item["id"]
+            if tid not in canonical_snapshot:
+                del_batch.delete(client.collection("templates").document(tid))
+        await del_batch.commit()
+        rest_batch = client.batch()
+        for cid, cdoc in canonical_snapshot.items():
+            rest_batch.set(client.collection("templates").document(cid), cdoc)
+        await rest_batch.commit()
+        server._get_all_seed_templates = orig_seeds
+        server.invalidate_published_templates_cache()
 
 async def register_user(client: AsyncClient, mobile: str = "9876543210") -> dict:
     """Create a user via OTP and return {token, user}."""
@@ -86,7 +125,7 @@ async def test_preview_does_not_consume_credit(client, clean_db):
     r = await client.post("/api/applications/preview", headers=h, json={
         "template_id": "adjournment",
         "language": "en",
-        "values": {"reason": "test reason"},
+        "values": {"reason": "test reason", "next_date": "2026-02-15"},
     })
     assert r.status_code == 200, r.text
 
@@ -112,7 +151,7 @@ async def test_download_consumes_one_credit(client, clean_db):
     r = await client.post("/api/applications/download", headers=h, json={
         "template_id": "adjournment",
         "language": "en",
-        "values": {"reason": "test"},
+        "values": {"reason": "test", "next_date": "2026-02-15"},
         "format": "pdf",
     })
     assert r.status_code == 200, r.text
@@ -137,7 +176,7 @@ async def test_consume_credit_false_ignored(client, clean_db):
     r = await client.post("/api/applications/download", headers=h, json={
         "template_id": "adjournment",
         "language": "en",
-        "values": {"reason": "bypass attempt"},
+        "values": {"reason": "bypass attempt", "next_date": "2026-02-15"},
         "format": "pdf",
         "consume_credit": False,  # Should be IGNORED
     })
@@ -162,7 +201,7 @@ async def test_insufficient_credits_blocks_download(client, clean_db):
     for _ in range(5):
         r = await client.post("/api/applications/download", headers=h, json={
             "template_id": "adjournment", "language": "en",
-            "values": {"reason": "drain"}, "format": "pdf",
+            "values": {"reason": "drain", "next_date": "2026-02-15"}, "format": "pdf",
         })
         assert r.status_code == 200
 
@@ -173,7 +212,7 @@ async def test_insufficient_credits_blocks_download(client, clean_db):
     # 6th download must fail
     r = await client.post("/api/applications/download", headers=h, json={
         "template_id": "adjournment", "language": "en",
-        "values": {"reason": "should fail"}, "format": "pdf",
+        "values": {"reason": "should fail", "next_date": "2026-02-15"}, "format": "pdf",
     })
     assert r.status_code == 402, f"Expected 402, got {r.status_code}: {r.text}"
 
@@ -420,7 +459,7 @@ async def test_taluka_label_renders_and_optional(client, clean_db):
         "template_id": "document_return_application",
         "case_id": case["id"],
         "language": "en",
-        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad", "case_status_phrase": "ચાલુ", "advocate_side": "applicant", "document_details": "Original receipt", "date": "2026-02-15"},
     })
     assert r.status_code == 200
     content = r.json()["content"]
@@ -485,7 +524,7 @@ async def test_case_data_inherited_into_application(client, clean_db):
         "template_id": "document_return_application",
         "case_id": case["id"],
         "language": "en",
-        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad", "case_status_phrase": "ચાલુ", "advocate_side": "applicant", "document_details": "Original receipt", "date": "2026-02-15"},
     })
     assert r.status_code == 200, r.text
     content = r.json()["content"]
@@ -499,7 +538,7 @@ async def test_case_data_inherited_into_application(client, clean_db):
         "case_id": case["id"],
         "language": "en",
         "format": "docx",
-        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad", "case_status_phrase": "ચાલુ", "advocate_side": "applicant", "document_details": "Original receipt", "date": "2026-02-15"},
     })
     assert r.status_code == 200, r.text
     doc = _zipfile.ZipFile(_io.BytesIO(__import__("base64").b64decode(r.json()["base64"])))
@@ -514,7 +553,7 @@ async def test_case_data_inherited_into_application(client, clean_db):
         "case_id": case["id"],
         "language": "en",
         "format": "pdf",
-        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad", "case_status_phrase": "ચાલુ", "advocate_side": "applicant", "document_details": "Original receipt", "date": "2026-02-15"},
     })
     assert r.status_code == 200, r.text
     raw = __import__("base64").b64decode(r.json()["base64"])
@@ -553,7 +592,7 @@ async def test_case_without_taluka_application_works(client, clean_db):
         "template_id": "document_return_application",
         "case_id": case["id"],
         "language": "en",
-        "values": {"document_name": "Original receipt", "place": "Ahmedabad"},
+        "values": {"document_name": "Original receipt", "place": "Ahmedabad", "case_status_phrase": "ચાલુ", "advocate_side": "applicant", "document_details": "Original receipt", "date": "2026-02-15"},
     })
     assert r.status_code == 200, r.text
     content = r.json()["content"]
@@ -746,7 +785,7 @@ async def test_existing_document_generation(client, clean_db):
         "template_id": "adjournment",
         "case_id": case_id,
         "language": "en",
-        "values": {"reason": "Court hearing"},
+        "values": {"reason": "Court hearing", "next_date": "2026-02-15"},
     })
     assert preview_r.status_code == 200
     data = preview_r.json()
@@ -758,7 +797,7 @@ async def test_existing_document_generation(client, clean_db):
         "template_id": "adjournment",
         "case_id": case_id,
         "language": "en",
-        "values": {"reason": "Court hearing"},
+        "values": {"reason": "Court hearing", "next_date": "2026-02-15"},
         "format": "pdf",
     })
     assert pdf_r.status_code == 200
@@ -770,7 +809,7 @@ async def test_existing_document_generation(client, clean_db):
         "template_id": "adjournment",
         "case_id": case_id,
         "language": "en",
-        "values": {"reason": "Court hearing"},
+        "values": {"reason": "Court hearing", "next_date": "2026-02-15"},
         "format": "docx",
     })
     assert docx_r.status_code == 200

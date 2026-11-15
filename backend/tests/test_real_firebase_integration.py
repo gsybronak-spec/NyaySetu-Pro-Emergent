@@ -20,6 +20,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import server
 from google.cloud import firestore
 
+pytestmark = pytest.mark.skipif(
+    bool(os.environ.get("FIRESTORE_EMULATOR_HOST")),
+    reason="Cloud-only integration suite; safely skipped when local Firestore emulator is active",
+)
+
 # Real Firestore test fixture
 @pytest.fixture(scope="session")
 def anyio_backend():
@@ -28,6 +33,8 @@ def anyio_backend():
 @pytest.fixture(scope="session")
 def real_fs_client():
     """Verify that server.db is connected to the real Cloud Firestore, not the emulator."""
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        pytest.skip("Cloud-only integration suite; safely skipped when local Firestore emulator is active")
     assert server.db is not None, "server.db is None — credentials not initialized"
     assert "FIRESTORE_EMULATOR_HOST" not in os.environ or not os.environ["FIRESTORE_EMULATOR_HOST"], (
         "FIRESTORE_EMULATOR_HOST is set! Tests must run against Real Cloud Firestore."

@@ -169,7 +169,7 @@ class TestRegression:
         r = s.get(f"{API}/templates")
         assert r.status_code == 200 and len(r.json()) >= 5
         r = s.post(f"{API}/applications/download", headers=_H(a["token"]),
-                   json={"template_id": "adjournment", "language": "en", "format": "pdf",
-                         "values": {"next_date": "10-01-2026", "reason": "TEST"}})
+                   json={"template_id": "mudat_arji", "language": "en", "format": "pdf",
+                         "values": {"next_date": "10-01-2026", "reason": "TEST", "adjournment_reason": "TEST"}})
         assert r.status_code == 200
         assert r.json()["mime_type"] == "application/pdf"

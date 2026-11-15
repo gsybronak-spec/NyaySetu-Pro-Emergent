@@ -643,14 +643,19 @@ class TestSecurityAuditApplicationsAndIndexes:
             "id": "legacy_certified_copy",
             "name_en": "Certified Copy Application",
             "name_gu": "સર્ટીફાઈડ નકલ અરજી",
+            "category": "Civil",
             "content_en": "IN THE COURT OF {{court}}\nApplication for Certified Copy",
             "content_gu": "માનનીય ન્યાયાલય {{court}}\nસર્ટીફાઈડ નકલ મેળવવા અરજી",
             "version": 1,
             "status": "published",
         }
-        await db.collection("templates").document(legacy_doc.get("id")).set(legacy_doc)
-
-        resolved = await resolve_template_for_draft("legacy_certified_copy")
-        assert resolved is not None
-        assert "સર્ટીફાઈડ નકલ મેળવવા અરજી" in resolved["content_gu"]
-        assert resolved.get("editor_content_gu") is None  # Legacy template gracefully loads
+        try:
+            await db.collection("templates").document(legacy_doc.get("id")).set(legacy_doc)
+            resolved = await resolve_template_for_draft("legacy_certified_copy")
+            assert resolved is not None
+            assert "સર્ટીફાઈડ નકલ મેળવવા અરજી" in resolved["content_gu"]
+            assert resolved.get("editor_content_gu") is None  # Legacy template gracefully loads
+        finally:
+            await db.collection("templates").document(legacy_doc.get("id")).delete()
+            import server
+            server.invalidate_published_templates_cache()

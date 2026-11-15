@@ -113,20 +113,21 @@ async def lawyer_auth():
 @pytest.mark.asyncio
 async def test_seed_runs_when_seed_complete_missing():
     """Seed must initialize templates into db.templates and set seed_complete=True."""
+    await server.db.collection("system_settings").document("templates_seed_complete").delete()
     await server.db.collection("system_settings").document("seed_complete").delete()
     async for d in server.db.collection("templates").stream():
         await d.reference.delete()
-    setting = await db.system_settings.find_one({"key": "seed_complete"})
+    setting = (await server.db.collection("system_settings").document("templates_seed_complete").get()).to_dict()
     assert setting is None
 
-    await seed_templates()
+    await seed_templates(force=True, mark_system_seed_complete=True)
 
     # Verify templates inserted
-    tpl_count = len(await db.collection("templates").get())
+    tpl_count = len([d async for d in server.db.collection("templates").stream()])
     assert tpl_count > 0
 
     # Verify seed_complete set
-    setting = await db.system_settings.find_one({"key": "seed_complete"})
+    setting = (await server.db.collection("system_settings").document("templates_seed_complete").get()).to_dict()
     assert setting is not None
     assert setting.get("value") is True
     assert "completed_at" in setting
@@ -135,21 +136,21 @@ async def test_seed_runs_when_seed_complete_missing():
 @pytest.mark.asyncio
 async def test_seed_does_not_run_when_seed_complete_true():
     """When seed_complete=True, seed_templates should be a complete no-op."""
-    await seed_templates()
-    initial_count = len(await db.collection("templates").get())
+    await seed_templates(force=True, mark_system_seed_complete=True)
+    initial_count = len([d async for d in db.collection("templates").stream()])
     assert initial_count > 0
 
     # Manually delete one template to test that seed does NOT resurrect it
-    sample_id = "civil_suit" if (await db.collection("templates").document("civil_suit").get()).to_dict() else (await db.templates.find_one({}))["id"]
+    sample_id = "mudat_arji"
     await db.collection("templates").document(sample_id).delete()
     assert (await db.collection("templates").document(sample_id).get()).to_dict() is None
 
     # Call seed_templates again without force
-    await seed_templates()
+    await seed_templates(force=False)
 
     # The deleted template must NOT be resurrected
     assert (await db.collection("templates").document(sample_id).get()).to_dict() is None
-    assert (len(await db.collection("templates").get())) == initial_count - 1
+    assert (len([d async for d in db.collection("templates").stream()])) == initial_count - 1
 
 
 # ============================================================
@@ -159,54 +160,84 @@ async def test_seed_does_not_run_when_seed_complete_true():
 @pytest.mark.asyncio
 async def test_runtime_endpoints_do_not_merge_seed_arrays(client, lawyer_auth, admin_auth):
     """Runtime endpoints must only return templates present in MongoDB."""
-    await seed_templates()
+    target_id = "decoupled_test_template"
+    try:
+        await db.collection("templates").document(target_id).set({
+            "id": target_id,
+            "name_en": "Decoupled Test Template",
+            "name_gu": "ડીકપલ્ડ ટેસ્ટ ટેમ્પલેટ",
+            "category": "Civil",
+            "status": "published",
+            "version": 1,
+            "fields": []
+        })
+        server.invalidate_published_templates_cache()
 
-    # Choose a template and delete it from DB
-    target_id = "adjournment"
-    assert (await db.collection("templates").document(target_id).get()).to_dict() is not None
+        # Verify initially present
+        resp = await client.get("/api/templates", headers=lawyer_auth)
+        assert resp.status_code == 200
+        assert target_id in [t["id"] for t in resp.json()]
 
-    await db.collection("templates").document(target_id).delete()
+        # Delete it from DB
+        await db.collection("templates").document(target_id).delete()
+        server.invalidate_published_templates_cache()
 
-    # Lawyer API GET /api/templates
-    resp = await client.get("/api/templates", headers=lawyer_auth)
-    assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
-    assert target_id not in ids, "Deleted template must NOT reappear in lawyer templates list"
+        # Lawyer API GET /api/templates
+        resp = await client.get("/api/templates", headers=lawyer_auth)
+        assert resp.status_code == 200
+        ids = [t["id"] for t in resp.json()]
+        assert target_id not in ids, "Deleted template must NOT reappear in lawyer templates list"
 
-    # Lawyer API GET /api/templates/{id}
-    resp = await client.get(f"/api/templates/{target_id}", headers=lawyer_auth)
-    assert resp.status_code == 404, "Deleted template must return 404 from lawyer API"
+        # Lawyer API GET /api/templates/{id}
+        resp = await client.get(f"/api/templates/{target_id}", headers=lawyer_auth)
+        assert resp.status_code == 404, "Deleted template must return 404 from lawyer API"
 
-    # Admin API GET /api/admin/templates
-    resp = await client.get("/api/admin/templates", headers=admin_auth)
-    assert resp.status_code == 200
-    admin_ids = [t["id"] for t in resp.json()]
-    assert target_id not in admin_ids, "Deleted template must NOT reappear in admin templates list"
+        # Admin API GET /api/admin/templates
+        resp = await client.get("/api/admin/templates", headers=admin_auth)
+        assert resp.status_code == 200
+        admin_ids = [t["id"] for t in resp.json()]
+        assert target_id not in admin_ids, "Deleted template must NOT reappear in admin templates list"
 
-    # Admin API GET /api/admin/templates/{id}
-    resp = await client.get(f"/api/admin/templates/{target_id}", headers=admin_auth)
-    assert resp.status_code == 404, "Deleted template must return 404 from admin API"
+        # Admin API GET /api/admin/templates/{id}
+        resp = await client.get(f"/api/admin/templates/{target_id}", headers=admin_auth)
+        assert resp.status_code == 404, "Deleted template must return 404 from admin API"
+    finally:
+        await db.collection("templates").document(target_id).delete()
+        server.invalidate_published_templates_cache()
 
 
 @pytest.mark.asyncio
 async def test_archived_templates_hidden_from_lawyer_api(client, lawyer_auth, admin_auth):
     """Archived templates must not appear in published results or lawyer API."""
-    await seed_templates()
-    target_id = "certified_copy"
+    target_id = "archive_test_template"
+    try:
+        await db.collection("templates").document(target_id).set({
+            "id": target_id,
+            "name_en": "Archive Test Template",
+            "name_gu": "આર્કાઇવ ટેસ્ટ ટેમ્પલેટ",
+            "category": "Civil",
+            "status": "published",
+            "version": 1,
+            "fields": []
+        })
+        server.invalidate_published_templates_cache()
 
-    # Archive the template via Admin API
-    resp = await client.post(f"/api/admin/templates/{target_id}/archive", headers=admin_auth)
-    assert resp.status_code == 200
+        # Archive the template via Admin API
+        resp = await client.post(f"/api/admin/templates/{target_id}/archive", headers=admin_auth)
+        assert resp.status_code == 200
 
-    # Lawyer API must NOT return it in published list
-    resp = await client.get("/api/templates", headers=lawyer_auth)
-    assert resp.status_code == 200
-    ids = [t["id"] for t in resp.json()]
-    assert target_id not in ids
+        # Lawyer API must NOT return it in published list
+        resp = await client.get("/api/templates", headers=lawyer_auth)
+        assert resp.status_code == 200
+        ids = [t["id"] for t in resp.json()]
+        assert target_id not in ids
 
-    # Direct fetch by lawyer returns 404
-    resp = await client.get(f"/api/templates/{target_id}", headers=lawyer_auth)
-    assert resp.status_code == 404
+        # Direct fetch by lawyer returns 404
+        resp = await client.get(f"/api/templates/{target_id}", headers=lawyer_auth)
+        assert resp.status_code == 404
+    finally:
+        await db.collection("templates").document(target_id).delete()
+        server.invalidate_published_templates_cache()
 
 
 # ============================================================
@@ -246,13 +277,13 @@ async def test_idempotent_template_revisions_migration():
 @pytest.mark.asyncio
 async def test_production_template_ids_unchanged():
     """All seed template IDs must be preserved identically in DB and revisions."""
-    await seed_templates()
-    all_seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
+    await seed_templates(force=True)
+    all_seed_ids = {t["id"] for t in server._get_all_seed_templates()}
 
-    db_ids = {t["id"] for t in await db.templates.find({}, {"_id": 0, "id": 1}).to_list(1000)}
+    db_ids = {t["id"] for t in [d.to_dict() async for d in db.collection("templates").stream()]}
     assert all_seed_ids.issubset(db_ids)
 
-    rev_ids = {r["template_id"] for r in await db.template_revisions.find({}, {"_id": 0, "template_id": 1}).to_list(1000)}
+    rev_ids = {r["template_id"] for r in [d.to_dict() async for d in db.collection("template_revisions").stream()]}
     assert all_seed_ids.issubset(rev_ids)
 
 
@@ -263,8 +294,8 @@ async def test_production_template_ids_unchanged():
 @pytest.mark.asyncio
 async def test_linear_versioning_and_publish_snapshot(client, admin_auth):
     """Publishing a branched template increments version linearly without changing ID."""
-    await seed_templates()
-    tid = "vakalatnama"
+    await seed_templates(force=True)
+    tid = "vakilatnama_civil"
 
     tpl_v1 = (await db.collection("templates").document(tid).get()).to_dict()
     assert tpl_v1["version"] == 1
@@ -313,8 +344,8 @@ async def test_linear_versioning_and_publish_snapshot(client, admin_auth):
 @pytest.mark.asyncio
 async def test_explicit_duplicate_as_new_template(client, admin_auth):
     """Explicit 'Duplicate As New' (as_new_template=True) creates a new template ID."""
-    await seed_templates()
-    tid = "vakalatnama"
+    await seed_templates(force=True)
+    tid = "vakilatnama_civil"
 
     resp = await client.post(
         f"/api/admin/templates/{tid}/clone",
@@ -337,14 +368,14 @@ async def test_explicit_duplicate_as_new_template(client, admin_auth):
 @pytest.mark.asyncio
 async def test_draft_stores_template_version(client, lawyer_auth):
     """Creating a draft saves the current template_version in db.drafts."""
-    await seed_templates()
-    tid = "affidavit"
+    await seed_templates(force=True)
+    tid = "mudat_arji"
 
     # Save draft
     save_req = {
         "template_id": tid,
         "language": "gu",
-        "values": {"deponent_name": "Ramesh Patel", "facts": "Test affidavit facts"}
+        "values": {"reason": "Personal reasons", "adjournment_reason": "Personal reasons"}
     }
     resp = await client.post("/api/drafts", json=save_req, headers=lawyer_auth)
     assert resp.status_code == 200
@@ -357,8 +388,8 @@ async def test_draft_stores_template_version(client, lawyer_auth):
 @pytest.mark.asyncio
 async def test_historical_draft_resolves_from_revisions_after_template_edit_and_deletion(client, admin_auth, lawyer_auth):
     """A draft saved under version 1 continues to resolve v1 even after v2 is published and template is deleted."""
-    await seed_templates()
-    tid = "compromise"
+    await seed_templates(force=True)
+    tid = "samadhan_purshish"
 
     # 1. User saves draft on Version 1
     await client.post("/api/drafts", json={
@@ -408,8 +439,8 @@ async def test_historical_draft_resolves_from_revisions_after_template_edit_and_
 @pytest.mark.asyncio
 async def test_legacy_draft_without_template_version_backward_compatible():
     """A legacy draft with template_version=None resolves from db.templates gracefully."""
-    await seed_templates()
-    tid = "inspection"
+    await seed_templates(force=True)
+    tid = "mudat_arji"
 
     # Call resolve_template_for_draft with None
     resolved = await resolve_template_for_draft(tid, None)

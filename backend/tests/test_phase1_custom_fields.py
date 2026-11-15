@@ -44,6 +44,31 @@ from httpx import AsyncClient, ASGITransport
 API = "/api"
 
 
+@pytest_asyncio.fixture(scope="function", autouse=True)
+async def seed_legacy_templates_phase1():
+    from test_seed_data import TEMPLATES
+    docs_to_restore = {}
+    if not server._CATALOG_MAPS_SYNCED:
+        await server.seed_catalogs()
+    for t in TEMPLATES:
+        tid = t["id"]
+        ref = server.db.collection("templates").document(tid)
+        snap = await ref.get()
+        docs_to_restore[tid] = snap.to_dict() if snap.exists else None
+        data = dict(t)
+        data["status"] = "published"
+        await ref.set(data)
+    server.invalidate_published_templates_cache()
+    yield
+    for tid, orig in docs_to_restore.items():
+        ref = server.db.collection("templates").document(tid)
+        if orig:
+            await ref.set(orig)
+        else:
+            await ref.delete()
+    server.invalidate_published_templates_cache()
+
+
 @pytest_asyncio.fixture(scope="function")
 async def client():
     transport = ASGITransport(app=app)
@@ -323,7 +348,7 @@ class TestDocumentAutofill:
             "template_id": "adjournment",
             "case_id": case_id,
             "language": "en",
-            "values": {},
+            "values": {"next_date": "20-02-2026"},
         })
         assert p.status_code == 200, p.text
         assert "witness not available this week" in p.json()["content"]
@@ -467,11 +492,12 @@ class TestDateFields:
         case_id = r.json()["id"]
 
         # Regular bail template references {{arrest_date}}
+        bail_vals = {"fir_number": "123/2026", "grounds": "False implication"}
         p = await client.post(f"{API}/applications/preview", headers=H(token), json={
             "template_id": "bail_regular",
             "case_id": case_id,
             "language": "en",
-            "values": {},
+            "values": bail_vals,
         })
         assert p.status_code == 200, p.text
         assert "2026-03-01" in p.json()["content"], "date missing from preview content"
@@ -481,7 +507,7 @@ class TestDateFields:
             "case_id": case_id,
             "language": "en",
             "format": "pdf",
-            "values": {},
+            "values": bail_vals,
         })
         assert d.status_code == 200, d.text
 
@@ -499,7 +525,7 @@ class TestDateFields:
             "template_id": "adjournment",
             "case_id": case_id,
             "language": "en",
-            "values": {},
+            "values": {"reason": "Personal reasons"},
         })
         assert p.status_code == 200, p.text
         assert "20-01-2026" in p.json()["content"]

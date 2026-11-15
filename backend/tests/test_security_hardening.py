@@ -51,9 +51,24 @@ async def client():
         yield c
 
 
+BACKEND_DIR = str(Path(__file__).resolve().parent.parent)
+
+def _run_sub(code, timeout=120):
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        cwd=BACKEND_DIR,
+        env={**os.environ, "PYTHONPATH": BACKEND_DIR},
+    )
+
+
 @pytest_asyncio.fixture(scope="function")
 async def clean_db():
+    server._rate_buckets.clear()
     yield
+    server._rate_buckets.clear()
 
 def mobile(prefix="9"):
     return f"{prefix}{int(time.time() * 1000) % 1000000000:09d}"
@@ -105,11 +120,11 @@ class TestPaperSize:
     @pytest.mark.asyncio
     async def test_pdf_a4_vs_legal_dimensions(self, client, clean_db):
         _, token = await create_test_lawyer()
-        vals = {"reason": "test", "next_date": "01-01-2027"}
+        vals = {"advocate_side": "party", "reason": "test", "date": "01/01/2027", "next_date": "01-01-2027"}
         sizes = {}
         for page in ("A4", "Legal"):
             r = await client.post(f"{API}/applications/download", headers=H(token), json={
-                "template_id": "adjournment", "language": "gu", "values": vals,
+                "template_id": "mudat_arji", "language": "gu", "values": vals,
                 "format": "pdf", "page_size": page, "filename": f"t_{page}.pdf",
             })
             assert r.status_code == 200, r.text
@@ -127,11 +142,11 @@ class TestPaperSize:
     @pytest.mark.asyncio
     async def test_docx_a4_vs_legal_pagesize(self, client, clean_db):
         _, token = await create_test_lawyer()
-        vals = {"reason": "test", "next_date": "01-01-2027"}
+        vals = {"advocate_side": "party", "reason": "test", "date": "01/01/2027", "next_date": "01-01-2027"}
         sizes = {}
         for page in ("A4", "Legal"):
             r = await client.post(f"{API}/applications/download", headers=H(token), json={
-                "template_id": "adjournment", "language": "gu", "values": vals,
+                "template_id": "mudat_arji", "language": "gu", "values": vals,
                 "format": "docx", "page_size": page, "filename": f"t_{page}.docx",
             })
             assert r.status_code == 200, r.text
@@ -143,13 +158,14 @@ class TestPaperSize:
     @pytest.mark.asyncio
     async def test_invalid_page_size_rejected(self, client, clean_db):
         _, token = await create_test_lawyer()
+        vals = {"advocate_side": "party", "reason": "x", "date": "01/01/2027"}
         r = await client.post(f"{API}/applications/preview", headers=H(token), json={
-            "template_id": "adjournment", "language": "gu", "values": {"reason": "x"},
+            "template_id": "mudat_arji", "language": "gu", "values": vals,
             "page_size": "Letter",
         })
         assert r.status_code == 422
         r = await client.post(f"{API}/applications/preview", headers=H(token), json={
-            "template_id": "adjournment", "language": "gu", "values": {"reason": "x"},
+            "template_id": "mudat_arji", "language": "gu", "values": vals,
             "page_size": "legal",  # case-insensitive OK
         })
         assert r.status_code == 200
@@ -224,8 +240,8 @@ class TestRateLimiting:
     async def test_download_rate_limit(self, client, clean_db):
         _, token = await create_test_lawyer()
         payload = {
-            "template_id": "adjournment", "language": "en",
-            "values": {"reason": "x", "next_date": "01-01-2027"},
+            "template_id": "mudat_arji", "language": "en",
+            "values": {"advocate_side": "party", "reason": "x", "date": "01/01/2027", "next_date": "01-01-2027"},
             "format": "pdf", "filename": "t.pdf",
         }
         statuses = []
@@ -239,9 +255,11 @@ class TestRateLimiting:
 
     @pytest.mark.asyncio
     async def test_admin_login_rate_limit(self, client, clean_db):
-        for i in range(6):
+        server._rate_buckets.clear()
+        email = f"rate_{int(time.time()*1000)}@test.in"
+        for i in range(11):
             r = await client.post(f"{API}/admin/auth/login", json={
-                "email": "nobody@test.in", "password": "WrongPass123!",
+                "email": email, "password": "WrongPass123!",
             })
         assert r.status_code == 429
 
@@ -298,7 +316,7 @@ class TestCorsAndJwt:
             "os.environ['DB_NAME']='nyaysetu_jwt_fail'\n"
             "import server\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        r = _run_sub(code)
         assert r.returncode != 0, "expected import failure without JWT_SECRET in declared production"
         assert "JWT_SECRET" in r.stderr
 
@@ -310,7 +328,7 @@ class TestCorsAndJwt:
             "os.environ['DB_NAME']='nyaysetu_jwt_fail'\n"
             "import server\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        r = _run_sub(code)
         assert r.returncode != 0
 
     def test_jwt_strong_secret_starts_in_production(self):
@@ -322,7 +340,7 @@ class TestCorsAndJwt:
             "import server\n"
             "print('OK')\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        r = _run_sub(code)
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout
 
@@ -340,7 +358,7 @@ class TestCorsAndJwt:
             "import server\n"
             "print('OK')\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+        r = _run_sub(code)
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout
 
@@ -363,7 +381,7 @@ class TestDevOtpRenderGuard:
             "assert server._DEV_OTP_ALLOWED is False\n"
             "print('OK')\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+        r = _run_sub(code, timeout=120)
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout
 
@@ -376,6 +394,6 @@ class TestDevOtpRenderGuard:
             "assert server._DEV_OTP_ALLOWED is True\n"
             "print('OK')\n"
         )
-        r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120)
+        r = _run_sub(code, timeout=120)
         assert r.returncode == 0, r.stderr
         assert "OK" in r.stdout

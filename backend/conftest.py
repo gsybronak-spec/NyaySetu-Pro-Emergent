@@ -12,12 +12,59 @@ if ROOT_DIR not in sys.path:
 
 # Force Firestore Emulator usage
 os.environ["FIRESTORE_EMULATOR_HOST"] = "127.0.0.1:8080"
-os.environ["FIREBASE_PROJECT_ID"] = "demo-test"
+TEST_PROJECT_ID = os.environ.get("FIREBASE_PROJECT_ID", "").strip() or "nyaysetu-local-test"
+os.environ["FIREBASE_PROJECT_ID"] = TEST_PROJECT_ID
 os.environ["JWT_SECRET"] = "test-jwt-secret-at-least-32-characters-long!"
 os.environ["ADMIN_SEED_EMAIL"] = "admin@test.com"
 os.environ["ADMIN_SEED_PASSWORD"] = "TestAdmin123!"
 
 import server
+
+def get_canonical_25_base_seeds():
+    base_seeds = []
+    seen = set()
+    # 1. First add the 21 authoritative modern templates from BASE_TEMPLATES
+    try:
+        from authoritative_catalog_42 import BASE_TEMPLATES
+        for b in BASE_TEMPLATES:
+            bk = b.get("base_key")
+            if bk and bk in server.CANONICAL_TEMPLATE_IDS and bk not in seen:
+                base_seeds.append({
+                    "id": bk,
+                    "slug": bk,
+                    "name_en": b.get("name_en", bk),
+                    "name_gu": b.get("name_gu", bk),
+                    "category": b.get("category", "General"),
+                    "sub_category": b.get("sub_category", ""),
+                    "description": b.get("description", ""),
+                    "tags": b.get("tags", []),
+                    "aliases": b.get("aliases", []),
+                    "fields": b.get("fields", []),
+                    "placeholders": b.get("placeholders", []),
+                    "content_gu": b.get("content_gu", ""),
+                    "content_en": b.get("content_en", ""),
+                    "settings": b.get("settings", {}),
+                    "status": "published",
+                    "version": 1,
+                    "source": "seed",
+                })
+                seen.add(bk)
+    except Exception:
+        pass
+
+    # 2. Add remaining 4 canonical templates from server.TEMPLATES
+    for t in server.TEMPLATES:
+        tid = t.get("id")
+        if tid in server.CANONICAL_TEMPLATE_IDS and tid not in seen:
+            item = dict(t)
+            item.setdefault("status", "published")
+            item.setdefault("version", 1)
+            base_seeds.append(item)
+            seen.add(tid)
+    return base_seeds
+
+# Ensure server._get_all_seed_templates returns canonical 25 base templates across all tests
+server._get_all_seed_templates = get_canonical_25_base_seeds
 
 
 
@@ -25,8 +72,8 @@ class FirestoreClientProxy:
     """Native Firestore AsyncClient proxy that provides a client bound to the current running event loop.
     Prevents gRPC 'Event loop is closed' or 'attached to different loop' errors across pytest tests and threads.
     """
-    def __init__(self, project_id="demo-test", credentials=None):
-        self._project_id = project_id
+    def __init__(self, project_id=None, credentials=None):
+        self._project_id = project_id or TEST_PROJECT_ID
         self._credentials = credentials
         self._clients = {}
 
@@ -70,14 +117,14 @@ class FirestoreClientProxy:
         return _FirestoreCollectionProxy(self, name)
 
 from google.auth.credentials import AnonymousCredentials
-_global_firestore_proxy = FirestoreClientProxy("demo-test", AnonymousCredentials())
+_global_firestore_proxy = FirestoreClientProxy(TEST_PROJECT_ID, AnonymousCredentials())
 server.db = _global_firestore_proxy
 
 async def _async_init_db():
     import httpx
     try:
         async with httpx.AsyncClient(timeout=60.0) as http:
-            await http.delete("http://127.0.0.1:8080/emulator/v1/projects/demo-test/databases/(default)/documents")
+            await http.delete(f"http://127.0.0.1:8080/emulator/v1/projects/{TEST_PROJECT_ID}/databases/(default)/documents")
     except Exception as e:
         print(f"Failed to clear emulator database: {e}")
 
@@ -105,8 +152,7 @@ async def _async_init_db():
             if count > 0:
                 await batch.commit()
                 
-        await _seed_collection("templates", test_seed_data.TEMPLATES)
-        await _seed_collection("templates", test_seed_data_templates_v2.TEMPLATES_V2)
+        await _seed_collection("templates", get_canonical_25_base_seeds())
         await _seed_collection("case_types", test_seed_data.CASE_TYPES)
         await _seed_collection("laws", test_seed_data.LAWS)
         await _seed_collection("districts", test_seed_data.DISTRICTS)
@@ -217,7 +263,6 @@ def initialize_emulator_database():
 @pytest_asyncio.fixture(autouse=True)
 async def ensure_baseline_templates(request):
     """Ensures templates and baseline auth exist for tests that need them."""
-    import server
     server._rate_buckets.clear()
     node_id = getattr(request.node, "nodeid", "")
     client = _global_firestore_proxy._get_client()
@@ -265,13 +310,11 @@ async def ensure_baseline_templates(request):
         or "test_template_page_size" in node_id
     )
     if not skip_seed:
-        snap = await client.collection("templates").document("vakalatnama").get()
+        snap = await client.collection("templates").document("vakalatnama_civil").get()
         if not snap.exists:
-            import test_seed_data
-            import test_seed_data_templates_v2
             batch = client.batch()
             count = 0
-            for item in [*test_seed_data.TEMPLATES, *test_seed_data_templates_v2.TEMPLATES_V2]:
+            for item in get_canonical_25_base_seeds():
                 item_copy = dict(item)
                 item_copy.setdefault("status", "published")
                 item_copy.setdefault("version", 1)
@@ -286,6 +329,32 @@ async def ensure_baseline_templates(request):
             if count > 0:
                 await batch.commit()
     yield
+
+@pytest_asyncio.fixture
+async def legacy_templates():
+    """Isolated fixture that temporarily seeds legacy templates for tests that specifically need them."""
+    client = _global_firestore_proxy._get_client()
+    import test_seed_data
+    batch = client.batch()
+    legacy_ids = []
+    for item in test_seed_data.TEMPLATES:
+        if item["id"] not in server.CANONICAL_TEMPLATE_IDS:
+            item_copy = dict(item)
+            item_copy.setdefault("status", "published")
+            item_copy.setdefault("version", 1)
+            ref = client.collection("templates").document(item["id"])
+            batch.set(ref, item_copy)
+            legacy_ids.append(item["id"])
+    await batch.commit()
+    server.invalidate_published_templates_cache()
+    try:
+        yield legacy_ids
+    finally:
+        del_batch = client.batch()
+        for lid in legacy_ids:
+            del_batch.delete(client.collection("templates").document(lid))
+        await del_batch.commit()
+        server.invalidate_published_templates_cache()
 
 @pytest.fixture(autouse=True)
 def mock_db():

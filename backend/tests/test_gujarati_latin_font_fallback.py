@@ -13,6 +13,7 @@ Ensures:
 
 import base64
 import re
+import shutil
 import subprocess
 import sys
 import unittest
@@ -33,6 +34,23 @@ for mod in ["docx", "docx.shared", "docx.enum.text", "docx.oxml", "docx.oxml.ns"
 
 import doc_generator
 import test_seed_data
+
+
+def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    if shutil.which("pdftotext"):
+        try:
+            proc = subprocess.run(["pdftotext", "-", "-"], input=pdf_bytes, capture_output=True, check=True)
+            return proc.stdout.decode("utf-8", errors="replace")
+        except Exception:
+            pass
+    try:
+        import pymupdf
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        return "\n".join(page.get_text() for page in doc)
+    except Exception:
+        from pdfminer.high_level import extract_text
+        import io
+        return extract_text(io.BytesIO(pdf_bytes))
 
 
 def extract_pdf_stream_text(pdf_bytes: bytes) -> str:
@@ -128,9 +146,8 @@ class TestGujaratiLatinFontFallback(unittest.TestCase):
         pdf_bytes = base64.b64decode(b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
-        # Verify with pdftotext
-        proc = subprocess.run(["pdftotext", "-", "-"], input=pdf_bytes, capture_output=True, check=True)
-        extracted_text = proc.stdout.decode("utf-8", errors="replace")
+        # Verify with pdftotext or pymupdf/pdfminer fallback
+        extracted_text = _extract_text_from_pdf(pdf_bytes)
 
         # 1. English names must be extracted
         self.assertIn("JAYDEEP", extracted_text)
@@ -205,8 +222,7 @@ class TestGujaratiLatinFontFallback(unittest.TestCase):
         self.assertIn("(--------------------) Tj", stream_text_en)
         self.assertNotIn("---------------------", stream_text_en)
 
-        proc = subprocess.run(["pdftotext", "-", "-"], input=pdf_bytes_en, capture_output=True, check=True)
-        extracted = proc.stdout.decode("utf-8", errors="replace")
+        extracted = _extract_text_from_pdf(pdf_bytes_en)
         self.assertIn("JAYDEEP", extracted)
         self.assertIn("RONAK", extracted)
         self.assertIn("Plaintiff's Advocate", extracted)

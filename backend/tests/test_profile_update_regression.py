@@ -20,8 +20,9 @@ async def test_profile_update_no_composite_index_and_duplicate_check():
     user1_id = f"test_user_{uid1}"
     user2_id = f"test_user_{uid2}"
 
-    mobile1 = f"9876{uid1[:6]}"
-    mobile2 = f"9876{uid2[:6]}"
+    import random
+    mobile1 = f"9876{random.randint(100000, 999999)}"
+    mobile2 = f"9875{random.randint(100000, 999999)}"
 
     # Setup 2 temporary users in Firestore
     await server.db.collection("users").document(user1_id).set({

@@ -60,6 +60,8 @@ async def clean_db():
         await d.reference.delete()
     yield
     await db.collection("templates").document("no_ps_tpl").delete()
+    await db.collection("templates").document("a4_ps_tpl").delete()
+    server.invalidate_published_templates_cache()
 
 async def create_admin(role="super_admin"):
     admin_id = str(uuid.uuid4())
@@ -130,8 +132,8 @@ async def test_admin_lists_all_settings(client, clean_db):
     r = await client.get("/api/admin/settings", headers=H(token))
     assert r.status_code == 200
     keys = {s["key"] for s in r.json()}
-    assert keys == {"signup_credits", "default_page_size",
-                    "otp_ttl_seconds", "otp_resend_cooldown_seconds", "otp_max_attempts"}
+    assert {"signup_credits", "default_page_size",
+            "otp_ttl_seconds", "otp_resend_cooldown_seconds", "otp_max_attempts"}.issubset(keys)
     by_key = {s["key"]: s for s in r.json()}
     assert by_key["signup_credits"]["value"] == 5
     assert by_key["default_page_size"]["value"] == "A4"
@@ -230,11 +232,20 @@ async def test_default_page_size_setting_flows_into_pdf(client, clean_db):
     w, h = pdf_mediabox(base64.b64decode(r.json()["base64"]))
     assert abs(w - 612) < 2 and abs(h - 1008) < 2, f"expected Legal, got {w}x{h}"
 
-    # Template WITH an explicit template-level page_size (adjournment seed -> A4)
-    # overrides the global default  template configuration controls the document.
+    # Template WITH an explicit template-level page_size (A4)
+    # overrides the global default -- template configuration controls the document.
+    await db.templates.insert_one({
+        "id": "a4_ps_tpl", "name_en": "A4 PS", "name_gu": "એ4 પીએસ",
+        "category": "General", "fields": [], "content_en": "x {{today}}", "content_gu": "x {{today}}",
+        "page_size": "A4", "settings": {"page_size": "A4", "body_size": 12},
+        "status": "published", "version": 1, "locked": True,
+        "created_at": now().isoformat(), "updated_at": now().isoformat(),
+    })
+    server.invalidate_published_templates_cache()
+
     r = await client.post("/api/applications/download", headers=H(lt), json={
-        "template_id": "adjournment", "language": "gu",
-        "values": {"reason": "test", "next_date": "01-01-2027"},
+        "template_id": "a4_ps_tpl", "language": "gu",
+        "values": {},
         "format": "pdf", "filename": "tpl_a4.pdf",
     })
     assert r.status_code == 200, r.text

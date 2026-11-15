@@ -252,6 +252,7 @@ async def test_disabled_user_blocked_at_login_and_api(client, clean_db):
     r = await client.patch(f"/api/admin/users/{user['id']}/status",
                            json={"active": True}, headers=headers)
     assert r.status_code == 200
+    server.invalidate_user_session_cache(user["id"])
     r = await client.get("/api/profile/me", headers={"Authorization": f"Bearer {user_token}"})
     assert r.status_code == 200
 

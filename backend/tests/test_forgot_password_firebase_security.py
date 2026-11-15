@@ -109,7 +109,15 @@ class MockFirestore:
 mock_db = MockFirestore()
 
 import server
-server.db = mock_db
+
+@pytest.fixture(autouse=True)
+def isolate_server_db():
+    orig_db = server.db
+    server.db = mock_db
+    try:
+        yield mock_db
+    finally:
+        server.db = orig_db
 
 # RSA Keypair for signing test Firebase tokens
 _PRIV = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -298,13 +306,13 @@ async def test_case_5_legacy_account_linking_and_login():
 
     # Test login with new password works
     login_req = server.LoginReq(identifier=mobile, password="NewLegacyPass456!")
-    login_res = await server.login_password(login_req)
+    login_res = await server.login(login_req)
     assert "token" in login_res
 
     # Test login with old password fails
     bad_login_req = server.LoginReq(identifier=mobile, password="OldLegacyPass123!")
     with pytest.raises(HTTPException) as exc_info:
-        await server.login_password(bad_login_req)
+        await server.login(bad_login_req)
     assert exc_info.value.status_code == 401
 
 

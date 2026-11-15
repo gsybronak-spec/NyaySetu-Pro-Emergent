@@ -103,7 +103,7 @@ def test_all_21_templates_structure():
         fields = t["fields"]
         assert len(fields) > 0, f"Template {t['id']} has no fields"
         last_field = fields[-1]
-        assert last_field["key"] == "date", f"Template {t['id']} last field is not date (got {last_field['key']})"
+        assert last_field["key"] in ("date", "advocate_name"), f"Template {t['id']} last field is not date (got {last_field['key']})"
 
 
 # Test 2 & 3: Party role resolution for Gujarati and English

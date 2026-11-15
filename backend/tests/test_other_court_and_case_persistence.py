@@ -57,25 +57,20 @@ class _MockHTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-fastapi_mock = sys.modules['fastapi']
-fastapi_mock.FastAPI = _MockFastAPI
-fastapi_mock.APIRouter = _MockRouter
-fastapi_mock.HTTPException = _MockHTTPException
-fastapi_mock.Depends = lambda x: x
-fastapi_mock.Header = lambda *args, **kwargs: None
-fastapi_mock.Request = MagicMock
-fastapi_mock.Response = MagicMock
-fastapi_mock.Cookie = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('fastapi'), MagicMock):
+    fastapi_mock = sys.modules['fastapi']
+    fastapi_mock.FastAPI = _MockFastAPI
+    fastapi_mock.APIRouter = _MockRouter
+    fastapi_mock.HTTPException = _MockHTTPException
+    fastapi_mock.Depends = lambda x: x
+    fastapi_mock.Header = lambda *args, **kwargs: None
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.Response = MagicMock
+    fastapi_mock.Cookie = lambda *args, **kwargs: None
 
-class _PydanticBaseModel:
-    def __init__(self, **kwargs):
-        for k, v in kwargs.items():
-            setattr(self, k, v)
-    def model_dump(self, **kwargs):
-        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-
-sys.modules['pydantic'].BaseModel = _PydanticBaseModel
-sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('pydantic'), MagicMock):
+    sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+    sys.modules['pydantic'].Field = lambda *args, **kwargs: None
 
 import doc_generator
 import server
@@ -86,6 +81,9 @@ class TestRequirement1OtherCourt(unittest.TestCase):
     def setUp(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
+        self.orig_load_catalog = server._load_catalog
+        self.had_courts_cache = "courts" in server._CATALOG_CACHE
+        self.orig_courts_cache = server._CATALOG_CACHE.get("courts")
         self.mock_courts = [
             {"id": "additional_civil_judge_441fab", "en": "ADDITIONAL CIVIL JUDGE", "gu": "એડીશનલ સિવીલ જજ", "district_id": "rajkot"},
             {"id": "principal_district_judge", "en": "PRINCIPAL DISTRICT JUDGE", "gu": "પ્રિન્સિપાલ ડિસ્ટ્રિક્ટ જજ", "district_id": "rajkot"},
@@ -101,7 +99,14 @@ class TestRequirement1OtherCourt(unittest.TestCase):
         }
 
     def tearDown(self):
-        self.loop.close()
+        try:
+            server._load_catalog = self.orig_load_catalog
+            if self.had_courts_cache:
+                server._CATALOG_CACHE["courts"] = self.orig_courts_cache
+            else:
+                server._CATALOG_CACHE.pop("courts", None)
+        finally:
+            self.loop.close()
 
     def test_resolve_court_label_custom_gu(self):
         case = {
@@ -189,6 +194,26 @@ class TestRequirement1OtherCourt(unittest.TestCase):
 
 
 class TestRequirement2CaseEditPersistence(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from starlette.testclient import TestClient
+        cls._client_ctx = TestClient(server.app)
+        cls._client_ctx.__enter__()
+        if not server._CATALOG_MAPS_SYNCED:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(server.seed_catalogs())
+            finally:
+                loop.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            cls._client_ctx.__exit__(None, None, None)
+        except Exception:
+            pass
+
     def test_enrich_case_custom_court(self):
         case_doc_gu = {
             "id": "case_1",

@@ -152,7 +152,7 @@ class TestPhase2TemplateCleanup(unittest.IsolatedAsyncioTestCase):
 
             req = server.DownloadReq(
                 template_id="mudat_arji_gu",
-                values={"court_name": "District Court", "adjournment_reason": "Advocate ill"},
+                values={"court_name": "District Court", "adjournment_reason": "Advocate ill", "reason": "Advocate ill", "advocate_side": "party", "date": "15/11/2026"},
                 language="gu",
                 format="pdf",
             )

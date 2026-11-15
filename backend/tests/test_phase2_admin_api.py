@@ -48,23 +48,64 @@ from server import (
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
     from conftest import _global_firestore_proxy
+    import server
     client = _global_firestore_proxy._get_client()
     target_colls = [
         "users", "wallets", "cases", "drafts", "applications",
         "transactions", "audit_logs", "admin_audit_logs",
         "templates", "template_revisions", "template_versions",
     ]
-    async def _wipe():
-        for coll in target_colls:
-            docs = [d async for d in client.collection(coll).stream()]
-            if docs:
-                batch = client.batch()
-                for d in docs:
-                    batch.delete(d.reference)
+    snapshots = {}
+    for coll in target_colls:
+        snapshots[coll] = {d.id: d.to_dict() async for d in client.collection(coll).stream()}
+    for coll in target_colls:
+        docs = [d async for d in client.collection(coll).stream()]
+        if docs:
+            batch = client.batch()
+            count = 0
+            for d in docs:
+                batch.delete(d.reference)
+                count += 1
+                if count == 500:
+                    await batch.commit()
+                    batch = client.batch()
+                    count = 0
+            if count > 0:
                 await batch.commit()
-    await _wipe()
-    yield
-    await _wipe()
+    server.invalidate_published_templates_cache()
+    try:
+        yield
+    finally:
+        for coll in target_colls:
+            current_docs = [d async for d in client.collection(coll).stream()]
+            orig_docs = snapshots.get(coll, {})
+            to_delete = [d for d in current_docs if d.id not in orig_docs]
+            if to_delete:
+                batch = client.batch()
+                count = 0
+                for d in to_delete:
+                    batch.delete(d.reference)
+                    count += 1
+                    if count == 500:
+                        await batch.commit()
+                        batch = client.batch()
+                        count = 0
+                if count > 0:
+                    await batch.commit()
+            if orig_docs:
+                batch = client.batch()
+                count = 0
+                for doc_id, doc_data in orig_docs.items():
+                    ref = client.collection(coll).document(doc_id)
+                    batch.set(ref, doc_data)
+                    count += 1
+                    if count == 500:
+                        await batch.commit()
+                        batch = client.batch()
+                        count = 0
+                if count > 0:
+                    await batch.commit()
+        server.invalidate_published_templates_cache()
 
 @pytest_asyncio.fixture(scope="function")
 async def client():
@@ -798,8 +839,9 @@ async def test_26_templates_list_with_revision_count(client, super_admin_auth):
     res = await client.get("/api/admin/templates?page=1&category=Criminal", headers={"Authorization": super_admin_auth["Authorization"]})
     assert res.status_code == 200
     data = res.json()
-    assert data["total"] == 1
-    assert data["templates"][0]["revision_count"] == 2
+    assert any(t["id"] == t_id for t in data["templates"])
+    tpl = next(t for t in data["templates"] if t["id"] == t_id)
+    assert tpl["revision_count"] == 2
 
 
 @pytest.mark.asyncio
@@ -810,6 +852,7 @@ async def test_27_template_revisions_endpoint(client, super_admin_auth):
         "id": t_id,
         "name_en": "Affidavit",
         "name_gu": "સોગંદનામું",
+        "category": "General",
         "status": "published",
         "version": 2,
         "fields": [],
@@ -860,6 +903,7 @@ async def test_29_template_archive_and_restore(client, super_admin_auth):
         "id": t_id,
         "name_en": "Temporary Template",
         "name_gu": "ટેમ્પરરી ટેમ્પલેટ",
+        "category": "General",
         "status": "published",
         "version": 1,
     })

@@ -67,23 +67,25 @@ class _MockHTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-fastapi_mock = sys.modules['fastapi']
-fastapi_mock.FastAPI = _MockFastAPI
-fastapi_mock.APIRouter = _MockRouter
-fastapi_mock.HTTPException = _MockHTTPException
-fastapi_mock.Depends = lambda x: x
-fastapi_mock.Header = lambda *args, **kwargs: None
-fastapi_mock.Request = MagicMock
-fastapi_mock.Response = MagicMock
-fastapi_mock.Cookie = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('fastapi'), MagicMock):
+    fastapi_mock = sys.modules['fastapi']
+    fastapi_mock.FastAPI = _MockFastAPI
+    fastapi_mock.APIRouter = _MockRouter
+    fastapi_mock.HTTPException = _MockHTTPException
+    fastapi_mock.Depends = lambda x: x
+    fastapi_mock.Header = lambda *args, **kwargs: None
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.Response = MagicMock
+    fastapi_mock.Cookie = lambda *args, **kwargs: None
 
 class _PydanticBaseModel:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-sys.modules['pydantic'].BaseModel = _PydanticBaseModel
-sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('pydantic'), MagicMock):
+    sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+    sys.modules['pydantic'].Field = lambda *args, **kwargs: None
 
 import server
 
@@ -243,11 +245,43 @@ class TestCaseCascadeDelete(unittest.TestCase):
         self.audit_patch.start()
         self.filter_patch = patch.object(server.firestore, 'FieldFilter', side_effect=lambda f, op, v: MagicMock(field=f, value=v))
         self.filter_patch.start()
+        with server._CATALOG_CACHE_LOCK:
+            self.orig_catalog_cache = dict(server._CATALOG_CACHE)
+            self.orig_catalog_cache_expires = dict(server._CATALOG_CACHE_EXPIRES)
+        self.orig_case_type_map = dict(server._CASE_TYPE_MAP)
+        self.orig_law_map = dict(server._LAW_MAP)
+        self.orig_district_map = dict(server._DISTRICT_MAP)
+        self.orig_taluka_map = dict(server._TALUKA_MAP)
+        self.orig_court_map = dict(server._COURT_MAP)
+        self.orig_ps_map = dict(server._PS_MAP)
+        self.orig_valid_case_types = set(server._VALID_CASE_TYPE_IDS)
+        self.orig_valid_laws = set(server._VALID_LAW_IDS)
+        self.orig_valid_districts = set(server._VALID_DISTRICT_IDS)
+        self.orig_valid_talukas = set(server._VALID_TALUKA_IDS)
+        self.orig_valid_courts = set(server._VALID_COURT_IDS)
+        self.orig_valid_ps = set(server._VALID_PS_IDS)
 
     def tearDown(self):
         self.filter_patch.stop()
         self.audit_patch.stop()
         self.db_patch.stop()
+        with server._CATALOG_CACHE_LOCK:
+            server._CATALOG_CACHE.clear()
+            server._CATALOG_CACHE.update(self.orig_catalog_cache)
+            server._CATALOG_CACHE_EXPIRES.clear()
+            server._CATALOG_CACHE_EXPIRES.update(self.orig_catalog_cache_expires)
+        server._CASE_TYPE_MAP = self.orig_case_type_map
+        server._LAW_MAP = self.orig_law_map
+        server._DISTRICT_MAP = self.orig_district_map
+        server._TALUKA_MAP = self.orig_taluka_map
+        server._COURT_MAP = self.orig_court_map
+        server._PS_MAP = self.orig_ps_map
+        server._VALID_CASE_TYPE_IDS = self.orig_valid_case_types
+        server._VALID_LAW_IDS = self.orig_valid_laws
+        server._VALID_DISTRICT_IDS = self.orig_valid_districts
+        server._VALID_TALUKA_IDS = self.orig_valid_talukas
+        server._VALID_COURT_IDS = self.orig_valid_courts
+        server._VALID_PS_IDS = self.orig_valid_ps
 
     def test_normal_admin_delete_case_blocks_when_applications_exist(self):
         """Standard delete endpoint MUST block case deletion if applications exist."""

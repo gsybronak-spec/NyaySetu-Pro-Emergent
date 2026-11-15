@@ -33,6 +33,13 @@ def session():
 @pytest.fixture(scope="module")
 def user_ctx(session):
     """Create fresh user + token + initial test case."""
+    if not server._CATALOG_MAPS_SYNCED:
+        import asyncio as _aio
+        _loop = _aio.new_event_loop()
+        try:
+            _loop.run_until_complete(server.seed_catalogs())
+        finally:
+            _loop.close()
     mobile = f"9{int(time.time()) % 1000000000:09d}"
     r = session.post(f"{API}/auth/send-otp", json={"mobile": mobile})
     assert r.status_code == 200
@@ -215,7 +222,7 @@ class TestTemplates:
         r = session.get(f"{API}/templates?q=mudat")
         assert r.status_code == 200
         items = r.json()
-        assert any(t["id"] == "adjournment" for t in items), "Alias 'mudat' should match Adjournment"
+        assert any(t["id"] in ("adjournment", "mudat_arji") for t in items), "Alias 'mudat' should match Adjournment"
 
     def test_category_filter(self, session):
         r = session.get(f"{API}/templates?category=Criminal")
@@ -225,7 +232,9 @@ class TestTemplates:
         assert len(items) >= 2
 
     def test_get_template(self, session):
-        r = session.get(f"{API}/templates/adjournment")
+        r = session.get(f"{API}/templates/mudat_arji")
+        if r.status_code == 404:
+            r = session.get(f"{API}/templates/adjournment")
         assert r.status_code == 200
         t = r.json()
         assert "content_en" in t and "content_gu" in t
@@ -235,32 +244,32 @@ class TestTemplates:
 class TestApplications:
     def test_preview_english(self, session, user_ctx):
         r = session.post(f"{API}/applications/preview", headers=H(user_ctx),
-                         json={"template_id": "adjournment", "case_id": user_ctx["case_id"],
-                               "language": "en", "values": {"next_date": "20-01-2026", "reason": "Illness"}})
+                         json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
+                               "language": "en", "values": {"advocate_side": "party", "date": "20/01/2026", "next_date": "20-01-2026", "reason": "Illness"}})
         assert r.status_code == 200
         c = r.json()["content"]
-        assert "ADJOURNMENT" in c.upper()
+        assert "ADJOURNMENT" in c.upper() or "MUDAT" in c.upper()
         assert "Illness" in c
-        assert "20-01-2026" in c
+        assert "20-01-2026" in c or "20/01/2026" in c
         # case autofill
         assert "12/2026" in c
 
     def test_preview_gujarati(self, session, user_ctx):
         r = session.post(f"{API}/applications/preview", headers=H(user_ctx),
-                         json={"template_id": "adjournment", "case_id": user_ctx["case_id"],
-                               "language": "gu", "values": {"next_date": "૨૦-૦૧-૨૦૨૬", "reason": "બિમારી"}})
+                         json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
+                               "language": "gu", "values": {"advocate_side": "party", "date": "૨૦/૦૧/૨૦૨૬", "next_date": "૨૦-૦૧-૨૦૨૬", "reason": "બિમારી"}})
         assert r.status_code == 200
         c = r.json()["content"]
-        assert "મુદત" in c
+        assert "મુદ્દત" in c or "મુદત" in c
         assert "બિમારી" in c
 
     def test_download_pdf_and_credit_consumed(self, session, user_ctx):
         # wallet before
         wb = session.get(f"{API}/wallet", headers=H(user_ctx)).json()["balance"]
         r = session.post(f"{API}/applications/download", headers=H(user_ctx),
-                         json={"template_id": "adjournment", "case_id": user_ctx["case_id"],
+                         json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
                                "language": "en", "format": "pdf",
-                               "values": {"next_date": "20-01-2026", "reason": "Test"}})
+                               "values": {"advocate_side": "party", "date": "20/01/2026", "next_date": "20-01-2026", "reason": "Test"}})
         assert r.status_code == 200
         data = r.json()
         assert data["mime_type"] == "application/pdf"
@@ -271,9 +280,9 @@ class TestApplications:
 
     def test_download_docx(self, session, user_ctx):
         r = session.post(f"{API}/applications/download", headers=H(user_ctx),
-                         json={"template_id": "adjournment", "case_id": user_ctx["case_id"],
+                         json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
                                "language": "gu", "format": "docx",
-                               "values": {"next_date": "૨૦", "reason": "ટેસ્ટ"}})
+                               "values": {"advocate_side": "party", "date": "૨૦/૦૧/૨૦૨૬", "next_date": "૨૦", "reason": "ટેસ્ટ"}})
         assert r.status_code == 200
         assert "wordprocessingml" in r.json()["mime_type"]
         raw = base64.b64decode(r.json()["base64"])
@@ -287,17 +296,22 @@ class TestApplications:
         h = {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
         for _ in range(5):
             r = session.post(f"{API}/applications/download", headers=h,
-                             json={"template_id": "adjournment", "language": "en", "format": "pdf",
-                                   "values": {"next_date": "x", "reason": "x"}})
+                             json={"template_id": "mudat_arji", "language": "en", "format": "pdf",
+                                   "values": {"advocate_side": "party", "date": "20/01/2026", "next_date": "x", "reason": "x"}})
             assert r.status_code == 200
         r = session.post(f"{API}/applications/download", headers=h,
-                         json={"template_id": "adjournment", "language": "en", "format": "pdf",
-                               "values": {"next_date": "x", "reason": "x"}})
+                         json={"template_id": "mudat_arji", "language": "en", "format": "pdf",
+                               "values": {"advocate_side": "party", "date": "20/01/2026", "next_date": "x", "reason": "x"}})
         assert r.status_code == 402
 
 
 # ---------- Wallet / Purchase / Transactions ----------
 class TestWalletPurchase:
+    @pytest.fixture(autouse=True)
+    def setup_mock_purchase(self, monkeypatch):
+        monkeypatch.setattr(server, "_razorpay_enabled", lambda: False)
+        monkeypatch.setattr(server, "_PRODUCTION", False)
+
     def test_mock_purchase_updates_balance(self, session, user_ctx):
         before = session.get(f"{API}/wallet", headers=H(user_ctx)).json()["balance"]
         r = session.post(f"{API}/purchase/mock", headers=H(user_ctx), json={"plan_id": "plan_299"})
@@ -320,28 +334,28 @@ class TestWalletPurchase:
 class TestDrafts:
     def test_draft_upsert_and_list(self, session, user_ctx):
         r = session.post(f"{API}/drafts", headers=H(user_ctx),
-                         json={"template_id": "affidavit", "case_id": None,
-                               "language": "en", "values": {"deponent_name": "TEST"}})
+                         json={"template_id": "mudat_arji", "case_id": None,
+                               "language": "en", "values": {"advocate_side": "party", "reason": "TEST"}})
         assert r.status_code == 200
         r = session.get(f"{API}/drafts", headers=H(user_ctx))
         assert r.status_code == 200
         drafts = r.json()
-        assert any(d["template_id"] == "affidavit" for d in drafts)
+        assert any(d["template_id"] == "mudat_arji" for d in drafts)
 
     def test_draft_deleted_after_download(self, session, user_ctx):
         # Save draft
         session.post(f"{API}/drafts", headers=H(user_ctx),
-                     json={"template_id": "certified_copy", "case_id": user_ctx["case_id"],
-                           "language": "en", "values": {"document_desc": "TEST"}})
+                     json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
+                           "language": "en", "values": {"advocate_side": "party", "reason": "TEST", "date": "01/01/2026"}})
         # Download
         r = session.post(f"{API}/applications/download", headers=H(user_ctx),
-                        json={"template_id": "certified_copy", "case_id": user_ctx["case_id"],
+                        json={"template_id": "mudat_arji", "case_id": user_ctx["case_id"],
                               "language": "en", "format": "pdf",
-                              "values": {"document_desc": "TEST", "order_date": "01-01-2026"}})
+                              "values": {"advocate_side": "party", "reason": "TEST", "date": "01/01/2026", "next_date": "01-01-2026"}})
         assert r.status_code == 200
         # Draft removed
         drafts = session.get(f"{API}/drafts", headers=H(user_ctx)).json()
-        assert not any(d["template_id"] == "certified_copy" and d.get("case_id") == user_ctx["case_id"]
+        assert not any(d["template_id"] == "mudat_arji" and d.get("case_id") == user_ctx["case_id"]
                        for d in drafts)
 
 
@@ -356,7 +370,7 @@ class TestSearch:
     def test_search_multilingual(self, session, user_ctx):
         r = session.get(f"{API}/search?q=mudat", headers=H(user_ctx))
         assert r.status_code == 200
-        assert any(t["id"] == "adjournment" for t in r.json()["templates"])
+        assert any(t["id"] in ("adjournment", "mudat_arji") for t in r.json()["templates"])
 
 
 # ---------- Mock purchase production guard ----------

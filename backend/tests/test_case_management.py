@@ -1,8 +1,3 @@
-import server
-
-from tests.firestore_test_utils import FirestoreDBSurrogate
-mock_db = FirestoreDBSurrogate()
-db = FirestoreDBSurrogate()
 """Iteration 3: Case Management enhancements (search dropdowns, category filter,
 archive/restore, enriched labels, delete, catalog additions) + regression on auth/referral."""
 import os
@@ -15,33 +10,54 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 os.environ.setdefault("DB_NAME", "nyaysetu_test_cm")
 
-
 import server
-
 from starlette.testclient import TestClient
-app_client = TestClient(server.app)
 
-class TestClientWrapper:
+app_client = None
+
+class ClientWrapper:
+    __test__ = False
+    def __init__(self, client=None):
+        self._client = client
+
+    def _get(self):
+        return self._client or app_client
+
     def get(self, url, **kwargs):
         kwargs.pop("timeout", None)
-        return app_client.get(url, **kwargs)
+        return self._get().get(url, **kwargs)
+
     def post(self, url, **kwargs):
         kwargs.pop("timeout", None)
-        return app_client.post(url, **kwargs)
+        return self._get().post(url, **kwargs)
+
     def put(self, url, **kwargs):
         kwargs.pop("timeout", None)
-        return app_client.put(url, **kwargs)
+        return self._get().put(url, **kwargs)
+
     def delete(self, url, **kwargs):
         kwargs.pop("timeout", None)
-        return app_client.delete(url, **kwargs)
+        return self._get().delete(url, **kwargs)
 
-requests = TestClientWrapper()
 API = "/api"
 
 
 @pytest.fixture(scope="module")
 def s():
-    return requests
+    global app_client
+    with TestClient(server.app) as client:
+        app_client = client
+        if not server._CATALOG_MAPS_SYNCED:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(server.seed_catalogs())
+            finally:
+                loop.close()
+        try:
+            yield ClientWrapper(client)
+        finally:
+            app_client = None
 
 
 def _new_user(sess, referral_code=None):

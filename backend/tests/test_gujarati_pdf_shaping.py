@@ -62,10 +62,22 @@ def _glyph_name(font, gid):
         return f"gid{gid}"
 
 
+def _resolve_font_path(font_file: str) -> str:
+    from pathlib import Path
+    p = Path(font_file)
+    if p.exists():
+        return str(p)
+    backend_p = Path(__file__).resolve().parent.parent / font_file
+    if backend_p.exists():
+        return str(backend_p)
+    return font_file
+
+
 def _hb_glyph_names(text, font_file="fonts/Lohit-Gujarati.ttf"):
     from fontTools.ttLib import TTFont as FTFont
     import uharfbuzz as hb
 
+    font_file = _resolve_font_path(font_file)
     with open(font_file, "rb") as f:
         font_bytes = f.read()
     face = hb.Face(font_bytes)
@@ -159,7 +171,7 @@ class TestHarfBuzzConjunctShaping:
         # contain Latin letters and digits so nothing renders as a box.
         from fontTools.ttLib import TTFont as FTFont
         for font_file in ("fonts/NotoSansGujarati-Regular.ttf", "fonts/NotoSerifGujarati-Regular.ttf"):
-            cmap = FTFont(font_file).getBestCmap()
+            cmap = FTFont(_resolve_font_path(font_file)).getBestCmap()
             assert all(ord(c) in cmap for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"), font_file
             assert all(ord(c) in cmap for c in "abcdefghijklmnopqrstuvwxyz"), font_file
             assert all(ord(c) in cmap for c in "0123456789./-()"), font_file

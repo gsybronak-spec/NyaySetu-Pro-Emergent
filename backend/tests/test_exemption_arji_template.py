@@ -45,23 +45,25 @@ class _MockHTTPException(Exception):
         self.detail = detail
         super().__init__(f"{status_code}: {detail}")
 
-fastapi_mock = sys.modules['fastapi']
-fastapi_mock.FastAPI = _MockFastAPI
-fastapi_mock.APIRouter = _MockRouter
-fastapi_mock.HTTPException = _MockHTTPException
-fastapi_mock.Depends = lambda x: x
-fastapi_mock.Header = lambda *args, **kwargs: None
-fastapi_mock.Request = MagicMock
-fastapi_mock.Response = MagicMock
-fastapi_mock.Cookie = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('fastapi'), MagicMock):
+    fastapi_mock = sys.modules['fastapi']
+    fastapi_mock.FastAPI = _MockFastAPI
+    fastapi_mock.APIRouter = _MockRouter
+    fastapi_mock.HTTPException = _MockHTTPException
+    fastapi_mock.Depends = lambda x: x
+    fastapi_mock.Header = lambda *args, **kwargs: None
+    fastapi_mock.Request = MagicMock
+    fastapi_mock.Response = MagicMock
+    fastapi_mock.Cookie = lambda *args, **kwargs: None
 
 class _PydanticBaseModel:
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-sys.modules['pydantic'].BaseModel = _PydanticBaseModel
-sys.modules['pydantic'].Field = lambda *args, **kwargs: None
+if isinstance(sys.modules.get('pydantic'), MagicMock):
+    sys.modules['pydantic'].BaseModel = _PydanticBaseModel
+    sys.modules['pydantic'].Field = lambda *args, **kwargs: None
 
 from test_seed_data import TEMPLATES
 import doc_generator
@@ -381,7 +383,7 @@ class TestExemptionArjiTemplate(unittest.IsolatedAsyncioTestCase):
             tpl = asyncio.run(server._get_template_by_id(tid))
             self.assertIsNotNone(tpl, f"Failed to resolve template for id: {tid}")
             self.assertEqual(tpl.get("id"), "exemption_arji")
-            self.assertIn("હાજરી મુક્તિ આપવા બાબત", tpl.get("name_gu", ""))
+            self.assertTrue(any(x in tpl.get("name_gu", "") for x in ("હાજરી માફી", "હાજરી મુક્તિ")))
 
             pub = asyncio.run(server.get_template(tid))
             self.assertIsNotNone(pub, f"Failed to get_template for id: {tid}")
@@ -482,6 +484,7 @@ class TestExemptionArjiTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_name": "વિજયકુમાર શાહ",
             "advocate_for": "આરોપી",
             "absence_reason": "અચાનક બીમાર હોવાથી હાજર રહી શકે તેમ નથી",
+            "reason": "અચાનક બીમાર હોવાથી હાજર રહી શકે તેમ નથી",
             "date": "2026-09-28",
             "place": "રાજકોટ",
             "advocate_name": "કિશન રાવલ",
