@@ -46,7 +46,6 @@ API = "/api"
 ADMIN = "/api/admin"
 
 EXPECTED_TITLES = {
-    "aanke_padvani_arji": "દસ્તાવેજને આંકે પાડવાની અરજી",
     "certified_report": "પ્રમાણિત નકલ માટે અરજી",
     "dd_karavani_arji": "કેસ/દાવો ડિસમિસ કરવાની અરજી",
     "document_return": "દસ્તાવેજ પરત મેળવવાની અરજી",
@@ -222,10 +221,10 @@ class TestCaseInheritance:
 
     def test_advocate_side_party_mapping(self, user):
         r = app_client.post(f"{API}/applications/preview", headers=_hdr(user["token"]), json={
-            "template_id": "aanke_padvani_arji",
+            "template_id": "document_return",
             "case_id": user["case_with_taluka"],
             "language": "gu",
-            "values": {"advocate_side": "party", "document_details": "આંક ૩ થી રજૂ કરેલ દસ્તાવેજ"},
+            "values": {"advocate_side": "party", "case_status": "ચાલુ", "document_name": "આંક ૩ થી રજૂ કરેલ દસ્તાવેજ"},
         })
         assert r.status_code == 200, r.text
         c = r.json()["content"]

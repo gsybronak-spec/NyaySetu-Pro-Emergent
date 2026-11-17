@@ -247,6 +247,20 @@ _firebase_certs_fetched_at: Optional[float] = None
 # ADMIN-CONFIGURABLE OPERATIONAL SETTINGS (Phase 40)
 # DB values override these defaults (which honor env vars where applicable).
 # ============================================================
+PROTECTED_TEMPLATE_IDS = {
+    "certified_copy_application",
+    "closing_purshish",
+    "closing_argument_right_application",
+    "reopen_right_to_argue_application",
+    "exemption_arji",
+    "dd_karavani_arji",
+    "mudat_arji",
+    "vakilatnama_criminal",
+    "vakilatnama_civil",
+}
+
+CANONICAL_ACTIVE_TEMPLATE_WHITELIST = tuple(sorted(PROTECTED_TEMPLATE_IDS | {"document_exhibit_application"}))
+
 _SETTING_DEFAULTS = {
     "signup_credits": 5,
     "default_page_size": "A4",
@@ -264,7 +278,6 @@ _SETTING_DEFAULTS = {
         "document_parat_levani_arji",
         "certified_report",
         "samadhan_purshish",
-        "aanke_padvani_arji",
         "closing_purshish",
         "saaxi_ne_summons",
         "kam_board_par_levani_arji",
@@ -2656,7 +2669,15 @@ async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
 
 async def _get_deleted_template_ids() -> set[str]:
     """Return set of permanently deleted template IDs, expanding base and variants."""
-    raw_ids = await _get_deleted_catalog_ids("template")
+    raw_ids = set(await _get_deleted_catalog_ids("template"))
+    if db is not None:
+        try:
+            docs = [d.to_dict() async for d in db.collection("deleted_templates").stream()]
+            for d in docs:
+                if d and d.get("id"):
+                    raw_ids.add(d["id"])
+        except Exception as e:
+            logger.warning(f"Failed to fetch deleted_templates: {e}")
     expanded = set()
     for tid in raw_ids:
         if not tid or not isinstance(tid, str):
@@ -2667,7 +2688,7 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3656,7 +3677,7 @@ async def _get_published_templates() -> list:
     db_templates = []
     if db is not None:
         db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
-        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids and t.get("base_key") not in deleted_ids and t.get("slug") not in deleted_ids]
         for t in db_templates:
             if (t.get("id") == "document_exhibit_application" or t.get("template_id") == "document_exhibit_application"):
                 ex_seed = _get_canonical_exhibit_template()
@@ -4112,7 +4133,7 @@ async def _get_published_templates() -> list:
         for cid, cseed in canonicals_by_id.items():
             if not any(x.get("id") == cid for x in v2_items):
                 v2_items.append(cseed)
-        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids and t.get("base_key") not in deleted_ids and t.get("slug") not in deleted_ids]
 
     db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
@@ -4132,7 +4153,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
     cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
         deleted_ids.discard(active_id)
         deleted_ids.discard(f"{active_id}_gu")
         deleted_ids.discard(f"{active_id}_en")
@@ -6661,7 +6682,7 @@ async def get_catalog_template_order():
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -9365,7 +9386,7 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in ("document_exhibit_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"):
+    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
         if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
             order.append(active_id)
     return {"template_order": order}
@@ -10104,23 +10125,50 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
     """Permanently delete a template from db.templates.
     CRITICAL RULE: NEVER delete db.template_revisions, ensuring historical drafts remain 100% resolvable."""
     await _ensure_seed_complete()
-    t = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(template_id).get())
-    if not t:
-        raise HTTPException(404, "Template not found")
-    
     base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
+    if template_id in PROTECTED_TEMPLATE_IDS or base_id in PROTECTED_TEMPLATE_IDS:
+        raise HTTPException(403, f"Template '{template_id}' is a protected canonical template and cannot be deleted.")
+
+    admin_id = admin.get("id", "super_admin") if isinstance(admin, dict) else str(admin)
     target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
-    for tid in target_ids:
-        await db.collection('templates').document(tid).delete()
-        if db is not None:
+
+    t = None
+    if db is not None:
+        _snap = await db.collection('templates').document(template_id).get()
+        t = _snap.to_dict() if _snap.exists else None
+        if not t and base_id != template_id:
+            _snap_b = await db.collection('templates').document(base_id).get()
+            t = _snap_b.to_dict() if _snap_b.exists else None
+
+    if not t:
+        seed = next((s for s in _get_all_seed_templates() if s.get("id") in (template_id, base_id) or s.get("base_key") in (template_id, base_id)), None)
+        if seed:
+            t = seed
+        else:
+            deleted_so_far = await _get_deleted_template_ids()
+            if template_id in deleted_so_far or base_id in deleted_so_far:
+                return {
+                    "success": True,
+                    "message": f"Template '{template_id}' is already permanently deleted from catalog.",
+                }
+            raise HTTPException(404, "Template not found")
+
+    if db is not None:
+        for tid in target_ids:
+            await db.collection('templates').document(tid).delete()
             tombstone_id = f"template:{tid}"
             await db.collection("deleted_catalog_items").document(tombstone_id).set({
                 "id": tid,
                 "kind": "template",
                 "deleted_at": now().isoformat(),
-                "deleted_by": admin["id"],
+                "deleted_by": admin_id,
             })
-    if db is not None:
+            await db.collection("deleted_templates").document(tid).set({
+                "id": tid,
+                "deleted_at": now().isoformat(),
+                "deleted_by": admin_id,
+            })
+
         curr_order = await _get_setting("template_display_order")
         if isinstance(curr_order, list):
             filtered_order = [x for x in curr_order if x not in target_ids]
@@ -10128,7 +10176,7 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
                 await db.collection("settings").document("template_display_order").set({
                     "value": filtered_order,
                     "updated_at": now().isoformat(),
-                    "updated_by": admin["id"],
+                    "updated_by": admin_id,
                 }, merge=True)
                 invalidate_settings_cache("template_display_order")
 
@@ -10493,7 +10541,7 @@ async def seed_templates(force: bool = False) -> dict:
                 "skipped": template_count,
                 "errors": 0,
                 "created_ids": [],
-                "skipped_ids": [t["id"] for t in all_seeds],
+                "skipped_ids": [t.get("id", t.get("base_key")) for t in all_seeds],
             }
 
     ts = now().isoformat()
@@ -10502,8 +10550,10 @@ async def seed_templates(force: bool = False) -> dict:
     skipped_ids = []
     deleted_template_ids = await _get_deleted_template_ids()
     for t in all_seeds:
-        if t["id"] in deleted_template_ids:
-            skipped_ids.append(t["id"])
+        tid = t.get("id") or t.get("template_id") or t.get("base_key")
+        base = t.get("base_key") or (tid[:-3] if isinstance(tid, str) and tid.endswith(("_gu", "_en")) else tid)
+        if tid in deleted_template_ids or base in deleted_template_ids or f"{base}_gu" in deleted_template_ids or f"{base}_en" in deleted_template_ids:
+            skipped_ids.append(tid)
             continue
         existing = (lambda _s: _s.to_dict() if _s.exists else None)(await db.collection('templates').document(t["id"]).get())
         if existing and (existing.get("content_en") or existing.get("content_gu")):

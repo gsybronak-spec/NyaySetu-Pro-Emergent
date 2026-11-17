@@ -147,7 +147,7 @@ EXPECTED_IDS = [
     "inspection", "compromise", "withdrawal", "amendment", "surety", "early_hearing",
     "document_return_application",
     # v2 application catalog (the lawyer's final drafts)
-    "aanke_padvani_arji", "certified_report", "dd_karavani_arji", "document_return",
+    "certified_report", "dd_karavani_arji", "document_return",
     "document_on_record", "closing_purshish", "hazari_mafi_arji", "fs_haq_bandh",
     "fs_haq_khol", "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
     "samadhan_purshish", "ulat_tapas_bandh", "ulat_tapas_khol", "undertaking",

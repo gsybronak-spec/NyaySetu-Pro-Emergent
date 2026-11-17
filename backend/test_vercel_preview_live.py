@@ -161,8 +161,8 @@ async def test_07_templates_catalog_and_canonical_21():
         templates = res.json()
         assert len(templates) == 45, f"Expected 45 templates, got {len(templates)}"
 
-        canonical_21 = [
-            "aanke_padvani_arji", "certified_report", "dd_karavani_arji",
+        canonical_20 = [
+            "certified_report", "dd_karavani_arji",
             "document_return", "document_on_record", "closing_purshish",
             "hazari_mafi_arji", "fs_haq_bandh", "fs_haq_khol",
             "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
@@ -171,7 +171,7 @@ async def test_07_templates_catalog_and_canonical_21():
             "warrant_hathbido", "warrant_rad"
         ]
         template_map = {t["id"]: t for t in templates}
-        for cid in canonical_21:
+        for cid in canonical_20:
             assert cid in template_map, f"Canonical template {cid} missing from live catalog"
             t = template_map[cid]
             assert t.get("name_en"), f"Template {cid} missing name_en"

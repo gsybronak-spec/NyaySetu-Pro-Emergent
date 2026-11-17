@@ -3,7 +3,6 @@ import { searchTemplatePairs } from "@/src/utils/templateSearch";
 
 // 21 Authoritative base keys
 const AUTHORITATIVE_21_BASE_KEYS = new Set([
-  "aanke_padvani_arji",
   "certified_report",
   "closing_purshish",
   "dd_karavani_arji",

@@ -119,8 +119,8 @@ async def test_08_templates_catalog_count():
 
 async def test_09_all_21_canonical_templates_retrieval():
     """Verify all 21 canonical NyaySetu Pro templates in real Firestore."""
-    CANONICAL_21 = [
-        "aanke_padvani_arji", "certified_report", "dd_karavani_arji",
+    CANONICAL_20 = [
+        "certified_report", "dd_karavani_arji",
         "document_return", "document_on_record", "closing_purshish",
         "hazari_mafi_arji", "fs_haq_bandh", "fs_haq_khol",
         "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
@@ -128,7 +128,7 @@ async def test_09_all_21_canonical_templates_retrieval():
         "undertaking", "vakilatnama_civil", "vakilatnama_criminal",
         "warrant_hathbido", "warrant_rad"
     ]
-    for tid in CANONICAL_21:
+    for tid in CANONICAL_20:
         snap = await server.db.collection("templates").document(tid).get()
         assert snap.exists, f"Canonical template '{tid}' missing in real Firestore"
         doc = snap.to_dict()

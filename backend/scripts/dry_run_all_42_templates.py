@@ -33,7 +33,6 @@ SOURCE_ODT_DIR = r"C:\Users\HP\Downloads\nyay templets"
 
 # Mapping base_key to source ODT filename
 ODT_MAP = {
-    "aanke_padvani_arji": "Aanke padvani arji.odt",
     "certified_report": "Certified Report.odt",
     "closing_purshish": "Closing Purshish.odt",
     "dd_karavani_arji": "DD karavani arji.odt",

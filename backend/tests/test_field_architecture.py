@@ -85,12 +85,12 @@ def mock_case_criminal():
     }
 
 
-# Test 1: All 21 templates load successfully and have date as the last field
-def test_all_21_templates_structure():
-    assert len(TEMPLATES_V2) == 21
+# Test 1: All 20 templates load successfully and have date as the last field
+def test_all_20_templates_structure():
+    assert len(TEMPLATES_V2) == 20
     template_ids = [t["id"] for t in TEMPLATES_V2]
     expected_ids = [
-        "aanke_padvani_arji", "certified_report", "dd_karavani_arji", "document_return",
+        "certified_report", "dd_karavani_arji", "document_return",
         "document_on_record", "closing_purshish", "hazari_mafi_arji", "fs_haq_bandh",
         "fs_haq_khol", "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
         "samadhan_purshish", "ulat_tapas_bandh", "ulat_tapas_khol", "undertaking",

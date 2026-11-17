@@ -119,9 +119,9 @@ async def test_templates_catalog_count(real_fs_client):
     assert len(docs) == 45, f"Expected 45 templates in real Firestore, got {len(docs)}"
 
 @pytest.mark.asyncio
-async def test_all_21_canonical_templates_retrieval(real_fs_client):
-    CANONICAL_21 = [
-        "aanke_padvani_arji", "certified_report", "dd_karavani_arji",
+async def test_all_20_canonical_templates_retrieval(real_fs_client):
+    CANONICAL_20 = [
+        "certified_report", "dd_karavani_arji",
         "document_return", "document_on_record", "closing_purshish",
         "hazari_mafi_arji", "fs_haq_bandh", "fs_haq_khol",
         "jamin_bond", "kam_board", "mudat_arji", "saaxi_summons",
@@ -129,7 +129,7 @@ async def test_all_21_canonical_templates_retrieval(real_fs_client):
         "undertaking", "vakilatnama_civil", "vakilatnama_criminal",
         "warrant_hathbido", "warrant_rad"
     ]
-    for tid in CANONICAL_21:
+    for tid in CANONICAL_20:
         snap = await real_fs_client.collection("templates").document(tid).get()
         assert snap.exists, f"Template '{tid}' missing in real Firestore"
         doc = snap.to_dict()

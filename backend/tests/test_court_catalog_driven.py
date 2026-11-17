@@ -226,7 +226,7 @@ class TestCourtCatalogDriven(unittest.TestCase):
     def test_document_generation_with_resolved_court(self):
         """Verify ReportLab PDF generation correctly substitutes and renders {{court}} in document_exhibit_application."""
         import base64
-        tpl = next((t for t in AUTH_BASE_TEMPLATES if t["base_key"] == "aanke_padvani_arji"), None)
+        tpl = next((t for t in AUTH_BASE_TEMPLATES if t["base_key"] == "dd_karavani_arji"), None)
         self.assertIsNotNone(tpl)
 
         court_name_gu = "પ્રિન્સિપાલ ડિસ્ટ્રિક્ટ એન્ડ સેશન્સ જજ"

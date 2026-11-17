@@ -353,7 +353,7 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
         }
         # Context missing police_station
         ctx_missing = {"reason": "Medical grounds"}
-        with self.assertRaises(_MockHTTPException) as ctx_err:
+        with self.assertRaises(server.HTTPException) as ctx_err:
             server.validate_template_requirements(mock_template_with_required_ps, ctx_missing, language="en")
         self.assertEqual(ctx_err.exception.status_code, 400)
         self.assertIn("Police Station", ctx_err.exception.detail)
@@ -392,7 +392,7 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
                 custom_court_name_gu=None,
                 custom_court_name_en=None,
             )
-            with self.assertRaises(_MockHTTPException):
+            with self.assertRaises(server.HTTPException):
                 await server.create_case(req_invalid, user=self.test_user)
         self.loop.run_until_complete(_run())
 
@@ -425,16 +425,16 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
                 "party_role": "plaintiff",
                 "opposite_party_role": "defendant",
             }
-            aanke_tpl = next(t for t in TEMPLATES_V2 if t["id"] == "aanke_padvani_arji")
+            cert_tpl = next(t for t in TEMPLATES_V2 if t["id"] == "certified_report")
             ctx = await server.build_render_context(
                 self.test_user,
                 case_doc,
-                {"advocate_side": "party", "document_details": "બાનાખતની અસલ નકલ"},
+                {"advocate_side": "party", "documents_details": "બાનાખતની અસલ નકલ"},
                 language="gu"
             )
-            server.validate_template_requirements(aanke_tpl, ctx, language="gu")
-            rendered = render_template(aanke_tpl["content_gu"], ctx)
-            self.assertIn("દસ્તાવેજને આંકે પાડવાની અરજી", rendered)
+            server.validate_template_requirements(cert_tpl, ctx, language="gu")
+            rendered = render_template(cert_tpl["content_gu"], ctx)
+            self.assertIn("પ્રમાણિત નકલ માટે અરજી", rendered)
             self.assertIn("789/2026", rendered)
             self.assertIn("Bharat Patel", rendered)
             self.assertIn("બાનાખતની અસલ નકલ", rendered)

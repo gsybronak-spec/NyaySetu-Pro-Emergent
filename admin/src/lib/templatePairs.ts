@@ -97,14 +97,6 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
     category: 'General',
   },
   {
-    baseKey: 'aanke_padvani_arji',
-    guId: 'aanke_padvani_arji_gu',
-    enId: 'aanke_padvani_arji_en',
-    name_gu: 'આંક પાડવાની અરજી',
-    name_en: 'Application to Exhibit Document',
-    category: 'General',
-  },
-  {
     baseKey: 'closing_purshish',
     guId: 'closing_purshish_gu',
     enId: 'closing_purshish_en',
