@@ -488,7 +488,8 @@ export const api = {
   favCourts: () => request("/favourites/courts"),
   addFavCourt: (id: string) => request(`/favourites/courts/${id}`, "POST"),
   removeFavCourt: (id: string) => request(`/favourites/courts/${id}`, "DELETE"),
-  plans: () => request("/catalog/plans"),
+  plans: (forceRefresh = false) =>
+    request("/catalog/plans", "GET", undefined, undefined, false, forceRefresh),
   quote: () => request("/catalog/quote"),
   createCase: async (data: any) => {
     const res = await request("/cases", "POST", data);

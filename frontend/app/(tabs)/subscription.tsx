@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -7,6 +7,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
+import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
@@ -118,16 +119,28 @@ export default function Subscription() {
   const { user } = useAuth();
 
   // Instant render from cache — 0ms blank delay
-  const [plans, setPlans] = useState<any[]>(() => getCachedPlans());
+  const [plans, setPlans] = useState<any[]>(() => catalogCache.peekPlans ? catalogCache.peekPlans() : getCachedPlans());
   const [wallet, setWallet] = useState(() => getCachedWallet() || {
     balance: user?.wallet_balance ?? 0,
     total_used: user?.total_credits_used ?? 0,
   });
   const [buying, setBuying] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Proactively prefetch Razorpay Checkout script in background
   useEffect(() => {
     preloadRazorpayScript();
+  }, []);
+
+  // Reactive subscription: auto-update plans when Admin changes prices or plans
+  useEffect(() => {
+    const unsub = catalogCache.subscribe("plans", (freshPlans) => {
+      if (Array.isArray(freshPlans) && freshPlans.length > 0) {
+        setPlans(freshPlans);
+        setCachedPlans(freshPlans);
+      }
+    });
+    return () => unsub();
   }, []);
 
   const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
@@ -137,7 +150,7 @@ export default function Subscription() {
     (async () => {
       try {
         const [p, w] = await Promise.all([
-          api.plans().catch(() => getCachedPlans()),
+          catalogCache.getPlans().catch(() => getCachedPlans()),
           api.wallet().catch(() => getCachedWallet() || { balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }),
         ]);
         if (active && Array.isArray(p) && p.length > 0) {
@@ -156,6 +169,25 @@ export default function Subscription() {
       active = false;
     };
   }, [user?.wallet_balance]));
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const [p, w] = await Promise.all([
+        catalogCache.getPlans(true),
+        api.wallet().catch(() => null),
+      ]);
+      if (Array.isArray(p) && p.length > 0) {
+        setPlans(p);
+        setCachedPlans(p);
+      }
+      if (w && typeof w === "object") {
+        setWallet(w);
+        setCachedWallet(w);
+      }
+    } catch {}
+    setRefreshing(false);
+  };
 
   const buy = async (id: string) => {
     setBuying(id);
@@ -307,6 +339,7 @@ export default function Subscription() {
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.brandPrimary} />}
       >
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}

@@ -63,10 +63,12 @@ const { runCatalogPaginationTests } = require("./catalog_pagination.test.ts");
 runCatalogPaginationTests();
 const { runPhase4CDynamicAlignmentTests } = require("./phase4c_dynamic_alignment.test.ts");
 const { runPhase4DAdminInvalidationTests } = require("./phase4d_admin_invalidation.test.ts");
+const { runComprehensive10xStressSyncTests } = require("./comprehensive_10x_stress_sync.test.ts");
 
 async function main() {
   await runPhase4CDynamicAlignmentTests();
   await runPhase4DAdminInvalidationTests();
+  await runComprehensive10xStressSyncTests();
   process.exit(0);
 }
 

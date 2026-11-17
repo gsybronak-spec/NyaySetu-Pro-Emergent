@@ -13,6 +13,7 @@
 
 import { api, invalidateApiCache } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
+import { DEFAULT_PLANS, CatalogPlan } from "@/src/constants/plans";
 import {
   SEED_DISTRICTS,
   SEED_TALUKAS,
@@ -160,8 +161,8 @@ async function fetchCatalogWithSWR<T>(
 
   inFlightRequests.set(cacheKey, requestPromise);
 
-  // If we have seed data and not strictly waiting, we can return seed while network executes
-  if (seedData && Array.isArray(seedData) && seedData.length > 0 && !memoryCache.has(cacheKey)) {
+  // If we have seed data and not strictly waiting (and not force refreshing), we can return seed while network executes
+  if (!forceRefresh && seedData && Array.isArray(seedData) && seedData.length > 0 && !memoryCache.has(cacheKey)) {
     memoryCache.set(cacheKey, seedData);
     // Let caller proceed immediately with authoritative seed while network finishes
     requestPromise.then((fresh) => {
@@ -296,6 +297,28 @@ export const catalogCache = {
     );
   },
 
+  getPlans: (forceRefresh = false): Promise<CatalogPlan[]> => {
+    if (forceRefresh) {
+      invalidateApiCache("/catalog/plans");
+      invalidateApiCache("/plans");
+      memoryCache.delete("plans");
+      inFlightRequests.delete("plans");
+    }
+    return fetchCatalogWithSWR(
+      "plans",
+      async () => {
+        const res = await api.plans(forceRefresh);
+        if (!Array.isArray(res)) {
+          throw new Error("Invalid plans response from server");
+        }
+        return res;
+      },
+      DEFAULT_PLANS,
+      forceRefresh,
+      true
+    );
+  },
+
   /**
    * Synchronous peek into memory cache. Returns fallback seed if not in memory.
    */
@@ -309,6 +332,7 @@ export const catalogCache = {
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
   peekPublishedTemplates: (): any[] | null => memoryCache.get("published_templates") ?? null,
   peekTemplateOrder: (): string[] | null => memoryCache.get("template_order") ?? null,
+  peekPlans: (): CatalogPlan[] => memoryCache.get("plans") || DEFAULT_PLANS,
 
   subscribe: subscribeCatalog,
 
@@ -333,6 +357,7 @@ export const catalogCache = {
       catalogCache.getCaseTypes(true),
       catalogCache.getLaws(true),
       catalogCache.getCaseForms(true),
+      catalogCache.getPlans(true),
     ]);
   },
 
@@ -363,6 +388,11 @@ export function handleExternalInvalidation(component?: string) {
     memoryCache.delete("template_order");
     invalidateApiCache("/catalog/template-order");
     catalogCache.getTemplateOrder(true).catch(() => {});
+  } else if (component === "plans") {
+    memoryCache.delete("plans");
+    invalidateApiCache("/catalog/plans");
+    invalidateApiCache("/plans");
+    catalogCache.getPlans(true).catch(() => {});
   } else if (component === "catalog" || component === "case_forms" || component === "settings") {
     catalogCache.revalidateAll().catch(() => {});
   } else {

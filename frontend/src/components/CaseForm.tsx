@@ -232,6 +232,25 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     catalogCache.getLaws().then(setLaws);
     catalogCache.getDistricts().then(setDistricts);
     catalogCache.getFavCourts().then(setFavCourts);
+
+    const unsubCT = catalogCache.subscribe("case_types", (fresh) => {
+      if (Array.isArray(fresh)) setCaseTypes(fresh);
+    });
+    const unsubLaws = catalogCache.subscribe("laws", (fresh) => {
+      if (Array.isArray(fresh)) setLaws(fresh);
+    });
+    const unsubDist = catalogCache.subscribe("districts", (fresh) => {
+      if (Array.isArray(fresh)) setDistricts(fresh);
+    });
+    const unsubFav = catalogCache.subscribe("fav_courts", (fresh) => {
+      if (Array.isArray(fresh)) setFavCourts(fresh);
+    });
+    return () => {
+      unsubCT();
+      unsubLaws();
+      unsubDist();
+      unsubFav();
+    };
   }, []);
 
   useEffect(() => {
@@ -245,6 +264,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           }
         })
         .catch(() => setDynamicFields([]));
+
+      const unsubCfg = catalogCache.subscribe(`case_form_cfg:${form.case_type_id}`, (cfg) => {
+        if (cfg && Array.isArray(cfg.fields)) {
+          setDynamicFields(cfg.fields);
+        }
+      });
+      return () => unsubCfg();
     }
   }, [form.case_type_id]);
 
