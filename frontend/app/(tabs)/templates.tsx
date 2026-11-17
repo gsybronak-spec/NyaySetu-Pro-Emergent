@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
@@ -65,6 +65,36 @@ export default function Templates() {
       active = false;
     };
   }, []);
+
+  // Reactive subscription: automatically re-render when catalog cache updates or background SWR completes
+  useEffect(() => {
+    const unsubTpls = catalogCache.subscribe("published_templates", (freshTpls) => {
+      if (Array.isArray(freshTpls)) {
+        setPublishedTemplates(freshTpls);
+      }
+    });
+    const unsubOrder = catalogCache.subscribe("template_order", (freshOrder) => {
+      if (Array.isArray(freshOrder)) {
+        setTemplateOrder(freshOrder);
+      }
+    });
+    return () => {
+      unsubTpls();
+      unsubOrder();
+    };
+  }, []);
+
+  // Re-check catalog on screen focus to ensure fresh state if updated while navigated away
+  useFocusEffect(
+    useCallback(() => {
+      catalogCache.getPublishedTemplates().then((tpls) => {
+        if (Array.isArray(tpls)) setPublishedTemplates(tpls);
+      }).catch(() => {});
+      catalogCache.getTemplateOrder().then((order) => {
+        if (Array.isArray(order)) setTemplateOrder(order);
+      }).catch(() => {});
+    }, [])
+  );
 
   const orderedBasePairs = useMemo(() => {
     return getActiveTemplatePairs(publishedTemplates, templateOrder);

@@ -33,8 +33,18 @@ export default function CaseDetail() {
     catalogCache.getTemplateOrder().then((order) => {
       if (active && Array.isArray(order)) setTemplateOrder(order);
     }).catch(() => {});
+
+    const unsubTpls = catalogCache.subscribe("published_templates", (freshTpls) => {
+      if (active && Array.isArray(freshTpls)) setPublishedTemplates(freshTpls);
+    });
+    const unsubOrder = catalogCache.subscribe("template_order", (freshOrder) => {
+      if (active && Array.isArray(freshOrder)) setTemplateOrder(freshOrder);
+    });
+
     return () => {
       active = false;
+      unsubTpls();
+      unsubOrder();
     };
   }, []);
 

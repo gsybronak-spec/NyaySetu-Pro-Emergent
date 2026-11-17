@@ -402,12 +402,11 @@ def _setting_type(key: str):
     return str
 
 
-_SETTINGS_CACHE: dict = {
-    k: {"value": v, "expires_at": time.time() + 300.0}
-    for k, v in _SETTING_DEFAULTS.items()
-}
+# Settings cache starts unpopulated so cold starts fetch authoritative values from Firestore.
+# Defaults are strictly used when the Firestore document does not exist.
+_SETTINGS_CACHE: dict = {}
 _SETTINGS_CACHE_LOCK = threading.Lock()
-_SETTINGS_CACHE_TTL_SEC = 300.0
+_SETTINGS_CACHE_TTL_SEC = 60.0
 
 _CACHE_REVISIONS: dict[str, int] = {"templates": 0, "catalog": 0, "plans": 0, "settings": 0}
 _LAST_REVISION_CHECK_TS: float = 0.0
@@ -417,6 +416,22 @@ _REVISION_CHECK_INTERVAL_SEC: float = 10.0
 def _record_local_revision_bump(component: str) -> None:
     with _REVISION_CHECK_LOCK:
         _CACHE_REVISIONS[component] = _CACHE_REVISIONS.get(component, 0) + 1
+
+def _invalidate_local_component_cache(component: str) -> None:
+    if component == "settings":
+        invalidate_settings_cache()
+    elif component == "templates":
+        fn = globals().get("invalidate_published_templates_cache")
+        if fn:
+            fn()
+    elif component == "catalog":
+        fn = globals().get("_invalidate_catalog_cache")
+        if fn:
+            fn()
+    elif component == "plans":
+        fn = globals().get("invalidate_plans_cache")
+        if fn:
+            fn()
 
 async def _commit_batch_with_revision(batch, component: str, extra_components: Optional[list] = None) -> None:
     """Atomically commit a Firestore batch containing data writes and the cache revision increment(s).
@@ -434,9 +449,11 @@ async def _commit_batch_with_revision(batch, component: str, extra_components: O
     if hasattr(commit_res, "__await__"):
         await commit_res
     _record_local_revision_bump(component)
+    _invalidate_local_component_cache(component)
     if extra_components:
         for ec in extra_components:
             _record_local_revision_bump(ec)
+            _invalidate_local_component_cache(ec)
 
 async def _bump_cache_revision(component: str) -> None:
     """Increment component cache revision in Firestore and update local revision.
@@ -449,6 +466,7 @@ async def _bump_cache_revision(component: str) -> None:
             merge=True
         )
         _record_local_revision_bump(component)
+        _invalidate_local_component_cache(component)
     except Exception as e:
         logger.warning(f"Failed to increment cache revision for {component}: {e}")
 
@@ -2852,7 +2870,7 @@ _CATALOG_CACHE_LOCK = threading.Lock()
 _CATALOG_CACHE_TTL_SEC: float = 60.0
 
 def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
-    global _CATALOG_CACHE, _CATALOG_CACHE_EXPIRES
+    global _CATALOG_CACHE, _CATALOG_CACHE_EXPIRES, _CATALOG_MAPS_SYNCED
     with _CATALOG_CACHE_LOCK:
         if kind:
             _CATALOG_CACHE.pop(kind, None)
@@ -2860,6 +2878,7 @@ def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
         else:
             _CATALOG_CACHE.clear()
             _CATALOG_CACHE_EXPIRES.clear()
+    _CATALOG_MAPS_SYNCED = False
 
 
 async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
@@ -2953,6 +2972,31 @@ async def _load_catalog(kind: str) -> list:
         with _CATALOG_CACHE_LOCK:
             _CATALOG_CACHE[kind] = items
             _CATALOG_CACHE_EXPIRES[kind] = now_ts + _CATALOG_CACHE_TTL_SEC
+        if kind == "districts":
+            for d_item in items:
+                if isinstance(d_item, dict) and d_item.get("id"):
+                    _DISTRICT_MAP[d_item["id"]] = d_item
+            _VALID_DISTRICT_IDS.update(_DISTRICT_MAP.keys())
+        elif kind == "talukas":
+            for t_item in items:
+                if isinstance(t_item, dict) and t_item.get("id"):
+                    _TALUKA_MAP[t_item["id"]] = t_item
+            _VALID_TALUKA_IDS.update(_TALUKA_MAP.keys())
+        elif kind == "case-types":
+            for ct_item in items:
+                if isinstance(ct_item, dict) and ct_item.get("id"):
+                    _CASE_TYPE_MAP[ct_item["id"]] = ct_item
+            _VALID_CASE_TYPE_IDS.update(_CASE_TYPE_MAP.keys())
+        elif kind == "laws":
+            for l_item in items:
+                if isinstance(l_item, dict) and l_item.get("id"):
+                    _LAW_MAP[l_item["id"]] = l_item
+            _VALID_LAW_IDS.update(_LAW_MAP.keys())
+        elif kind == "police-stations":
+            for ps_item in items:
+                if isinstance(ps_item, dict) and ps_item.get("id"):
+                    _PS_MAP[ps_item["id"]] = ps_item
+            _VALID_PS_IDS.update(_PS_MAP.keys())
         return list(items)
     except HTTPException:
         raise
@@ -2968,6 +3012,31 @@ async def _load_catalog(kind: str) -> list:
 
 
 _CATALOG_MAPS_SYNCED: bool = False
+_CATALOG_MAPS_LOCK = None
+
+
+def _get_catalog_maps_lock():
+    global _CATALOG_MAPS_LOCK
+    if _CATALOG_MAPS_LOCK is None:
+        _CATALOG_MAPS_LOCK = asyncio.Lock()
+    return _CATALOG_MAPS_LOCK
+
+
+async def _ensure_catalog_maps_synced() -> None:
+    """Ensure in-memory catalog maps are hydrated from Firestore at least once per container.
+    Uses an async lock to prevent duplicate concurrent reads on cold starts.
+    Preserves existing in-memory maps if database read fails."""
+    global _CATALOG_MAPS_SYNCED
+    if _CATALOG_MAPS_SYNCED or db is None:
+        return
+    lock = _get_catalog_maps_lock()
+    async with lock:
+        if _CATALOG_MAPS_SYNCED:
+            return
+        try:
+            await _refresh_catalog_maps()
+        except Exception as err:
+            logger.warning(f"Lazy catalog maps hydration failed (retaining existing in-memory maps): {err}")
 
 
 def _init_default_catalog_maps() -> None:
@@ -3611,16 +3680,69 @@ async def _get_published_templates() -> list:
 
     deleted_ids = await _get_deleted_template_ids()
     db_templates = []
+    non_published_templates = []
     if db is not None:
-        db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
-        db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+        try:
+            db_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "==", "published")).limit(1000).stream()]
+            db_templates = [t for t in db_templates if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids]
+        except Exception as e:
+            logger.warning(f"Failed to query published templates: {e}")
+        try:
+            non_published_templates = [d.to_dict() async for d in db.collection("templates").where(filter=firestore.FieldFilter("status", "in", ["draft", "archived"])).limit(1000).stream()]
+        except Exception:
+            non_published_templates = []
 
     canonical_seeds_all = _get_all_seed_templates()
     canonical_map = {t["id"]: t for t in canonical_seeds_all if t.get("id")}
 
-    # Exclude deleted templates and legacy _gu / _en variants
     filtered_db_templates = []
     seen_canonical = set()
+
+    # 1. Process non-published templates: honor explicit draft / archived state without ghost resurrection
+    for t in non_published_templates:
+        status = t.get("status")
+        if status not in ("draft", "archived"):
+            continue
+        tid = t.get("id") or t.get("template_id")
+        if not tid or tid in deleted_ids:
+            continue
+        canon_id = resolve_canonical_template_id(tid) or tid
+        seen_canonical.add(canon_id)
+        seen_canonical.add(tid)
+        if status == "archived":
+            # Explicitly archived: stays hidden, never resurrect from canonical seed constants
+            continue
+        if status == "draft":
+            # Draft version: if a previous published revision exists, serve that version to lawyers
+            curr_ver = t.get("version") or 1
+            if curr_ver > 1 and db is not None:
+                prev_ver = curr_ver - 1
+                rev_doc = None
+                for doc_key in (f"{canon_id}_{prev_ver}", f"{tid}_{prev_ver}"):
+                    try:
+                        _snap = await db.collection("template_revisions").document(doc_key).get()
+                        if _snap.exists:
+                            rev_doc = _snap.to_dict()
+                            break
+                    except Exception:
+                        pass
+                if rev_doc:
+                    rev_status = rev_doc.get("metadata", {}).get("status") or rev_doc.get("status")
+                    if rev_status == "published":
+                        published_rev_tpl = {
+                            **rev_doc,
+                            "id": rev_doc.get("template_id", canon_id),
+                            "status": "published",
+                            "format_version": rev_doc.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
+                        }
+                        if canon_id in canonical_map:
+                            merged = dict(canonical_map[canon_id])
+                            merged.update({k: v for k, v in published_rev_tpl.items() if v is not None})
+                            filtered_db_templates.append(merged)
+                        else:
+                            filtered_db_templates.append(published_rev_tpl)
+
+    # 2. Process published templates from Firestore
     for t in db_templates:
         tid = t.get("id") or t.get("template_id")
         if not tid or tid in deleted_ids:
@@ -3628,10 +3750,11 @@ async def _get_published_templates() -> list:
         # Skip legacy suffixed records from published list
         if tid.endswith(("_gu", "_en")) and resolve_canonical_template_id(tid) != tid:
             continue
-        canon_id = resolve_canonical_template_id(tid)
+        canon_id = resolve_canonical_template_id(tid) or tid
         if canon_id in seen_canonical:
             continue
         seen_canonical.add(canon_id)
+        seen_canonical.add(tid)
         if canon_id in canonical_map:
             merged = dict(canonical_map[canon_id])
             merged.update({k: v for k, v in t.items() if v is not None})
@@ -3639,12 +3762,32 @@ async def _get_published_templates() -> list:
         else:
             filtered_db_templates.append(t)
 
+    # 3. Safe fallback for genuinely unseeded canonical templates on initial database deployment
     for cid, cseed in canonical_map.items():
         if cid in CANONICAL_TEMPLATE_IDS and cid not in seen_canonical and cid not in deleted_ids:
             filtered_db_templates.append(dict(cseed))
             seen_canonical.add(cid)
 
-    filtered_db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
+    # 4. Authoritative template order: check template_display_order from settings
+    order = await _get_setting("template_display_order")
+    order_map = {}
+    if isinstance(order, list):
+        for idx, tid in enumerate(order):
+            cid = resolve_canonical_template_id(tid)
+            if cid and cid not in order_map:
+                order_map[cid] = idx
+            if tid not in order_map:
+                order_map[tid] = idx
+
+    def _template_sort_key(t):
+        tid = t.get("id") or t.get("template_id") or ""
+        canon = resolve_canonical_template_id(tid) or tid
+        so = t.get("sort_order")
+        if so is None:
+            so = order_map.get(canon, order_map.get(tid, 999999))
+        return (so if isinstance(so, (int, float)) else 999999, t.get("category", ""), t.get("name_en", ""))
+
+    filtered_db_templates.sort(key=_template_sort_key)
     res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in filtered_db_templates]
 
     with _PUBLISHED_TEMPLATES_LOCK:
@@ -10656,6 +10799,10 @@ async def create_indexes():
 
         if is_seeded is True:
             logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding bypassed.")
+            try:
+                await _ensure_catalog_maps_synced()
+            except Exception as map_err:
+                logger.warning(f"Catalog maps cold start sync notice: {map_err}")
             # In serverless production, super_admin is already seeded; avoid cold-start queries.
             if not os.environ.get("VERCEL") and not _PRODUCTION:
                 try:

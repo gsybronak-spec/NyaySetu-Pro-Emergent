@@ -358,10 +358,27 @@ async function rawRequest(path: string, method = "GET", body?: any, timeoutMs: n
   return json;
 }
 
-async function request(path: string, method = "GET", body?: any, timeoutMs: number = REQUEST_TIMEOUT_MS, isRetry = false): Promise<any> {
-  const isCacheable = method === "GET" && CACHEABLE_GET_PREFIXES.some((p) => path.startsWith(p));
+async function request(
+  path: string,
+  method = "GET",
+  body?: any,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+  isRetry = false,
+  forceRefresh = false
+): Promise<any> {
+  const isCacheable = method === "GET" && !forceRefresh && CACHEABLE_GET_PREFIXES.some((p) => path.startsWith(p));
   if (!isCacheable) {
-    return rawRequest(path, method, body, timeoutMs, isRetry);
+    const token = await getToken();
+    const cacheKey = `${path}::${token || "anon"}`;
+    if (forceRefresh) {
+      apiGetCache.delete(cacheKey);
+      apiInFlightGet.delete(cacheKey);
+    }
+    const fresh = await rawRequest(path, method, body, timeoutMs, isRetry);
+    if (method === "GET" && CACHEABLE_GET_PREFIXES.some((p) => path.startsWith(p))) {
+      apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+    }
+    return fresh;
   }
 
   const token = await getToken();
@@ -510,12 +527,12 @@ export const api = {
     invalidateApiCache("/cases");
     return res;
   },
-  templates: (q?: string, category?: string) => {
+  templates: (q?: string, category?: string, forceRefresh = false) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
     const qs = params.toString();
-    return request(`/templates${qs ? `?${qs}` : ""}`);
+    return request(`/templates${qs ? `?${qs}` : ""}`, "GET", undefined, undefined, false, forceRefresh);
   },
   favTemplates: () => request("/favourites/templates"),
   addFavTemplate: async (id: string) => {
@@ -532,9 +549,11 @@ export const api = {
   updateTemplateOrder: async (template_order: string[]) => {
     const res = await request("/user/template-order", "PUT", { template_order });
     invalidateApiCache("/catalog/template-order");
+    invalidateApiCache("/templates");
     return res;
   },
-  catalogTemplateOrder: () => request("/catalog/template-order"),
+  catalogTemplateOrder: (forceRefresh = false) =>
+    request("/catalog/template-order", "GET", undefined, undefined, false, forceRefresh),
   template: (id: string) => request(`/templates/${id}`),
   previewApp: (data: any) => request("/applications/preview", "POST", data),
   // Downloads may need longer: document generation + a cold Render instance can

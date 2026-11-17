@@ -11,7 +11,7 @@
  * 7. Zero fake empty states (never converts network failures to [])
  */
 
-import { api } from "@/src/api/client";
+import { api, invalidateApiCache } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
 import {
   SEED_DISTRICTS,
@@ -36,6 +36,18 @@ function notify(key: string, data: any) {
         console.warn("[catalogCache] listener error", e);
       }
     });
+  }
+  if (key !== "*") {
+    const wildcardSet = listeners.get("*");
+    if (wildcardSet) {
+      wildcardSet.forEach((cb) => {
+        try {
+          cb({ key, data });
+        } catch (e) {
+          console.warn("[catalogCache] wildcard listener error", e);
+        }
+      });
+    }
   }
 }
 
@@ -120,8 +132,8 @@ async function fetchCatalogWithSWR<T>(
     }
   }
 
-  // 3. Deduplicate in-flight network request
-  if (inFlightRequests.has(cacheKey)) {
+  // 3. Deduplicate in-flight network request (bypass if forceRefresh is true)
+  if (!forceRefresh && inFlightRequests.has(cacheKey)) {
     return inFlightRequests.get(cacheKey)!;
   }
 
@@ -243,15 +255,19 @@ export const catalogCache = {
   },
 
   getPublishedTemplates: (forceRefresh = false): Promise<any[]> => {
+    if (forceRefresh) {
+      invalidateApiCache("/templates");
+      memoryCache.delete("published_templates");
+      inFlightRequests.delete("published_templates");
+    }
     return fetchCatalogWithSWR(
       "published_templates",
       async () => {
-        try {
-          const res = await api.templates();
-          return Array.isArray(res) ? res : [];
-        } catch {
-          return null as any;
+        const res = await api.templates(undefined, undefined, forceRefresh);
+        if (!Array.isArray(res)) {
+          throw new Error("Invalid templates response from server");
         }
+        return res;
       },
       null as any,
       forceRefresh,
@@ -260,15 +276,19 @@ export const catalogCache = {
   },
 
   getTemplateOrder: (forceRefresh = false): Promise<string[]> => {
+    if (forceRefresh) {
+      invalidateApiCache("/catalog/template-order");
+      memoryCache.delete("template_order");
+      inFlightRequests.delete("template_order");
+    }
     return fetchCatalogWithSWR(
       "template_order",
       async () => {
-        try {
-          const res = await api.catalogTemplateOrder();
-          return Array.isArray(res?.template_order) ? res.template_order : [];
-        } catch {
-          return null as any;
+        const res = await api.catalogTemplateOrder(forceRefresh);
+        if (!res || !Array.isArray(res.template_order)) {
+          throw new Error("Invalid template order response from server");
         }
+        return res.template_order;
       },
       null as any,
       forceRefresh,
@@ -292,6 +312,30 @@ export const catalogCache = {
 
   subscribe: subscribeCatalog,
 
+  invalidateTemplates: async () => {
+    memoryCache.delete("published_templates");
+    memoryCache.delete("template_order");
+    invalidateApiCache("/templates");
+    invalidateApiCache("/catalog/template-order");
+    return Promise.allSettled([
+      catalogCache.getPublishedTemplates(true),
+      catalogCache.getTemplateOrder(true),
+    ]);
+  },
+
+  revalidateAll: async () => {
+    invalidateApiCache();
+    memoryCache.clear();
+    return Promise.allSettled([
+      catalogCache.getPublishedTemplates(true),
+      catalogCache.getTemplateOrder(true),
+      catalogCache.getDistricts(true),
+      catalogCache.getCaseTypes(true),
+      catalogCache.getLaws(true),
+      catalogCache.getCaseForms(true),
+    ]);
+  },
+
   clearCourtsCache: async () => {
     for (const k of Array.from(memoryCache.keys())) {
       if (k.startsWith("courts")) memoryCache.delete(k);
@@ -306,4 +350,57 @@ export const catalogCache = {
     inFlightRequests.clear();
   },
 };
+
+/**
+ * Handle external invalidation events triggered by Admin mutations across browser tabs or windows.
+ */
+export function handleExternalInvalidation(component?: string) {
+  if (component === "templates") {
+    memoryCache.delete("published_templates");
+    invalidateApiCache("/templates");
+    catalogCache.getPublishedTemplates(true).catch(() => {});
+  } else if (component === "template_order") {
+    memoryCache.delete("template_order");
+    invalidateApiCache("/catalog/template-order");
+    catalogCache.getTemplateOrder(true).catch(() => {});
+  } else if (component === "catalog" || component === "case_forms" || component === "settings") {
+    catalogCache.revalidateAll().catch(() => {});
+  } else {
+    catalogCache.invalidateTemplates().catch(() => {});
+  }
+}
+
+// Attach cross-tab listeners in browser environments
+if (typeof window !== "undefined") {
+  try {
+    window.addEventListener("storage", (e) => {
+      if (e.key === "nyaysetu_cache_bust" && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          handleExternalInvalidation(parsed.component);
+        } catch {}
+      }
+    });
+  } catch {}
+
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const bc = new BroadcastChannel("nyaysetu_sync_channel");
+      bc.onmessage = (event) => {
+        if (event.data?.type === "invalidate") {
+          handleExternalInvalidation(event.data.component);
+        }
+      };
+    }
+  } catch {}
+
+  try {
+    window.addEventListener("nyaysetu:invalidation", (e: any) => {
+      if (e.detail?.component) {
+        handleExternalInvalidation(e.detail.component);
+      }
+    });
+  } catch {}
+}
+
 

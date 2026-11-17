@@ -80,11 +80,39 @@ export default function Home() {
     setVisibleHomeCount((prev) => prev + 10);
   };
 
+  // Reactive subscription: re-render immediately when background revalidation or another screen updates catalog
+  useEffect(() => {
+    const unsubTpls = catalogCache.subscribe("published_templates", (freshTpls) => {
+      if (Array.isArray(freshTpls)) {
+        const currentOrder = catalogCache.peekTemplateOrder();
+        const active = getActiveTemplatePairs(freshTpls, currentOrder);
+        setAllTemplatePairs(active);
+        setTotalTemplateCount(active.length);
+      }
+    });
+    const unsubOrder = catalogCache.subscribe("template_order", (freshOrder) => {
+      if (Array.isArray(freshOrder)) {
+        const currentTpls = catalogCache.peekPublishedTemplates();
+        const active = getActiveTemplatePairs(currentTpls, freshOrder);
+        setAllTemplatePairs(active);
+        setTotalTemplateCount(active.length);
+      }
+    });
+    return () => {
+      unsubTpls();
+      unsubOrder();
+    };
+  }, []);
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await Promise.allSettled([
+      catalogCache.getPublishedTemplates(true),
+      catalogCache.getTemplateOrder(true),
+      load(),
+    ]);
     setRefreshing(false);
   };
 

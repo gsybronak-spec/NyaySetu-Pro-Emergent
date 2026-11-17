@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_BASE || 'https://backend-gold-iota-nyngopebeg.vercel.app';
+const BASE = (typeof (import.meta as any) !== 'undefined' && (import.meta as any).env?.VITE_API_BASE) || 'https://backend-gold-iota-nyngopebeg.vercel.app';
 
 let isRefreshing = false;
 let refreshSubscribers: Array<(token: string | null, error?: Error) => void> = [];
@@ -153,6 +153,46 @@ async function request(path: string, method = 'GET', body?: unknown, isRetry = f
   return json;
 }
 
+export type InvalidationComponent = 'templates' | 'template_order' | 'catalog' | 'settings' | 'plans' | 'case_forms';
+
+type InvalidationListener = (component: InvalidationComponent, details?: any) => void;
+const invalidationListeners = new Set<InvalidationListener>();
+
+export function subscribeAdminInvalidation(listener: InvalidationListener): () => void {
+  invalidationListeners.add(listener);
+  return () => {
+    invalidationListeners.delete(listener);
+  };
+}
+
+export function notifyAdminMutation(component: InvalidationComponent, details?: any) {
+  // 1. Notify internal Admin subscribers
+  invalidationListeners.forEach((cb) => {
+    try {
+      cb(component, details);
+    } catch (e) {
+      console.warn('[adminApi] Invalidation listener error', e);
+    }
+  });
+
+  // 2. Broadcast to Lawyer Frontend across tabs / windows
+  if (typeof window !== 'undefined') {
+    try {
+      const payload = JSON.stringify({ component, timestamp: Date.now(), details });
+      localStorage.setItem('nyaysetu_cache_bust', payload);
+      window.dispatchEvent(new CustomEvent('nyaysetu:invalidation', { detail: { component, details } }));
+    } catch {}
+
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('nyaysetu_sync_channel');
+        bc.postMessage({ type: 'invalidate', component, timestamp: Date.now(), details });
+        bc.close();
+      }
+    } catch {}
+  }
+}
+
 export const adminApi = {
   login: (email: string, password: string) =>
     request('/auth/login', 'POST', { email, password }),
@@ -171,23 +211,61 @@ export const adminApi = {
     return request(`/templates${qs ? '?' + qs : ''}`);
   },
   adminGetTemplate: (id: string) => request(`/templates/${id}`),
-  adminCreateTemplate: (data: any) => request('/templates', 'POST', data),
-  adminUpdateTemplate: (id: string, data: any) => request(`/templates/${id}`, 'PUT', data),
-  adminPublishTemplate: (id: string) => request(`/templates/${id}/publish`, 'POST'),
-  adminArchiveTemplate: (id: string) => request(`/templates/${id}/archive`, 'POST'),
-  adminDeleteTemplate: (id: string) => request(`/templates/${id}`, 'DELETE'),
-  adminRemoveShadowDraft: (id: string, confirm = true) => request(`/templates/${id}/draft?confirm=${confirm}`, 'DELETE'),
+  adminCreateTemplate: async (data: any) => {
+    const res = await request('/templates', 'POST', data);
+    notifyAdminMutation('templates', { action: 'create', id: res?.id || data?.id });
+    return res;
+  },
+  adminUpdateTemplate: async (id: string, data: any) => {
+    const res = await request(`/templates/${id}`, 'PUT', data);
+    notifyAdminMutation('templates', { action: 'update', id });
+    return res;
+  },
+  adminPublishTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}/publish`, 'POST');
+    notifyAdminMutation('templates', { action: 'publish', id });
+    return res;
+  },
+  adminArchiveTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}/archive`, 'POST');
+    notifyAdminMutation('templates', { action: 'archive', id });
+    return res;
+  },
+  adminDeleteTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}`, 'DELETE');
+    notifyAdminMutation('templates', { action: 'delete', id });
+    notifyAdminMutation('template_order', { action: 'delete', id });
+    return res;
+  },
+  adminRemoveShadowDraft: async (id: string, confirm = true) => {
+    const res = await request(`/templates/${id}/draft?confirm=${confirm}`, 'DELETE');
+    notifyAdminMutation('templates', { action: 'remove_draft', id });
+    return res;
+  },
   adminCloneTemplate: (id: string, data?: any) => request(`/templates/${id}/clone`, 'POST', data),
   adminTemplateVersions: (id: string) => request(`/templates/${id}/versions`),
   adminPreviewTemplate: (id: string, data?: any) => request(`/templates/${id}/preview`, 'POST', data),
-  adminMigrateSeed: () => request('/templates/migrate-seed', 'POST'),
+  adminMigrateSeed: async () => {
+    const res = await request('/templates/migrate-seed', 'POST');
+    notifyAdminMutation('templates', { action: 'migrate_seed' });
+    notifyAdminMutation('template_order', { action: 'migrate_seed' });
+    return res;
+  },
   adminImportAnalyze: (file_name: string, content_base64: string) =>
     request('/templates/import-word/analyze', 'POST', { file_name, content_base64 }),
-  adminImportCreate: (data: any) => request('/templates/import-word', 'POST', data),
+  adminImportCreate: async (data: any) => {
+    const res = await request('/templates/import-word', 'POST', data);
+    notifyAdminMutation('templates', { action: 'import_create', id: res?.id || data?.id });
+    return res;
+  },
   getCaseForms: () => request('/case-forms').catch(() => fetch(`${BASE}/api/catalog/case-forms`).then(r => r.json())),
   getCaseFormConfig: (id: string) => request(`/case-forms/${id}`).catch(() => fetch(`${BASE}/api/catalog/case-forms/${id}`).then(r => r.json())),
   getCaseTypes: () => fetch(`${BASE}/api/catalog/case-types`).then(r => r.json()),
-  adminSaveCaseForm: (id: string, data: any) => request(`/case-forms/${id}`, 'POST', data),
+  adminSaveCaseForm: async (id: string, data: any) => {
+    const res = await request(`/case-forms/${id}`, 'POST', data);
+    notifyAdminMutation('case_forms', { id });
+    return res;
+  },
   listUsers: (q?: string, limit = 50, offset = 0) => {
     const params = new URLSearchParams();
     if (q) params.append('q', q);
@@ -241,20 +319,73 @@ export const adminApi = {
   bulkCascadeDeleteCases: (ids: string[]) => request('/cases/bulk-cascade-delete', 'POST', { ids }),
   resetAllTestCases: (confirmText: string) => request('/cases/reset-all-test-data', 'POST', { confirm_text: confirmText }),
   listPlans: () => request('/plans'),
-  createPlan: (data: any) => request('/plans', 'POST', data),
-  updatePlan: (id: string, data: any) => request(`/plans/${id}`, 'PUT', data),
-  setPlanStatus: (id: string, active: boolean) => request(`/plans/${id}/status`, 'POST', { active }),
+  createPlan: async (data: any) => {
+    const res = await request('/plans', 'POST', data);
+    notifyAdminMutation('plans', { action: 'create' });
+    return res;
+  },
+  updatePlan: async (id: string, data: any) => {
+    const res = await request(`/plans/${id}`, 'PUT', data);
+    notifyAdminMutation('plans', { action: 'update', id });
+    return res;
+  },
+  setPlanStatus: async (id: string, active: boolean) => {
+    const res = await request(`/plans/${id}/status`, 'POST', { active });
+    notifyAdminMutation('plans', { action: 'status', id, active });
+    return res;
+  },
   listCatalog: (kind: string) => request(`/catalog/${kind}`),
-  createCatalogItem: (kind: string, data: any) => request(`/catalog/${kind}`, 'POST', data),
-  updateCatalogItem: (kind: string, id: string, data: any) => request(`/catalog/${kind}/${id}`, 'PUT', data),
-  deleteCatalogItem: (kind: string, id: string, hard = false) => request(`/catalog/${kind}/${id}?hard=${hard}`, 'DELETE'),
-  bulkDeleteCatalogItems: (kind: string, ids: string[]) => request(`/catalog/${kind}/bulk-delete`, 'POST', { ids }),
-  setCatalogStatus: (kind: string, id: string, active: boolean) => request(`/catalog/${kind}/${id}/status`, 'POST', { active }),
-  reorderCatalog: (kind: string, order: string[]) => request(`/catalog/${kind}/reorder`, 'PUT', { order }),
+  createCatalogItem: async (kind: string, data: any) => {
+    const res = await request(`/catalog/${kind}`, 'POST', data);
+    notifyAdminMutation('catalog', { action: 'create', kind });
+    return res;
+  },
+  updateCatalogItem: async (kind: string, id: string, data: any) => {
+    const res = await request(`/catalog/${kind}/${id}`, 'PUT', data);
+    notifyAdminMutation('catalog', { action: 'update', kind, id });
+    return res;
+  },
+  deleteCatalogItem: async (kind: string, id: string, hard = false) => {
+    const res = await request(`/catalog/${kind}/${id}?hard=${hard}`, 'DELETE');
+    notifyAdminMutation('catalog', { action: 'delete', kind, id });
+    return res;
+  },
+  bulkDeleteCatalogItems: async (kind: string, ids: string[]) => {
+    const res = await request(`/catalog/${kind}/bulk-delete`, 'POST', { ids });
+    notifyAdminMutation('catalog', { action: 'bulk_delete', kind, ids });
+    return res;
+  },
+  setCatalogStatus: async (kind: string, id: string, active: boolean) => {
+    const res = await request(`/catalog/${kind}/${id}/status`, 'POST', { active });
+    notifyAdminMutation('catalog', { action: 'status', kind, id, active });
+    return res;
+  },
+  reorderCatalog: async (kind: string, order: string[]) => {
+    const res = await request(`/catalog/${kind}/reorder`, 'PUT', { order });
+    notifyAdminMutation('catalog', { action: 'reorder', kind, order });
+    return res;
+  },
   listSettings: () => request('/settings'),
-  updateSetting: (key: string, value: number | string) => request(`/settings/${key}`, 'PUT', { value }),
+  updateSetting: async (key: string, value: number | string) => {
+    const res = await request(`/settings/${key}`, 'PUT', { value });
+    notifyAdminMutation('settings', { key, value });
+    return res;
+  },
   getTemplateOrder: () => request('/template-order'),
-  updateTemplateOrder: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
-  reorderTemplates: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
-  bulkDeleteTemplates: (ids: string[]) => request('/templates/bulk-delete', 'POST', { ids }),
+  updateTemplateOrder: async (order: string[]) => {
+    const res = await request('/template-order', 'PUT', { template_order: order });
+    notifyAdminMutation('template_order', { action: 'order_update', order });
+    return res;
+  },
+  reorderTemplates: async (order: string[]) => {
+    const res = await request('/template-order', 'PUT', { template_order: order });
+    notifyAdminMutation('template_order', { action: 'order_update', order });
+    return res;
+  },
+  bulkDeleteTemplates: async (ids: string[]) => {
+    const res = await request('/templates/bulk-delete', 'POST', { ids });
+    notifyAdminMutation('templates', { action: 'bulk_delete', ids });
+    notifyAdminMutation('template_order', { action: 'bulk_delete', ids });
+    return res;
+  },
 };

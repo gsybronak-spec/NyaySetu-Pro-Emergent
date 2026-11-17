@@ -4,13 +4,16 @@ export interface TemplateLogicalPair {
   enId: string;
   name_gu: string;
   name_en: string;
-  category: "Civil" | "Criminal" | "General" | "Bail";
+  category: "Civil" | "Criminal" | "General" | "Bail" | string;
   description_gu: string;
   description_en: string;
   keywords_gu: string[];
   keywords_en: string[];
   transliterations: string[];
   aliases: string[];
+  status?: string;
+  sort_order?: number;
+  [key: string]: any;
 }
 
 export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
@@ -492,7 +495,7 @@ export function resolveTemplateId(idOrBaseKey: string, lang: "gu" | "en" = "gu")
   return raw;
 }
 
-function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null): TemplateLogicalPair[] {
+export function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null): TemplateLogicalPair[] {
   if (!Array.isArray(order) || order.length === 0) {
     return pairs;
   }
@@ -566,55 +569,64 @@ export function getActiveTemplatePairs(
       return [];
     }
 
-    const serverIdSet = new Set<string>();
-    for (const t of serverTemplates) {
-      const id = t?.id || t?.template_id;
-      if (typeof id === "string" && id.trim()) {
-        const clean = id.trim();
-        serverIdSet.add(clean);
-        serverIdSet.add(clean.replace(/_(gu|en)$/, ""));
-      }
-    }
-
     const matchedPairs: TemplateLogicalPair[] = [];
     const matchedBaseKeys = new Set<string>();
 
-    for (const pair of TEMPLATE_LOGICAL_PAIRS) {
-      if (
-        serverIdSet.has(pair.baseKey) ||
-        serverIdSet.has(pair.guId) ||
-        serverIdSet.has(pair.enId)
-      ) {
-        matchedPairs.push(pair);
-        matchedBaseKeys.add(pair.baseKey);
-      }
-    }
-
-    // Include any custom server templates created by admin not in TEMPLATE_LOGICAL_PAIRS
-    for (const t of serverTemplates) {
-      const id = t?.id || t?.template_id;
+    // Process templates in the exact order returned by the server
+    for (const st of serverTemplates) {
+      const id = st?.id || st?.template_id;
       if (!id || typeof id !== "string") continue;
-      const base = id.trim().replace(/_(gu|en)$/, "");
-      if (!matchedBaseKeys.has(base)) {
+      const raw = id.trim();
+      const base = raw.replace(/_(gu|en)$/, "");
+
+      if (matchedBaseKeys.has(base) || matchedBaseKeys.has(raw)) {
+        continue;
+      }
+
+      // Find matching template pair from known TEMPLATE_LOGICAL_PAIRS
+      const pair = findTemplatePair(raw) || findTemplatePair(base);
+      if (pair) {
+        matchedBaseKeys.add(pair.baseKey);
         matchedBaseKeys.add(base);
+        matchedBaseKeys.add(raw);
+        matchedPairs.push({
+          ...pair,
+          name_gu: (st.name_gu && typeof st.name_gu === "string" && st.name_gu.trim()) ? st.name_gu.trim() : pair.name_gu,
+          name_en: (st.name_en && typeof st.name_en === "string" && st.name_en.trim()) ? st.name_en.trim() : pair.name_en,
+          category: (st.category && typeof st.category === "string" && st.category.trim()) ? (st.category.trim() as any) : pair.category,
+          description_gu: (st.description_gu !== undefined && st.description_gu !== null) ? st.description_gu : (st.description || pair.description_gu),
+          description_en: (st.description_en !== undefined && st.description_en !== null) ? st.description_en : (st.description || pair.description_en),
+          aliases: Array.isArray(st.aliases) && st.aliases.length > 0 ? Array.from(new Set([...pair.aliases, ...st.aliases])) : pair.aliases,
+          status: st.status || (pair as any).status || "published",
+          sort_order: st.sort_order !== undefined ? st.sort_order : (pair as any).sort_order,
+        });
+      } else {
+        // Dynamic custom template created by Admin not in baseline TEMPLATE_LOGICAL_PAIRS
+        matchedBaseKeys.add(base);
+        matchedBaseKeys.add(raw);
         matchedPairs.push({
           baseKey: base,
-          guId: `${base}_gu`,
-          enId: `${base}_en`,
-          name_gu: t.name_gu || t.name_en || base,
-          name_en: t.name_en || t.name_gu || base,
-          category: t.category || "General",
-          description_gu: t.description_gu || "",
-          description_en: t.description_en || "",
-          keywords_gu: Array.isArray(t.keywords_gu) ? t.keywords_gu : [],
-          keywords_en: Array.isArray(t.keywords_en) ? t.keywords_en : [],
-          transliterations: Array.isArray(t.transliterations) ? t.transliterations : [],
-          aliases: Array.isArray(t.aliases) ? t.aliases : [],
+          guId: base.endsWith("_gu") ? base : `${base}_gu`,
+          enId: base.endsWith("_en") ? base : `${base}_en`,
+          name_gu: st.name_gu || st.name_en || base,
+          name_en: st.name_en || st.name_gu || base,
+          category: st.category || "General",
+          description_gu: st.description_gu || st.description || "",
+          description_en: st.description_en || st.description || "",
+          keywords_gu: Array.isArray(st.keywords_gu) ? st.keywords_gu : [],
+          keywords_en: Array.isArray(st.keywords_en) ? st.keywords_en : [],
+          transliterations: Array.isArray(st.transliterations) ? st.transliterations : [],
+          aliases: Array.isArray(st.aliases) ? st.aliases : [],
+          status: st.status || "published",
+          sort_order: st.sort_order,
         });
       }
     }
 
-    return sortPairsByOrder(matchedPairs, order);
+    if (Array.isArray(order) && order.length > 0) {
+      return sortPairsByOrder(matchedPairs, order);
+    }
+    return matchedPairs;
   }
 
   // Fallback when serverTemplates is null/undefined
