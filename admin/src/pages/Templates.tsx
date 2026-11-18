@@ -57,6 +57,11 @@ export default function Templates() {
   const [orderDragIdx, setOrderDragIdx] = useState<number | null>(null);
   const [orderDragOverIdx, setOrderDragOverIdx] = useState<number | null>(null);
 
+  const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+  const [reorderSaving, setReorderSaving] = useState(false);
+  const [reorderSuccess, setReorderSuccess] = useState('');
+
   const handleOpenOrderModal = async () => {
     const validIds = new Set(templates.map(t => t.id));
     const initialPairs = validIds.size > 0
@@ -161,6 +166,89 @@ export default function Templates() {
       } : null);
     } catch (err: any) {
       setOrderModal(prev => prev ? { ...prev, saving: false, error: err.message || 'Failed to save order' } : null);
+    }
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, a, select, textarea, .action-buttons, .action-btn')) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedIdx(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverIdx !== index) {
+      setDragOverIdx(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+    if (draggedIdx === null || draggedIdx === dropIndex) {
+      setDraggedIdx(null);
+      setDragOverIdx(null);
+      return;
+    }
+
+    const previousTemplates = [...templates];
+    const newTemplates = [...templates];
+    const [movedItem] = newTemplates.splice(draggedIdx, 1);
+    newTemplates.splice(dropIndex, 0, movedItem);
+
+    setTemplates(newTemplates);
+    setDraggedIdx(null);
+    setDragOverIdx(null);
+    setReorderSaving(true);
+    setReorderSuccess('');
+
+    try {
+      const isFiltered = Boolean(statusFilter || categoryFilter || searchQuery);
+      let orderedKeys: string[];
+
+      if (!isFiltered) {
+        orderedKeys = newTemplates.map(t => t.id);
+      } else {
+        const res = await adminApi.getTemplateOrder();
+        let masterOrder: string[] = Array.isArray(res?.template_order) ? [...res.template_order] : [];
+        if (masterOrder.length === 0) {
+          masterOrder = newTemplates.map(t => t.id);
+        }
+        const movedId = movedItem.id;
+        const targetId = previousTemplates[dropIndex].id;
+
+        const curIdx = masterOrder.indexOf(movedId);
+        if (curIdx !== -1) {
+          masterOrder.splice(curIdx, 1);
+        }
+        const targetIdx = masterOrder.indexOf(targetId);
+        if (targetIdx !== -1) {
+          const insertIdx = dropIndex > draggedIdx ? targetIdx + 1 : targetIdx;
+          masterOrder.splice(insertIdx, 0, movedId);
+        } else {
+          masterOrder.push(movedId);
+        }
+        orderedKeys = masterOrder;
+      }
+
+      await adminApi.updateTemplateOrder(orderedKeys);
+      setReorderSuccess('✓ Order saved successfully');
+      setTimeout(() => setReorderSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save template order');
+      setTemplates(previousTemplates);
+    } finally {
+      setReorderSaving(false);
     }
   };
 
@@ -511,6 +599,14 @@ export default function Templates() {
         </div>
       </div>
 
+      {isSuperAdmin && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', fontSize: '0.85rem' }}>
+          <span style={{ color: reorderSaving ? '#2563eb' : reorderSuccess ? '#16a34a' : '#6b7280', fontWeight: reorderSaving || reorderSuccess ? 600 : 400 }}>
+            {reorderSaving ? '⏳ Saving order...' : reorderSuccess ? reorderSuccess : '💡 Drag rows using the ⋮⋮ handle to reorder templates directly'}
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="dashboard-loading">
           <div className="spinner"></div>
@@ -576,6 +672,9 @@ export default function Templates() {
                         />
                       </th>
                     )}
+                    {isSuperAdmin && (
+                      <th style={{ width: '32px', textAlign: 'center' }}></th>
+                    )}
                     <th>Name (EN / GU)</th>
                     <th>Category</th>
                     <th>Status</th>
@@ -585,8 +684,21 @@ export default function Templates() {
                   </tr>
                 </thead>
                 <tbody>
-                  {templates.map(t => (
-                    <tr key={t.id} style={{ backgroundColor: selectedIds.has(t.id) ? '#eff6ff' : undefined }}>
+                  {templates.map((t, idx) => (
+                    <tr
+                      key={t.id}
+                      draggable={isSuperAdmin}
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={(e) => handleDragOver(e, idx)}
+                      onDragEnd={handleDragEnd}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      style={{
+                        opacity: draggedIdx === idx ? 0.35 : 1,
+                        backgroundColor: dragOverIdx === idx ? '#f0fdf4' : (selectedIds.has(t.id) ? '#eff6ff' : undefined),
+                        borderTop: dragOverIdx === idx ? '2px solid #16a34a' : undefined,
+                        transition: 'background-color 0.15s ease',
+                      }}
+                    >
                       {isSuperAdmin && (
                         <td style={{ textAlign: 'center' }}>
                           <input
@@ -594,6 +706,22 @@ export default function Templates() {
                             checked={selectedIds.has(t.id)}
                             onChange={() => handleToggleSelect(t.id)}
                           />
+                        </td>
+                      )}
+                      {isSuperAdmin && (
+                        <td
+                          style={{
+                            cursor: 'grab',
+                            userSelect: 'none',
+                            textAlign: 'center',
+                            color: '#9ca3af',
+                            fontSize: '1.2rem',
+                            padding: '8px 4px',
+                            width: '32px',
+                          }}
+                          title="Drag to reorder"
+                        >
+                          ⋮⋮
                         </td>
                       )}
                       <td>
@@ -612,7 +740,11 @@ export default function Templates() {
                       </td>
                       <td>{t.fields?.length || 0} fields</td>
                       <td>
-                        <div className="action-buttons">
+                        <div
+                          className="action-buttons"
+                          draggable={false}
+                          onDragStart={(e) => e.stopPropagation()}
+                        >
                           <button className="action-btn" title="Preview Document" onClick={() => handleOpenPreview(t)}>
                             👁️ View
                           </button>

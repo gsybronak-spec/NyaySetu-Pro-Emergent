@@ -247,19 +247,29 @@ _firebase_certs_fetched_at: Optional[float] = None
 # ADMIN-CONFIGURABLE OPERATIONAL SETTINGS (Phase 40)
 # DB values override these defaults (which honor env vars where applicable).
 # ============================================================
-PROTECTED_TEMPLATE_IDS = {
-    "certified_copy_application",
-    "closing_purshish",
-    "closing_argument_right_application",
-    "reopen_right_to_argue_application",
-    "exemption_arji",
-    "dd_karavani_arji",
-    "mudat_arji",
-    "vakilatnama_criminal",
-    "vakilatnama_civil",
-}
+# ============================================================
+# TEMPLATE PROTECTION POLICY (Complete Deletion Policy)
+# ============================================================
+# Universal Super Admin deletion policy: NO templates are protected, undeletable,
+# immutable, or deletion-exempt. An authorized Super Admin can permanently delete
+# ANY template (canonical, finalized legal, seed, custom, draft, or published).
+ENABLE_TEMPLATE_PROTECTION: bool = False
 
-CANONICAL_ACTIVE_TEMPLATE_WHITELIST = tuple(sorted(PROTECTED_TEMPLATE_IDS | {"document_exhibit_application"}))
+LAUNCH_PROTECTED_TEMPLATE_IDS = frozenset()
+
+def get_protected_template_ids() -> set:
+    """Returns the set of currently protected template IDs.
+    Complete deletion policy: No templates are protected from Super Admin deletion."""
+    return set()
+
+def is_template_protected(template_id: str) -> bool:
+    """Check if a template is protected from deletion.
+    Complete deletion policy: No templates are protected from Super Admin deletion."""
+    return False
+
+# Backwards compatibility aliases: empty collections so that no legacy check blocks deletion
+PROTECTED_TEMPLATE_IDS = frozenset()
+CANONICAL_ACTIVE_TEMPLATE_WHITELIST = ()
 
 _SETTING_DEFAULTS = {
     "signup_credits": 5,
@@ -2687,11 +2697,6 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(base)
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
-    # Active canonical templates must never be masked by historical tombstones
-    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
-        expanded.discard(active_id)
-        expanded.discard(f"{active_id}_gu")
-        expanded.discard(f"{active_id}_en")
     return expanded
 
 
@@ -3290,148 +3295,154 @@ async def _ensure_seed_complete() -> None:
         await seed_templates()
     try:
         if db is not None:
-            doc_ref = db.collection("templates").document("document_exhibit_application")
-            snap = await doc_ref.get()
-            if snap.exists:
-                cur = snap.to_dict()
-                cur_gu = cur.get("content_gu", "")
-                ex_seed = _get_canonical_exhibit_template()
-                if ex_seed:
-                    needs_update = False
-                    update_dict = {}
-                    if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in cur_gu or "---------------------------" in cur_gu or "-----------------" in cur_gu:
-                        update_dict["content_gu"] = ex_seed["content_gu"]
-                        needs_update = True
-                    if cur.get("content_en") != ex_seed["content_en"]:
-                        update_dict["content_en"] = ex_seed["content_en"]
-                        needs_update = True
-                    if (cur.get("settings") or {}).get("line_spacing") != 19.5:
-                        update_dict["settings"] = ex_seed["settings"]
-                        needs_update = True
-                    if cur.get("fields") != ex_seed.get("fields"):
-                        update_dict["fields"] = ex_seed["fields"]
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref.update(update_dict)
-                        invalidate_published_templates_cache()
+            deleted_ids = await _get_deleted_template_ids()
+            if "document_exhibit_application" not in deleted_ids:
+                doc_ref = db.collection("templates").document("document_exhibit_application")
+                snap = await doc_ref.get()
+                if snap.exists:
+                    cur = snap.to_dict()
+                    cur_gu = cur.get("content_gu", "")
+                    ex_seed = _get_canonical_exhibit_template()
+                    if ex_seed:
+                        needs_update = False
+                        update_dict = {}
+                        if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in cur_gu or "---------------------------" in cur_gu or "-----------------" in cur_gu:
+                            update_dict["content_gu"] = ex_seed["content_gu"]
+                            needs_update = True
+                        if cur.get("content_en") != ex_seed["content_en"]:
+                            update_dict["content_en"] = ex_seed["content_en"]
+                            needs_update = True
+                        if (cur.get("settings") or {}).get("line_spacing") != 19.5:
+                            update_dict["settings"] = ex_seed["settings"]
+                            needs_update = True
+                        if cur.get("fields") != ex_seed.get("fields"):
+                            update_dict["fields"] = ex_seed["fields"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_cc = db.collection("templates").document("certified_copy_application")
-            snap_cc = await doc_ref_cc.get()
-            cc_seed = _get_canonical_certified_copy_template()
-            if cc_seed:
-                if not snap_cc.exists:
-                    await doc_ref_cc.set({
-                        **cc_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_cc = snap_cc.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_cc.get("content_gu") != cc_seed["content_gu"]:
-                        update_dict["content_gu"] = cc_seed["content_gu"]
-                        needs_update = True
-                    if cur_cc.get("content_en") != cc_seed["content_en"]:
-                        update_dict["content_en"] = cc_seed["content_en"]
-                        needs_update = True
-                    if cur_cc.get("settings") != cc_seed["settings"]:
-                        update_dict["settings"] = cc_seed["settings"]
-                        needs_update = True
-                    if cur_cc.get("fields") != cc_seed.get("fields"):
-                        update_dict["fields"] = cc_seed["fields"]
-                        needs_update = True
-                    if cur_cc.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_cc.update(update_dict)
+            if "certified_copy_application" not in deleted_ids:
+                doc_ref_cc = db.collection("templates").document("certified_copy_application")
+                snap_cc = await doc_ref_cc.get()
+                cc_seed = _get_canonical_certified_copy_template()
+                if cc_seed:
+                    if not snap_cc.exists:
+                        await doc_ref_cc.set({
+                            **cc_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_cc = snap_cc.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_cc.get("content_gu") != cc_seed["content_gu"]:
+                            update_dict["content_gu"] = cc_seed["content_gu"]
+                            needs_update = True
+                        if cur_cc.get("content_en") != cc_seed["content_en"]:
+                            update_dict["content_en"] = cc_seed["content_en"]
+                            needs_update = True
+                        if cur_cc.get("settings") != cc_seed["settings"]:
+                            update_dict["settings"] = cc_seed["settings"]
+                            needs_update = True
+                        if cur_cc.get("fields") != cc_seed.get("fields"):
+                            update_dict["fields"] = cc_seed["fields"]
+                            needs_update = True
+                        if cur_cc.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_cc.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_cp = db.collection("templates").document("closing_purshish")
-            snap_cp = await doc_ref_cp.get()
-            cp_seed = _get_canonical_closing_purshish_template()
-            if cp_seed:
-                if not snap_cp.exists:
-                    await doc_ref_cp.set({
-                        **cp_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_cp = snap_cp.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_cp.get("content_gu") != cp_seed["content_gu"]:
-                        update_dict["content_gu"] = cp_seed["content_gu"]
-                        needs_update = True
-                    if cur_cp.get("content_en") != cp_seed["content_en"]:
-                        update_dict["content_en"] = cp_seed["content_en"]
-                        needs_update = True
-                    if cur_cp.get("settings") != cp_seed["settings"]:
-                        update_dict["settings"] = cp_seed["settings"]
-                        needs_update = True
-                    if cur_cp.get("fields") != cp_seed.get("fields"):
-                        update_dict["fields"] = cp_seed["fields"]
-                        needs_update = True
-                    if cur_cp.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_cp.update(update_dict)
+            if "closing_purshish" not in deleted_ids:
+                doc_ref_cp = db.collection("templates").document("closing_purshish")
+                snap_cp = await doc_ref_cp.get()
+                cp_seed = _get_canonical_closing_purshish_template()
+                if cp_seed:
+                    if not snap_cp.exists:
+                        await doc_ref_cp.set({
+                            **cp_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_cp = snap_cp.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_cp.get("content_gu") != cp_seed["content_gu"]:
+                            update_dict["content_gu"] = cp_seed["content_gu"]
+                            needs_update = True
+                        if cur_cp.get("content_en") != cp_seed["content_en"]:
+                            update_dict["content_en"] = cp_seed["content_en"]
+                            needs_update = True
+                        if cur_cp.get("settings") != cp_seed["settings"]:
+                            update_dict["settings"] = cp_seed["settings"]
+                            needs_update = True
+                        if cur_cp.get("fields") != cp_seed.get("fields"):
+                            update_dict["fields"] = cp_seed["fields"]
+                            needs_update = True
+                        if cur_cp.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_cp.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_car = db.collection("templates").document("closing_argument_right_application")
-            snap_car = await doc_ref_car.get()
-            car_seed = _get_canonical_closing_argument_right_template()
-            if car_seed:
-                if not snap_car.exists:
-                    await doc_ref_car.set({
-                        **car_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_car = snap_car.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_car.get("content_gu") != car_seed["content_gu"]:
-                        update_dict["content_gu"] = car_seed["content_gu"]
-                        needs_update = True
-                    if cur_car.get("content_en") != car_seed["content_en"]:
-                        update_dict["content_en"] = car_seed["content_en"]
-                        needs_update = True
-                    if cur_car.get("settings") != car_seed["settings"]:
-                        update_dict["settings"] = car_seed["settings"]
-                        needs_update = True
-                    if cur_car.get("fields") != car_seed.get("fields"):
-                        update_dict["fields"] = car_seed["fields"]
-                        needs_update = True
-                    if cur_car.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_car.update(update_dict)
+            if "closing_argument_right_application" not in deleted_ids:
+                doc_ref_car = db.collection("templates").document("closing_argument_right_application")
+                snap_car = await doc_ref_car.get()
+                car_seed = _get_canonical_closing_argument_right_template()
+                if car_seed:
+                    if not snap_car.exists:
+                        await doc_ref_car.set({
+                            **car_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_car = snap_car.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_car.get("content_gu") != car_seed["content_gu"]:
+                            update_dict["content_gu"] = car_seed["content_gu"]
+                            needs_update = True
+                        if cur_car.get("content_en") != car_seed["content_en"]:
+                            update_dict["content_en"] = car_seed["content_en"]
+                            needs_update = True
+                        if cur_car.get("settings") != car_seed["settings"]:
+                            update_dict["settings"] = car_seed["settings"]
+                            needs_update = True
+                        if cur_car.get("fields") != car_seed.get("fields"):
+                            update_dict["fields"] = car_seed["fields"]
+                            needs_update = True
+                        if cur_car.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_car.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_rr = db.collection("templates").document("reopen_right_to_argue_application")
-            snap_rr = await doc_ref_rr.get()
-            rr_seed = _get_canonical_reopen_right_to_argue_template()
-            if rr_seed:
-                if not snap_rr.exists:
-                    await doc_ref_rr.set({
-                        **rr_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
+            if "reopen_right_to_argue_application" not in deleted_ids:
+                doc_ref_rr = db.collection("templates").document("reopen_right_to_argue_application")
+                snap_rr = await doc_ref_rr.get()
+                rr_seed = _get_canonical_reopen_right_to_argue_template()
+                if rr_seed:
+                    if not snap_rr.exists:
+                        await doc_ref_rr.set({
+                            **rr_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
                 else:
                     cur_rr = snap_rr.to_dict()
                     needs_update = False
@@ -3455,198 +3466,203 @@ async def _ensure_seed_complete() -> None:
                         await doc_ref_rr.update(update_dict)
                         invalidate_published_templates_cache()
 
-            doc_ref_ex = db.collection("templates").document("exemption_arji")
-            snap_ex = await doc_ref_ex.get()
-            ex_seed_arji = _get_canonical_exemption_arji_template()
-            if ex_seed_arji:
-                if not snap_ex.exists:
-                    await doc_ref_ex.set({
-                        **ex_seed_arji,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_ex = snap_ex.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_ex.get("content_gu") != ex_seed_arji["content_gu"]:
-                        update_dict["content_gu"] = ex_seed_arji["content_gu"]
-                        needs_update = True
-                    if cur_ex.get("content_en") != ex_seed_arji["content_en"]:
-                        update_dict["content_en"] = ex_seed_arji["content_en"]
-                        needs_update = True
-                    if cur_ex.get("settings") != ex_seed_arji["settings"]:
-                        update_dict["settings"] = ex_seed_arji["settings"]
-                        needs_update = True
-                    if cur_ex.get("fields") != ex_seed_arji.get("fields"):
-                        update_dict["fields"] = ex_seed_arji["fields"]
-                        needs_update = True
-                    if cur_ex.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_ex.update(update_dict)
+            if "exemption_arji" not in deleted_ids:
+                doc_ref_ex = db.collection("templates").document("exemption_arji")
+                snap_ex = await doc_ref_ex.get()
+                ex_seed_arji = _get_canonical_exemption_arji_template()
+                if ex_seed_arji:
+                    if not snap_ex.exists:
+                        await doc_ref_ex.set({
+                            **ex_seed_arji,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_ex = snap_ex.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_ex.get("content_gu") != ex_seed_arji["content_gu"]:
+                            update_dict["content_gu"] = ex_seed_arji["content_gu"]
+                            needs_update = True
+                        if cur_ex.get("content_en") != ex_seed_arji["content_en"]:
+                            update_dict["content_en"] = ex_seed_arji["content_en"]
+                            needs_update = True
+                        if cur_ex.get("settings") != ex_seed_arji["settings"]:
+                            update_dict["settings"] = ex_seed_arji["settings"]
+                            needs_update = True
+                        if cur_ex.get("fields") != ex_seed_arji.get("fields"):
+                            update_dict["fields"] = ex_seed_arji["fields"]
+                            needs_update = True
+                        if cur_ex.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_ex.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_dd = db.collection("templates").document("dd_karavani_arji")
-            snap_dd = await doc_ref_dd.get()
-            dd_seed_arji = _get_canonical_dd_karavani_arji_template()
-            if dd_seed_arji:
-                if not snap_dd.exists:
-                    await doc_ref_dd.set({
-                        **dd_seed_arji,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_dd = snap_dd.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_dd.get("content_gu") != dd_seed_arji["content_gu"]:
-                        update_dict["content_gu"] = dd_seed_arji["content_gu"]
-                        needs_update = True
-                    if cur_dd.get("content_en") != dd_seed_arji["content_en"]:
-                        update_dict["content_en"] = dd_seed_arji["content_en"]
-                        needs_update = True
-                    if cur_dd.get("settings") != dd_seed_arji["settings"]:
-                        update_dict["settings"] = dd_seed_arji["settings"]
-                        needs_update = True
-                    if cur_dd.get("fields") != dd_seed_arji.get("fields"):
-                        update_dict["fields"] = dd_seed_arji["fields"]
-                        needs_update = True
-                    if cur_dd.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_dd.update(update_dict)
+            if "dd_karavani_arji" not in deleted_ids:
+                doc_ref_dd = db.collection("templates").document("dd_karavani_arji")
+                snap_dd = await doc_ref_dd.get()
+                dd_seed_arji = _get_canonical_dd_karavani_arji_template()
+                if dd_seed_arji:
+                    if not snap_dd.exists:
+                        await doc_ref_dd.set({
+                            **dd_seed_arji,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_dd = snap_dd.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_dd.get("content_gu") != dd_seed_arji["content_gu"]:
+                            update_dict["content_gu"] = dd_seed_arji["content_gu"]
+                            needs_update = True
+                        if cur_dd.get("content_en") != dd_seed_arji["content_en"]:
+                            update_dict["content_en"] = dd_seed_arji["content_en"]
+                            needs_update = True
+                        if cur_dd.get("settings") != dd_seed_arji["settings"]:
+                            update_dict["settings"] = dd_seed_arji["settings"]
+                            needs_update = True
+                        if cur_dd.get("fields") != dd_seed_arji.get("fields"):
+                            update_dict["fields"] = dd_seed_arji["fields"]
+                            needs_update = True
+                        if cur_dd.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_dd.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_mudat = db.collection("templates").document("mudat_arji")
-            snap_mudat = await doc_ref_mudat.get()
-            mudat_seed_arji = _get_canonical_mudat_arji_template()
-            if mudat_seed_arji:
-                if not snap_mudat.exists:
-                    await doc_ref_mudat.set({
-                        **mudat_seed_arji,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_mudat = snap_mudat.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_mudat.get("content_gu") != mudat_seed_arji["content_gu"]:
-                        update_dict["content_gu"] = mudat_seed_arji["content_gu"]
-                        needs_update = True
-                    if cur_mudat.get("content_en") != mudat_seed_arji["content_en"]:
-                        update_dict["content_en"] = mudat_seed_arji["content_en"]
-                        needs_update = True
-                    if cur_mudat.get("settings") != mudat_seed_arji["settings"]:
-                        update_dict["settings"] = mudat_seed_arji["settings"]
-                        needs_update = True
-                    if cur_mudat.get("fields") != mudat_seed_arji.get("fields"):
-                        update_dict["fields"] = mudat_seed_arji["fields"]
-                        needs_update = True
-                    if cur_mudat.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_mudat.update(update_dict)
+            if "mudat_arji" not in deleted_ids:
+                doc_ref_mudat = db.collection("templates").document("mudat_arji")
+                snap_mudat = await doc_ref_mudat.get()
+                mudat_seed_arji = _get_canonical_mudat_arji_template()
+                if mudat_seed_arji:
+                    if not snap_mudat.exists:
+                        await doc_ref_mudat.set({
+                            **mudat_seed_arji,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_mudat = snap_mudat.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_mudat.get("content_gu") != mudat_seed_arji["content_gu"]:
+                            update_dict["content_gu"] = mudat_seed_arji["content_gu"]
+                            needs_update = True
+                        if cur_mudat.get("content_en") != mudat_seed_arji["content_en"]:
+                            update_dict["content_en"] = mudat_seed_arji["content_en"]
+                            needs_update = True
+                        if cur_mudat.get("settings") != mudat_seed_arji["settings"]:
+                            update_dict["settings"] = mudat_seed_arji["settings"]
+                            needs_update = True
+                        if cur_mudat.get("fields") != mudat_seed_arji.get("fields"):
+                            update_dict["fields"] = mudat_seed_arji["fields"]
+                            needs_update = True
+                        if cur_mudat.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_mudat.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_vcrim = db.collection("templates").document("vakilatnama_criminal")
-            snap_vcrim = await doc_ref_vcrim.get()
-            vcrim_seed = _get_canonical_vakilatnama_criminal_template()
-            if vcrim_seed:
-                if not snap_vcrim.exists:
-                    await doc_ref_vcrim.set({
-                        **vcrim_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_vcrim = snap_vcrim.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_vcrim.get("content_gu") != vcrim_seed["content_gu"]:
-                        update_dict["content_gu"] = vcrim_seed["content_gu"]
-                        needs_update = True
-                    if cur_vcrim.get("content_en") != vcrim_seed["content_en"]:
-                        update_dict["content_en"] = vcrim_seed["content_en"]
-                        needs_update = True
-                    if cur_vcrim.get("settings") != vcrim_seed["settings"]:
-                        update_dict["settings"] = vcrim_seed["settings"]
-                        needs_update = True
-                    if cur_vcrim.get("fields") != vcrim_seed.get("fields"):
-                        update_dict["fields"] = vcrim_seed["fields"]
-                        needs_update = True
-                    if cur_vcrim.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if cur_vcrim.get("category") != vcrim_seed.get("category"):
-                        update_dict["category"] = vcrim_seed["category"]
-                        needs_update = True
-                    if cur_vcrim.get("name_gu") != vcrim_seed.get("name_gu"):
-                        update_dict["name_gu"] = vcrim_seed["name_gu"]
-                        needs_update = True
-                    if cur_vcrim.get("name_en") != vcrim_seed.get("name_en"):
-                        update_dict["name_en"] = vcrim_seed["name_en"]
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_vcrim.update(update_dict)
+            if "vakilatnama_criminal" not in deleted_ids:
+                doc_ref_vcrim = db.collection("templates").document("vakilatnama_criminal")
+                snap_vcrim = await doc_ref_vcrim.get()
+                vcrim_seed = _get_canonical_vakilatnama_criminal_template()
+                if vcrim_seed:
+                    if not snap_vcrim.exists:
+                        await doc_ref_vcrim.set({
+                            **vcrim_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_vcrim = snap_vcrim.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_vcrim.get("content_gu") != vcrim_seed["content_gu"]:
+                            update_dict["content_gu"] = vcrim_seed["content_gu"]
+                            needs_update = True
+                        if cur_vcrim.get("content_en") != vcrim_seed["content_en"]:
+                            update_dict["content_en"] = vcrim_seed["content_en"]
+                            needs_update = True
+                        if cur_vcrim.get("settings") != vcrim_seed["settings"]:
+                            update_dict["settings"] = vcrim_seed["settings"]
+                            needs_update = True
+                        if cur_vcrim.get("fields") != vcrim_seed.get("fields"):
+                            update_dict["fields"] = vcrim_seed["fields"]
+                            needs_update = True
+                        if cur_vcrim.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_vcrim.get("category") != vcrim_seed.get("category"):
+                            update_dict["category"] = vcrim_seed["category"]
+                            needs_update = True
+                        if cur_vcrim.get("name_gu") != vcrim_seed.get("name_gu"):
+                            update_dict["name_gu"] = vcrim_seed["name_gu"]
+                            needs_update = True
+                        if cur_vcrim.get("name_en") != vcrim_seed.get("name_en"):
+                            update_dict["name_en"] = vcrim_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_vcrim.update(update_dict)
+                            invalidate_published_templates_cache()
 
-            doc_ref_vciv = db.collection("templates").document("vakilatnama_civil")
-            snap_vciv = await doc_ref_vciv.get()
-            vciv_seed = _get_canonical_vakilatnama_civil_template()
-            if vciv_seed:
-                if not snap_vciv.exists:
-                    await doc_ref_vciv.set({
-                        **vciv_seed,
-                        "status": "published",
-                        "updated_at": now().isoformat(),
-                        "created_at": now().isoformat(),
-                    })
-                    invalidate_published_templates_cache()
-                else:
-                    cur_vciv = snap_vciv.to_dict()
-                    needs_update = False
-                    update_dict = {}
-                    if cur_vciv.get("content_gu") != vciv_seed["content_gu"]:
-                        update_dict["content_gu"] = vciv_seed["content_gu"]
-                        needs_update = True
-                    if cur_vciv.get("content_en") != vciv_seed["content_en"]:
-                        update_dict["content_en"] = vciv_seed["content_en"]
-                        needs_update = True
-                    if cur_vciv.get("settings") != vciv_seed["settings"]:
-                        update_dict["settings"] = vciv_seed["settings"]
-                        needs_update = True
-                    if cur_vciv.get("fields") != vciv_seed.get("fields"):
-                        update_dict["fields"] = vciv_seed["fields"]
-                        needs_update = True
-                    if cur_vciv.get("status") != "published":
-                        update_dict["status"] = "published"
-                        needs_update = True
-                    if cur_vciv.get("category") != vciv_seed.get("category"):
-                        update_dict["category"] = vciv_seed["category"]
-                        needs_update = True
-                    if cur_vciv.get("name_gu") != vciv_seed.get("name_gu"):
-                        update_dict["name_gu"] = vciv_seed["name_gu"]
-                        needs_update = True
-                    if cur_vciv.get("name_en") != vciv_seed.get("name_en"):
-                        update_dict["name_en"] = vciv_seed["name_en"]
-                        needs_update = True
-                    if needs_update:
-                        await doc_ref_vciv.update(update_dict)
+            if "vakilatnama_civil" not in deleted_ids:
+                doc_ref_vciv = db.collection("templates").document("vakilatnama_civil")
+                snap_vciv = await doc_ref_vciv.get()
+                vciv_seed = _get_canonical_vakilatnama_civil_template()
+                if vciv_seed:
+                    if not snap_vciv.exists:
+                        await doc_ref_vciv.set({
+                            **vciv_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
                         invalidate_published_templates_cache()
+                    else:
+                        cur_vciv = snap_vciv.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_vciv.get("content_gu") != vciv_seed["content_gu"]:
+                            update_dict["content_gu"] = vciv_seed["content_gu"]
+                            needs_update = True
+                        if cur_vciv.get("content_en") != vciv_seed["content_en"]:
+                            update_dict["content_en"] = vciv_seed["content_en"]
+                            needs_update = True
+                        if cur_vciv.get("settings") != vciv_seed["settings"]:
+                            update_dict["settings"] = vciv_seed["settings"]
+                            needs_update = True
+                        if cur_vciv.get("fields") != vciv_seed.get("fields"):
+                            update_dict["fields"] = vciv_seed["fields"]
+                            needs_update = True
+                        if cur_vciv.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_vciv.get("category") != vciv_seed.get("category"):
+                            update_dict["category"] = vciv_seed["category"]
+                            needs_update = True
+                        if cur_vciv.get("name_gu") != vciv_seed.get("name_gu"):
+                            update_dict["name_gu"] = vciv_seed["name_gu"]
+                            needs_update = True
+                        if cur_vciv.get("name_en") != vciv_seed.get("name_en"):
+                            update_dict["name_en"] = vciv_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_vciv.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -3669,9 +3685,7 @@ async def _get_published_templates() -> list:
     now_ts = time.time()
     with _PUBLISHED_TEMPLATES_LOCK:
         if _PUBLISHED_TEMPLATES_CACHE["data"] is not None and now_ts < _PUBLISHED_TEMPLATES_CACHE["expires_at"]:
-            cached = list(_PUBLISHED_TEMPLATES_CACHE["data"])
-            if any(t.get("id") == "closing_purshish" for t in cached) and any(t.get("id") == "closing_argument_right_application" for t in cached) and any(t.get("id") == "reopen_right_to_argue_application" for t in cached) and any(t.get("id") == "exemption_arji" for t in cached) and any(t.get("id") == "dd_karavani_arji" for t in cached) and any(t.get("id") == "mudat_arji" for t in cached) and any(t.get("id") == "vakilatnama_criminal" for t in cached) and any(t.get("id") == "vakilatnama_civil" for t in cached):
-                return cached
+            return list(_PUBLISHED_TEMPLATES_CACHE["data"])
 
     deleted_ids = await _get_deleted_template_ids()
     db_templates = []
@@ -4152,11 +4166,6 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     deleted_ids = await _get_deleted_template_ids()
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
     cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
-    # Active canonical templates must never be masked by historical tombstones
-    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
-        deleted_ids.discard(active_id)
-        deleted_ids.discard(f"{active_id}_gu")
-        deleted_ids.discard(f"{active_id}_en")
     if cand_set.intersection(deleted_ids):
         return None
 
@@ -6682,9 +6691,6 @@ async def get_catalog_template_order():
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
-        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
-            order.append(active_id)
     return {"template_order": order}
 
 
@@ -9386,9 +9392,6 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
-    for active_id in CANONICAL_ACTIVE_TEMPLATE_WHITELIST:
-        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
-            order.append(active_id)
     return {"template_order": order}
 
 
@@ -9413,6 +9416,11 @@ async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_a
             if not tid.endswith("_gu") and not tid.endswith("_en"):
                 await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
                 await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+            else:
+                base_tid = tid[:-3]
+                other_suffix = "_en" if tid.endswith("_gu") else "_gu"
+                await db.collection("templates").document(base_tid).set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await db.collection("templates").document(f"{base_tid}{other_suffix}").set({"sort_order": idx, "updated_at": ts}, merge=True)
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
     await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
@@ -9441,6 +9449,11 @@ async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require
             if not tid.endswith("_gu") and not tid.endswith("_en"):
                 await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
                 await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+            else:
+                base_tid = tid[:-3]
+                other_suffix = "_en" if tid.endswith("_gu") else "_gu"
+                await db.collection("templates").document(base_tid).set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await db.collection("templates").document(f"{base_tid}{other_suffix}").set({"sort_order": idx, "updated_at": ts}, merge=True)
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
     await create_admin_audit_log(
@@ -9595,10 +9608,25 @@ async def admin_list_templates(
     # Deterministic safe sort
     sort_direction = -1 if sort_order.lower() in ("desc", "-1") else 1
     
+    order_list = await _get_setting("template_display_order") if sort_by == "sort_order" else None
+    if isinstance(order_list, str):
+        try:
+            order_list = json.loads(order_list)
+        except Exception:
+            order_list = None
+    if order_list is None and sort_by == "sort_order":
+        order_list = _SETTING_DEFAULTS.get("template_display_order")
+    order_map = {tid: idx for idx, tid in enumerate(order_list)} if isinstance(order_list, list) else {}
+
     def _safe_sort_key(t):
         if sort_by == "sort_order":
             so = t.get("sort_order")
-            return (so if isinstance(so, (int, float)) else 999999, str(t.get("name_en") or ""))
+            if isinstance(so, (int, float)):
+                return (so, str(t.get("name_en") or ""))
+            tid = str(t.get("id") or "")
+            base_id = tid.replace("_gu", "").replace("_en", "")
+            fallback_order = order_map.get(tid, order_map.get(base_id, 999999))
+            return (fallback_order, str(t.get("name_en") or ""))
         val = t.get(sort_by)
         if val is None:
             return ""
@@ -9665,6 +9693,7 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
     deleted_ids = []
     failed_ids = []
     ts = now().isoformat()
+    admin_id = admin.get("id", "super_admin") if isinstance(admin, dict) else str(admin)
     batch_mgr = FirestoreBatchManager(db, max_ops=400)
 
     for template_id in clean_ids:
@@ -9677,8 +9706,30 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
                     "id": tid,
                     "kind": "template",
                     "deleted_at": ts,
-                    "deleted_by": admin["id"],
+                    "deleted_by": admin_id,
                 })
+                await batch_mgr.add_set(db.collection("deleted_templates").document(tid), {
+                    "id": tid,
+                    "deleted_at": ts,
+                    "deleted_by": admin_id,
+                })
+                # Permanently delete associated revisions and versions
+                try:
+                    rev_docs = [d async for d in db.collection("template_revisions").where(filter=firestore.FieldFilter("template_id", "==", tid)).stream()]
+                    for d in rev_docs:
+                        d_dict = d.to_dict() if hasattr(d, "to_dict") else {}
+                        if d_dict.get("template_id") == tid or d.id.startswith(f"{tid}_"):
+                            await batch_mgr.add_delete(db.collection("template_revisions").document(d.id))
+                except Exception as e:
+                    logger.warning(f"Failed queueing revision deletion for {tid}: {e}")
+                try:
+                    ver_docs = [d async for d in db.collection("template_versions").where(filter=firestore.FieldFilter("template_id", "==", tid)).stream()]
+                    for d in ver_docs:
+                        d_dict = d.to_dict() if hasattr(d, "to_dict") else {}
+                        if d_dict.get("template_id") == tid or d.id.startswith(f"{tid}_"):
+                            await batch_mgr.add_delete(db.collection("template_versions").document(d.id))
+                except Exception as e:
+                    logger.warning(f"Failed queueing version deletion for {tid}: {e}")
         deleted_ids.append(template_id)
 
     # Prune from template_display_order
@@ -9695,7 +9746,7 @@ async def admin_bulk_delete_templates(req: TemplateBulkDeleteReq, admin=Depends(
                 await batch_mgr.add_set(db.collection("settings").document("template_display_order"), {
                     "value": filtered_order,
                     "updated_at": ts,
-                    "updated_by": admin["id"],
+                    "updated_by": admin_id,
                 }, merge=True)
 
     await batch_mgr.commit()
@@ -9725,9 +9776,9 @@ async def admin_get_template(template_id: str, admin=Depends(require_super_admin
     """Get full template details from db.templates for admin editing, including revision count."""
     if _is_templates_disabled():
         raise HTTPException(404, "Template not found")
-    await _ensure_seed_complete()
     deleted_ids = await _get_deleted_template_ids()
-    if template_id in deleted_ids:
+    base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
+    if template_id in deleted_ids or base_cand in deleted_ids or f"{base_cand}_gu" in deleted_ids or f"{base_cand}_en" in deleted_ids:
         raise HTTPException(404, "Template not found (deleted)")
 
     t = None
@@ -10122,12 +10173,10 @@ async def admin_restore_template(template_id: str, admin=Depends(require_super_a
 
 @admin_api.delete("/templates/{template_id}")
 async def admin_delete_template(template_id: str, admin=Depends(require_super_admin)):
-    """Permanently delete a template from db.templates.
-    CRITICAL RULE: NEVER delete db.template_revisions, ensuring historical drafts remain 100% resolvable."""
+    """Permanently delete a template from db.templates, db.template_revisions, and db.template_versions.
+    Universal Super Admin deletion policy: No templates are exempt from deletion."""
     await _ensure_seed_complete()
     base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
-    if template_id in PROTECTED_TEMPLATE_IDS or base_id in PROTECTED_TEMPLATE_IDS:
-        raise HTTPException(403, f"Template '{template_id}' is a protected canonical template and cannot be deleted.")
 
     admin_id = admin.get("id", "super_admin") if isinstance(admin, dict) else str(admin)
     target_ids = {template_id, base_id, f"{base_id}_gu", f"{base_id}_en"}
@@ -10141,16 +10190,16 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
             t = _snap_b.to_dict() if _snap_b.exists else None
 
     if not t:
+        deleted_so_far = await _get_deleted_template_ids()
+        if template_id in deleted_so_far or base_id in deleted_so_far:
+            return {
+                "success": True,
+                "message": f"Template '{template_id}' is already permanently deleted from catalog.",
+            }
         seed = next((s for s in _get_all_seed_templates() if s.get("id") in (template_id, base_id) or s.get("base_key") in (template_id, base_id)), None)
         if seed:
             t = seed
         else:
-            deleted_so_far = await _get_deleted_template_ids()
-            if template_id in deleted_so_far or base_id in deleted_so_far:
-                return {
-                    "success": True,
-                    "message": f"Template '{template_id}' is already permanently deleted from catalog.",
-                }
             raise HTTPException(404, "Template not found")
 
     if db is not None:
@@ -10168,6 +10217,23 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
                 "deleted_at": now().isoformat(),
                 "deleted_by": admin_id,
             })
+            # Permanently delete associated revisions and versions
+            try:
+                rev_docs = [d async for d in db.collection("template_revisions").where(filter=firestore.FieldFilter("template_id", "==", tid)).stream()]
+                for d in rev_docs:
+                    d_dict = d.to_dict() if hasattr(d, "to_dict") else {}
+                    if d_dict.get("template_id") == tid or d.id.startswith(f"{tid}_"):
+                        await db.collection("template_revisions").document(d.id).delete()
+            except Exception as e:
+                logger.warning(f"Failed deleting template_revisions for {tid}: {e}")
+            try:
+                ver_docs = [d async for d in db.collection("template_versions").where(filter=firestore.FieldFilter("template_id", "==", tid)).stream()]
+                for d in ver_docs:
+                    d_dict = d.to_dict() if hasattr(d, "to_dict") else {}
+                    if d_dict.get("template_id") == tid or d.id.startswith(f"{tid}_"):
+                        await db.collection("template_versions").document(d.id).delete()
+            except Exception as e:
+                logger.warning(f"Failed deleting template_versions for {tid}: {e}")
 
         curr_order = await _get_setting("template_display_order")
         if isinstance(curr_order, list):
@@ -10186,13 +10252,13 @@ async def admin_delete_template(template_id: str, admin=Depends(require_super_ad
         entity_type="template",
         entity_id=template_id,
         old_value=t,
-        reason="Permanent deletion from template catalog",
+        reason="Permanent deletion from template catalog and version storage",
     )
     invalidate_published_templates_cache()
     _invalidate_catalog_cache()
     return {
         "success": True,
-        "message": f"Template '{template_id}' permanently deleted from catalog. Historical revisions preserved.",
+        "message": f"Template '{template_id}' permanently deleted from catalog and version storage.",
     }
 
 
