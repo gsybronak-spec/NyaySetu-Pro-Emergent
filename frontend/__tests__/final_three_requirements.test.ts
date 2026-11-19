@@ -5,6 +5,7 @@ import {
   getOrderedTemplatePairs,
   sortPairsByOrder,
 } from "../src/data/templateCatalogPairs";
+import { searchTemplatePairs } from "../src/utils/templateSearch";
 
 export function runFinalThreeRequirementsFrontendTests() {
   console.log("=== EXECUTING FINAL THREE REQUIREMENTS FRONTEND TEST SUITE ===");
@@ -130,5 +131,46 @@ export function runFinalThreeRequirementsFrontendTests() {
   assert.strictEqual(orderedPairsDerived[1].baseKey, "aanke_padvani_arji");
 
   console.log("PASS Req 3: Drag-and-drop order persists and controls catalog ordering identically");
+
+  // Test 3C: Search score ties preserve exact catalog order (no alphabetical disruption)
+  const emptyQueryResults = searchTemplatePairs("", "All", new Set(), orderedPairsExplicit);
+  for (let i = 0; i < orderedPairsExplicit.length; i++) {
+    assert.strictEqual(
+      emptyQueryResults[i].pair.baseKey,
+      orderedPairsExplicit[i].baseKey,
+      `Empty search query index ${i} must preserve catalog order`
+    );
+  }
+
+  // Broad query: multiple matches must keep catalog order when scores tie
+  const broadMatches = searchTemplatePairs("application", "All", new Set(), orderedPairsExplicit);
+  for (let i = 0; i < broadMatches.length - 1; i++) {
+    if (broadMatches[i].score === broadMatches[i + 1].score) {
+      const idxA = orderedPairsExplicit.findIndex((p) => p.baseKey === broadMatches[i].pair.baseKey);
+      const idxB = orderedPairsExplicit.findIndex((p) => p.baseKey === broadMatches[i + 1].pair.baseKey);
+      assert.ok(idxA < idxB, `Score tie must preserve catalog order: ${idxA} < ${idxB}`);
+    }
+  }
+  console.log("PASS Req 3C: Search score ties preserve authoritative catalog order without alphabetical drift");
+
+  // Test 3D: Authoritative 23 templates 1:1 sync with zero missing or extra
+  const prod23Ids = [
+    "vakilatnama_civil", "vakilatnama_criminal", "document_exhibit_application",
+    "certified_copy_application", "closing_purshish", "closing_argument_right_application",
+    "exemption_arji", "dd_karavani_arji", "mudat_arji", "warrant_rad_karvani_arji",
+    "document_parat_levani_arji", "document_swikaravani_arji", "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji", "jamin_bond_swikarvani_arji", "kam_board_par_levani_arji",
+    "saaxi_ne_summons", "samadhan_purshish", "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji", "undertaking", "warrant_no_hath_bido_apvani_arji",
+    "reopen_right_to_argue_application"
+  ];
+  const prod23Templates = prod23Ids.map((id) => ({ id, template_id: id, name_en: id, name_gu: id }));
+  const prodReordered = ["reopen_right_to_argue_application", "closing_purshish", ...prod23Ids.filter((id) => id !== "reopen_right_to_argue_application" && id !== "closing_purshish")];
+  const pairs23 = getActiveTemplatePairs(prod23Templates, prodReordered);
+  assert.strictEqual(pairs23.length, 23);
+  for (let i = 0; i < 23; i++) {
+    assert.strictEqual(pairs23[i].baseKey, prodReordered[i], `Template index ${i} must exactly match admin order`);
+  }
+  console.log("PASS Req 3D: All 23 production templates synchronize with 100% exact order parity");
   console.log("=== ALL FINAL THREE REQUIREMENTS FRONTEND TESTS PASSED ===");
 }

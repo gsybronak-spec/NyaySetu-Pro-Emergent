@@ -428,7 +428,7 @@ _SETTINGS_CACHE: dict = {
     for k, v in _SETTING_DEFAULTS.items()
 }
 _SETTINGS_CACHE_LOCK = threading.Lock()
-_SETTINGS_CACHE_TTL_SEC = 300.0
+_SETTINGS_CACHE_TTL_SEC = 60.0
 
 def invalidate_settings_cache(key: Optional[str] = None):
     with _SETTINGS_CACHE_LOCK:
@@ -3902,7 +3902,7 @@ async def _ensure_seed_complete() -> None:
 
 _PUBLISHED_TEMPLATES_CACHE: dict = {"data": None, "expires_at": 0.0}
 _PUBLISHED_TEMPLATES_LOCK = threading.Lock()
-_PUBLISHED_TEMPLATES_TTL_SEC = 300.0
+_PUBLISHED_TEMPLATES_TTL_SEC = 60.0
 
 def invalidate_published_templates_cache():
     with _PUBLISHED_TEMPLATES_LOCK:
@@ -5025,7 +5025,6 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
 
     all_templates = await _get_published_templates()
     fav_set = set(user.get("favourite_templates") or []) if user else set()
-    custom_order = user.get("template_order") or [] if user else []
 
     items = []
     for t in all_templates:
@@ -5056,11 +5055,6 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
             else:
                 matched = [t for t in matched if t["category"].lower() == category.lower()]
         items = matched
-
-    # Sort if user has custom order
-    if custom_order and user is not None:
-        order_index = {tid: idx for idx, tid in enumerate(custom_order)}
-        items.sort(key=lambda x: order_index.get(x["id"], 999999))
 
     return items
 
@@ -9722,6 +9716,8 @@ async def admin_update_setting(key: str, req: SettingsUpdateReq,
     _validate_setting_value(key, value)
     await db.collection('settings').document(key).set({"value": value, "updated_by": admin["id"], "updated_at": now().isoformat()})
     invalidate_settings_cache(key)
+    if key == "template_display_order":
+        invalidate_published_templates_cache()
     await audit_log(admin=admin, action="settings_update", target=key, metadata={"value": value})
     t = _setting_type(key)
     type_str = "int" if t is int else ("list" if t is list else "str")

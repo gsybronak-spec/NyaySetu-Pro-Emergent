@@ -5,6 +5,7 @@ import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
 import { getFirebaseAuth } from "@/src/firebase/config";
 import { storage } from "@/src/utils/storage";
+import { catalogCache } from "@/src/services/catalogCache";
 
 interface User {
   id: string;
@@ -257,6 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!e.newValue) {
           setUser(null);
           storage.remove("nyaysetu_user_profile").catch(() => {});
+          catalogCache.clearCache();
         } else {
           refresh();
         }
@@ -377,6 +379,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setTokens(null, null);
     setUser(null);
     await storage.remove("nyaysetu_user_profile");
+    await catalogCache.clearCache();
     // Clear the Firebase client session too (no-op when Firebase is not
     // configured). The NyaySetu JWT removal is authoritative either way.
     await firebaseSignOutClient();

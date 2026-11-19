@@ -49,13 +49,13 @@ export default function Templates() {
   // Fetch authoritative published templates and template order
   useEffect(() => {
     let active = true;
-    catalogCache.getPublishedTemplates().then((tpls) => {
+    catalogCache.getPublishedTemplates(true).then((tpls) => {
       if (active && Array.isArray(tpls)) {
         setPublishedTemplates(tpls);
       }
     }).catch(() => {});
 
-    catalogCache.getTemplateOrder().then((order) => {
+    catalogCache.getTemplateOrder(true).then((order) => {
       if (active && Array.isArray(order)) {
         setTemplateOrder(order);
       }

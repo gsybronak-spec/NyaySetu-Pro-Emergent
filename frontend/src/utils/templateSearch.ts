@@ -204,10 +204,9 @@ export function searchTemplatePairs(
     return results;
   }
 
-  // Sort descending by score, then category / alphabetical
+  // Sort descending by score, preserving catalog order on score ties
   results.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    return a.pair.name_en.localeCompare(b.pair.name_en);
+    return b.score - a.score;
   });
 
   return results;

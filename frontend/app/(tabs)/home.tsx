@@ -47,8 +47,8 @@ export default function Home() {
       api.quote().catch(() => { failed = true; return null; }),
       api.wallet().catch(() => { failed = true; return null; }),
       api.drafts().catch(() => { failed = true; return []; }),
-      catalogCache.getPublishedTemplates().catch(() => null),
-      catalogCache.getTemplateOrder().catch(() => null),
+      catalogCache.getPublishedTemplates(true).catch(() => null),
+      catalogCache.getTemplateOrder(true).catch(() => null),
     ]);
     if (q?.quote) setQuote(q.quote);
     if (w && typeof w === "object") setWallet(w);

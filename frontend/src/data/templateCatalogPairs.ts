@@ -505,8 +505,8 @@ function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null)
     }
   });
   return [...pairs].sort((a, b) => {
-    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : 9999);
-    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : 9999);
+    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : (orderMap.has(a.enId) ? orderMap.get(a.enId)! : 9999));
+    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : (orderMap.has(b.enId) ? orderMap.get(b.enId)! : 9999));
     return idxA - idxB;
   });
 }
@@ -539,8 +539,8 @@ export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogica
   );
 
   return filtered.sort((a, b) => {
-    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : 9999);
-    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : 9999);
+    const idxA = orderMap.has(a.baseKey) ? orderMap.get(a.baseKey)! : (orderMap.has(a.guId) ? orderMap.get(a.guId)! : (orderMap.has(a.enId) ? orderMap.get(a.enId)! : 9999));
+    const idxB = orderMap.has(b.baseKey) ? orderMap.get(b.baseKey)! : (orderMap.has(b.guId) ? orderMap.get(b.guId)! : (orderMap.has(b.enId) ? orderMap.get(b.enId)! : 9999));
     return idxA - idxB;
   });
 }
@@ -552,6 +552,7 @@ export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogica
  * 1. If serverTemplates is provided as an array:
  *    - If serverTemplates is empty ([]), returns [] (all templates deleted/unpublished).
  *    - If serverTemplates has items, only templates matching server templates are returned.
+ *      Preserves exact sequence of effectiveOrder (or serverTemplates order).
  *      Supports both known TEMPLATE_LOGICAL_PAIRS and dynamically added custom templates.
  * 2. If serverTemplates is null/undefined (e.g. initial load or network error):
  *    - Delegates to getOrderedTemplatePairs(order).
@@ -578,13 +579,33 @@ export function getActiveTemplatePairs(
       }
     }
 
-    const matchedPairs: TemplateLogicalPair[] = [];
-    const matchedBaseKeys = new Set<string>();
+    const staticPairMap = new Map<string, TemplateLogicalPair>();
+    for (const p of TEMPLATE_LOGICAL_PAIRS) {
+      staticPairMap.set(p.baseKey, p);
+      staticPairMap.set(p.guId, p);
+      staticPairMap.set(p.enId, p);
+    }
 
-    for (const pair of TEMPLATE_LOGICAL_PAIRS) {
-      const serverT = serverTemplateMap.get(pair.baseKey) || serverTemplateMap.get(pair.guId) || serverTemplateMap.get(pair.enId);
-      if (serverT) {
-        matchedPairs.push({
+    const effectiveOrder = (Array.isArray(order) && order.length > 0)
+      ? order
+      : serverTemplates.map((t: any) => t?.id || t?.template_id).filter(Boolean);
+
+    const orderedPairs: TemplateLogicalPair[] = [];
+    const seenBaseKeys = new Set<string>();
+
+    for (const item of effectiveOrder) {
+      if (!item || typeof item !== "string") continue;
+      const clean = item.trim();
+      const base = clean.replace(/_(gu|en)$/, "");
+      if (seenBaseKeys.has(base)) continue;
+
+      const serverT = serverTemplateMap.get(clean) || serverTemplateMap.get(base);
+      if (!serverT) continue;
+
+      const pair = staticPairMap.get(clean) || staticPairMap.get(base);
+      if (pair) {
+        seenBaseKeys.add(pair.baseKey);
+        orderedPairs.push({
           ...pair,
           name_gu: serverT.name_gu || pair.name_gu,
           name_en: serverT.name_en || pair.name_en,
@@ -592,18 +613,46 @@ export function getActiveTemplatePairs(
           description_gu: serverT.description_gu !== undefined ? serverT.description_gu : pair.description_gu,
           description_en: serverT.description_en !== undefined ? serverT.description_en : pair.description_en,
         });
-        matchedBaseKeys.add(pair.baseKey);
+      } else {
+        seenBaseKeys.add(base);
+        orderedPairs.push({
+          baseKey: base,
+          guId: `${base}_gu`,
+          enId: `${base}_en`,
+          name_gu: serverT.name_gu || serverT.name_en || base,
+          name_en: serverT.name_en || serverT.name_gu || base,
+          category: serverT.category || "General",
+          description_gu: serverT.description_gu || "",
+          description_en: serverT.description_en || "",
+          keywords_gu: Array.isArray(serverT.keywords_gu) ? serverT.keywords_gu : [],
+          keywords_en: Array.isArray(serverT.keywords_en) ? serverT.keywords_en : [],
+          transliterations: Array.isArray(serverT.transliterations) ? serverT.transliterations : [],
+          aliases: Array.isArray(serverT.aliases) ? serverT.aliases : [],
+        });
       }
     }
 
-    // Include any custom server templates created by admin not in TEMPLATE_LOGICAL_PAIRS
+    // Append any server templates not present in effectiveOrder
     for (const t of serverTemplates) {
       const id = t?.id || t?.template_id;
       if (!id || typeof id !== "string") continue;
-      const base = id.trim().replace(/_(gu|en)$/, "");
-      if (!matchedBaseKeys.has(base)) {
-        matchedBaseKeys.add(base);
-        matchedPairs.push({
+      const clean = id.trim();
+      const base = clean.replace(/_(gu|en)$/, "");
+      if (seenBaseKeys.has(base)) continue;
+      seenBaseKeys.add(base);
+
+      const pair = staticPairMap.get(clean) || staticPairMap.get(base);
+      if (pair) {
+        orderedPairs.push({
+          ...pair,
+          name_gu: t.name_gu || pair.name_gu,
+          name_en: t.name_en || pair.name_en,
+          category: t.category || pair.category,
+          description_gu: t.description_gu !== undefined ? t.description_gu : pair.description_gu,
+          description_en: t.description_en !== undefined ? t.description_en : pair.description_en,
+        });
+      } else {
+        orderedPairs.push({
           baseKey: base,
           guId: `${base}_gu`,
           enId: `${base}_en`,
@@ -620,10 +669,7 @@ export function getActiveTemplatePairs(
       }
     }
 
-    const effectiveOrder = (Array.isArray(order) && order.length > 0)
-      ? order
-      : serverTemplates.map((t: any) => t?.id || t?.template_id).filter(Boolean);
-    return sortPairsByOrder(matchedPairs, effectiveOrder);
+    return orderedPairs;
   }
 
   // Fallback when serverTemplates is null/undefined

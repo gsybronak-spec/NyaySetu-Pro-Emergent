@@ -111,8 +111,8 @@ async function fetchCatalogWithSWR<T>(
     }
   }
 
-  // 2. Check local storage cache
-  if (!forceRefresh) {
+  // 2. Check local storage cache (bypassed for template_order and published_templates to ensure authoritative sync on refresh)
+  if (!forceRefresh && cacheKey !== "template_order" && cacheKey !== "published_templates") {
     const stored = await loadFromStorage<T>(cacheKey, allowEmpty);
     if (stored !== null && stored !== undefined && (allowEmpty || !Array.isArray(stored) || stored.length > 0)) {
       triggerBackgroundRevalidate(cacheKey, fetcher, allowEmpty);
@@ -301,9 +301,17 @@ export const catalogCache = {
     notify("courts:all", []);
   },
 
-  clearCache: () => {
+  clearCache: async () => {
     memoryCache.clear();
     inFlightRequests.clear();
+    try {
+      await Promise.all([
+        storage.remove(`${STORAGE_PREFIX}template_order`),
+        storage.remove(`${STORAGE_PREFIX}published_templates`),
+      ]);
+    } catch {
+      // Ignore storage remove errors
+    }
   },
 };
 
