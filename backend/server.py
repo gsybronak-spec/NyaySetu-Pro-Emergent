@@ -9891,6 +9891,46 @@ async def admin_save_case_form(case_type_id: str, req: CaseFormConfigReq, admin=
     _d = [x async for x in db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).stream()]; res = _d[0].to_dict() if _d else None
     return res
 
+@admin_api.get("/diagnostic/tombstones")
+async def admin_diagnostic_tombstones(admin=Depends(require_super_admin)):
+    """READ-ONLY forensic inspection of production tombstones and templates collections."""
+    catalog_tombstones = []
+    template_tombstones = []
+    templates_docs = []
+    if db is not None:
+        try:
+            async for d in db.collection("deleted_catalog_items").stream():
+                doc = d.to_dict() or {}
+                doc["_doc_id"] = d.id
+                catalog_tombstones.append(doc)
+        except Exception as e:
+            logger.warning(f"Diagnostic read deleted_catalog_items failed: {e}")
+        try:
+            async for d in db.collection("deleted_templates").stream():
+                doc = d.to_dict() or {}
+                doc["_doc_id"] = d.id
+                template_tombstones.append(doc)
+        except Exception as e:
+            logger.warning(f"Diagnostic read deleted_templates failed: {e}")
+        try:
+            async for d in db.collection("templates").stream():
+                doc = d.to_dict() or {}
+                templates_docs.append({
+                    "_doc_id": d.id,
+                    "id": doc.get("id"),
+                    "name_en": doc.get("name_en"),
+                    "status": doc.get("status"),
+                    "source": doc.get("source"),
+                    "updated_at": doc.get("updated_at"),
+                })
+        except Exception as e:
+            logger.warning(f"Diagnostic read templates failed: {e}")
+    return {
+        "deleted_catalog_items": catalog_tombstones,
+        "deleted_templates": template_tombstones,
+        "templates_in_db": templates_docs,
+    }
+
 
 @admin_api.get("/templates")
 async def admin_list_templates(
