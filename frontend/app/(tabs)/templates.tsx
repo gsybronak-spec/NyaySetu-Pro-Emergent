@@ -11,7 +11,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
-import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getActiveTemplatePairs, PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
@@ -81,7 +81,9 @@ export default function Templates() {
   }, []);
 
   const orderedBasePairs = useMemo(() => {
-    return getActiveTemplatePairs(publishedTemplates, templateOrder);
+    return getActiveTemplatePairs(publishedTemplates, templateOrder).filter(
+      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+    );
   }, [publishedTemplates, templateOrder]);
 
   // Load user favorites on mount

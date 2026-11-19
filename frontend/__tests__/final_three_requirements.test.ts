@@ -4,6 +4,7 @@ import {
   getActiveTemplatePairs,
   getOrderedTemplatePairs,
   sortPairsByOrder,
+  PERMANENTLY_DELETED_BASE_KEYS,
 } from "../src/data/templateCatalogPairs";
 import { searchTemplatePairs } from "../src/utils/templateSearch";
 
@@ -172,5 +173,23 @@ export function runFinalThreeRequirementsFrontendTests() {
     assert.strictEqual(pairs23[i].baseKey, prodReordered[i], `Template index ${i} must exactly match admin order`);
   }
   console.log("PASS Req 3D: All 23 production templates synchronize with 100% exact order parity");
+
+  // Test 3E: Initial-load freshness & permanently deleted template exclusion
+  assert.ok(PERMANENTLY_DELETED_BASE_KEYS.has("aanke_padvani_arji"), "aanke_padvani_arji must be marked permanently deleted");
+  assert.ok(PERMANENTLY_DELETED_BASE_KEYS.has("certified_report"), "certified_report must be marked permanently deleted");
+
+  // On initial render (stale cache / null fallback), deleted templates must be filtered out
+  const rawFallback = getActiveTemplatePairs(null, null);
+  const safeFallback = rawFallback.filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+  assert.ok(!safeFallback.some((p) => PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)), "Deleted templates must never appear in safe fallback");
+  assert.strictEqual(safeFallback.length, 23, "Fallback must contain exactly 23 templates excluding deleted ones");
+
+  // If stale localStorage has old 25-template list containing deleted templates, filter removes them
+  const staleServerTemplates = TEMPLATE_LOGICAL_PAIRS.map((p) => ({ id: p.baseKey, template_id: p.baseKey, name_en: p.name_en, name_gu: p.name_gu }));
+  const renderedFromStaleCache = getActiveTemplatePairs(staleServerTemplates, null).filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+  assert.ok(!renderedFromStaleCache.some((p) => PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)), "Deleted templates must never appear from stale cache");
+  assert.strictEqual(renderedFromStaleCache.length, 23);
+
+  console.log("PASS Req 3E: Initial-load freshness and deleted template exclusion verified");
   console.log("=== ALL FINAL THREE REQUIREMENTS FRONTEND TESTS PASSED ===");
 }

@@ -11,8 +11,10 @@
  * 7. Zero fake empty states (never converts network failures to [])
  */
 
+import { AppState } from "react-native";
 import { api } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
+import { PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
 import {
   SEED_DISTRICTS,
   SEED_TALUKAS,
@@ -25,6 +27,49 @@ const STORAGE_PREFIX = "nyaysetu_cat_v2:";
 const memoryCache = new Map<string, any>();
 const inFlightRequests = new Map<string, Promise<any>>();
 const listeners = new Map<string, Set<(data: any) => void>>();
+
+function sanitizeTemplates(list: any[]): any[] {
+  if (!Array.isArray(list)) return [];
+  return list.filter((t: any) => {
+    const id = t?.id || t?.template_id;
+    if (!id || typeof id !== "string") return false;
+    const base = id.trim().replace(/_(gu|en)$/, "");
+    return !PERMANENTLY_DELETED_BASE_KEYS.has(base) && !PERMANENTLY_DELETED_BASE_KEYS.has(id.trim());
+  });
+}
+
+function sanitizeOrder(order: string[]): string[] {
+  if (!Array.isArray(order)) return [];
+  return order.filter((id) => {
+    if (!id || typeof id !== "string") return false;
+    const base = id.trim().replace(/_(gu|en)$/, "");
+    return !PERMANENTLY_DELETED_BASE_KEYS.has(base) && !PERMANENTLY_DELETED_BASE_KEYS.has(id.trim());
+  });
+}
+
+// Synchronously hydrate memoryCache from window.localStorage to guarantee zero-delay instant render
+if (typeof window !== "undefined" && window.localStorage) {
+  try {
+    const rawTpls = window.localStorage.getItem(`${STORAGE_PREFIX}published_templates`);
+    if (rawTpls) {
+      const parsed = JSON.parse(rawTpls);
+      const clean = sanitizeTemplates(parsed);
+      if (clean.length > 0) {
+        memoryCache.set("published_templates", clean);
+      }
+    }
+    const rawOrder = window.localStorage.getItem(`${STORAGE_PREFIX}template_order`);
+    if (rawOrder) {
+      const parsed = JSON.parse(rawOrder);
+      const clean = sanitizeOrder(parsed);
+      if (clean.length > 0) {
+        memoryCache.set("template_order", clean);
+      }
+    }
+  } catch {
+    // Ignore storage parse error
+  }
+}
 
 function notify(key: string, data: any) {
   const set = listeners.get(key);
@@ -51,8 +96,13 @@ export function subscribeCatalog(key: string, cb: (data: any) => void): () => vo
 
 async function loadFromStorage<T>(key: string, allowEmpty = false): Promise<T | null> {
   try {
-    const val = await storage.get(`${STORAGE_PREFIX}${key}`, null as any);
+    let val = await storage.get(`${STORAGE_PREFIX}${key}`, null as any);
     if (val !== null && val !== undefined) {
+      if (key === "published_templates" && Array.isArray(val)) {
+        val = sanitizeTemplates(val) as any;
+      } else if (key === "template_order" && Array.isArray(val)) {
+        val = sanitizeOrder(val) as any;
+      }
       if (allowEmpty || !Array.isArray(val) || val.length > 0) {
         memoryCache.set(key, val);
         return val as T;
@@ -66,9 +116,15 @@ async function loadFromStorage<T>(key: string, allowEmpty = false): Promise<T | 
 
 async function saveToStorage(key: string, data: any): Promise<void> {
   try {
-    memoryCache.set(key, data);
-    await storage.set(`${STORAGE_PREFIX}${key}`, data);
-    notify(key, data);
+    let cleanData = data;
+    if (key === "published_templates" && Array.isArray(data)) {
+      cleanData = sanitizeTemplates(data);
+    } else if (key === "template_order" && Array.isArray(data)) {
+      cleanData = sanitizeOrder(data);
+    }
+    memoryCache.set(key, cleanData);
+    await storage.set(`${STORAGE_PREFIX}${key}`, cleanData);
+    notify(key, cleanData);
   } catch {
     // Ignore storage write error
   }
@@ -287,8 +343,51 @@ export const catalogCache = {
   peekCaseTypes: (): any[] => memoryCache.get("case_types") || SEED_CASE_TYPES,
   peekLaws: (): any[] => memoryCache.get("laws") || SEED_LAWS,
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
-  peekPublishedTemplates: (): any[] | null => memoryCache.get("published_templates") ?? null,
-  peekTemplateOrder: (): string[] | null => memoryCache.get("template_order") ?? null,
+  peekPublishedTemplates: (): any[] | null => {
+    const mem = memoryCache.get("published_templates");
+    if (mem && Array.isArray(mem)) return sanitizeTemplates(mem);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem(`${STORAGE_PREFIX}published_templates`);
+        if (raw) {
+          const clean = sanitizeTemplates(JSON.parse(raw));
+          if (clean.length > 0) {
+            memoryCache.set("published_templates", clean);
+            return clean;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  },
+  peekTemplateOrder: (): string[] | null => {
+    const mem = memoryCache.get("template_order");
+    if (mem && Array.isArray(mem)) return sanitizeOrder(mem);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem(`${STORAGE_PREFIX}template_order`);
+        if (raw) {
+          const clean = sanitizeOrder(JSON.parse(raw));
+          if (clean.length > 0) {
+            memoryCache.set("template_order", clean);
+            return clean;
+          }
+        }
+      } catch {}
+    }
+    return null;
+  },
+
+  revalidateTemplates: async () => {
+    try {
+      await Promise.all([
+        catalogCache.getPublishedTemplates(true),
+        catalogCache.getTemplateOrder(true),
+      ]);
+    } catch {
+      // Ignore background network errors
+    }
+  },
 
   subscribe: subscribeCatalog,
 
@@ -314,4 +413,26 @@ export const catalogCache = {
     }
   },
 };
+
+let isAppReturnRevalidationSetup = false;
+export function setupAppReturnRevalidation() {
+  if (isAppReturnRevalidationSetup) return;
+  isAppReturnRevalidationSetup = true;
+
+  const onReturn = () => {
+    catalogCache.revalidateTemplates();
+  };
+
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("focus", onReturn);
+    if (typeof document !== "undefined" && document.addEventListener) {
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) onReturn();
+      });
+    }
+  }
+  AppState.addEventListener("change", (state) => {
+    if (state === "active") onReturn();
+  });
+}
 

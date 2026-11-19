@@ -18,7 +18,7 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
-import { getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { getActiveTemplatePairs, PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 
 interface SearchResults {
@@ -52,7 +52,9 @@ export default function Search() {
         catalogCache.getPublishedTemplates().catch(() => null),
         catalogCache.getTemplateOrder().catch(() => null),
       ]);
-      const activePairs = getActiveTemplatePairs(tpls, order);
+      const activePairs = getActiveTemplatePairs(tpls, order).filter(
+        (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+      );
       const matchedPairs = searchTemplatePairs(trimmed, null, undefined, activePairs);
       setResults({
         cases: Array.isArray(res?.cases) ? res.cases : [],

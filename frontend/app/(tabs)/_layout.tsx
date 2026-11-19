@@ -10,7 +10,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopSidebar } from "@/src/components/DesktopSidebar";
-import { catalogCache } from "@/src/services/catalogCache";
+import { catalogCache, setupAppReturnRevalidation } from "@/src/services/catalogCache";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function TabsLayout() {
@@ -20,6 +20,13 @@ export default function TabsLayout() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
+    // Setup automatic revalidation when returning to app (focus, visibilitychange, AppState)
+    setupAppReturnRevalidation();
+
+    // Immediately fetch latest authoritative templates and order on app entry
+    catalogCache.getPublishedTemplates(true).catch(() => {});
+    catalogCache.getTemplateOrder(true).catch(() => {});
+
     // Pre-warm master catalogs in background when entering main dashboard
     catalogCache.getDistricts().catch(() => {});
     catalogCache.getCaseTypes().catch(() => {});

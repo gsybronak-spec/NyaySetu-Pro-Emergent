@@ -13,7 +13,7 @@ import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage, StatCard } from "@/src/components/DesktopPage";
-import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
+import { TemplateLogicalPair, getActiveTemplatePairs, PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 import { NotificationCenter } from "@/src/components/NotificationCenter";
@@ -26,11 +26,15 @@ export default function Home() {
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState(() => ({ balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }));
   const [allTemplatePairs, setAllTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
-    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder())
+    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).filter(
+      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+    )
   );
   const [visibleHomeCount, setVisibleHomeCount] = useState<number>(10);
   const [totalTemplateCount, setTotalTemplateCount] = useState<number>(() =>
-    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).length
+    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).filter(
+      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+    ).length
   );
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [drafts, setDrafts] = useState<any[]>([]);
@@ -53,7 +57,9 @@ export default function Home() {
     if (q?.quote) setQuote(q.quote);
     if (w && typeof w === "object") setWallet(w);
     setDrafts(Array.isArray(drs) ? drs : []);
-    const active = getActiveTemplatePairs(tpls, order);
+    const active = getActiveTemplatePairs(tpls, order).filter(
+      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+    );
     setAllTemplatePairs(active);
     setTotalTemplateCount(active.length);
     setLoadError(failed);

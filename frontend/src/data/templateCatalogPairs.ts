@@ -517,6 +517,11 @@ function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null)
  * - If order is an array of IDs, only templates in the order are returned, sorted by that order.
  * - If order is null or undefined, returns the full default baseline TEMPLATE_LOGICAL_PAIRS.
  */
+export const PERMANENTLY_DELETED_BASE_KEYS = new Set([
+  "aanke_padvani_arji",
+  "certified_report",
+]);
+
 export function getOrderedTemplatePairs(order?: string[] | null): TemplateLogicalPair[] {
   if (order === null || order === undefined) {
     return [...TEMPLATE_LOGICAL_PAIRS];
