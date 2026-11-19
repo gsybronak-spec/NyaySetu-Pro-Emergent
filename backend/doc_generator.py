@@ -249,6 +249,8 @@ def get_doc_settings(overrides: dict = None) -> dict:
                        "body_size", "heading_size", "body_size_en", "heading_size_en", "paragraph_spacing",
                        "first_line_indent_pt", "alignment", "format_version"):
                 settings[k] = v
+            else:
+                settings[k] = v
 
     # Final defensive guard: ensure line_spacing is never less than body_size
     try:
@@ -846,6 +848,40 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
 
 def render_template(content_template: str, values: dict) -> str:
     vals = dict(values or {})
+
+    # Universal bidirectional alias resolution for court, place, date, and party roles
+    if not vals.get("court") and vals.get("court_name"):
+        vals["court"] = vals["court_name"]
+    elif not vals.get("court_name") and vals.get("court"):
+        vals["court_name"] = vals["court"]
+
+    if not vals.get("taluka_place") and vals.get("place"):
+        vals["taluka_place"] = vals["place"]
+    elif not vals.get("place") and vals.get("taluka_place"):
+        vals["place"] = vals["taluka_place"]
+
+    if not vals.get("date_display") and vals.get("date"):
+        vals["date_display"] = vals["date"]
+    elif not vals.get("date") and vals.get("date_display"):
+        vals["date"] = vals["date_display"]
+
+    if not vals.get("selected_party_role") and vals.get("advocate_for_role"):
+        vals["selected_party_role"] = vals["advocate_for_role"]
+    elif not vals.get("advocate_for_role") and vals.get("selected_party_role"):
+        vals["advocate_for_role"] = vals["selected_party_role"]
+
+    if not vals.get("party_line") and vals.get("party_1_role") and vals.get("party_1_name"):
+        vals["party_line"] = f"{vals['party_1_role']} :- {vals['party_1_name']}".strip(" :-")
+    if not vals.get("opposite_party_line") and vals.get("party_2_role") and vals.get("party_2_name"):
+        vals["opposite_party_line"] = f"{vals['party_2_role']} :- {vals['party_2_name']}".strip(" :-")
+
+    if "police_station_crime_no" not in vals:
+        vals["police_station_crime_no"] = ""
+    if "return_reason" not in vals:
+        vals["return_reason"] = ""
+    if "enclosure_line" not in vals:
+        vals["enclosure_line"] = ""
+
     if (
         "પ્રમાણિત નકલ મેળવવા બાબત" in content_template
         or "Application for Obtaining Certified Copy" in content_template
@@ -867,11 +903,6 @@ def render_template(content_template: str, values: dict) -> str:
             elif raw_dep.lower().startswith("rs"): raw_dep = raw_dep[len("rs"):].strip()
             elif raw_dep.lower().startswith("inr"): raw_dep = raw_dep[len("inr"):].strip()
             vals["deposit_amount"] = raw_dep
-
-        if not vals.get("court_name") and vals.get("court"):
-            vals["court_name"] = vals["court"]
-        elif not vals.get("court") and vals.get("court_name"):
-            vals["court"] = vals["court_name"]
 
     result = content_template
     for k, v in vals.items():
@@ -2065,6 +2096,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
     body_lines = []
     date_lines = []
+    extracted_pn = ""
     for ln in rest_lines:
         clean_ln = clean_labels(ln)
         if clean_ln.startswith("તારીખ") or clean_ln.startswith("તા.") or clean_ln.startswith("સ્થળ") or clean_ln.startswith("Date") or clean_ln.startswith("Place"):
@@ -2087,6 +2119,12 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             or "name of advocate" in clean_ln.lower()
             or bool(re.search(r"(?:પક્ષકાર|એડવોકેટ)[નુંનુ]\s*નામ", clean_ln))
         ):
+            if not extracted_pn and ("party" in clean_ln.lower() or "પક્ષકાર" in clean_ln):
+                m = re.search(r"(?:પક્ષકાર[નુંનુ]\s*નામ|Party(?:'s)?\s*name)\s*[:-]\s*([^\s_].*?)(?:\s+(?:એડવોકેટ[નુંનુ]\s*નામ|Advocate(?:'s)?\s*name)\b|$)", clean_ln)
+                if m:
+                    cand = m.group(1).strip()
+                    if cand and not cand.startswith("_") and is_clean_val(cand):
+                        extracted_pn = cand
             pass
         else:
             if clean_ln.strip():
@@ -2133,7 +2171,18 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
             f"સ્થળ : {p_val}" if language == "gu" else f"Place : {p_val}",
         ]
 
-    raw_pn = (ctx.get("party_signature_name") or ctx.get("party_sign_name") or "").strip()
+    if "party_signature_name" in ctx and ctx.get("party_signature_name") is not None:
+        raw_pn = str(ctx.get("party_signature_name") or "").strip()
+    elif "party_sign_name" in ctx and ctx.get("party_sign_name") is not None:
+        raw_pn = str(ctx.get("party_sign_name") or "").strip()
+    else:
+        rep_side = ctx.get("representing_party") or ctx.get("advocate_side") or "party_1"
+        if rep_side in ("party_2", "opposite", "party2"):
+            raw_pn = str(ctx.get("party_2_name") or ctx.get("opposite_party") or "").strip()
+        else:
+            raw_pn = str(ctx.get("party_1_name") or ctx.get("party_name") or "").strip()
+        if not raw_pn and extracted_pn:
+            raw_pn = extracted_pn
     p_name = clean_labels(raw_pn) if is_clean_val(raw_pn) else ""
     raw_an = (ctx.get("advocate_name") or (advocate_lines[0] if advocate_lines else "")).strip()
     if "ના એડવોકેટ" in raw_an or raw_an.startswith("Advocate for"):
@@ -2251,7 +2300,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
                     # Top Header: Justice Symbol (Left) & Advocate Details (Right)
                     justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
-                    img_size = 82.0
+                    img_size = 104.0
                     if os.path.exists(justice_img_path):
                         c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
 
@@ -2265,45 +2314,45 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                         language=language,
                     )
 
-                    y = min(y - img_size - 8, adv_y - 8)
+                    y = min(y - img_size - 10.0, adv_y - 10.0)
 
                     # Horizontal Rule 1
                     c.setLineWidth(1.0)
                     c.line(margin_l, y, margin_l + max_width, y)
-                    y -= 22.0
+                    y -= 44.0
 
                     # Title: "વકીલાતનામું" with proper breathing space
                     draw_hb_line("વકીલાતનામું", title_size, margin_l, y, align="center", width_limit=max_width, is_bold=True, underline=True)
-                    y -= 24.0
+                    y -= 36.0
 
                     # Court Heading & Mukam
                     for cln in court_lines:
                         is_first = (cln == court_lines[0])
                         sz = court_size if is_first else mukam_size
                         draw_hb_line(cln, sz, margin_l, y, align="center", width_limit=max_width, is_bold=is_first)
-                        y -= (20.0 if is_first else 19.0)
-                    y -= 2.0
+                        y -= (22.0 if is_first else 20.0)
+                    y -= 4.0
 
                     # Case Line
                     if case_line:
                         draw_hb_line(case_line, case_size, margin_l, y, align="right", width_limit=max_width, is_bold=False)
-                        y -= 19.0
+                        y -= 20.0
 
                     # Parties
                     if applicant_line:
                         draw_hb_line(applicant_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-                        y -= 18.0
+                        y -= 20.0
                     draw_hb_line(versus_line, versus_size, margin_l, y, align="center", width_limit=max_width, is_bold=True)
-                    y -= 18.0
+                    y -= 20.0
                     if opponent_line:
                         draw_hb_line(opponent_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-                        y -= 16.0
-                    y -= 2.0
+                        y -= 18.0
+                    y -= 6.0
 
                     # Horizontal Rule 2
                     c.setLineWidth(1.0)
                     c.line(margin_l, y, margin_l + max_width, y)
-                    y -= 22.0
+                    y -= 26.0
 
                     # Legal Body Paragraphs
                     for bln in body_lines:
@@ -2332,14 +2381,14 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                                 if wi < len(w_list) - 1:
                                     cur_x += space_adv + extra
                             y -= body_line_h
-                        y -= 12.0
-                    y -= 4.0
+                        y -= 16.0
+                    y -= 12.0
 
                     # Date & Place
                     for dln in date_lines:
                         draw_hb_line(dln, date_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-                        y -= 18.0
-                    y -= 8.0
+                        y -= 20.0
+                    y -= 24.0
 
                     # Column boundaries
                     col1_x = margin_l
@@ -2357,8 +2406,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                     w_sig_a = sum(g["adv"] for g in _shape_hb_word(hb_font, upem, lbl_a_sig, sig_size))
                     c.line(col2_x + w_sig_a + 2, y - 1, margin_l + max_width, y - 1)
 
-                    # Row 2: Names (strictly aligned baseline)
-                    y_row2 = y - 24.0
+                    # Row 2: Names (strictly aligned baseline) - comfortably spaced below signature line
+                    y_row2 = y - 48.0
                     lbl_p_pre = "પક્ષકારનું નામ :- "
                     lbl_a_pre = "એડવોકેટનું નામ :- "
 
@@ -2522,7 +2571,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
     # 1. Top Header: Justice Symbol (Left) & Advocate Details (Right)
     justice_img_path = str(Path(__file__).parent / "assets" / "justice_symbol.png")
-    img_size = 82.0
+    img_size = 104.0
     if os.path.exists(justice_img_path):
         c.drawImage(justice_img_path, margin_l, y - img_size + 4, width=img_size, height=img_size, preserveAspectRatio=True, mask='auto')
 
@@ -2536,58 +2585,58 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
         language=language,
     )
 
-    y = min(y - img_size - 8, adv_y - 8)
+    y = min(y - img_size - 10.0, adv_y - 10.0)
 
     # Upper Horizontal Rule
     c.setLineWidth(1.0)
     c.line(margin_l, y, margin_l + max_width, y)
-    y -= 22.0
+    y -= 44.0
 
     # Title: "વકીલાતનામું" / "VAKALATNAMA" with proper breathing space
     doc_title = "વકીલાતનામું" if language == "gu" else "VAKALATNAMA"
     draw_canvas_line(doc_title, title_size, margin_l, y, align="center", width_limit=max_width, is_bold=True, underline=True)
-    y -= 24.0
+    y -= 36.0
 
     # Court Heading & Mukam (Place)
     for cln in court_lines:
         is_first = (cln == court_lines[0])
         sz = court_size if is_first else mukam_size
         draw_canvas_line(cln, sz, margin_l, y, align="center", width_limit=max_width, is_bold=is_first)
-        y -= (20.0 if is_first else 19.0)
-    y -= 2.0
+        y -= (22.0 if is_first else 20.0)
+    y -= 4.0
 
     # Case Line
     if case_line:
         draw_canvas_line(case_line, case_size, margin_l, y, align="right", width_limit=max_width, is_bold=False)
-        y -= 19.0
+        y -= 20.0
 
     # Parties
     if applicant_line:
         draw_canvas_line(applicant_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-        y -= 18.0
+        y -= 20.0
     draw_canvas_line(versus_line, versus_size, margin_l, y, align="center", width_limit=max_width, is_bold=True)
-    y -= 18.0
+    y -= 20.0
     if opponent_line:
         draw_canvas_line(opponent_line, party_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-        y -= 16.0
-    y -= 2.0
+        y -= 18.0
+    y -= 6.0
 
     # Lower Horizontal Rule
     c.setLineWidth(1.0)
     c.line(margin_l, y, margin_l + max_width, y)
-    y -= 22.0
+    y -= 26.0
 
     # Legal Body Paragraphs
     for bln in body_lines:
         y = draw_canvas_paragraph(bln, body_size, margin_l, y, width_limit=max_width, line_height=body_line_h, indent_pt=body_indent)
-        y -= 12.0
-    y -= 4.0
+        y -= 16.0
+    y -= 12.0
 
     # Date & Place
     for dln in date_lines:
         draw_canvas_line(dln, date_size, margin_l, y, align="left", width_limit=max_width, is_bold=False)
-        y -= 18.0
-    y -= 8.0
+        y -= 20.0
+    y -= 24.0
 
     # Column boundaries
     col1_x = margin_l
@@ -2608,8 +2657,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
     w_a_sig = _get_token_width(lbl_a_sig, sig_size)
     c.line(col2_x + w_a_sig + 2, y - 1, margin_l + max_width, y - 1)
 
-    # Row 2: Side-by-side Names (strictly aligned baseline)
-    y_row2 = y - 24.0
+    # Row 2: Side-by-side Names (strictly aligned baseline) - comfortably spaced below signature line
+    y_row2 = y - 48.0
 
     lbl_p_prefix = "પક્ષકારનું નામ :- " if language == "gu" else "Party's name :- "
     lbl_a_prefix = "એડવોકેટનું નામ :- " if language == "gu" else "Advocate's name :- "

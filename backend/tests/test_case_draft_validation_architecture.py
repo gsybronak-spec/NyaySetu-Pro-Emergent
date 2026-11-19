@@ -157,6 +157,8 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
         asyncio.set_event_loop(self.loop)
         self.mock_db = MockFirestoreDB()
         server.db = self.mock_db
+        self.orig_synced = server._CATALOG_MAPS_SYNCED
+        server._CATALOG_MAPS_SYNCED = True
         self.test_user = {
             "id": "adv_user_123",
             "name": "Advocate Ronak Solanki",
@@ -167,6 +169,7 @@ class TestCaseDraftValidationArchitecture(unittest.TestCase):
         }
 
     def tearDown(self):
+        server._CATALOG_MAPS_SYNCED = self.orig_synced
         self.loop.close()
 
     # 1. Case Create succeeds with only case_number

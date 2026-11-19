@@ -28,6 +28,64 @@ Placeholder conventions
 
 TEMPLATES_V2 = [
     {
+        "id": "aanke_padvani_arji",
+        "name_en": "Application to Exhibit Document",
+        "name_gu": "દસ્તાવેજને આંકે પાડવાની અરજી",
+        "category": "General",
+        "aliases": ["aanke", "exhibit", "document_exhibit_application", "document_exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક"],
+        "fields": [
+            {"key": "advocate_side", "label_en": "Advocate acting on behalf of", "label_gu": "કોના તરફે એડવોકેટ", "type": "select", "required": True, "source": "case_parties",
+             "options": [
+                 {"value": "party", "label_en": "Applicant / Plaintiff side", "label_gu": "ફરિયાદી / અરજદાર / વાદી તરફથી"},
+                 {"value": "opposite", "label_en": "Opposite party side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફથી"},
+             ]},
+            {"key": "document_details", "label_en": "Document details to be exhibited", "label_gu": "ક્યા દસ્તાવેજને આંક પાડવાના તેની વિગત", "type": "textarea", "required": True},
+            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+        ],
+        "content_en": """IN THE COURT OF {{court}},
+{{taluka_place}}
+
+{{case_type}} No. {{case_number}}
+
+{{party_line}}
+Versus
+{{opposite_party_line}}
+
+APPLICATION TO GIVE EXHIBIT NUMBER TO DOCUMENT
+
+In the above matter, we, advocate of {{selected_party_role}}, most respectfully submit this application to this Hon'ble Court that......
+
+The said case is pending before this Hon'ble Court. In the said case, {{document_details}} has been produced as documentary evidence. As the said document is in the interest of justice, this Hon'ble Court may be pleased to take the said document on record, give a proper exhibit number and pass appropriate orders.
+
+Date : {{date_display}}
+Place : {{taluka_place}}
+
+-----------------
+Advocate of {{selected_party_role}}
+""",
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+{{taluka_place}}
+
+{{case_type}} નં. {{case_number}}
+
+{{party_line}}
+વિરુદ્ધ
+{{opposite_party_line}}
+
+દસ્તાવેજને આંકે પાડવાની અરજી
+
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે......
+
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{document_details}} દસ્તાવેજી પુરાવા તરીકે રજૂ કરવામાં આવેલ છે. સદર દસ્તાવેજ ન્યાયના હિતમાં હોય, સદર દસ્તાવેજને રેકોર્ડ પર લઈ યોગ્ય આંક આપી યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date_display}}
+સ્થળ : {{taluka_place}}
+
+----------
+{{selected_party_role}} ના એડવોકેટ
+""",
+    },
+    {
         "id": "certified_report",
         "name_en": "Application for Certified Copy",
         "name_gu": "પ્રમાણિત નકલ માટે અરજી",

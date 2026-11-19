@@ -27,6 +27,23 @@ os.environ.setdefault("DB_NAME", "nyaysetu_test_tpl_page_size")
 
 import pytest
 
+import socket
+
+def _is_emulator_running() -> bool:
+    host_port = os.environ.get("FIRESTORE_EMULATOR_HOST")
+    if not host_port:
+        return False
+    try:
+        host, port = host_port.split(":")
+        s = socket.create_connection((host, int(port)), timeout=0.3)
+        s.close()
+        return True
+    except Exception:
+        return False
+
+if not _is_emulator_running():
+    pytest.skip("Local Firestore emulator is unavailable on 127.0.0.1:8080.", allow_module_level=True)
+
 import pytest_asyncio
 import bcrypt
 from datetime import datetime, timezone
@@ -46,7 +63,7 @@ COLLECTIONS = ["admin_users", "users", "wallets", "cases", "drafts",
                "plans", "settings", "system_settings"]
 
 SEED_IDS = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
-assert "affidavit" in SEED_IDS and len(SEED_IDS) == 45
+assert "affidavit" in SEED_IDS and len(SEED_IDS) == 50
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -58,6 +75,8 @@ async def client():
 
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def clean_db():
+    if not _is_emulator_running():
+        pytest.skip("Local Firestore emulator is unavailable on 127.0.0.1:8080.")
     seed_ids = {t["id"] for t in [*TEMPLATES, *TEMPLATES_V2]}
     async for d in server.db.collection("templates").stream():
         if d.id not in seed_ids or d.id == "adjournment":

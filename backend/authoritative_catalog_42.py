@@ -38,8 +38,61 @@ DEFAULT_SETTINGS = {
     "alignment": "justify",
 }
 
-# The 20 Authoritative Template Definitions (Base Specifications)
+# The 21 Authoritative Template Definitions (Base Specifications)
 BASE_TEMPLATES = [
+    {
+        "base_key": "aanke_padvani_arji",
+        "aliases": ["aanke", "exhibit", "document_exhibit_application", "document_exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક", "આંક પાડવાની અરજી"],
+        "name_gu": "આંક પાડવાની અરજી",
+        "name_en": "Application to Exhibit Document",
+        "category": "General",
+        "description": "Application to mark/assign exhibit numbers to documents produced on record.",
+        "fields": [
+            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
+            {'key': 'document_details', 'label_en': 'Document details to be exhibited', 'label_gu': 'ક્યા દસ્તાવેજને આંક પાડવાના તેની વિગત', 'type': 'textarea', 'required': True},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+        ],
+        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+મુકામ :- {{taluka_place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_line}}
+વિરુદ્ધ
+{{opposite_party_line}}
+
+ બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
+
+સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{document_details}} ખુબ જ મહત્વ ધરાવે છે અને કેસના યોગ્ય નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોય, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને યોગ્ય આંક આપવાનો હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date_display}}
+સ્થળ : {{taluka_place}}
+
+----------
+{{selected_party_role}} ના એડવોકેટ""",
+        "content_en": """IN THE COURT OF {{court}},
+AT {{taluka_place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_line}}
+Versus
+{{opposite_party_line}}
+
+SUBJECT: APPLICATION TO EXHIBIT DOCUMENT
+
+In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+
+The said case is pending before this Hon'ble Court. In the said case, {{document_details}} is of great significance and is necessary for the proper adjudication of the case. As it is in the interest of justice to take the said document on record as evidence, it is prayed that this Hon'ble Court may be pleased to take the said document on record and assign appropriate exhibit number to it.
+
+Date : {{date_display}}
+Place : {{taluka_place}}
+
+-----------------
+Advocate for {{selected_party_role}}""",
+    },
     {
         "base_key": "certified_report",
         "aliases": ["certified copy", "પ્રમાણિત નકલ", "pramanit nakal", "નકલ", "સર્ટિફાઇડ રિપોર્ટ", "inspection"],

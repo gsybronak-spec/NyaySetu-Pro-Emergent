@@ -350,14 +350,17 @@ export default function TemplateApplication() {
         me?.qualification ||
         me?.advocate_qualification ||
         "";
+      initialValues["qualification"] = initialValues["advocate_qualification"];
       initialValues["advocate_address"] =
         (language === "gu" ? me?.office_address_gu : me?.office_address_en) ||
         me?.office_address ||
         me?.address ||
         me?.advocate_address ||
         "";
+      initialValues["office_address"] = initialValues["advocate_address"];
       initialValues["advocate_mobile"] =
         me?.mobile || me?.phone || me?.advocate_mobile || "";
+      initialValues["mobile_number"] = initialValues["advocate_mobile"];
       initialValues["advocate_enrollment_no"] =
         me?.bar_council_no ||
         me?.sanad_no ||
@@ -370,10 +373,9 @@ export default function TemplateApplication() {
       initialValues["bar_council_no"] = initialValues["advocate_enrollment_no"];
       initialValues["advocate_email"] = me?.email || me?.advocate_email || "";
       if (isVakalatnama) {
-        initialValues["party_signature_name"] =
-          initialValues["party_signature_name"] !== undefined
-            ? initialValues["party_signature_name"]
-            : "";
+        if (initialValues["party_signature_name"] === undefined) {
+          delete initialValues["party_signature_name"];
+        }
       }
       if (templateId === "reopen_right_to_argue_application") {
         const dVal = initialValues["district"];
@@ -848,7 +850,7 @@ export default function TemplateApplication() {
         if (!values.custom_court_name_en?.trim()) missing.push("custom_court_name_en");
       }
       if (!values.case_type) missing.push("case_type");
-      if (!values.case_number && templateId !== "jamin_bond") missing.push("case_number");
+      if (!values.case_number && !templateId.startsWith("jamin_bond")) missing.push("case_number");
       if (!values.party_name && !values.party_1_name) missing.push("party_name");
       if (!values.opposite_party && !values.party_2_name) missing.push("opposite_party");
       if (!values.advocate_name) missing.push("advocate_name");
@@ -903,7 +905,7 @@ export default function TemplateApplication() {
     }
     setBusy(true);
     try {
-      const res = await api.previewApp({ template_id: templateId, case_id: caseId, language, values: toDocValues(values) });
+      const res = await api.previewApp({ template_id: resolveTemplateId(templateId, language) || templateId, case_id: caseId, language, values: toDocValues(values) });
       setPreview(res.content);
       setBlocks(res.blocks || []);
       if (res?.pdf_base64) {
@@ -924,7 +926,7 @@ export default function TemplateApplication() {
     setPreviewLoading(true);
     try {
       const res = await api.previewApp({
-        template_id: templateId,
+        template_id: resolveTemplateId(templateId, activeLang) || templateId,
         case_id: caseId,
         language: activeLang,
         values: toDocValues(activeValues),
@@ -996,7 +998,7 @@ export default function TemplateApplication() {
     setNotice(null);
     try {
       const res = await api.downloadApp({
-        template_id: templateId,
+        template_id: resolveTemplateId(templateId, language) || templateId,
         case_id: caseId,
         language,
         values: toDocValues(values),
@@ -1051,8 +1053,8 @@ export default function TemplateApplication() {
   const renderFieldInput = (f: any) => {
     if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason") return null;
     if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
-    const label = (language === "gu" ? f.label_gu : f.label_en) + (f.required ? " *" : "");
-    const pickLabel = (o: any) => (language === "gu" ? o.label_gu || o.label_en : o.label_en || o.label_gu);
+    const label = (language === "gu" ? (f.label_gu || f.label_en || f.label || f.key) : (f.label_en || f.label_gu || f.label || f.key)) + (f.required ? " *" : "");
+    const pickLabel = (o: any) => typeof o === "string" ? o : (language === "gu" ? (o.label_gu || o.label_en || o.label || o.value || o.id || o.key || "") : (o.label_en || o.label_gu || o.label || o.value || o.id || o.key || ""));
     const fvalue = values[f.key];
 
     if (f.type === "date") {
@@ -1793,7 +1795,7 @@ export default function TemplateApplication() {
               <Field
                 testID="field-party_signature_name"
                 label={language === "gu" ? "પક્ષકારનું નામ (સહી કરનાર) (વૈકલ્પિક)" : "Name of Party Signing (Optional)"}
-                placeholder={language === "gu" ? "ખાલી રાખશો તો સહી માટે ખાલી લીટી આવશે" : "Leave blank to render blank underline for signing"}
+                placeholder={values.party_1_name ? values.party_1_name : (language === "gu" ? "ખાલી રાખશો તો સહી માટે ખાલી લીટી આવશે" : "Leave blank to render blank underline for signing")}
                 value={values.party_signature_name !== undefined ? values.party_signature_name : ""}
                 onChangeText={(v) => update("party_signature_name", v)}
               />

@@ -153,6 +153,24 @@ async function request(path: string, method = 'GET', body?: unknown, isRetry = f
   return json;
 }
 
+export const notifyAdminMutation = (type: string, payload?: any) => {
+  try {
+    if (typeof window !== 'undefined') {
+      (window as any).notifyAdminMutation = notifyAdminMutation;
+      if ('BroadcastChannel' in window) {
+        const channel = new BroadcastChannel('nyaysetu_sync_channel');
+        channel.postMessage({ type, payload, timestamp: Date.now() });
+        channel.close();
+      }
+      if (window.localStorage) {
+        window.localStorage.setItem('nyaysetu_sync_channel', JSON.stringify({ type, payload, timestamp: Date.now() }));
+      }
+    }
+  } catch (e) {
+    console.warn('[sync] broadcast failed', e);
+  }
+};
+
 export const adminApi = {
   login: (email: string, password: string) =>
     request('/auth/login', 'POST', { email, password }),
@@ -171,13 +189,41 @@ export const adminApi = {
     return request(`/templates${qs ? '?' + qs : ''}`);
   },
   adminGetTemplate: (id: string) => request(`/templates/${id}`),
-  adminCreateTemplate: (data: any) => request('/templates', 'POST', data),
-  adminUpdateTemplate: (id: string, data: any) => request(`/templates/${id}`, 'PUT', data),
-  adminPublishTemplate: (id: string) => request(`/templates/${id}/publish`, 'POST'),
-  adminArchiveTemplate: (id: string) => request(`/templates/${id}/archive`, 'POST'),
-  adminDeleteTemplate: (id: string) => request(`/templates/${id}`, 'DELETE'),
-  adminRemoveShadowDraft: (id: string, confirm = true) => request(`/templates/${id}/draft?confirm=${confirm}`, 'DELETE'),
-  adminCloneTemplate: (id: string, data?: any) => request(`/templates/${id}/clone`, 'POST', data),
+  adminCreateTemplate: async (data: any) => {
+    const res = await request('/templates', 'POST', data);
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminUpdateTemplate: async (id: string, data: any) => {
+    const res = await request(`/templates/${id}`, 'PUT', data);
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminPublishTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}/publish`, 'POST');
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminArchiveTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}/archive`, 'POST');
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminDeleteTemplate: async (id: string) => {
+    const res = await request(`/templates/${id}`, 'DELETE');
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminRemoveShadowDraft: async (id: string, confirm = true) => {
+    const res = await request(`/templates/${id}/draft?confirm=${confirm}`, 'DELETE');
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
+  adminCloneTemplate: async (id: string, data?: any) => {
+    const res = await request(`/templates/${id}/clone`, 'POST', data);
+    notifyAdminMutation('templates_updated');
+    return res;
+  },
   adminTemplateVersions: (id: string) => request(`/templates/${id}/versions`),
   adminPreviewTemplate: (id: string, data?: any) => request(`/templates/${id}/preview`, 'POST', data),
   adminMigrateSeed: () => request('/templates/migrate-seed', 'POST'),
@@ -254,7 +300,19 @@ export const adminApi = {
   listSettings: () => request('/settings'),
   updateSetting: (key: string, value: number | string) => request(`/settings/${key}`, 'PUT', { value }),
   getTemplateOrder: () => request('/template-order'),
-  updateTemplateOrder: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
-  reorderTemplates: (order: string[]) => request('/template-order', 'PUT', { template_order: order }),
-  bulkDeleteTemplates: (ids: string[]) => request('/templates/bulk-delete', 'POST', { ids }),
+  updateTemplateOrder: async (order: string[]) => {
+    const res = await request('/template-order', 'PUT', { template_order: order });
+    notifyAdminMutation('templates_updated', { order });
+    return res;
+  },
+  reorderTemplates: async (order: string[]) => {
+    const res = await request('/template-order', 'PUT', { template_order: order });
+    notifyAdminMutation('templates_updated', { order });
+    return res;
+  },
+  bulkDeleteTemplates: async (ids: string[]) => {
+    const res = await request('/templates/bulk-delete', 'POST', { ids });
+    notifyAdminMutation('templates_updated', { ids });
+    return res;
+  },
 };

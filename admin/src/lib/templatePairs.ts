@@ -97,6 +97,14 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
     category: 'General',
   },
   {
+    baseKey: 'aanke_padvani_arji',
+    guId: 'aanke_padvani_arji_gu',
+    enId: 'aanke_padvani_arji_en',
+    name_gu: 'આંક પાડવાની અરજી',
+    name_en: 'Application to Exhibit Document',
+    category: 'General',
+  },
+  {
     baseKey: 'closing_purshish',
     guId: 'closing_purshish_gu',
     enId: 'closing_purshish_en',
@@ -175,6 +183,30 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
     name_gu: 'ફર્ધર સ્ટેટમેન્ટ (F.S.) હક ખોલવાની અરજી',
     name_en: 'Application to Reopen Right of Further Statement (F.S.)',
     category: 'Criminal',
+  },
+  {
+    baseKey: 'certified_copy_application',
+    guId: 'certified_copy_application',
+    enId: 'certified_copy_application',
+    name_gu: 'પ્રમાણિત નકલ મેળવવા બાબત',
+    name_en: 'Application for Obtaining Certified Copy',
+    category: 'General',
+  },
+  {
+    baseKey: 'closing_argument_right_application',
+    guId: 'closing_argument_right_application',
+    enId: 'closing_argument_right_application',
+    name_gu: 'દલીલોનો હક બંધ કરાવવાની અરજી',
+    name_en: 'Application for Closing the Right to Make Arguments',
+    category: 'General',
+  },
+  {
+    baseKey: 'reopen_right_to_argue_application',
+    guId: 'reopen_right_to_argue_application',
+    enId: 'reopen_right_to_argue_application',
+    name_gu: 'દલીલો કરવા નો હક ફરીથી ખોલાવવાની અરજી',
+    name_en: 'Application for Reopening the Right to Make Arguments',
+    category: 'General',
   },
 ];
 

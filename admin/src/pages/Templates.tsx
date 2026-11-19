@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../lib/api';
 import { useAdminAuth } from '../lib/auth';
 import StatusBadge from '../components/StatusBadge';
-import { ADMIN_TEMPLATE_PAIRS, AdminTemplatePair, getOrderedAdminPairs } from '../lib/templatePairs';
 
 export default function Templates() {
   const navigate = useNavigate();
@@ -45,129 +44,10 @@ export default function Templates() {
     error: string;
   } | null>(null);
 
-  const [orderModal, setOrderModal] = useState<{
-    open: boolean;
-    pairs: AdminTemplatePair[];
-    loading: boolean;
-    saving: boolean;
-    successMsg: string;
-    error: string;
-  } | null>(null);
-
-  const [orderDragIdx, setOrderDragIdx] = useState<number | null>(null);
-  const [orderDragOverIdx, setOrderDragOverIdx] = useState<number | null>(null);
-
   const [draggedIdx, setDraggedIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [reorderSaving, setReorderSaving] = useState(false);
   const [reorderSuccess, setReorderSuccess] = useState('');
-
-  const handleOpenOrderModal = async () => {
-    const validIds = new Set(templates.map(t => t.id));
-    const initialPairs = validIds.size > 0
-      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-      : [...ADMIN_TEMPLATE_PAIRS];
-
-    setOrderModal({
-      open: true,
-      pairs: initialPairs,
-      loading: true,
-      saving: false,
-      successMsg: '',
-      error: '',
-    });
-    try {
-      const res = await adminApi.getTemplateOrder();
-      const order = res?.template_order || [];
-      const ordered = getOrderedAdminPairs(order);
-      const filtered = validIds.size > 0
-        ? ordered.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-        : ordered;
-      setOrderModal(prev => prev ? { ...prev, pairs: filtered, loading: false } : null);
-    } catch (err: any) {
-      setOrderModal(prev => prev ? { ...prev, loading: false, error: 'Failed to fetch current order: ' + err.message } : null);
-    }
-  };
-
-  const handleOrderDragStart = (e: React.DragEvent, index: number) => {
-    setOrderDragIdx(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
-  };
-
-  const handleOrderDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (orderDragOverIdx !== index) {
-      setOrderDragOverIdx(index);
-    }
-  };
-
-  const handleOrderDragEnd = () => {
-    setOrderDragIdx(null);
-    setOrderDragOverIdx(null);
-  };
-
-  const handleOrderDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
-    if (!orderModal || orderDragIdx === null || orderDragIdx === dropIndex) {
-      setOrderDragIdx(null);
-      setOrderDragOverIdx(null);
-      return;
-    }
-    const current = [...orderModal.pairs];
-    const [moved] = current.splice(orderDragIdx, 1);
-    current.splice(dropIndex, 0, moved);
-    setOrderDragIdx(null);
-    setOrderDragOverIdx(null);
-    setOrderModal({ ...orderModal, pairs: current, successMsg: '', error: '' });
-  };
-
-  const moveOrder = (index: number, direction: 'up' | 'down' | 'top' | 'bottom') => {
-    if (!orderModal) return;
-    const current = [...orderModal.pairs];
-    if (direction === 'up' && index > 0) {
-      const temp = current[index];
-      current[index] = current[index - 1];
-      current[index - 1] = temp;
-    } else if (direction === 'down' && index < current.length - 1) {
-      const temp = current[index];
-      current[index] = current[index + 1];
-      current[index + 1] = temp;
-    } else if (direction === 'top' && index > 0) {
-      const [item] = current.splice(index, 1);
-      current.unshift(item);
-    } else if (direction === 'bottom' && index < current.length - 1) {
-      const [item] = current.splice(index, 1);
-      current.push(item);
-    }
-    setOrderModal({ ...orderModal, pairs: current, successMsg: '', error: '' });
-  };
-
-  const resetToDefaultOrder = () => {
-    if (!orderModal) return;
-    const validIds = new Set(templates.map(t => t.id));
-    const defaults = validIds.size > 0
-      ? ADMIN_TEMPLATE_PAIRS.filter(p => validIds.has(p.guId) || validIds.has(p.enId) || validIds.has(p.baseKey))
-      : [...ADMIN_TEMPLATE_PAIRS];
-    setOrderModal({ ...orderModal, pairs: defaults, successMsg: '', error: '' });
-  };
-
-  const handleSaveOrder = async () => {
-    if (!orderModal) return;
-    setOrderModal(prev => prev ? { ...prev, saving: true, error: '', successMsg: '' } : null);
-    try {
-      const keys = orderModal.pairs.map(p => p.baseKey);
-      await adminApi.updateTemplateOrder(keys);
-      setOrderModal(prev => prev ? {
-        ...prev,
-        saving: false,
-        successMsg: '✅ Display order updated successfully! The first 10 items will appear on the Home Page and all 21 in the Main Catalog.',
-      } : null);
-    } catch (err: any) {
-      setOrderModal(prev => prev ? { ...prev, saving: false, error: err.message || 'Failed to save order' } : null);
-    }
-  };
 
   const handleDragStart = (e: React.DragEvent, index: number) => {
     const target = e.target as HTMLElement;
@@ -255,7 +135,10 @@ export default function Templates() {
   const loadTemplates = () => {
     setLoading(true);
     adminApi.adminListTemplates(statusFilter || undefined, categoryFilter || undefined, searchQuery || undefined)
-      .then(setTemplates)
+      .then((data: any) => {
+        const list = Array.isArray(data) ? data : (data?.templates || data?.items || []);
+        setTemplates(list);
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   };
@@ -553,9 +436,6 @@ export default function Templates() {
           <p className="dashboard-desc">Manage legal document templates, custom fields, and version lifecycles</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
-          <button className="btn-secondary" onClick={handleOpenOrderModal} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span>📐</span> Template Placement / Order
-          </button>
           <button className="btn-secondary" onClick={handleMigrate}>Migrate Seed Templates</button>
           {isSuperAdmin && (
             <button className="btn-secondary" onClick={() => setImportModal({
@@ -673,7 +553,7 @@ export default function Templates() {
                       </th>
                     )}
                     {isSuperAdmin && (
-                      <th style={{ width: '32px', textAlign: 'center' }}></th>
+                      <th style={{ width: '40px', textAlign: 'center' }}>⇅</th>
                     )}
                     <th>Name (EN / GU)</th>
                     <th>Category</th>
@@ -717,7 +597,7 @@ export default function Templates() {
                             color: '#9ca3af',
                             fontSize: '1.2rem',
                             padding: '8px 4px',
-                            width: '32px',
+                            width: '40px',
                           }}
                           title="Drag to reorder"
                         >
@@ -736,7 +616,6 @@ export default function Templates() {
                       <td><StatusBadge status={t.status} /></td>
                       <td>
                         <span className="version-badge">v{t.version || 1}</span>
-                        {t.locked && t.status === 'published' && <span style={{ marginLeft: '4px', fontSize: '0.75rem', color: '#888' }}>🔒</span>}
                       </td>
                       <td>{t.fields?.length || 0} fields</td>
                       <td>
@@ -1268,212 +1147,6 @@ export default function Templates() {
         </div>
       )}
 
-      {orderModal && (
-        <div className="modal-overlay" style={{ zIndex: 1100 }}>
-          <div className="modal-content" style={{ maxWidth: '850px', width: '90%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div className="modal-header">
-              <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem' }}>📐 Template Placement & Display Order / પ્લેસમેન્ટ ક્રમ</h2>
-                <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: '#6b7280' }}>
-                  Authoritative ordering for all 21 templates. The <strong>first 10 templates</strong> appear on the Home Page.
-                </p>
-              </div>
-              <button
-                className="btn-icon"
-                onClick={() => setOrderModal(null)}
-                style={{ fontSize: '1.2rem', background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
-              {orderModal.error && (
-                <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: '6px', marginBottom: '12px', fontSize: '0.88rem' }}>
-                  {orderModal.error}
-                </div>
-              )}
-              {orderModal.successMsg && (
-                <div style={{ backgroundColor: '#ecfdf5', color: '#065f46', padding: '10px 14px', borderRadius: '6px', marginBottom: '12px', fontSize: '0.88rem', fontWeight: 600 }}>
-                  {orderModal.successMsg}
-                </div>
-              )}
-
-              {orderModal.loading ? (
-                <div style={{ textAlign: 'center', padding: '40px' }}>
-                  <div className="spinner" style={{ margin: '0 auto 12px' }}></div>
-                  <p>Loading authoritative order...</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {orderModal.pairs.map((pair, index) => {
-                    const isTop10 = index < 10;
-                    return (
-                      <div
-                        key={pair.baseKey}
-                        draggable={!orderModal.saving}
-                        onDragStart={(e) => handleOrderDragStart(e, index)}
-                        onDragOver={(e) => handleOrderDragOver(e, index)}
-                        onDragEnd={handleOrderDragEnd}
-                        onDrop={(e) => handleOrderDrop(e, index)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 14px',
-                          borderRadius: '8px',
-                          border: isTop10 ? '1px solid #c5a059' : '1px solid #e5e7eb',
-                          backgroundColor: orderDragOverIdx === index ? '#f0fdf4' : (isTop10 ? '#fffdf7' : '#fafafa'),
-                          borderTop: orderDragOverIdx === index ? '2px solid #16a34a' : (isTop10 ? '1px solid #c5a059' : '1px solid #e5e7eb'),
-                          opacity: orderDragIdx === index ? 0.35 : 1,
-                          transition: 'background-color 0.15s ease',
-                          gap: '12px',
-                        }}
-                      >
-                        {/* Position Number & Destination Badge */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '170px' }}>
-                          <span
-                            style={{
-                              cursor: 'grab',
-                              userSelect: 'none',
-                              color: '#9ca3af',
-                              fontSize: '1.2rem',
-                              padding: '0 4px',
-                            }}
-                            title="Drag to reorder"
-                          >
-                            ⋮⋮
-                          </span>
-                          <span
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: '50%',
-                              backgroundColor: isTop10 ? '#0b1b3d' : '#9ca3af',
-                              color: '#fff',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '0.82rem',
-                              fontWeight: 700,
-                            }}
-                          >
-                            {index + 1}
-                          </span>
-                          <span
-                            style={{
-                              fontSize: '0.72rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '999px',
-                              backgroundColor: isTop10 ? '#fef3c7' : '#f3f4f6',
-                              color: isTop10 ? '#92400e' : '#6b7280',
-                              border: isTop10 ? '1px solid #fde68a' : '1px solid #e5e7eb',
-                            }}
-                          >
-                            {isTop10 ? '🏠 Home (1-10)' : 'Catalog (11-21)'}
-                          </span>
-                        </div>
-
-                        {/* Titles */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
-                            {pair.name_gu}
-                          </div>
-                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>
-                            {pair.name_en}
-                          </div>
-                        </div>
-
-                        {/* Category */}
-                        <div style={{ minWidth: '80px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              fontSize: '0.72rem',
-                              fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              backgroundColor: '#e0e7ff',
-                              color: '#3730a3',
-                            }}
-                          >
-                            {pair.category}
-                          </span>
-                        </div>
-
-                        {/* Move Actions */}
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={index === 0 || orderModal.saving}
-                            onClick={() => moveOrder(index, 'up')}
-                            style={{ padding: '4px 8px', fontSize: '0.78rem', minWidth: '32px' }}
-                            title="Move Up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={index === orderModal.pairs.length - 1 || orderModal.saving}
-                            onClick={() => moveOrder(index, 'down')}
-                            style={{ padding: '4px 8px', fontSize: '0.78rem', minWidth: '32px' }}
-                            title="Move Down"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={index === 0 || orderModal.saving}
-                            onClick={() => moveOrder(index, 'top')}
-                            style={{ padding: '4px 8px', fontSize: '0.75rem' }}
-                            title="Move to Top"
-                          >
-                            Top
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={resetToDefaultOrder}
-                disabled={orderModal.saving || orderModal.loading}
-                style={{ color: '#b45309' }}
-              >
-                🔄 Reset to Default
-              </button>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setOrderModal(null)}
-                  disabled={orderModal.saving}
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleSaveOrder}
-                  disabled={orderModal.saving || orderModal.loading}
-                  style={{ backgroundColor: '#0b1b3d' }}
-                >
-                  {orderModal.saving ? 'Saving...' : 'Save Display Order (ઓર્ડર સેવ કરો)'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

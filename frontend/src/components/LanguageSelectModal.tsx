@@ -96,7 +96,6 @@ export function LanguageSelectModal({
             <Pressable
               testID="select-lang-gu"
               onPress={() => {
-                onClose();
                 onSelect("gu");
               }}
               style={({ pressed }) => [
@@ -129,7 +128,6 @@ export function LanguageSelectModal({
             <Pressable
               testID="select-lang-en"
               onPress={() => {
-                onClose();
                 onSelect("en");
               }}
               style={({ pressed }) => [

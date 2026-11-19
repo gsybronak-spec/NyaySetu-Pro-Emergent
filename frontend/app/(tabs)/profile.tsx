@@ -118,8 +118,18 @@ export default function Profile() {
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 14, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
             ) : null}
+            {(user?.advocate_qualification || user?.qualification) ? (
+              <Text style={{ color: "#CBD5E1", fontSize: 13, marginTop: 2, fontWeight: "600" }}>
+                {user?.advocate_qualification || user?.qualification}
+              </Text>
+            ) : null}
             <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 2 }}>{user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}</Text>
             {user?.email && user?.mobile ? <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }} numberOfLines={1}>{user.email}</Text> : null}
+            {user?.office_address || user?.advocate_address ? (
+              <Text style={{ color: "#94A3B8", fontSize: 12, marginTop: 2 }} numberOfLines={2}>
+                {user?.office_address || user?.advocate_address}
+              </Text>
+            ) : null}
             {user?.bar_council_no ? (
               <View style={styles.dBarChip}>
                 <Ionicons name="ribbon" size={13} color="#C5A059" />
@@ -191,7 +201,17 @@ export default function Profile() {
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 13, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
             ) : null}
+            {(user?.advocate_qualification || user?.qualification) ? (
+              <Text style={{ color: "#CBD5E1", fontSize: 12, marginTop: 1, fontWeight: "600" }}>
+                {user?.advocate_qualification || user?.qualification}
+              </Text>
+            ) : null}
             <Text style={{ color: "#A6B1C2", fontSize: 12, marginTop: 2 }}>{user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}</Text>
+            {user?.office_address || user?.advocate_address ? (
+              <Text style={{ color: "#94A3B8", fontSize: 11, marginTop: 1 }} numberOfLines={1}>
+                {user?.office_address || user?.advocate_address}
+              </Text>
+            ) : null}
             {user?.bar_council_no ? (
               <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>
             ) : null}

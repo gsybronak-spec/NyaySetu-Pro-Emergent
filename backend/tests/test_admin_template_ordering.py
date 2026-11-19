@@ -147,11 +147,18 @@ class TestAdminTemplateOrdering(unittest.TestCase):
         server.db = self.orig_db
 
     def test_admin_update_template_order_syncs_variants(self):
-        """PUT /template-order must sync sort_order across base, _gu, and _en documents."""
-        req = TemplateOrderReq(template_order=["order_test_alpha", "order_test_beta"])
+        """PUT /template-order must sync sort_order across existing base, _gu, and _en documents without creating ghosts."""
+        # Pre-seed existing templates
+        for tid in ["order_test_alpha", "order_test_alpha_gu", "order_test_alpha_en", "order_test_beta",
+                    "order_test_gamma", "order_test_gamma_gu", "order_test_gamma_en"]:
+            asyncio.run(self.mock_db.collection("templates").document(tid).set({
+                "id": tid, "name_en": tid, "status": "published"
+            }))
+
+        req = TemplateOrderReq(template_order=["order_test_alpha", "order_test_beta", "non_existent_ghost_id"])
         res = asyncio.run(admin_update_template_order(req, admin=self.admin))
         self.assertTrue(res["success"])
-        self.assertEqual(res["template_order"], ["order_test_alpha", "order_test_beta"])
+        self.assertIn("order_test_alpha", res["template_order"])
 
         # Check alpha base, _gu, and _en
         doc_base = asyncio.run(self.mock_db.collection("templates").document("order_test_alpha").get()).to_dict()
@@ -165,6 +172,10 @@ class TestAdminTemplateOrdering(unittest.TestCase):
         # Check beta
         doc_beta = asyncio.run(self.mock_db.collection("templates").document("order_test_beta").get()).to_dict()
         self.assertEqual(doc_beta.get("sort_order"), 1)
+
+        # Verify non_existent_ghost_id was NEVER created in db.templates
+        doc_ghost = asyncio.run(self.mock_db.collection("templates").document("non_existent_ghost_id").get())
+        self.assertFalse(doc_ghost.exists, "Ordering payload created a missing document in db.templates!")
 
         # Updating with suffixed ID (e.g. order_test_gamma_gu) also syncs base and sibling
         req_suffixed = TemplateOrderReq(template_order=["order_test_gamma_gu"])

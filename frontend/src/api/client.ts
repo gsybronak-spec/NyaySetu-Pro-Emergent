@@ -13,8 +13,6 @@ const apiGetCache = new Map<string, CacheEntry>();
 const apiInFlightGet = new Map<string, Promise<any>>();
 
 const CACHEABLE_GET_PREFIXES = [
-  "/catalog/",
-  "/templates",
   "/favourites/templates",
   "/user/template-preferences",
   "/wallet",

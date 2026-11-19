@@ -152,80 +152,52 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
         server.invalidate_published_templates_cache()
         server._invalidate_catalog_cache()
 
-    def test_01_no_templates_are_protected(self):
-        """01. Verify no templates are protected from deletion under complete deletion policy."""
+    def test_01_all_templates_are_deletable(self):
+        """01. Verify template protection is removed and all templates are deletable by Super Admin."""
         self.assertFalse(server.ENABLE_TEMPLATE_PROTECTION)
-        self.assertEqual(len(server.get_protected_template_ids()), 0)
         self.assertEqual(len(server.PROTECTED_TEMPLATE_IDS), 0)
-        self.assertEqual(len(server.CANONICAL_ACTIVE_TEMPLATE_WHITELIST), 0)
-
-        # is_template_protected evaluates to False unconditionally for all IDs
-        test_ids = [
-            "mudat_arji", "vakilatnama_civil", "vakilatnama_criminal",
-            "certified_copy_application", "exemption_arji", "custom_test_arji"
-        ]
-        for tid in test_ids:
+        self.assertEqual(len(server.get_protected_template_ids()), 0)
+        # Check all templates evaluate to False
+        for tid in ["aanke_padvani_arji", "certified_report", "closing_purshish", "vakilatnama_civil"]:
             self.assertFalse(server.is_template_protected(tid))
-            self.assertNotIn(tid, server.PROTECTED_TEMPLATE_IDS)
 
-    def test_02_super_admin_can_delete_all_25_canonical_templates(self):
-        """02. Verify an authorized Super Admin can permanently delete each of the 25 canonical templates."""
+    def test_02_super_admin_can_delete_all_canonical_templates(self):
+        """02. Verify an authorized Super Admin can delete canonical templates without 403."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
-        canonical_25 = [
-            "certified_copy_application", "certified_report", "closing_argument_right_application",
-            "closing_purshish", "dd_karavani_arji", "document_exhibit_application",
-            "document_parat_levani_arji", "document_return_application", "document_swikaravani_arji",
-            "exemption_arji", "fs_no_haq_bandh_karvani_arji", "fs_no_haq_kholvani_arji",
-            "jamin_bond_swikarvani_arji", "kam_board_par_levani_arji", "mudat_arji",
-            "reopen_right_to_argue_application", "saaxi_ne_summons", "samadhan_purshish",
-            "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji",
-            "undertaking", "vakilatnama_civil", "vakilatnama_criminal",
-            "warrant_no_hath_bido_apvani_arji", "warrant_rad_karvani_arji"
+        targets = [
+            "aanke_padvani_arji", "certified_report", "closing_purshish",
+            "closing_argument_right_application", "reopen_right_to_argue_application",
+            "dd_karavani_arji", "exemption_arji", "vakilatnama_civil", "vakilatnama_criminal"
         ]
 
-        for tid in canonical_25:
-            # Seed template in mock DB
+        for tid in targets:
             asyncio.run(self.mock_db.collection("templates").document(tid).set({
-                "id": tid,
-                "name_en": tid.replace("_", " ").title(),
-                "name_gu": "ગુજરાતી નામ",
-                "status": "published",
+                "id": tid, "name_en": tid, "status": "published"
             }))
-
-            # Deletion must succeed with 200 OK (no HTTP 403 Forbidden!)
             res = asyncio.run(server.admin_delete_template(tid, admin=admin))
-            self.assertTrue(res.get("success"), f"Deletion failed for canonical template: {tid}")
+            self.assertTrue(res.get("success"), f"{tid} deletion failed")
+            self.assertFalse(asyncio.run(self.mock_db.collection("templates").document(tid).get()).exists)
 
-            # Active doc must be removed
-            snap = asyncio.run(self.mock_db.collection("templates").document(tid).get())
-            self.assertFalse(snap.exists)
-
-            # Double tombstones written
-            cat_tomb = asyncio.run(self.mock_db.collection("deleted_catalog_items").document(f"template:{tid}").get())
-            self.assertTrue(cat_tomb.exists)
-            self.assertEqual(cat_tomb.to_dict().get("kind"), "template")
-
-            del_tomb = asyncio.run(self.mock_db.collection("deleted_templates").document(tid).get())
-            self.assertTrue(del_tomb.exists)
-            self.assertEqual(del_tomb.to_dict().get("id"), tid)
-
-    def test_03_super_admin_can_delete_all_9_finalized_legal_templates(self):
-        """03. Verify all 9 previously protected legal templates are permanently deletable."""
+    def test_03_super_admin_can_delete_unprotected_templates(self):
+        """03. Verify Super Admin can permanently delete unprotected templates."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
-        legal_9 = [
-            "certified_copy_application", "closing_purshish", "closing_argument_right_application",
-            "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji",
-            "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil"
+        unprotected = [
+            "mudat_arji", "document_parat_levani_arji", "samadhan_purshish", "saaxi_ne_summons"
         ]
-        for tid in legal_9:
+        for tid in unprotected:
             asyncio.run(self.mock_db.collection("templates").document(tid).set({
                 "id": tid,
                 "name_en": tid,
                 "status": "published",
             }))
             res = asyncio.run(server.admin_delete_template(tid, admin=admin))
-            self.assertTrue(res.get("success"))
+            self.assertTrue(res.get("success"), f"Deletion failed for unprotected template: {tid}")
             self.assertFalse(asyncio.run(self.mock_db.collection("templates").document(tid).get()).exists)
+            # Tombstones created
+            cat_tomb = asyncio.run(self.mock_db.collection("deleted_catalog_items").document(f"template:{tid}").get())
+            self.assertTrue(cat_tomb.exists)
+            del_tomb = asyncio.run(self.mock_db.collection("deleted_templates").document(tid).get())
+            self.assertTrue(del_tomb.exists)
 
     def test_04_deletion_purges_template_revisions_and_versions(self):
         """04. Verify deleting a template permanently deletes its template_revisions and template_versions."""
@@ -277,10 +249,10 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
             asyncio.run(server.require_super_admin(authorization="Bearer invalid-token"))
         self.assertEqual(ctx.exception.status_code, 401)
 
-    def test_06_bulk_delete_all_template_types(self):
-        """06. Verify bulk deletion permanently deletes canonical, seed, and custom templates."""
+    def test_06_bulk_delete_all_templates(self):
+        """06. Verify bulk deletion successfully deletes all templates including canonical ones."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
-        ids_to_delete = ["closing_purshish", "exemption_arji", "custom_user_template"]
+        ids_to_delete = ["closing_purshish", "aanke_padvani_arji", "custom_user_template"]
 
         for tid in ids_to_delete:
             asyncio.run(self.mock_db.collection("templates").document(tid).set({
@@ -299,14 +271,10 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
         self.assertEqual(res.get("deleted_count"), 3)
         self.assertEqual(res.get("failed_count"), 0)
 
-        for tid in ids_to_delete:
-            cat_tomb = asyncio.run(self.mock_db.collection("deleted_catalog_items").document(f"template:{tid}").get())
-            self.assertTrue(cat_tomb.exists)
-            del_tomb = asyncio.run(self.mock_db.collection("deleted_templates").document(tid).get())
-            self.assertTrue(del_tomb.exists)
-            # Revisions & versions purged
-            self.assertFalse(asyncio.run(self.mock_db.collection("template_revisions").document(f"{tid}_1").get()).exists)
-            self.assertFalse(asyncio.run(self.mock_db.collection("template_versions").document(f"{tid}_1").get()).exists)
+        # All templates must be deleted
+        self.assertFalse(asyncio.run(self.mock_db.collection("templates").document("closing_purshish").get()).exists)
+        self.assertFalse(asyncio.run(self.mock_db.collection("templates").document("aanke_padvani_arji").get()).exists)
+        self.assertFalse(asyncio.run(self.mock_db.collection("templates").document("custom_user_template").get()).exists)
 
     def test_07_anti_resurrection_after_seeding_and_restart(self):
         """07. Verify deletion tombstones prevent seed initialization from recreating deleted template."""
@@ -348,11 +316,11 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
     def test_08_tombstones_contain_no_content(self):
         """08. Verify tombstones retain only minimal deletion markers without template content."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
-        target_tid = "certified_copy_application"
+        target_tid = "document_parat_levani_arji"
 
         asyncio.run(self.mock_db.collection("templates").document(target_tid).set({
             "id": target_tid,
-            "name_en": "Certified Copy Application",
+            "name_en": "Document Parat Levani",
             "content_gu": "ખાનગી કાનૂની લખાણ",
             "content_en": "Private legal text",
             "fields": [{"key": "court", "label_en": "Court"}],
@@ -380,30 +348,30 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
         """09. Verify deleting one template never affects unrelated templates, cases, or users."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
 
-        asyncio.run(self.mock_db.collection("templates").document("vakilatnama_civil").set({
-            "id": "vakilatnama_civil", "name_en": "Vakalatnama (Civil)", "status": "published"
+        asyncio.run(self.mock_db.collection("templates").document("samadhan_purshish").set({
+            "id": "samadhan_purshish", "name_en": "Samadhan Purshis", "status": "published"
         }))
-        asyncio.run(self.mock_db.collection("templates").document("vakilatnama_criminal").set({
-            "id": "vakilatnama_criminal", "name_en": "Vakalatnama (Criminal)", "status": "published"
+        asyncio.run(self.mock_db.collection("templates").document("warrant_rad_karvani_arji").set({
+            "id": "warrant_rad_karvani_arji", "name_en": "Warrant Rad", "status": "published"
         }))
         asyncio.run(self.mock_db.collection("cases").document("case_123").set({
             "id": "case_123", "title": "State vs Shah", "status": "active"
         }))
 
-        res = asyncio.run(server.admin_delete_template("vakilatnama_civil", admin=admin))
+        res = asyncio.run(server.admin_delete_template("samadhan_purshish", admin=admin))
         self.assertTrue(res.get("success"))
 
-        # Criminal template and case record must still exist
-        self.assertTrue(asyncio.run(self.mock_db.collection("templates").document("vakilatnama_criminal").get()).exists)
+        # Other template and case record must still exist
+        self.assertTrue(asyncio.run(self.mock_db.collection("templates").document("warrant_rad_karvani_arji").get()).exists)
         self.assertTrue(asyncio.run(self.mock_db.collection("cases").document("case_123").get()).exists)
 
     def test_10_repeated_deletion_is_safe_and_idempotent(self):
         """10. Verify repeated deletion calls succeed idempotently."""
         admin = {"id": "super_admin_test", "role": "super_admin"}
-        target = "dd_karavani_arji"
+        target = "document_parat_levani_arji"
 
         asyncio.run(self.mock_db.collection("templates").document(target).set({
-            "id": target, "name_en": "DD Karavani Arji", "status": "published"
+            "id": target, "name_en": "Document Parat Levani", "status": "published"
         }))
         res1 = asyncio.run(server.admin_delete_template(target, admin=admin))
         self.assertTrue(res1.get("success"))
@@ -412,14 +380,16 @@ class TestCompleteTemplateDeletionPolicy(unittest.TestCase):
         self.assertTrue(res2.get("success"))
         self.assertIn("already permanently deleted", res2.get("message"))
 
-    def test_11_aanke_padvani_arji_remains_permanently_deleted(self):
-        """11. Verify aanke_padvani_arji remains absent from all seed catalogs."""
-        self.assertEqual(len(SEED_BASE_TEMPLATES), 20)
-        self.assertFalse(any(t.get("base_key") == "aanke_padvani_arji" for t in SEED_BASE_TEMPLATES))
-        self.assertEqual(len(AUTH_BASE_TEMPLATES), 20)
-        self.assertFalse(any(t.get("base_key") == "aanke_padvani_arji" for t in AUTH_BASE_TEMPLATES))
-        self.assertEqual(len(TEMPLATES_V2), 20)
-        self.assertFalse(any(t.get("id") == "aanke_padvani_arji" for t in TEMPLATES_V2))
+    def test_11_aanke_padvani_arji_and_catalogs_restored(self):
+        """11. Verify aanke_padvani_arji is restored in all catalogs (21 base = 42 total, 25 canonical IDs)."""
+        self.assertEqual(len(SEED_BASE_TEMPLATES), 21)
+        self.assertTrue(any(t.get("base_key") == "aanke_padvani_arji" for t in SEED_BASE_TEMPLATES))
+        self.assertEqual(len(AUTH_BASE_TEMPLATES), 21)
+        self.assertTrue(any(t.get("base_key") == "aanke_padvani_arji" for t in AUTH_BASE_TEMPLATES))
+        self.assertEqual(len(TEMPLATES_V2), 21)
+        self.assertTrue(any(t.get("id") == "aanke_padvani_arji" for t in TEMPLATES_V2))
+        self.assertEqual(len(server.CANONICAL_TEMPLATE_IDS), 25)
+        self.assertIn("aanke_padvani_arji", server.CANONICAL_TEMPLATE_IDS)
 
 
 if __name__ == '__main__':

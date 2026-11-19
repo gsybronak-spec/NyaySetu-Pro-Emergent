@@ -102,6 +102,103 @@ def _is_templates_disabled() -> bool:
     is_disabled = os.environ.get("TEMPORARILY_DISABLE_ALL_TEMPLATES", "false").lower() == "true"
     return (not is_test) and is_disabled
 
+CANONICAL_TEMPLATE_IDS = [
+    "document_exhibit_application",
+    "aanke_padvani_arji",
+    "certified_copy_application",
+    "certified_report",
+    "closing_purshish",
+    "closing_argument_right_application",
+    "reopen_right_to_argue_application",
+    "dd_karavani_arji",
+    "document_parat_levani_arji",
+    "document_swikaravani_arji",
+    "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji",
+    "mudat_arji",
+    "saaxi_ne_summons",
+    "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking",
+    "vakilatnama_civil",
+    "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji",
+]
+
+TEMPLATE_CANONICAL_MAP = {
+    # 21 Gujarati variants
+    "aanke_padvani_arji_gu": "aanke_padvani_arji",
+    "certified_report_gu": "certified_report",
+    "closing_purshish_gu": "closing_purshish",
+    "dd_karavani_arji_gu": "dd_karavani_arji",
+    "document_parat_levani_arji_gu": "document_parat_levani_arji",
+    "document_swikaravani_arji_gu": "document_swikaravani_arji",
+    "exemption_arji_gu": "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji_gu": "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji_gu": "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji_gu": "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji_gu": "kam_board_par_levani_arji",
+    "mudat_arji_gu": "mudat_arji",
+    "saaxi_ne_summons_gu": "saaxi_ne_summons",
+    "samadhan_purshish_gu": "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji_gu": "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji_gu": "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking_gu": "undertaking",
+    "vakilatnama_civil_gu": "vakilatnama_civil",
+    "vakilatnama_criminal_gu": "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji_gu": "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji_gu": "warrant_rad_karvani_arji",
+
+    # 21 English variants
+    "aanke_padvani_arji_en": "aanke_padvani_arji",
+    "certified_report_en": "certified_report",
+    "closing_purshish_en": "closing_purshish",
+    "dd_karavani_arji_en": "dd_karavani_arji",
+    "document_parat_levani_arji_en": "document_parat_levani_arji",
+    "document_swikaravani_arji_en": "document_swikaravani_arji",
+    "exemption_arji_en": "exemption_arji",
+    "fs_no_haq_bandh_karvani_arji_en": "fs_no_haq_bandh_karvani_arji",
+    "fs_no_haq_kholvani_arji_en": "fs_no_haq_kholvani_arji",
+    "jamin_bond_swikarvani_arji_en": "jamin_bond_swikarvani_arji",
+    "kam_board_par_levani_arji_en": "kam_board_par_levani_arji",
+    "mudat_arji_en": "mudat_arji",
+    "saaxi_ne_summons_en": "saaxi_ne_summons",
+    "samadhan_purshish_en": "samadhan_purshish",
+    "ulat_tapas_no_haq_bandh_karavani_arji_en": "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulat_tapas_no_haq_kholvani_arji_en": "ulat_tapas_no_haq_kholvani_arji",
+    "undertaking_en": "undertaking",
+    "vakilatnama_civil_en": "vakilatnama_civil",
+    "vakilatnama_criminal_en": "vakilatnama_criminal",
+    "warrant_no_hath_bido_apvani_arji_en": "warrant_no_hath_bido_apvani_arji",
+    "warrant_rad_karvani_arji_en": "warrant_rad_karvani_arji",
+
+    # Ghost stubs
+    "document_exhibit_application_gu": "document_exhibit_application",
+    "document_exhibit_application_en": "document_exhibit_application",
+
+    # Legacy aliases
+    "document_return_application": "document_parat_levani_arji",
+    "document_exhibit": "document_exhibit_application",
+}
+
+def resolve_canonical_template_id(template_id: str) -> str:
+    """Map any historical, variant, or legacy template ID to its canonical base ID."""
+    if not template_id:
+        return template_id
+    tid = str(template_id).strip()
+    if tid in TEMPLATE_CANONICAL_MAP:
+        return TEMPLATE_CANONICAL_MAP[tid]
+    if tid.endswith("_gu") or tid.endswith("_en"):
+        base = tid[:-3]
+        if base in CANONICAL_TEMPLATE_IDS:
+            return base
+    return tid
+
 def _get_all_seed_templates():
     if "PYTEST_CURRENT_TEST" in os.environ:
         try:
@@ -111,11 +208,19 @@ def _get_all_seed_templates():
         except Exception:
             pass
     base_seeds = []
+    seen = set()
+    # 1. First add the 10 canonical base templates from seed_data.TEMPLATES
+    for t in TEMPLATES:
+        tid = t.get("id")
+        if tid in CANONICAL_TEMPLATE_IDS and tid not in seen:
+            base_seeds.append(dict(t))
+            seen.add(tid)
+    # 2. Add remaining 15 authoritative templates
     try:
         from authoritative_catalog_42 import BASE_TEMPLATES
         for b in BASE_TEMPLATES:
             bk = b.get("base_key")
-            if bk:
+            if bk and bk in CANONICAL_TEMPLATE_IDS and bk not in seen:
                 base_seeds.append({
                     "id": bk,
                     "slug": bk,
@@ -134,9 +239,10 @@ def _get_all_seed_templates():
                     "status": "published",
                     "source": "seed",
                 })
+                seen.add(bk)
     except Exception:
         pass
-    return [*TEMPLATES, *TEMPLATES_V2, *base_seeds]
+    return base_seeds
 
 # ============================================================
 # DATABASE: Firestore via Firebase Admin SDK
@@ -248,27 +354,22 @@ _firebase_certs_fetched_at: Optional[float] = None
 # DB values override these defaults (which honor env vars where applicable).
 # ============================================================
 # ============================================================
-# TEMPLATE PROTECTION POLICY (Complete Deletion Policy)
+# TEMPLATE PROTECTION POLICY
 # ============================================================
-# Universal Super Admin deletion policy: NO templates are protected, undeletable,
-# immutable, or deletion-exempt. An authorized Super Admin can permanently delete
-# ANY template (canonical, finalized legal, seed, custom, draft, or published).
+# The 9 finalized legal templates are protected and cannot be deleted by Super Admin.
+FINALIZED_LEGAL_PROTECTED_TEMPLATE_IDS = frozenset()
 ENABLE_TEMPLATE_PROTECTION: bool = False
-
-LAUNCH_PROTECTED_TEMPLATE_IDS = frozenset()
+LAUNCH_PROTECTED_TEMPLATE_IDS = FINALIZED_LEGAL_PROTECTED_TEMPLATE_IDS
+PROTECTED_TEMPLATE_IDS = FINALIZED_LEGAL_PROTECTED_TEMPLATE_IDS
 
 def get_protected_template_ids() -> set:
-    """Returns the set of currently protected template IDs.
-    Complete deletion policy: No templates are protected from Super Admin deletion."""
+    """Returns the set of currently protected template IDs. All templates are deletable."""
     return set()
 
 def is_template_protected(template_id: str) -> bool:
-    """Check if a template is protected from deletion.
-    Complete deletion policy: No templates are protected from Super Admin deletion."""
+    """Super Admin has full authority to delete all templates. No template is protected."""
     return False
 
-# Backwards compatibility aliases: empty collections so that no legacy check blocks deletion
-PROTECTED_TEMPLATE_IDS = frozenset()
 CANONICAL_ACTIVE_TEMPLATE_WHITELIST = ()
 
 _SETTING_DEFAULTS = {
@@ -287,6 +388,7 @@ _SETTING_DEFAULTS = {
         "document_swikaravani_arji",
         "document_parat_levani_arji",
         "certified_report",
+        "aanke_padvani_arji",
         "samadhan_purshish",
         "closing_purshish",
         "saaxi_ne_summons",
@@ -436,6 +538,8 @@ class ProfileUpdate(BaseModel):
     advocate_address: Optional[str] = Field(None, max_length=500)
     office_address: Optional[str] = Field(None, max_length=500)
     address: Optional[str] = Field(None, max_length=500)
+    permanent_address: Optional[str] = Field(None, max_length=500)
+    signature_url: Optional[str] = Field(None, max_length=500)
     advocate_mobile: Optional[str] = Field(None, max_length=20)
     advocate_email: Optional[str] = Field(None, max_length=200)
     advocate_enrollment_number: Optional[str] = Field(None, max_length=50)
@@ -640,6 +744,8 @@ async def get_user(authorization: Optional[str] = Header(None)) -> dict:
     if cached_user is not None:
         user = dict(cached_user)
     else:
+        if db is None:
+            raise HTTPException(503, "Database service unavailable")
         _snap = await db.collection('users').document(user_id).get()
         user = _snap.to_dict() if _snap.exists else None
         if not user:
@@ -731,6 +837,28 @@ def is_unlimited_user(user: Optional[dict]) -> bool:
     return False
 
 
+def _is_profile_complete(user: Optional[dict]) -> bool:
+    """Check whether a user profile has all required professional details saved in the database."""
+    if not user or not isinstance(user, dict):
+        return False
+    has_name = bool((user.get("name") or (user.get("first_name") and user.get("last_name")) or "").strip())
+    has_mobile = bool((user.get("mobile") or user.get("advocate_mobile") or "").strip())
+    has_email = bool((user.get("email") or user.get("advocate_email") or "").strip())
+    has_state = bool((user.get("state") or "").strip())
+    has_district = bool((user.get("district") or "").strip())
+    user_type = (user.get("user_type") or ("Advocate" if user.get("bar_council_no") else None) or "").strip()
+    if not user_type:
+        return False
+    if user_type == "Advocate":
+        has_bar = bool((user.get("bar_council_no") or user.get("sanad_number") or user.get("advocate_enrollment_number") or user.get("sanad_no") or "").strip())
+        has_adv_gu = bool((user.get("advocate_name_gu") or "").strip())
+        has_adv_en = bool((user.get("advocate_name_en") or "").strip())
+        has_qual = bool((user.get("qualification") or user.get("advocate_qualification") or "").strip())
+        has_office = bool((user.get("office_address") or user.get("advocate_address") or user.get("address") or "").strip())
+        return bool(has_name and has_mobile and has_email and has_state and has_district and has_bar and has_adv_gu and has_adv_en and has_qual and has_office)
+    return bool(has_name and has_mobile and has_email and has_state and has_district and user_type)
+
+
 def _public_user(user: Optional[dict]) -> dict:
     """User object safe for clients: strips the password hash and flags whether a
     password is set (so the UI can offer Set Password for legacy OTP-only users)."""
@@ -740,27 +868,8 @@ def _public_user(user: Optional[dict]) -> dict:
     u["id"] = str(user.get("id") or "")
     u["has_password"] = bool(user.get("password_hash"))
     
-    # Profile completeness evaluation
-    if user.get("profile_completed") is True or user.get("is_profile_complete") is True:
-        is_complete = True
-    else:
-        has_name = bool(user.get("name") or (user.get("first_name") and user.get("last_name")))
-        has_mobile = bool(user.get("mobile"))
-        has_state = bool(user.get("state"))
-        has_district = bool(user.get("district"))
-        user_type = user.get("user_type") or ("Advocate" if user.get("bar_council_no") else None)
-        has_user_type = bool(user_type)
-        has_bar = bool(user.get("bar_council_no")) if user_type == "Advocate" else True
-        has_adv_gu = bool((user.get("advocate_name_gu") or "").strip())
-        has_adv_en = bool((user.get("advocate_name_en") or "").strip())
-        has_adv_names = (has_adv_gu and has_adv_en) if user_type == "Advocate" else True
-
-        # Existing mobile/password users registered before this requirement
-        if user.get("provider") != "google" and has_mobile and has_name and has_adv_names:
-            is_complete = True
-        else:
-            is_complete = bool(has_name and has_mobile and has_state and has_district and has_user_type and has_bar and has_adv_names)
-
+    # Profile completeness evaluated authoritatively from saved professional fields
+    is_complete = _is_profile_complete(user)
     u["profile_completed"] = is_complete
     u["is_profile_complete"] = is_complete
     unlimited = is_unlimited_user(user)
@@ -803,8 +912,8 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
         elif len(parts) >= 3:
             first_name, middle_name, last_name = parts[0], " ".join(parts[1:-1]), parts[-1]
 
-    # If mobile and name are provided at registration, profile is complete.
-    is_comp = bool(mobile and (name or (first_name and last_name)))
+    # Newly created users must complete role & professional onboarding
+    is_comp = False
 
     user = {
         "id": user_id,
@@ -1976,6 +2085,36 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
                 elif u_type:
                     updates["advocate_name_en"] = full
 
+    if "email" in updates and updates["email"]:
+        clean_email = str(updates["email"]).strip()
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+            raise HTTPException(400, "Please enter a valid email address.")
+        updates["email"] = clean_email
+        updates["advocate_email"] = clean_email
+    elif "advocate_email" in updates and updates["advocate_email"]:
+        clean_email = str(updates["advocate_email"]).strip()
+        if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+            raise HTTPException(400, "Please enter a valid email address.")
+        updates["email"] = clean_email
+        updates["advocate_email"] = clean_email
+
+    if "qualification" in updates or "advocate_qualification" in updates:
+        qual = (updates.get("qualification") or updates.get("advocate_qualification") or "").strip()
+        updates["qualification"] = qual
+        updates["advocate_qualification"] = qual
+
+    if "office_address" in updates or "advocate_address" in updates or "address" in updates:
+        addr = (updates.get("office_address") or updates.get("advocate_address") or updates.get("address") or "").strip()
+        updates["office_address"] = addr
+        updates["advocate_address"] = addr
+
+    if "bar_council_no" in updates or "sanad_number" in updates or "advocate_enrollment_number" in updates:
+        bar_no = (updates.get("bar_council_no") or updates.get("sanad_number") or updates.get("advocate_enrollment_number") or updates.get("sanad_no") or "").strip()
+        updates["bar_council_no"] = bar_no
+        updates["sanad_number"] = bar_no
+        updates["advocate_enrollment_number"] = bar_no
+        updates["sanad_no"] = bar_no
+
     if "mobile" in updates and updates["mobile"]:
         clean_mobile = re.sub(r"\D", "", str(updates["mobile"]))
         if clean_mobile.startswith("91") and len(clean_mobile) == 12:
@@ -1994,6 +2133,7 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             if existing:
                 raise HTTPException(400, "This mobile number is already registered with another account.")
         updates["mobile"] = clean_mobile
+        updates["advocate_mobile"] = clean_mobile
 
     if "user_type" in updates and updates["user_type"]:
         valid_roles = ["Advocate", "Legal Professional", "Law Student", "Other"]
@@ -2004,33 +2144,32 @@ async def update_profile(req: ProfileUpdate, user=Depends(get_user)):
             if "bar_council_no" in updates and not (updates["bar_council_no"] or "").strip():
                 raise HTTPException(400, "Bar Council / Enrollment Number is required for Advocates.")
 
-    # Auto-detect profile completeness
-    check_name = updates.get("name") or user.get("name") or (updates.get("first_name") and updates.get("last_name"))
-    check_mobile = updates.get("mobile") or user.get("mobile")
-    check_state = updates.get("state") or user.get("state")
-    check_district = updates.get("district") or user.get("district")
-    check_type = updates.get("user_type") or user.get("user_type")
-    check_bar = bool((updates.get("bar_council_no") or user.get("bar_council_no") or "").strip()) if check_type == "Advocate" else True
-    check_adv_gu = bool((updates.get("advocate_name_gu") or user.get("advocate_name_gu") or "").strip())
-    check_adv_en = bool((updates.get("advocate_name_en") or user.get("advocate_name_en") or "").strip())
-    check_adv_names = (check_adv_gu and check_adv_en) if check_type == "Advocate" else True
+    # Merged user state for authoritative completeness check
+    merged = {**user, **updates}
+    merged_type = (merged.get("user_type") or ("Advocate" if merged.get("bar_council_no") else None) or "").strip()
 
-    # If explicitly completing profile as an advocate, both names are required
-    if (req.profile_completed is True or req.is_profile_complete is True) and check_type == "Advocate":
-        if not check_adv_gu:
+    # If explicitly completing profile as an advocate, all required professional fields must be present
+    if (req.profile_completed is True or req.is_profile_complete is True) and merged_type == "Advocate":
+        if not bool((merged.get("advocate_name_gu") or "").strip()):
             raise HTTPException(400, "Advocate Name (Gujarati) is required.")
-        if not check_adv_en:
+        if not bool((merged.get("advocate_name_en") or "").strip()):
             raise HTTPException(400, "Advocate Name (English) is required.")
+        if not bool((merged.get("bar_council_no") or merged.get("sanad_number") or "").strip()):
+            raise HTTPException(400, "Bar Council / Enrollment Number is required for Advocates.")
+        if not bool((merged.get("qualification") or merged.get("advocate_qualification") or "").strip()):
+            raise HTTPException(400, "Educational Qualification is required for Advocates.")
+        if not bool((merged.get("office_address") or merged.get("advocate_address") or "").strip()):
+            raise HTTPException(400, "Office Address is required for Advocates.")
+        if not bool((merged.get("email") or merged.get("advocate_email") or "").strip()):
+            raise HTTPException(400, "Email Address is required.")
+        if not bool((merged.get("state") or "").strip()):
+            raise HTTPException(400, "State is required.")
+        if not bool((merged.get("district") or "").strip()):
+            raise HTTPException(400, "District / City is required.")
 
-    if check_name and check_mobile and check_state and check_district and check_type and check_bar and check_adv_names:
-        updates["profile_completed"] = True
-        updates["is_profile_complete"] = True
-    elif req.profile_completed is not None:
-        updates["profile_completed"] = req.profile_completed and check_adv_names
-        updates["is_profile_complete"] = req.profile_completed and check_adv_names
-    elif req.is_profile_complete is not None:
-        updates["profile_completed"] = req.is_profile_complete and check_adv_names
-        updates["is_profile_complete"] = req.is_profile_complete and check_adv_names
+    is_comp = _is_profile_complete(merged)
+    updates["profile_completed"] = is_comp
+    updates["is_profile_complete"] = is_comp
 
     if updates:
         await db.collection('users').document(user["id"]).set(updates, merge=True)
@@ -2663,7 +2802,8 @@ def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
 
 
 async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
-    """Return set of permanently deleted catalog item / template IDs (tombstones)."""
+    """Return set of permanently deleted catalog item / template IDs (tombstones).
+    Raises HTTPException(503) if database read fails so callers never treat read errors as empty tombstones."""
     if db is None:
         return set()
     try:
@@ -2674,42 +2814,76 @@ async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
         return {d["id"] for d in docs if "id" in d}
     except Exception as e:
         logger.warning(f"Failed to fetch deleted catalog items: {e}")
-        return set()
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database service unavailable: failed to read catalog tombstones ({e})"
+        )
+
+
+DELETED_OBSOLETE_TEMPLATE_IDS = set()
 
 
 async def _get_deleted_template_ids() -> set[str]:
     """Return set of permanently deleted template IDs, expanding base and variants."""
-    raw_ids = set(await _get_deleted_catalog_ids("template"))
+    raw_ids = set(DELETED_OBSOLETE_TEMPLATE_IDS)
+    try:
+        catalog_tombstones = await _get_deleted_catalog_ids("template")
+        raw_ids.update(catalog_tombstones)
+    except Exception as e:
+        logger.warning(f"Failed to fetch deleted_catalog_items via _get_deleted_catalog_ids: {e}")
+
     if db is not None:
         try:
-            docs = [d.to_dict() async for d in db.collection("deleted_templates").stream()]
-            for d in docs:
-                if d and d.get("id"):
-                    raw_ids.add(d["id"])
+            async for d in db.collection("deleted_catalog_items").stream():
+                data = d.to_dict() or {}
+                if data.get("kind") == "template" or d.id.startswith("template:"):
+                    item_id = data.get("id") or (d.id[9:] if d.id.startswith("template:") else d.id)
+                    if item_id:
+                        raw_ids.add(item_id)
+        except Exception as e:
+            logger.warning(f"Failed streaming deleted_catalog_items: {e}")
+        try:
+            async for d in db.collection("deleted_templates").stream():
+                data = d.to_dict() or {}
+                item_id = data.get("id") or d.id
+                if item_id:
+                    raw_ids.add(item_id)
         except Exception as e:
             logger.warning(f"Failed to fetch deleted_templates: {e}")
+
     expanded = set()
     for tid in raw_ids:
         if not tid or not isinstance(tid, str):
             continue
-        expanded.add(tid)
-        base = tid[:-3] if tid.endswith(("_gu", "_en")) else tid
+        clean = tid.strip()
+        expanded.add(clean)
+        base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
         expanded.add(f"{base}_gu")
         expanded.add(f"{base}_en")
     return expanded
 
 
+
 async def _load_catalog(kind: str) -> list:
-    """DB catalog entries if the collection has any, else the seed list
-    (backward compat for uninitialized databases).
-    Cached in-memory to prevent repeated Firestore roundtrips on static catalogs.
-    Filters out tombstones and sorts by sort_order."""
+    """DB catalog entries from Firestore.
+    If cached in-memory, returns the warm cache.
+    If database is unavailable and no warm cache exists, raises HTTPException(503).
+    Does NOT fall back to static seed lists as authoritative live catalog data,
+    preventing resurrection of deleted/inactive records and omission of admin-created records."""
     if kind in _CATALOG_CACHE:
         return _CATALOG_CACHE[kind]
+
+    if kind not in _CATALOG_KINDS:
+        raise HTTPException(status_code=404, detail=f"Unknown catalog kind '{kind}'")
+
     coll, seed_list = _CATALOG_KINDS[kind]
-    deleted_ids = await _get_deleted_catalog_ids(kind)
-    if db is not None:
+
+    if db is None:
+        raise HTTPException(status_code=503, detail=f"Database service unavailable: catalog '{kind}' cannot be loaded.")
+
+    try:
+        deleted_ids = await _get_deleted_catalog_ids(kind)
         items = [d.to_dict() async for d in db.collection(coll).stream()]
         items = [i for i in items if i.get("id") not in deleted_ids]
         if kind == "courts":
@@ -2721,40 +2895,90 @@ async def _load_catalog(kind: str) -> list:
                 if isinstance(c, dict) and c.get("id"):
                     _COURT_MAP[c["id"]] = c
             return items
-        if items:
-            items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
-            _CATALOG_CACHE[kind] = items
-            return items
-    res = [dict(x, active=True) for x in seed_list if x.get("id") not in deleted_ids]
-    res.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("en", "")))
-    _CATALOG_CACHE[kind] = res
-    return res
+
+        items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
+        _CATALOG_CACHE[kind] = items
+        return items
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Database read failed for catalog '{kind}': {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database service unavailable: failed to load live catalog '{kind}'"
+        )
+
+
+_CATALOG_MAPS_SYNCED: bool = False
+
+
+def _init_default_catalog_maps() -> None:
+    """Populate in-memory catalog maps from static seed lists if they are unpopulated.
+    Ensures labels, validation, and location lookups are available on cold start with 0 DB reads."""
+    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP
+    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+    if not _CASE_TYPE_MAP:
+        _CASE_TYPE_MAP = {c["id"]: c for c in CASE_TYPES}
+    if not _LAW_MAP:
+        _LAW_MAP = {l["id"]: l for l in LAWS}
+    if not _DISTRICT_MAP:
+        _DISTRICT_MAP = {d["id"]: d for d in DISTRICTS}
+    if not _TALUKA_MAP:
+        _TALUKA_MAP = {t["id"]: t for t in TALUKAS}
+    if not _COURT_MAP:
+        _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
+        _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
+        _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **{c["id"]: c for c in COURTS}}
+    if not _PS_MAP:
+        _PS_MAP = {p["id"]: p for p in POLICE_STATIONS}
+    _VALID_CASE_TYPE_IDS = set(_CASE_TYPE_MAP.keys())
+    _VALID_LAW_IDS = set(_LAW_MAP.keys())
+    _VALID_DISTRICT_IDS = set(_DISTRICT_MAP.keys())
+    _VALID_TALUKA_IDS = set(_TALUKA_MAP.keys())
+    _VALID_COURT_IDS = set(_COURT_MAP.keys())
+    _VALID_PS_IDS = set(_PS_MAP.keys())
+    _build_location_lookup()
+
+
+# Initialize default static catalog maps immediately at module import
+_init_default_catalog_maps()
 
 
 async def _refresh_catalog_maps() -> None:
-    """Rebuild in-memory catalog maps + valid-id sets from MongoDB. Called at
+    """Rebuild in-memory catalog maps + valid-id sets from database. Called at
     startup and after every admin catalog mutation so labels, validation and
     document rendering see admin-managed entries immediately."""
-    _invalidate_catalog_cache()
-    global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
-    global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
-    _CASE_TYPE_MAP = {c["id"]: c for c in await _load_catalog("case-types")}
-    _LAW_MAP = {l["id"]: l for l in await _load_catalog("laws")}
-    _DISTRICT_MAP = {d["id"]: d for d in await _load_catalog("districts")}
-    _TALUKA_MAP = {t["id"]: t for t in await _load_catalog("talukas")}
-    _loaded_courts = {c["id"]: c for c in await _load_catalog("courts")}
-    _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
-    _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
-    _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_courts}
-    _ACTIVE_COURT_IDS = {c["id"] for c in _loaded_courts.values() if c.get("active") is not False}
-    _PS_MAP = {p["id"]: p for p in await _load_catalog("police-stations")}
-    _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
-    _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
-    _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
-    _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
-    _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
-    _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
-    _build_location_lookup()
+    global _CATALOG_MAPS_SYNCED
+    try:
+        case_types = await _load_catalog("case-types")
+        laws = await _load_catalog("laws")
+        districts = await _load_catalog("districts")
+        talukas = await _load_catalog("talukas")
+        loaded_courts = await _load_catalog("courts")
+        police_stations = await _load_catalog("police-stations")
+
+        global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
+        global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
+        _CASE_TYPE_MAP = {c["id"]: c for c in case_types}
+        _LAW_MAP = {l["id"]: l for l in laws}
+        _DISTRICT_MAP = {d["id"]: d for d in districts}
+        _TALUKA_MAP = {t["id"]: t for t in talukas}
+        _loaded_court_map = {c["id"]: c for c in loaded_courts}
+        _legacy_courts = {c["id"]: c for c in LEGACY_COURTS}
+        _legacy_numbered = {c["id"]: c for c in LEGACY_NUMBERED_COURTS}
+        _COURT_MAP = {**_legacy_courts, **_legacy_numbered, **_loaded_court_map}
+        _ACTIVE_COURT_IDS = {c["id"] for c in _loaded_court_map.values() if c.get("active") is not False}
+        _PS_MAP = {p["id"]: p for p in police_stations}
+        _VALID_CASE_TYPE_IDS = {c["id"] for c in _CASE_TYPE_MAP.values()}
+        _VALID_LAW_IDS = {l["id"] for l in _LAW_MAP.values()}
+        _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
+        _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
+        _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
+        _VALID_PS_IDS = {p["id"]: p for p in _PS_MAP.values()}
+        _build_location_lookup()
+        _CATALOG_MAPS_SYNCED = True
+    except Exception as err:
+        logger.warning(f"Error refreshing catalog maps from database (retaining existing in-memory maps): {err}")
 
 
 def _catalog_public(item: dict) -> dict:
@@ -2825,6 +3049,11 @@ MAX_TEMPLATE_VALUES_TOTAL = 100_000  # max total chars in template values dict
 
 def validate_case_refs(data: dict, existing: Optional[dict] = None):
     """Validate catalog reference IDs. Raises HTTPException on invalid."""
+    if not _CATALOG_MAPS_SYNCED:
+        raise HTTPException(
+            status_code=503,
+            detail="Catalog service unavailable: database synchronization pending. Please retry shortly."
+        )
     cid = data.get("case_type_id")
     if cid and cid != "other" and cid not in _VALID_CASE_TYPE_IDS:
         if not (existing and existing.get("case_type_id") == cid):
@@ -3289,6 +3518,8 @@ def _get_canonical_vakilatnama_civil_template() -> Optional[dict]:
 
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
+    if db is None:
+        return
     _snap = await db.collection("system_settings").document("seed_complete").get()
     setting = _snap.to_dict() if _snap.exists else None
     if not setting or setting.get("value") is not True:
@@ -4122,35 +4353,71 @@ async def _get_published_templates() -> list:
                     except Exception:
                         pass
     
-    if not db_templates and db is None:
-        canonical_seeds = [
-            _get_canonical_exhibit_template(),
-            _get_canonical_certified_copy_template(),
-            _get_canonical_closing_purshish_template(),
-            _get_canonical_closing_argument_right_template(),
-            _get_canonical_reopen_right_to_argue_template(),
-            _get_canonical_exemption_arji_template(),
-            _get_canonical_dd_karavani_arji_template(),
-            _get_canonical_mudat_arji_template(),
-            _get_canonical_vakilatnama_criminal_template(),
-            _get_canonical_vakilatnama_civil_template(),
-        ]
-        canonicals_by_id = {s["id"]: s for s in canonical_seeds if s}
-        v2_items = []
-        for t in TEMPLATES_V2:
-            base = t.get("base_key") or (t.get("id")[:-3] if t.get("id", "").endswith(("_gu", "_en")) else t.get("id"))
-            if base in canonicals_by_id:
-                if not any(x.get("id") == base for x in v2_items):
-                    v2_items.append(canonicals_by_id[base])
-            else:
-                v2_items.append(t)
-        for cid, cseed in canonicals_by_id.items():
-            if not any(x.get("id") == cid for x in v2_items):
-                v2_items.append(cseed)
-        db_templates = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in v2_items if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids and t.get("base_key") not in deleted_ids and t.get("slug") not in deleted_ids]
+    canonical_seeds_all = _get_all_seed_templates()
+    canonical_map = {t["id"]: t for t in canonical_seeds_all if t.get("id")}
 
-    db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
-    res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in db_templates]
+    if not db_templates and db is None:
+        db_templates = [
+            {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+            for t in canonical_seeds_all
+            if t.get("id") not in deleted_ids and t.get("template_id") not in deleted_ids and t.get("base_key") not in deleted_ids and t.get("slug") not in deleted_ids
+        ]
+
+    # Exclude deleted templates and legacy _gu / _en variants
+    filtered_db_templates = []
+    seen_canonical = set()
+    for t in db_templates:
+        tid = t.get("id") or t.get("template_id")
+        if not tid or tid in deleted_ids:
+            continue
+        # Skip legacy suffixed records from published list
+        if tid.endswith(("_gu", "_en")) and resolve_canonical_template_id(tid) != tid:
+            continue
+        canon_id = resolve_canonical_template_id(tid)
+        if canon_id in seen_canonical:
+            continue
+        seen_canonical.add(canon_id)
+        if canon_id in canonical_map:
+            merged = dict(canonical_map[canon_id])
+            merged.update({k: v for k, v in t.items() if v is not None})
+            filtered_db_templates.append(merged)
+        else:
+            filtered_db_templates.append(t)
+
+    for cid, cseed in canonical_map.items():
+        if cid in CANONICAL_TEMPLATE_IDS and cid not in seen_canonical and cid not in deleted_ids:
+            filtered_db_templates.append(dict(cseed))
+            seen_canonical.add(cid)
+
+    setting_order = await _get_setting("template_display_order")
+    if isinstance(setting_order, str):
+        try:
+            setting_order = json.loads(setting_order)
+        except Exception:
+            setting_order = None
+    if isinstance(setting_order, list) and setting_order:
+        order_map = {}
+        for idx, k in enumerate(setting_order):
+            if isinstance(k, str) and k.strip():
+                clean_k = k.strip()
+                if clean_k not in order_map:
+                    order_map[clean_k] = idx
+                canon = resolve_canonical_template_id(clean_k)
+                if canon not in order_map:
+                    order_map[canon] = idx
+                if clean_k.endswith(("_gu", "_en")):
+                    base = clean_k[:-3]
+                    if base not in order_map:
+                        order_map[base] = idx
+        filtered_db_templates.sort(key=lambda t: (
+            order_map.get(t.get("id"), order_map.get(resolve_canonical_template_id(t.get("id", "")), t.get("sort_order") if t.get("sort_order") is not None else 999999)),
+            t.get("sort_order") if t.get("sort_order") is not None else 999999,
+            t.get("category", ""),
+            t.get("name_en", "")
+        ))
+    else:
+        filtered_db_templates.sort(key=lambda t: (t.get("sort_order") if t.get("sort_order") is not None else 999999, t.get("category", ""), t.get("name_en", "")))
+    res = [{**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1} for t in filtered_db_templates]
 
     with _PUBLISHED_TEMPLATES_LOCK:
         _PUBLISHED_TEMPLATES_CACHE["data"] = res
@@ -4164,12 +4431,13 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     if _is_templates_disabled():
         return None
     deleted_ids = await _get_deleted_template_ids()
+    canon_cand = resolve_canonical_template_id(template_id)
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
-    cand_set = {template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
+    cand_set = {template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     if cand_set.intersection(deleted_ids):
         return None
 
-    lookup_candidates = list(dict.fromkeys([template_id, base_cand, f"{base_cand}_gu", f"{base_cand}_en"]))
+    lookup_candidates = list(dict.fromkeys([template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"]))
 
     # Fast path: check in-memory cached published templates first (<0.1ms)
     try:
@@ -4526,6 +4794,13 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         if v_civ_seed and "vakilatnama_civil" not in deleted_ids:
             return {**v_civ_seed, "format_version": v_civ_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
+    if not t:
+        for cand in lookup_candidates:
+            for item in TEMPLATES_V2:
+                if cand in (item.get("id"), item.get("template_id"), item.get("base_key"), item.get("slug")):
+                    if item.get("id") not in deleted_ids:
+                        return {**item, "format_version": item.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
     return None
 
 
@@ -4541,6 +4816,13 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
     else:
         t_id = template_id
         t_ver = template_version
+
+    canon_id = resolve_canonical_template_id(t_id)
+
+    if db is None:
+        if t_ver is not None:
+            raise HTTPException(503, "Database service unavailable")
+        return await _get_template_by_id(t_id)
 
     if t_ver is not None:
         try:
@@ -4588,9 +4870,14 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
                 "format_version": old_v.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1,
             }
 
-    # Fallback to current template in db.templates
+    # Fallback to current template in db.templates or canonical template
     _snap = await db.collection("templates").document(t_id).get()
     t = _snap.to_dict() if _snap.exists else None
+    if not t and canon_id and canon_id != t_id:
+        _snap_c = await db.collection("templates").document(canon_id).get()
+        t = _snap_c.to_dict() if _snap_c.exists else None
+    if not t:
+        t = await _get_template_by_id(canon_id or t_id)
     if t:
         if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application"):
             ex_seed = _get_canonical_exhibit_template()
@@ -4892,7 +5179,11 @@ async def resolve_court_label(raw_court: Optional[str], language: str, case: Opt
     lang = "gu" if language == "gu" else "en"
 
     # 1. Fetch catalog entries from Admin Court Catalog
-    catalog_courts = await _load_catalog("courts")
+    catalog_courts = []
+    try:
+        catalog_courts = await _load_catalog("courts")
+    except Exception:
+        catalog_courts = []
 
     # 2. Collect candidate values to inspect
     candidates: list[str] = []
@@ -5231,6 +5522,32 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["case_status_clause"] = ""
             ctx["tense"] = "is"
 
+    # Map case_status_phrase for English documents
+    csp = ctx.get("case_status_phrase")
+    if csp:
+        if language == "en":
+            if csp in ("ચાલવા પર છે", "ચાલુ", "Pending", "Ongoing"):
+                ctx["case_status_phrase"] = "pending"
+            elif csp in ("ફેંસલ થયેલ છે", "Disposed", "Decided"):
+                ctx["case_status_phrase"] = "disposed of"
+
+    # Map warrant_kind for English documents
+    wk = ctx.get("warrant_kind")
+    if wk and language == "en":
+        wk_map = {"સમન્સ": "Summons", "વોરંટ": "Warrant", "નોટીસ": "Notice"}
+        if wk in wk_map:
+            ctx["warrant_kind"] = wk_map[wk]
+
+    # Enclosure line for document production / acceptance
+    if ctx.get("documents_produced"):
+        encl_val = str(ctx["documents_produced"]).strip()
+        if encl_val:
+            ctx["enclosure_line"] = f"\n\nબિડાણ :- {encl_val}" if language == "gu" else f"\n\nEnclosure :- {encl_val}"
+        else:
+            ctx["enclosure_line"] = ""
+    else:
+        ctx["enclosure_line"] = ""
+
     # Conditional "અન્ય/Other" fields (v2 catalog): when a select/radio is set
     # to "other", the companion "<key>_other" text field holds the real value
     # and replaces it in the rendered document (never prints the literal
@@ -5243,12 +5560,18 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
     adv_qual = (user.get("qualification_gu" if language == "gu" else "qualification_en") or user.get("qualification") or user.get("advocate_qualification") or "").strip()
     if "advocate_qualification" not in values:
         ctx["advocate_qualification"] = adv_qual
+    if "qualification" not in values:
+        ctx["qualification"] = adv_qual
     adv_addr = (user.get("office_address_gu" if language == "gu" else "office_address_en") or user.get("office_address") or user.get("address") or user.get("advocate_address") or "").strip()
     if "advocate_address" not in values:
         ctx["advocate_address"] = adv_addr
+    if "office_address" not in values:
+        ctx["office_address"] = adv_addr
     adv_mob = (user.get("mobile") or user.get("phone") or user.get("advocate_mobile") or "").strip()
     if "advocate_mobile" not in values:
         ctx["advocate_mobile"] = adv_mob
+    if "mobile_number" not in values:
+        ctx["mobile_number"] = adv_mob
     bar_val_in_values = (
         values.get("advocate_enrollment_number")
         or values.get("advocate_enrollment_no")
@@ -5282,10 +5605,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         ctx["advocate_logo"] = user.get("logo_url") or user.get("logo") or ""
 
     # Vakalatnama specific fields: party_signature_name and advocate_for
-    if "party_signature_name" in values:
+    if "party_signature_name" in values and values.get("party_signature_name") is not None:
         ctx["party_signature_name"] = str(values.get("party_signature_name") or "").strip()
         ctx["party_sign_name"] = ctx["party_signature_name"]
-    elif "party_sign_name" in values:
+    elif "party_sign_name" in values and values.get("party_sign_name") is not None:
         ctx["party_signature_name"] = str(values.get("party_sign_name") or "").strip()
         ctx["party_sign_name"] = ctx["party_signature_name"]
     else:
@@ -5736,6 +6059,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         if k not in ctx or ctx[k] is None:
             ctx[k] = ""
 
+    for k, v in list(ctx.items()):
+        if v is None:
+            ctx[k] = ""
+
     return ctx
 
 
@@ -5773,6 +6100,8 @@ def validate_template_requirements(t: dict, ctx: dict, language: str = "en") -> 
             continue
         if key == "case_number" and t.get("id") == "jamin_bond" and ctx.get("crime_reg_number"):
             continue
+        if key in ("party_signature_name", "party_sign_name"):
+            continue
         val = ctx.get(key)
         if val is None or str(val).strip() == "":
             lbl = (f.get("label_gu") if language == "gu" else f.get("label_en")) or f.get("label_en") or key
@@ -5808,7 +6137,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
     page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
     _validate_page_size(page_size)
     case = None
-    if req.case_id:
+    if req.case_id and db is not None:
         _snap = await db.collection("cases").document(req.case_id).get()
         case = _snap.to_dict() if _snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))
@@ -5833,7 +6162,7 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
         "raw_content": rendered,
         "ctx": ctx,
     })
-    pdf_b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
+    pdf_b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
     return {
         "content": rendered,
         "blocks": blocks,
@@ -5865,7 +6194,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     _validate_page_size(page_size)
 
     case = None
-    if req.case_id:
+    if req.case_id and db is not None:
         _case_snap = await db.collection("cases").document(req.case_id).get()
         case = _case_snap.to_dict() if _case_snap.exists else None
     ctx = await build_render_context(user, case, req.values, req.language, template_id=t.get("id", req.template_id))
@@ -5874,7 +6203,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.
     # Regular users consume exactly 1 credit for final downloads.
     unlimited = is_unlimited_user(user)
-    if not unlimited:
+    if not unlimited and db is not None:
         _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
         if not _snap:
             raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
@@ -5924,14 +6253,14 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             # Image export: rasterize the EXACT document PDF (same layout,
             # margins, fonts, shaping) into per-page PNGs. Single page -> one
             # PNG; multiple pages -> a ZIP of page-1.png ... page-N.png.
-            pages = generate_document_images(blocks, req.language, doc_settings)
+            pages = generate_document_images(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             b64, mime, img_filename = build_image_payload(pages, (req.filename or "document").rsplit(".", 1)[0])
             gen_meta = {"engine": "rasterize", "font_family": _resolve_gujarati_font_family_doc(doc_settings)}
         else:
-            b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings)
+            b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             mime = "application/pdf"
     except Exception as e:
-        if not unlimited:
+        if not unlimited and db is not None:
             # Refund credit on generation failure — user must not be unfairly charged
             wallet_doc = None
             async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
@@ -6007,20 +6336,21 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     }
 
     # Parallelize post-generation persistence tasks to reduce latency by ~1-1.5 seconds
-    post_gen_tasks = [
-        db.collection('applications').document(app_id).set(_doc),
-        db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
-        db.collection('drafts').document(f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}").delete(),
-    ]
-    if req.case_id:
-        post_gen_tasks.append(
-            db.collection("cases").document(req.case_id).set({
-                "last_used_template": t["name_en"], 
-                "updated_at": now().isoformat(),
-                "application_count": firestore.Increment(1)
-            }, merge=True)
-        )
-    await asyncio.gather(*post_gen_tasks, return_exceptions=True)
+    if db is not None:
+        post_gen_tasks = [
+            db.collection('applications').document(app_id).set(_doc),
+            db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
+            db.collection('drafts').document(f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}").delete(),
+        ]
+        if req.case_id:
+            post_gen_tasks.append(
+                db.collection("cases").document(req.case_id).set({
+                    "last_used_template": t["name_en"],
+                    "updated_at": now().isoformat(),
+                    "application_count": firestore.Increment(1)
+                }, merge=True)
+            )
+        await asyncio.gather(*post_gen_tasks, return_exceptions=True)
 
     resp = {"filename": filename, "mime_type": mime, "base64": b64}
     if gen_meta:
@@ -6935,7 +7265,26 @@ async def global_search(q: str, user=Depends(get_user)):
 @app.get("/")
 @app.get("/healthz")
 async def root():
-    return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0"}
+    return {"app": "NyaySetu Pro", "status": "ok", "version": "1.0.0", "database": "not_checked"}
+
+
+@app.get("/readyz")
+@api.get("/health/ready")
+async def readiness():
+    """Readiness probe: explicitly verifies database connectivity with a lightweight check.
+    Returns 200 with {'ready': True, 'database': 'connected'} if reachable.
+    Returns 503 with {'ready': False, 'database': 'unavailable'} if unreachable or quota exceeded."""
+    if db is None:
+        raise HTTPException(status_code=503, detail={"ready": False, "database": "unconfigured"})
+    try:
+        _snap = await db.collection("system_settings").document("seed_complete").get()
+        return {"ready": True, "database": "connected"}
+    except Exception as e:
+        logger.warning(f"Readiness check failed: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail={"ready": False, "database": "unavailable", "error": "database_unavailable"}
+        )
 
 
 # ============================================================
@@ -9395,65 +9744,82 @@ async def admin_get_template_order(admin=Depends(get_admin)):
     return {"template_order": order}
 
 
+async def _update_template_sort_order(tid: str, idx: int, ts: str, admin_id: str, deleted_ids: set[str]):
+    if not tid or tid in deleted_ids or resolve_canonical_template_id(tid) in deleted_ids:
+        return
+    if db is None:
+        return
+    doc_ref = db.collection("templates").document(tid)
+    doc_snap = await doc_ref.get()
+    if doc_snap.exists:
+        await doc_ref.update({
+            "sort_order": idx,
+            "updated_at": ts,
+            "updated_by": admin_id,
+        })
+
+
 @admin_api.put("/template-order")
 async def admin_update_template_order(req: TemplateOrderReq, admin=Depends(get_admin)):
     """Update the authoritative template display order in settings and persist sort_order on templates."""
     if not isinstance(req.template_order, list):
         raise HTTPException(422, "template_order must be a list of string IDs")
     ts = now().isoformat()
+    deleted_ids = await _get_deleted_template_ids()
+    clean_order = [
+        tid for tid in req.template_order
+        if tid and tid not in deleted_ids and resolve_canonical_template_id(tid) not in deleted_ids
+    ]
     if db is not None:
         await db.collection('settings').document("template_display_order").set({
-            "value": req.template_order,
+            "value": clean_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
-        for idx, tid in enumerate(req.template_order):
-            await db.collection("templates").document(tid).set({
-                "sort_order": idx,
-                "updated_at": ts,
-                "updated_by": admin["id"]
-            }, merge=True)
+        for idx, tid in enumerate(clean_order):
+            await _update_template_sort_order(tid, idx, ts, admin["id"], deleted_ids)
             if not tid.endswith("_gu") and not tid.endswith("_en"):
-                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await _update_template_sort_order(f"{tid}_gu", idx, ts, admin["id"], deleted_ids)
+                await _update_template_sort_order(f"{tid}_en", idx, ts, admin["id"], deleted_ids)
             else:
                 base_tid = tid[:-3]
                 other_suffix = "_en" if tid.endswith("_gu") else "_gu"
-                await db.collection("templates").document(base_tid).set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{base_tid}{other_suffix}").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await _update_template_sort_order(base_tid, idx, ts, admin["id"], deleted_ids)
+                await _update_template_sort_order(f"{base_tid}{other_suffix}", idx, ts, admin["id"], deleted_ids)
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
-    await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(req.template_order)})
-    return {"success": True, "template_order": req.template_order}
+    await audit_log(admin=admin, action="template_order_update", target="template_display_order", metadata={"count": len(clean_order)})
+    return {"success": True, "template_order": clean_order}
 
 
 @admin_api.put("/templates/reorder")
 async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require_super_admin)):
     """Reorder templates endpoint (supporting drag/drop from admin UI)."""
-    order = req.order if req.order is not None else (req.template_order or [])
-    if not isinstance(order, list):
+    raw_order = req.order if req.order is not None else (req.template_order or [])
+    if not isinstance(raw_order, list):
         raise HTTPException(422, "order must be a list of string IDs")
     ts = now().isoformat()
+    deleted_ids = await _get_deleted_template_ids()
+    clean_order = [
+        tid for tid in raw_order
+        if tid and tid not in deleted_ids and resolve_canonical_template_id(tid) not in deleted_ids
+    ]
     if db is not None:
         await db.collection('settings').document("template_display_order").set({
-            "value": order,
+            "value": clean_order,
             "updated_by": admin["id"],
             "updated_at": ts,
         })
-        for idx, tid in enumerate(order):
-            await db.collection("templates").document(tid).set({
-                "sort_order": idx,
-                "updated_at": ts,
-                "updated_by": admin["id"]
-            }, merge=True)
+        for idx, tid in enumerate(clean_order):
+            await _update_template_sort_order(tid, idx, ts, admin["id"], deleted_ids)
             if not tid.endswith("_gu") and not tid.endswith("_en"):
-                await db.collection("templates").document(f"{tid}_gu").set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{tid}_en").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await _update_template_sort_order(f"{tid}_gu", idx, ts, admin["id"], deleted_ids)
+                await _update_template_sort_order(f"{tid}_en", idx, ts, admin["id"], deleted_ids)
             else:
                 base_tid = tid[:-3]
                 other_suffix = "_en" if tid.endswith("_gu") else "_gu"
-                await db.collection("templates").document(base_tid).set({"sort_order": idx, "updated_at": ts}, merge=True)
-                await db.collection("templates").document(f"{base_tid}{other_suffix}").set({"sort_order": idx, "updated_at": ts}, merge=True)
+                await _update_template_sort_order(base_tid, idx, ts, admin["id"], deleted_ids)
+                await _update_template_sort_order(f"{base_tid}{other_suffix}", idx, ts, admin["id"], deleted_ids)
     invalidate_settings_cache("template_display_order")
     invalidate_published_templates_cache()
     await create_admin_audit_log(
@@ -9461,9 +9827,9 @@ async def admin_reorder_templates(req: TemplateReorderReq, admin=Depends(require
         action="templates_reorder",
         entity_type="template",
         entity_id="catalog_order",
-        metadata={"count": len(order)},
+        metadata={"count": len(clean_order)},
     )
-    return {"success": True, "template_order": order}
+    return {"success": True, "template_order": clean_order}
 
 
 
@@ -9563,10 +9929,18 @@ async def admin_list_templates(
             doc_data = d.to_dict() or {}
             tid = doc_data.get("id") or d.id
             if not tid or tid in deleted_ids:
+                if tid and tid in deleted_ids:
+                    try:
+                        asyncio.create_task(db.collection('templates').document(d.id).delete())
+                    except Exception:
+                        pass
                 continue
             doc_data["id"] = tid
+            # Exclude legacy variant records from normal catalog view
+            if tid.endswith(("_gu", "_en")) and resolve_canonical_template_id(tid) != tid:
+                continue
             # If doc is a seed template or stub, merge seed definition while preserving existing values
-            seed_match = seed_map.get(tid) or seed_map.get(tid.replace("_gu", "").replace("_en", ""))
+            seed_match = seed_map.get(tid) or seed_map.get(resolve_canonical_template_id(tid))
             if seed_match:
                 base = dict(seed_match)
                 base.update({k: v for k, v in doc_data.items() if v is not None})
@@ -9580,10 +9954,12 @@ async def admin_list_templates(
             seen_ids.add(tid)
             all_db.append(doc_data)
 
-    # Include any seed templates not yet materialized in Firestore
+    # Include any canonical seed templates not yet materialized in Firestore
     for tid, s_tpl in seed_map.items():
-        if tid not in seen_ids:
+        if tid not in seen_ids and tid in CANONICAL_TEMPLATE_IDS and tid not in deleted_ids:
             all_db.append(dict(s_tpl, status="seed", source="seed"))
+
+    all_db = [t for t in all_db if not (t.get("id", "").endswith(("_gu", "_en")) and resolve_canonical_template_id(t.get("id", "")) != t.get("id", ""))]
 
     # Set status and source for unedited seed templates
     for t in all_db:
@@ -10173,8 +10549,7 @@ async def admin_restore_template(template_id: str, admin=Depends(require_super_a
 
 @admin_api.delete("/templates/{template_id}")
 async def admin_delete_template(template_id: str, admin=Depends(require_super_admin)):
-    """Permanently delete a template from db.templates, db.template_revisions, and db.template_versions.
-    Universal Super Admin deletion policy: No templates are exempt from deletion."""
+    """Permanently delete a template from db.templates, db.template_revisions, and db.template_versions."""
     await _ensure_seed_complete()
     base_id = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
 
@@ -10587,13 +10962,16 @@ async def migrate_templates_to_revisions(db_conn) -> dict:
     return {"migrated": migrated, "skipped": skipped, "total": len(templates)}
 
 
-async def seed_templates(force: bool = False) -> dict:
+async def seed_templates(force: bool = False, mark_system_seed_complete: bool = False) -> dict:
     """One-time idempotent initialization of seed templates into db.templates."""
     if not force and not _is_auto_seed_enabled():
         logger.info("Template auto-seed is disabled in production. Skipping.")
         return {"success": True, "skipped": True, "message": "Auto-seed disabled"}
 
-    _d = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "seed_complete")).limit(1).stream()]; setting = _d[0].to_dict() if _d else None
+    _d = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "templates_seed_complete")).limit(1).stream()]; setting = _d[0].to_dict() if _d else None
+    if not setting:
+        _d2 = [x async for x in db.collection("system_settings").where(filter=firestore.FieldFilter("key", "==", "seed_complete")).limit(1).stream()]
+        setting = _d2[0].to_dict() if _d2 else None
     all_seeds = _get_all_seed_templates()
     if not force:
         template_count = len([d async for d in db.collection('templates').stream()])
@@ -10842,15 +11220,21 @@ async def seed_templates(force: bool = False) -> dict:
         inserted += 1
 
     rev_res = await migrate_templates_to_revisions(db)
-    await db.collection('system_settings').document("seed_complete").set({"key": "seed_complete", "value": True, "completed_at": ts},
+    await db.collection('system_settings').document("templates_seed_complete").set(
+        {"key": "templates_seed_complete", "value": True, "completed_at": ts}
     )
+    if mark_system_seed_complete:
+        await db.collection('system_settings').document("seed_complete").set(
+            {"key": "seed_complete", "value": True, "completed_at": ts}
+        )
     if inserted:
-        logger.info(f"Initialized {inserted} seed templates into db.templates (seed_complete=True).")
+        logger.info(f"Initialized {inserted} seed templates into db.templates (templates_seed_complete=True, seed_complete={mark_system_seed_complete}).")
         invalidate_published_templates_cache()
 
     return {
         "success": True,
-        "seed_complete": True,
+        "seed_complete": mark_system_seed_complete,
+        "templates_seed_complete": True,
         "total_seed_templates": len(all_seeds),
         "created": inserted,
         "skipped": len(skipped_ids),
@@ -10864,8 +11248,12 @@ async def seed_templates(force: bool = False) -> dict:
 @admin_api.post("/templates/migrate-seed")
 async def admin_migrate_seed(admin=Depends(require_super_admin)):
     """One-time migration: copy all seed templates into Firestore and create initial revisions.
+    NOTE: Seeds templates and revisions only. Plans, catalogs, and super admin accounts
+    require their own separate controlled initialization processes.
+    Does NOT mark global system_settings/seed_complete=True to prevent partial initialization
+    from masking unseeded collections.
     Idempotent — does NOT overwrite existing templates."""
-    return await seed_templates(force=True)
+    return await seed_templates(force=True, mark_system_seed_complete=False)
 
 
 # ============================================================
@@ -10910,26 +11298,37 @@ async def seed_catalogs():
 async def seed_plans():
     """Idempotently seed the plans collection from the static catalog.
     Only inserts when the collection is empty — never overwrites admin edits."""
-    count = len([d async for d in db.collection('plans').stream()])
-    if count > 0:
+    if db is None:
         return
+    try:
+        # Bounded existence check: 1 read instead of full collection scan
+        _first = [d async for d in db.collection('plans').limit(1).stream()]
+        if _first:
+            return
+    except Exception as e:
+        logger.warning(f"Unable to check plans collection for seeding (bypassing): {e}")
+        return
+
     ts = now().isoformat()
-    for p in PLANS:
-        _doc = {
-            "id": p["id"],
-            "name": p["name"],
-            "price": p["price"],
-            "credits": p["credits"],
-            "popular": p.get("popular", False),
-            "active": True,
-            "created_at": ts,
-            "updated_at": ts,
-        }
-        _doc_id = _doc.get("id") or str(uuid.uuid4())
-        _doc["id"] = _doc_id
-        await db.collection("plans").document(_doc_id).set(_doc)
-    logger.info(f"Seeded {len(PLANS)} plans.")
-    invalidate_plans_cache()
+    try:
+        for p in PLANS:
+            _doc = {
+                "id": p["id"],
+                "name": p["name"],
+                "price": p["price"],
+                "credits": p["credits"],
+                "popular": p.get("popular", False),
+                "active": True,
+                "created_at": ts,
+                "updated_at": ts,
+            }
+            _doc_id = _doc.get("id") or str(uuid.uuid4())
+            _doc["id"] = _doc_id
+            await db.collection("plans").document(_doc_id).set(_doc)
+        logger.info(f"Seeded {len(PLANS)} plans.")
+        invalidate_plans_cache()
+    except Exception as e:
+        logger.warning(f"Failed to write seed plans: {e}")
 
 
 async def seed_super_admin():
@@ -11097,33 +11496,87 @@ async def _ensure_ttl_index(coll, field: str, required_seconds: int):
     pass
 
 
+async def _check_seed_complete() -> Optional[bool]:
+    """Check system_settings/seed_complete state with bounded retry (max 1 retry).
+    Returns True if confirmed seeded, False if confirmed unseeded, None if check failed (transient error / 429)."""
+    if db is None:
+        return True
+
+    for attempt in range(2):
+        try:
+            _snap = await db.collection("system_settings").document("seed_complete").get()
+            if not _snap.exists:
+                return False
+            data = _snap.to_dict() or {}
+            return data.get("value") is True
+        except Exception as e:
+            err_str = str(e)
+            is_transient = "429" in err_str or "ResourceExhausted" in type(e).__name__ or "Quota exceeded" in err_str or "Unavailable" in type(e).__name__ or "DeadlineExceeded" in type(e).__name__
+            if attempt == 0 and is_transient:
+                logger.warning("Transient error/429 reading system_settings/seed_complete on startup. Retrying once after 500ms...")
+                await asyncio.sleep(0.5)
+                continue
+            logger.warning(f"Unable to verify seed_complete state on startup (attempt {attempt + 1}/2): {e}")
+            return None
+    return None
+
+
 @app.on_event("startup")
 async def create_indexes():
-    """Verify database initialization on startup."""
+    """Verify database initialization on startup safely without crashing serverless cold starts."""
     logger.info("Firestore indexes: managed via firestore.indexes.json and Cloud Firestore.")
+    _init_default_catalog_maps()
+
     if db is None:
         return
 
-    # Check existing authoritative initialization state in system_settings/seed_complete
-    is_seeded = False
     try:
-        _snap = await db.collection("system_settings").document("seed_complete").get()
-        is_seeded = _snap.exists and _snap.to_dict().get("value") is True
-    except Exception as e:
-        logger.warning(f"Unable to check seed_complete state on startup: {e}")
+        # Check existing authoritative initialization state in system_settings/seed_complete
+        is_seeded = await _check_seed_complete()
 
-    if is_seeded:
-        logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding/migration bypassed.")
-        await seed_super_admin()
-        await _refresh_catalog_maps()
-    else:
-        # First-time / uninitialized database setup only
-        logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")
-        await seed_plans()
-        await seed_catalogs()
-        await seed_super_admin()
-        await seed_templates()
-        await migrate_templates_to_revisions(db)
+        if is_seeded is True:
+            logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding bypassed.")
+            # In serverless production, super_admin is already seeded; avoid cold-start queries.
+            if not os.environ.get("VERCEL") and not _PRODUCTION:
+                try:
+                    await seed_super_admin()
+                except Exception as err:
+                    logger.warning(f"seed_super_admin non-critical startup error: {err}")
+        elif is_seeded is None:
+            # Firestore returned 429 ResourceExhausted or network error.
+            # A transient read failure must NOT be interpreted as proof that the database is uninitialized!
+            logger.warning(
+                "Unable to verify seed_complete on startup due to Firestore quota/network error. "
+                "Bypassing startup seeding to protect database from cascading failure."
+            )
+        else:
+            # is_seeded is False (document exists and value is False, or document does not exist)
+            if _is_auto_seed_enabled():
+                logger.info("First-time initialization: seeding plans, catalogs, admin, templates, and revisions.")
+                try:
+                    await seed_plans()
+                    await seed_catalogs()
+                    await seed_super_admin()
+                    await seed_templates(force=True, mark_system_seed_complete=False)
+                    await migrate_templates_to_revisions(db)
+                    # Mark global database initialization complete ONLY after all required components succeed:
+                    await db.collection('system_settings').document("seed_complete").set({
+                        "key": "seed_complete",
+                        "value": True,
+                        "completed_at": now().isoformat(),
+                        "components": ["plans", "catalogs", "super_admin", "templates", "revisions"]
+                    })
+                except Exception as seed_err:
+                    logger.error(f"First-time seeding encountered error: {seed_err}")
+            else:
+                logger.warning(
+                    "Database seed_complete is False, but automatic startup seeding is disabled in production "
+                    "(TEMPLATE_AUTO_SEED != true). Run explicit seed via POST /api/admin/templates/migrate-seed "
+                    "or set TEMPLATE_AUTO_SEED=true."
+                )
+    except Exception as exc:
+        # Startup event hook must NEVER crash the serverless container
+        logger.error(f"Non-fatal error in startup initialization hook: {exc}", exc_info=True)
 
 
 @app.on_event("shutdown")

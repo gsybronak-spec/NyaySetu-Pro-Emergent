@@ -33,8 +33,21 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
       "aanke padva",
       "dastavejne aank padva",
       "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
-      "આંક પાડવાની અરજી",
     ],
+  },
+  {
+    baseKey: "aanke_padvani_arji",
+    guId: "aanke_padvani_arji_gu",
+    enId: "aanke_padvani_arji_en",
+    name_gu: "આંક પાડવાની અરજી",
+    name_en: "Application to Exhibit Document",
+    category: "General",
+    description_gu: "દસ્તાવેજને પુરાવા તરીકે રેકોર્ડ પર લઈ આંક પાડવાની અરજી",
+    description_en: "Application to mark/assign exhibit numbers to documents produced on record",
+    keywords_gu: ["આંક", "આંક પાડવા", "નિશાની", "દસ્તાવેજ આંક", "પુરાવો આંક"],
+    keywords_en: ["exhibit", "mark exhibit", "assign exhibit", "exhibit document", "tentative exhibit", "exhibit number"],
+    transliterations: ["aanke", "aank", "anka", "nishani", "exhibit arji"],
+    aliases: ["aanke", "exhibit", "દસ્તાવેજને આંકે પાડવાની અરજી", "આંક", "આંક પાડવાની અરજી"],
   },
   {
     baseKey: "certified_copy_application",
@@ -552,13 +565,16 @@ export function getActiveTemplatePairs(
       return [];
     }
 
-    const serverIdSet = new Set<string>();
+    const serverTemplateMap = new Map<string, any>();
     for (const t of serverTemplates) {
       const id = t?.id || t?.template_id;
       if (typeof id === "string" && id.trim()) {
         const clean = id.trim();
-        serverIdSet.add(clean);
-        serverIdSet.add(clean.replace(/_(gu|en)$/, ""));
+        serverTemplateMap.set(clean, t);
+        const base = clean.replace(/_(gu|en)$/, "");
+        if (!serverTemplateMap.has(base)) {
+          serverTemplateMap.set(base, t);
+        }
       }
     }
 
@@ -566,12 +582,16 @@ export function getActiveTemplatePairs(
     const matchedBaseKeys = new Set<string>();
 
     for (const pair of TEMPLATE_LOGICAL_PAIRS) {
-      if (
-        serverIdSet.has(pair.baseKey) ||
-        serverIdSet.has(pair.guId) ||
-        serverIdSet.has(pair.enId)
-      ) {
-        matchedPairs.push(pair);
+      const serverT = serverTemplateMap.get(pair.baseKey) || serverTemplateMap.get(pair.guId) || serverTemplateMap.get(pair.enId);
+      if (serverT) {
+        matchedPairs.push({
+          ...pair,
+          name_gu: serverT.name_gu || pair.name_gu,
+          name_en: serverT.name_en || pair.name_en,
+          category: serverT.category || pair.category,
+          description_gu: serverT.description_gu !== undefined ? serverT.description_gu : pair.description_gu,
+          description_en: serverT.description_en !== undefined ? serverT.description_en : pair.description_en,
+        });
         matchedBaseKeys.add(pair.baseKey);
       }
     }
@@ -600,7 +620,10 @@ export function getActiveTemplatePairs(
       }
     }
 
-    return sortPairsByOrder(matchedPairs, order);
+    const effectiveOrder = (Array.isArray(order) && order.length > 0)
+      ? order
+      : serverTemplates.map((t: any) => t?.id || t?.template_id).filter(Boolean);
+    return sortPairsByOrder(matchedPairs, effectiveOrder);
   }
 
   // Fallback when serverTemplates is null/undefined
