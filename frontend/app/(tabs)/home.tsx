@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Image } from "expo-image";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -26,15 +26,11 @@ export default function Home() {
   const [quote, setQuote] = useState("Justice begins with preparation.");
   const [wallet, setWallet] = useState(() => ({ balance: user?.wallet_balance ?? 0, total_used: user?.total_credits_used ?? 0 }));
   const [allTemplatePairs, setAllTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
-    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).filter(
-      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
-    )
+    catalogCache.peekActiveTemplatePairs()
   );
   const [visibleHomeCount, setVisibleHomeCount] = useState<number>(10);
   const [totalTemplateCount, setTotalTemplateCount] = useState<number>(() =>
-    getActiveTemplatePairs(catalogCache.peekPublishedTemplates(), catalogCache.peekTemplateOrder()).filter(
-      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
-    ).length
+    catalogCache.peekActiveTemplatePairs().length
   );
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [drafts, setDrafts] = useState<any[]>([]);
@@ -47,19 +43,16 @@ export default function Home() {
 
   const load = useCallback(async () => {
     let failed = false;
-    const [q, w, drs, tpls, order] = await Promise.all([
+    const [q, w, drs, activePairs] = await Promise.all([
       api.quote().catch(() => { failed = true; return null; }),
       api.wallet().catch(() => { failed = true; return null; }),
       api.drafts().catch(() => { failed = true; return []; }),
-      catalogCache.getPublishedTemplates(true).catch(() => null),
-      catalogCache.getTemplateOrder(true).catch(() => null),
+      catalogCache.getActiveTemplatePairs(false).catch(() => catalogCache.peekActiveTemplatePairs()),
     ]);
     if (q?.quote) setQuote(q.quote);
     if (w && typeof w === "object") setWallet(w);
     setDrafts(Array.isArray(drs) ? drs : []);
-    const active = getActiveTemplatePairs(tpls, order).filter(
-      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
-    );
+    const active = Array.isArray(activePairs) && activePairs.length > 0 ? activePairs : catalogCache.peekActiveTemplatePairs();
     setAllTemplatePairs(active);
     setTotalTemplateCount(active.length);
     setLoadError(failed);
@@ -73,6 +66,22 @@ export default function Home() {
       setApplications(Array.isArray(hs) ? hs : []);
     }
   }, [isDesktop]);
+
+  useEffect(() => {
+    let active = true;
+    const unsub = catalogCache.subscribe("active_template_pairs", (pairs) => {
+      if (active && Array.isArray(pairs) && pairs.length > 0) {
+        setAllTemplatePairs(pairs);
+        setTotalTemplateCount(pairs.length);
+      }
+    });
+    return () => {
+      active = false;
+      unsub();
+    };
+  }, []);
+
+
 
   const templatePairs = useMemo(() => {
     return allTemplatePairs.slice(0, visibleHomeCount);
@@ -90,7 +99,10 @@ export default function Home() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await load();
+    await Promise.all([
+      load(),
+      catalogCache.getActiveTemplatePairs(true).catch(() => {}),
+    ]);
     setRefreshing(false);
   };
 
@@ -153,10 +165,38 @@ export default function Home() {
 
         {/* Real metrics */}
         <View style={styles.statGrid}>
-          <StatCard label="Active Cases" value={cases.length} icon="folder-open" tone="navy" />
-          <StatCard label="Drafts" value={drafts.length} icon="create" tone="gold" />
-          <StatCard label="Applications Generated" value={applications.length} icon="document-text" tone="green" />
-          <StatCard label="Credits Remaining" value={isUnlimited ? "Unlimited" : wallet.balance} icon="wallet" tone="red" />
+          <StatCard
+            label="Active Cases"
+            value={cases.length}
+            icon="folder-open"
+            tone="navy"
+            onPress={() => router.push("/(tabs)/cases")}
+            testID="stat-card-active-cases"
+          />
+          <StatCard
+            label="Drafts"
+            value={drafts.length}
+            icon="create"
+            tone="gold"
+            onPress={() => router.push({ pathname: "/vault", params: { tab: "drafts" } })}
+            testID="stat-card-drafts"
+          />
+          <StatCard
+            label="Applications Generated"
+            value={applications.length}
+            icon="document-text"
+            tone="green"
+            onPress={() => router.push({ pathname: "/vault", params: { tab: "documents" } })}
+            testID="stat-card-applications-generated"
+          />
+          <StatCard
+            label="Credits Remaining"
+            value={isUnlimited ? "Unlimited" : wallet.balance}
+            icon="wallet"
+            tone="red"
+            onPress={() => router.push("/(tabs)/subscription")}
+            testID="stat-card-credits-remaining"
+          />
         </View>
 
         {/* Quick actions */}
@@ -184,30 +224,6 @@ export default function Home() {
             ))}
           </View>
         </View>
-
-        {/* Continue drafting */}
-        {drafts.length > 0 && (
-          <View style={styles.desktopSection}>
-            <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Continue Drafting</Text>
-            <View style={{ gap: Spacing.sm }}>
-              {drafts.slice(0, 4).map((d) => (
-                <Pressable
-                  key={d.id}
-                  testID={`draft-${d.id}`}
-                  onPress={() => router.push({ pathname: "/template/[id]", params: { id: d.template_id, case_id: d.case_id ?? "", lang: d.language, draft: "1" } })}
-                  style={[styles.desktopDraftRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-                >
-                  <Ionicons name="document-text" size={20} color={colors.brandPrimary} />
-                  <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                    <Text style={{ color: colors.onSurface, fontWeight: "700" }}>{d.template_name}</Text>
-                    <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Last edited: {new Date(d.updated_at).toLocaleString()}</Text>
-                  </View>
-                  <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
 
         {/* Recent cases */}
         {cases.length > 0 && (
@@ -420,27 +436,7 @@ export default function Home() {
           </Pressable>
         </View>
 
-        {/* Continue Drafting */}
-        {drafts.length > 0 && (
-          <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Continue Drafting</Text>
-            {drafts.slice(0, 2).map((d) => (
-              <Pressable
-                key={d.id}
-                testID={`draft-${d.id}`}
-                onPress={() => router.push({ pathname: "/template/[id]", params: { id: d.template_id, case_id: d.case_id ?? "", lang: d.language, draft: "1" } })}
-                style={[styles.draftRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
-              >
-                <Ionicons name="document-text" size={22} color={colors.brandPrimary} />
-                <View style={{ flex: 1, marginLeft: Spacing.md }}>
-                  <Text style={{ color: colors.onSurface, fontWeight: "700" }}>{d.template_name}</Text>
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>Last edited: {new Date(d.updated_at).toLocaleString()}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.muted} />
-              </Pressable>
-            ))}
-          </View>
-        )}
+
 
         {/* Categories */}
         <View style={styles.section}>
@@ -602,10 +598,6 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: Spacing.lg, marginTop: Spacing.xl },
   sectionTitle: { fontSize: 17, fontWeight: "700", marginBottom: Spacing.md, fontFamily: "serif" },
   rowBetween: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  draftRow: {
-    flexDirection: "row", alignItems: "center", padding: Spacing.md,
-    borderRadius: Radius.md, borderWidth: 1, marginBottom: Spacing.sm,
-  },
   catCard: {
     flex: 1, padding: Spacing.lg, borderRadius: Radius.md, borderWidth: 1,
     alignItems: "flex-start", gap: Spacing.sm,
@@ -715,10 +707,6 @@ const styles = StyleSheet.create({
     width: 220, padding: Spacing.lg, borderRadius: 14, borderWidth: 1,
   },
   quickIcon: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
-  desktopDraftRow: {
-    flexDirection: "row", alignItems: "center", padding: Spacing.md,
-    borderRadius: 12, borderWidth: 1,
-  },
   recentGrid: { flexDirection: "row", flexWrap: "wrap", gap: Spacing.md },
   recentCard: { width: "31%", minWidth: 260, padding: Spacing.lg, borderRadius: 14, borderWidth: 1 },
   recentPill: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },

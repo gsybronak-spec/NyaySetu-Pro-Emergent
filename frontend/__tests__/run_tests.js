@@ -35,4 +35,20 @@ const { runCatalogPaginationTests } = require("./catalog_pagination.test.ts");
 runCatalogPaginationTests();
 const { runFinalThreeRequirementsFrontendTests } = require("./final_three_requirements.test.ts");
 runFinalThreeRequirementsFrontendTests();
+const { runTemplateOrderConsistencyTests } = require("./test_template_order_consistency.test.ts");
+runTemplateOrderConsistencyTests();
+const { runInstantStartupCacheTests } = require("./test_instant_startup_cache.test.ts");
+runInstantStartupCacheTests();
+const { runDraftBulkDeleteTests } = require("./test_draft_bulk_delete.test.ts");
+const { runFinalUIFixesTests } = require("./test_final_ui_fixes.test.ts");
+(async () => {
+  await runDraftBulkDeleteTests();
+  await runFinalUIFixesTests();
+  require("./verify_browser_behavior.js");
+})().catch((err) => {
+  console.error("Test runner failed:", err);
+  process.exit(1);
+});
+
+
 

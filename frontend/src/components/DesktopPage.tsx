@@ -1,5 +1,5 @@
 import React from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
 import { useTheme } from "@/src/theme/ThemeContext";
@@ -75,22 +75,22 @@ export function StatCard({
   value,
   icon,
   tone,
+  onPress,
+  testID,
 }: {
   label: string;
   value: string | number;
   icon: keyof typeof Ionicons.glyphMap;
   tone?: "gold" | "navy" | "red" | "green";
+  onPress?: () => void;
+  testID?: string;
 }) {
   const { colors, isDark } = useTheme();
   const iconColor =
     tone === "gold" ? "#C5A059" : tone === "red" ? "#B3261E" : tone === "green" ? "#1B7F4D" : isDark ? "#A6B1C2" : "#1D2D50";
-  return (
-    <View
-      style={[
-        styles.stat,
-        { backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF", borderColor: colors.border },
-      ]}
-    >
+
+  const cardContent = (
+    <>
       <View style={[styles.statIcon, { backgroundColor: iconColor + "1A" }]}>
         <Ionicons name={icon} size={20} color={iconColor} />
       </View>
@@ -100,6 +100,37 @@ export function StatCard({
           {label}
         </Text>
       </View>
+    </>
+  );
+
+  if (onPress) {
+    return (
+      <Pressable
+        testID={testID}
+        onPress={onPress}
+        style={({ pressed }: any) => [
+          styles.stat,
+          {
+            backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF",
+            borderColor: colors.border,
+            opacity: pressed ? 0.85 : 1,
+            cursor: "pointer",
+          },
+        ]}
+      >
+        {cardContent}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.stat,
+        { backgroundColor: isDark ? colors.surfaceSecondary : "#FFFFFF", borderColor: colors.border },
+      ]}
+    >
+      {cardContent}
     </View>
   );
 }

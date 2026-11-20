@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
@@ -26,8 +26,9 @@ export default function Templates() {
   const [debouncedQ, setDebouncedQ] = useState("");
   const [cat, setCat] = useState<string | null>(params.cat || null);
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
-  const [publishedTemplates, setPublishedTemplates] = useState<any[] | null>(() => catalogCache.peekPublishedTemplates());
-  const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+  const [orderedBasePairs, setOrderedBasePairs] = useState<TemplateLogicalPair[]>(() =>
+    catalogCache.peekActiveTemplatePairs()
+  );
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
 
   const PAGE_SIZE = 10;
@@ -46,45 +47,39 @@ export default function Templates() {
     return () => clearTimeout(timer);
   }, [q]);
 
-  // Fetch authoritative published templates and template order
+  // Fetch authoritative published templates and template order atomically via SWR
+  const refreshTemplates = useCallback(async () => {
+    try {
+      const fresh = await catalogCache.getActiveTemplatePairs(false);
+      if (Array.isArray(fresh) && fresh.length > 0) {
+        setOrderedBasePairs(fresh);
+      }
+    } catch {}
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      const immediate = catalogCache.peekActiveTemplatePairs();
+      if (immediate.length > 0) {
+        setOrderedBasePairs(immediate);
+      }
+      refreshTemplates();
+    }, [refreshTemplates])
+  );
+
   useEffect(() => {
     let active = true;
-    catalogCache.getPublishedTemplates(true).then((tpls) => {
-      if (active && Array.isArray(tpls)) {
-        setPublishedTemplates(tpls);
-      }
-    }).catch(() => {});
-
-    catalogCache.getTemplateOrder(true).then((order) => {
-      if (active && Array.isArray(order)) {
-        setTemplateOrder(order);
-      }
-    }).catch(() => {});
-
-    const unsubTemplates = catalogCache.subscribe("published_templates", (tpls) => {
-      if (active && Array.isArray(tpls)) {
-        setPublishedTemplates(tpls);
-      }
-    });
-
-    const unsubOrder = catalogCache.subscribe("template_order", (order) => {
-      if (active && Array.isArray(order)) {
-        setTemplateOrder(order);
+    const unsub = catalogCache.subscribe("active_template_pairs", (pairs) => {
+      if (active && Array.isArray(pairs) && pairs.length > 0) {
+        setOrderedBasePairs(pairs);
       }
     });
 
     return () => {
       active = false;
-      unsubTemplates();
-      unsubOrder();
+      unsub();
     };
   }, []);
-
-  const orderedBasePairs = useMemo(() => {
-    return getActiveTemplatePairs(publishedTemplates, templateOrder).filter(
-      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
-    );
-  }, [publishedTemplates, templateOrder]);
 
   // Load user favorites on mount
   useEffect(() => {

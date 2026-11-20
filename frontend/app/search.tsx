@@ -47,14 +47,10 @@ export default function Search() {
     setSearching(true);
     setError(null);
     try {
-      const [res, tpls, order] = await Promise.all([
+      const [res, activePairs] = await Promise.all([
         api.search(trimmed).catch(() => ({ cases: [] })),
-        catalogCache.getPublishedTemplates().catch(() => null),
-        catalogCache.getTemplateOrder().catch(() => null),
+        catalogCache.getActiveTemplatePairs().catch(() => catalogCache.peekActiveTemplatePairs()),
       ]);
-      const activePairs = getActiveTemplatePairs(tpls, order).filter(
-        (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
-      );
       const matchedPairs = searchTemplatePairs(trimmed, null, undefined, activePairs);
       setResults({
         cases: Array.isArray(res?.cases) ? res.cases : [],

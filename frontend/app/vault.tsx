@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, useFocusEffect } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
@@ -46,15 +46,32 @@ function fmtFileSize(bytes?: number) {
 export default function DocumentVault() {
   const { colors } = useTheme();
   const { isDesktop } = useResponsive();
+  const params = useLocalSearchParams<{ tab?: string; filter?: string }>();
 
-  const [activeTab, setActiveTab] = useState<VaultTab>("all");
+  const initialTab: VaultTab =
+    params.tab === "drafts" || params.filter === "drafts"
+      ? "drafts"
+      : params.tab === "documents" || params.filter === "documents"
+      ? "documents"
+      : "all";
+
+  const [activeTab, setActiveTab] = useState<VaultTab>(initialTab);
   const [searchQuery, setSearchQuery] = useState("");
   const { keyboardHeight } = useKeyboardHeight();
   const [documents, setDocuments] = useState<any[]>([]);
   const [drafts, setDrafts] = useState<any[]>([]);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = params.tab || (params.filter === "drafts" ? "drafts" : params.filter === "documents" ? "documents" : null);
+    if (t && (t === "all" || t === "documents" || t === "drafts")) {
+      setActiveTab(t as VaultTab);
+    }
+  }, [params.tab, params.filter]);
 
   const loadData = useCallback(async () => {
     try {
@@ -83,11 +100,22 @@ export default function DocumentVault() {
     setRefreshing(false);
   };
 
+  const isDraftEligible = useCallback((d: any) => {
+    const isCompleted = d.is_completed || d.status === "completed" || d.submitted || d.is_submitted;
+    return !isCompleted && Boolean(d.id || d._id);
+  }, []);
+
   const handleDeleteDraft = (draft: any) => {
+    const draftId = draft.id || draft._id;
     const confirmDelete = async () => {
       try {
-        await api.deleteDraft(draft.id || draft._id);
-        setDrafts((prev) => prev.filter((d) => (d.id || d._id) !== (draft.id || draft._id)));
+        await api.deleteDraft(draftId);
+        setDrafts((prev) => prev.filter((d) => (d.id || d._id) !== draftId));
+        setSelectedDraftIds((prev) => {
+          const next = new Set(prev);
+          next.delete(draftId);
+          return next;
+        });
       } catch (err: any) {
         Alert.alert("Error", err?.message || "Could not delete draft");
       }
@@ -101,6 +129,61 @@ export default function DocumentVault() {
       Alert.alert("Delete Draft", "Are you sure you want to delete this draft?", [
         { text: "Cancel", style: "cancel" },
         { text: "Delete", style: "destructive", onPress: confirmDelete },
+      ]);
+    }
+  };
+
+  const executeBulkDelete = async () => {
+    const toDeleteIds = Array.from(selectedDraftIds);
+    if (toDeleteIds.length === 0) return;
+    setIsBulkDeleting(true);
+
+    const successfulIds: string[] = [];
+    const failedIds: string[] = [];
+
+    await Promise.all(
+      toDeleteIds.map(async (id) => {
+        try {
+          await api.deleteDraft(id);
+          successfulIds.push(id);
+        } catch {
+          failedIds.push(id);
+        }
+      })
+    );
+
+    if (successfulIds.length > 0) {
+      setDrafts((prev) => prev.filter((d) => !successfulIds.includes(d.id || d._id)));
+      setSelectedDraftIds((prev) => {
+        const next = new Set(prev);
+        successfulIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+
+    setIsBulkDeleting(false);
+
+    if (failedIds.length > 0) {
+      Alert.alert(
+        "Partial Failure",
+        `Deleted ${successfulIds.length} draft(s). Failed to delete ${failedIds.length} draft(s). Please try again.`
+      );
+    }
+  };
+
+  const handleBulkDelete = () => {
+    const count = selectedDraftIds.size;
+    if (count === 0) return;
+    const msg = `Are you sure you want to permanently delete ${count} selected draft(s)? This action cannot be undone.`;
+
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(msg)) {
+        executeBulkDelete();
+      }
+    } else {
+      Alert.alert("Delete Selected Drafts", msg, [
+        { text: "Cancel", style: "cancel" },
+        { text: `Delete (${count})`, style: "destructive", onPress: executeBulkDelete },
       ]);
     }
   };
@@ -153,6 +236,33 @@ export default function DocumentVault() {
       (d.party_name || "").toLowerCase().includes(q)
     );
   });
+
+  const eligibleDrafts = useMemo(() => {
+    return filteredDrafts.filter(isDraftEligible);
+  }, [filteredDrafts, isDraftEligible]);
+
+  const isAllSelected = eligibleDrafts.length > 0 && eligibleDrafts.every((d) => selectedDraftIds.has(d.id || d._id));
+
+  const toggleDraftSelection = (id: string) => {
+    setSelectedDraftIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectAll = () => {
+    if (isAllSelected) {
+      setSelectedDraftIds(new Set());
+    } else {
+      const allEligibleIds = eligibleDrafts.map((d) => d.id || d._id).filter(Boolean);
+      setSelectedDraftIds(new Set(allEligibleIds));
+    }
+  };
 
   const renderDocumentCard = (doc: any) => {
     const isDocx = doc.format === "docx";
@@ -242,14 +352,36 @@ export default function DocumentVault() {
   };
 
   const renderDraftCard = (draft: any) => {
+    const draftId = draft.id || draft._id;
+    const isSelected = selectedDraftIds.has(draftId);
+    const isEligible = isDraftEligible(draft);
+
     return (
       <View
-        key={`draft-${draft.id || draft._id}`}
+        key={`draft-${draftId}`}
         style={[
           styles.card,
-          { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+          {
+            backgroundColor: colors.surfaceSecondary,
+            borderColor: isSelected ? colors.brandPrimary : colors.border,
+          },
         ]}
       >
+        {isEligible && (
+          <Pressable
+            testID={`vault-draft-checkbox-${draftId}`}
+            onPress={() => toggleDraftSelection(draftId)}
+            hitSlop={8}
+            style={styles.checkboxTouch}
+          >
+            <Ionicons
+              name={isSelected ? "checkbox" : "square-outline"}
+              size={20}
+              color={isSelected ? colors.brandPrimary : colors.muted}
+            />
+          </Pressable>
+        )}
+
         <View style={[styles.iconBox, { backgroundColor: "#F59E0B18" }]}>
           <Ionicons name="time" size={22} color="#D97706" />
         </View>
@@ -277,7 +409,7 @@ export default function DocumentVault() {
 
         <View style={styles.actionCol}>
           <Pressable
-            testID={`vault-resume-${draft.id || draft._id}`}
+            testID={`vault-resume-${draftId}`}
             onPress={() =>
               router.push(
                 `/template/${draft.template_id}?case_id=${draft.case_id || ""}&lang=${
@@ -295,7 +427,7 @@ export default function DocumentVault() {
           </Pressable>
 
           <Pressable
-            testID={`vault-del-draft-${draft.id || draft._id}`}
+            testID={`vault-del-draft-${draftId}`}
             onPress={() => handleDeleteDraft(draft)}
             style={[styles.actionBtnDanger, { borderColor: colors.error + "40" }]}
           >
@@ -381,11 +513,63 @@ export default function DocumentVault() {
         >
           {(activeTab === "all" || activeTab === "drafts") && filteredDrafts.length > 0 && (
             <View style={{ marginBottom: Spacing.lg }}>
-              <View style={styles.sectionHeader}>
-                <Ionicons name="time-outline" size={16} color={colors.brandPrimary} />
-                <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
-                  Unsaved Drafts ({filteredDrafts.length})
-                </Text>
+              <View
+                style={[
+                  styles.sectionHeader,
+                  { justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: Spacing.xs },
+                ]}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Ionicons name="time-outline" size={16} color={colors.brandPrimary} />
+                  <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
+                    Unsaved Drafts ({filteredDrafts.length})
+                  </Text>
+                </View>
+
+                {eligibleDrafts.length > 0 && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: Spacing.sm }}>
+                    <Pressable
+                      testID="vault-select-all-btn"
+                      onPress={handleToggleSelectAll}
+                      style={[
+                        styles.bulkActionBtn,
+                        { borderColor: colors.border, backgroundColor: colors.surfaceSecondary },
+                      ]}
+                    >
+                      <Ionicons
+                        name={isAllSelected ? "checkbox" : "square-outline"}
+                        size={16}
+                        color={isAllSelected ? colors.brandPrimary : colors.muted}
+                      />
+                      <Text style={[styles.bulkActionText, { color: colors.onSurface }]}>
+                        {isAllSelected ? "Deselect All" : "Select All"}
+                      </Text>
+                    </Pressable>
+
+                    {selectedDraftIds.size > 0 && (
+                      <Pressable
+                        testID="vault-bulk-delete-btn"
+                        onPress={handleBulkDelete}
+                        disabled={isBulkDeleting}
+                        style={[
+                          styles.bulkDeleteBtn,
+                          { backgroundColor: colors.error },
+                        ]}
+                      >
+                        {isBulkDeleting ? (
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                          <>
+                            <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
+                            <Text style={styles.bulkDeleteText}>
+                              Delete Selected ({selectedDraftIds.size})
+                            </Text>
+                          </>
+                        )}
+                      </Pressable>
+                    )}
+                  </View>
+                )}
               </View>
               {filteredDrafts.map(renderDraftCard)}
             </View>
@@ -618,5 +802,37 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     fontSize: 14,
     fontWeight: "700",
+  },
+  bulkActionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+  },
+  bulkActionText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  bulkDeleteBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: Radius.sm,
+  },
+  bulkDeleteText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  checkboxTouch: {
+    marginRight: Spacing.xs,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 2,
   },
 });

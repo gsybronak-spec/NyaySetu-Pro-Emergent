@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -22,31 +22,64 @@ export default function CaseDetail() {
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [publishedTemplates, setPublishedTemplates] = useState<any[] | null>(() => catalogCache.peekPublishedTemplates());
-  const [templateOrder, setTemplateOrder] = useState<string[] | null>(() => catalogCache.peekTemplateOrder());
+  const [caseDrafts, setCaseDrafts] = useState<any[]>([]);
+  const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
+    catalogCache.peekActiveTemplatePairs()
+  );
 
   useEffect(() => {
     let active = true;
-    catalogCache.getPublishedTemplates().then((tpls) => {
-      if (active && Array.isArray(tpls)) setPublishedTemplates(tpls);
+    catalogCache.getActiveTemplatePairs().then((pairs) => {
+      if (active && Array.isArray(pairs) && pairs.length > 0) {
+        setTemplatePairs(pairs);
+      }
     }).catch(() => {});
-    catalogCache.getTemplateOrder().then((order) => {
-      if (active && Array.isArray(order)) setTemplateOrder(order);
-    }).catch(() => {});
+    const unsub = catalogCache.subscribe("active_template_pairs", (pairs) => {
+      if (active && Array.isArray(pairs) && pairs.length > 0) {
+        setTemplatePairs(pairs);
+      }
+    });
     return () => {
       active = false;
+      unsub();
     };
   }, []);
 
-  const templatePairs = useMemo(() => {
-    return getActiveTemplatePairs(publishedTemplates, templateOrder);
-  }, [publishedTemplates, templateOrder]);
+  const handleDeleteDraft = (draft: any, e?: any) => {
+    if (e && typeof e.stopPropagation === "function") {
+      e.stopPropagation();
+    }
+    const confirmDelete = async () => {
+      try {
+        await api.deleteDraft(draft.id || draft._id);
+        setCaseDrafts((prev) => prev.filter((d) => (d.id || d._id) !== (draft.id || draft._id)));
+      } catch (err: any) {
+        Alert.alert("Error", err?.message || "Could not delete draft");
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm("Delete this draft application? / આ ડ્રાફ્ટ અરજી કાયમ માટે કાઢી નાખવી છે?")) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert("Delete Draft / ડ્રાફ્ટ કાઢી નાખો", "Are you sure you want to delete this incomplete draft application? This cannot be undone.", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: confirmDelete },
+      ]);
+    }
+  };
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const cs = await api.getCase(String(id));
+      const [cs, drs] = await Promise.all([
+        api.getCase(String(id)),
+        api.drafts().catch(() => []),
+      ]);
       setC(cs);
+      const caseIdStr = String(id);
+      setCaseDrafts(Array.isArray(drs) ? drs.filter((d: any) => String(d?.case_id) === caseIdStr) : []);
       if (cs?.case_type_id) {
         api
           .caseFormConfig(cs.case_type_id)
@@ -249,6 +282,46 @@ export default function CaseDetail() {
           </View>
 
           <View style={{ flex: 1, minWidth: 0 }}>
+            {caseDrafts.length > 0 && (
+              <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, marginBottom: Spacing.lg }]}>
+                <Text style={[styles.section, { color: colors.brandPrimary }]}>INCOMPLETE DRAFT APPLICATIONS / અધૂરી અરજીઓ</Text>
+                <View style={{ gap: Spacing.sm, marginTop: Spacing.xs }}>
+                  {caseDrafts.map((d) => (
+                    <View
+                      key={d.id}
+                      style={[styles.dTplRow, { backgroundColor: colors.surface, borderColor: colors.border, justifyContent: "space-between" }]}
+                    >
+                      <Pressable
+                        testID={`case-resume-draft-${d.id}`}
+                        onPress={() => router.push({ pathname: "/template/[id]", params: { id: d.template_id, case_id: c.id, lang: d.language || "gu", draft: "1" } })}
+                        style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+                      >
+                        <View style={[styles.tplIcon, { backgroundColor: "#F59E0B18" }]}>
+                          <Ionicons name="time" size={18} color="#D97706" />
+                        </View>
+                        <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                          <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
+                            {d.template_name || d.template_id}
+                          </Text>
+                          <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
+                            Last edited: {new Date(d.updated_at).toLocaleString()}
+                          </Text>
+                        </View>
+                      </Pressable>
+                      <Pressable
+                        testID={`case-del-draft-${d.id}`}
+                        onPress={(e) => handleDeleteDraft(d, e)}
+                        hitSlop={8}
+                        style={{ padding: 8, borderRadius: Radius.sm }}
+                      >
+                        <Ionicons name="trash-outline" size={17} color={colors.error || "#EF4444"} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
             <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
               <Text style={[styles.section, { color: colors.brandPrimary }]}>CREATE APPLICATION / અરજી તૈયાર કરો</Text>
               <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -4 }}>
@@ -359,7 +432,45 @@ export default function CaseDetail() {
               ))}
             </>
           )}
-        </View>
+        {caseDrafts.length > 0 && (
+          <View style={{ marginTop: Spacing.lg }}>
+            <Text style={[styles.section, { color: colors.onSurface, fontSize: 15 }]}>Incomplete Drafts / અધૂરી અરજીઓ</Text>
+            <View style={{ gap: Spacing.sm }}>
+              {caseDrafts.map((d) => (
+                <View
+                  key={d.id}
+                  style={[styles.tplRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, justifyContent: "space-between" }]}
+                >
+                  <Pressable
+                    testID={`case-resume-draft-${d.id}`}
+                    onPress={() => router.push({ pathname: "/template/[id]", params: { id: d.template_id, case_id: c.id, lang: d.language || "gu", draft: "1" } })}
+                    style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+                  >
+                    <View style={[styles.tplIcon, { backgroundColor: "#F59E0B18" }]}>
+                      <Ionicons name="time" size={18} color="#D97706" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: Spacing.md }}>
+                      <Text style={{ color: colors.onSurface, fontWeight: "700" }} numberOfLines={1}>
+                        {d.template_name || d.template_id}
+                      </Text>
+                      <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
+                        Last edited: {new Date(d.updated_at).toLocaleString()}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  <Pressable
+                    testID={`case-del-draft-${d.id}`}
+                    onPress={(e) => handleDeleteDraft(d, e)}
+                    hitSlop={8}
+                    style={{ padding: 8 }}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={colors.error || "#EF4444"} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
 
         <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>Create Application / અરજી તૈયાર કરો</Text>
         <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>Choose an application — select language and case data auto-fills.</Text>

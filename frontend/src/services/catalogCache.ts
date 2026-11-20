@@ -14,13 +14,19 @@
 import { AppState } from "react-native";
 import { api } from "@/src/api/client";
 import { storage } from "@/src/utils/storage";
-import { PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
+import {
+  TemplateLogicalPair,
+  getActiveTemplatePairs,
+  PERMANENTLY_DELETED_BASE_KEYS,
+} from "@/src/data/templateCatalogPairs";
 import {
   SEED_DISTRICTS,
   SEED_TALUKAS,
   SEED_CASE_TYPES,
   SEED_LAWS,
   SEED_CASE_FORMS,
+  SEED_TEMPLATE_ORDER,
+  SEED_PUBLISHED_TEMPLATES,
 } from "./catalogSeed";
 
 const STORAGE_PREFIX = "nyaysetu_cat_v2:";
@@ -50,6 +56,16 @@ function sanitizeOrder(order: string[]): string[] {
 // Synchronously hydrate memoryCache from window.localStorage to guarantee zero-delay instant render
 if (typeof window !== "undefined" && window.localStorage) {
   try {
+    const rawPairs = window.localStorage.getItem(`${STORAGE_PREFIX}active_template_pairs`);
+    if (rawPairs) {
+      const parsed = JSON.parse(rawPairs);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        memoryCache.set(
+          "active_template_pairs",
+          parsed.filter((p: any) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey))
+        );
+      }
+    }
     const rawTpls = window.localStorage.getItem(`${STORAGE_PREFIX}published_templates`);
     if (rawTpls) {
       const parsed = JSON.parse(rawTpls);
@@ -114,6 +130,48 @@ async function loadFromStorage<T>(key: string, allowEmpty = false): Promise<T | 
   return null;
 }
 
+function isOrderEqual(a: any, b: any): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function isTemplatesEqual(a: any, b: any): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const tA = a[i];
+    const tB = b[i];
+    const idA = tA?.id || tA?.template_id;
+    const idB = tB?.id || tB?.template_id;
+    if (idA !== idB) return false;
+    if (tA?.name_en !== tB?.name_en || tA?.name_gu !== tB?.name_gu) return false;
+    if (tA?.updated_at && tB?.updated_at && tA.updated_at !== tB.updated_at) return false;
+  }
+  return true;
+}
+
+function isPairsEqual(a: any, b: any): boolean {
+  if (!Array.isArray(a) || !Array.isArray(b)) return a === b;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i]?.baseKey !== b[i]?.baseKey) return false;
+    if (a[i]?.name_gu !== b[i]?.name_gu || a[i]?.name_en !== b[i]?.name_en) return false;
+    if (a[i]?.category !== b[i]?.category) return false;
+  }
+  return true;
+}
+
+function isDataEqual(key: string, a: any, b: any): boolean {
+  if (key === "template_order") return isOrderEqual(a, b);
+  if (key === "published_templates") return isTemplatesEqual(a, b);
+  if (key === "active_template_pairs") return isPairsEqual(a, b);
+  return false;
+}
+
 async function saveToStorage(key: string, data: any): Promise<void> {
   try {
     let cleanData = data;
@@ -122,9 +180,19 @@ async function saveToStorage(key: string, data: any): Promise<void> {
     } else if (key === "template_order" && Array.isArray(data)) {
       cleanData = sanitizeOrder(data);
     }
+    const prev = memoryCache.get(key);
+    const hasChanged = !prev || !isDataEqual(key, prev, cleanData);
+
     memoryCache.set(key, cleanData);
     await storage.set(`${STORAGE_PREFIX}${key}`, cleanData);
-    notify(key, cleanData);
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        window.localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(cleanData));
+      } catch {}
+    }
+    if (hasChanged) {
+      notify(key, cleanData);
+    }
   } catch {
     // Ignore storage write error
   }
@@ -135,6 +203,8 @@ function getSeedFallback(key: string, district_id?: string): any[] {
   if (key === "case_types") return SEED_CASE_TYPES;
   if (key === "laws") return SEED_LAWS;
   if (key === "case_forms") return SEED_CASE_FORMS;
+  if (key === "template_order") return SEED_TEMPLATE_ORDER;
+  if (key === "published_templates") return SEED_PUBLISHED_TEMPLATES;
   if (key.startsWith("talukas")) {
     if (district_id) {
       return SEED_TALUKAS.filter((t: any) => t.district_id === district_id);
@@ -167,8 +237,8 @@ async function fetchCatalogWithSWR<T>(
     }
   }
 
-  // 2. Check local storage cache (bypassed for template_order and published_templates to ensure authoritative sync on refresh)
-  if (!forceRefresh && cacheKey !== "template_order" && cacheKey !== "published_templates") {
+  // 2. Check local storage cache
+  if (!forceRefresh) {
     const stored = await loadFromStorage<T>(cacheKey, allowEmpty);
     if (stored !== null && stored !== undefined && (allowEmpty || !Array.isArray(stored) || stored.length > 0)) {
       triggerBackgroundRevalidate(cacheKey, fetcher, allowEmpty);
@@ -204,15 +274,8 @@ async function fetchCatalogWithSWR<T>(
 
   inFlightRequests.set(cacheKey, requestPromise);
 
-  // If we have seed data and not strictly waiting, we can return seed while network executes
-  if (seedData && Array.isArray(seedData) && seedData.length > 0 && !memoryCache.has(cacheKey)) {
-    memoryCache.set(cacheKey, seedData);
-    // Let caller proceed immediately with authoritative seed while network finishes
-    requestPromise.then((fresh) => {
-      if (fresh && fresh !== seedData) {
-        notify(cacheKey, fresh);
-      }
-    });
+  // If not forcing refresh, and seed data is available while cache is cold, allow caller to proceed immediately
+  if (!forceRefresh && seedData && Array.isArray(seedData) && seedData.length > 0 && !memoryCache.has(cacheKey)) {
     return seedData;
   }
 
@@ -309,7 +372,7 @@ export const catalogCache = {
           return null as any;
         }
       },
-      null as any,
+      SEED_PUBLISHED_TEMPLATES,
       forceRefresh,
       true
     );
@@ -326,7 +389,7 @@ export const catalogCache = {
           return null as any;
         }
       },
-      null as any,
+      SEED_TEMPLATE_ORDER,
       forceRefresh,
       true
     );
@@ -343,7 +406,7 @@ export const catalogCache = {
   peekCaseTypes: (): any[] => memoryCache.get("case_types") || SEED_CASE_TYPES,
   peekLaws: (): any[] => memoryCache.get("laws") || SEED_LAWS,
   peekFavCourts: (): string[] => memoryCache.get("fav_courts") || [],
-  peekPublishedTemplates: (): any[] | null => {
+  peekPublishedTemplates: (): any[] => {
     const mem = memoryCache.get("published_templates");
     if (mem && Array.isArray(mem)) return sanitizeTemplates(mem);
     if (typeof window !== "undefined" && window.localStorage) {
@@ -358,9 +421,9 @@ export const catalogCache = {
         }
       } catch {}
     }
-    return null;
+    return SEED_PUBLISHED_TEMPLATES;
   },
-  peekTemplateOrder: (): string[] | null => {
+  peekTemplateOrder: (): string[] => {
     const mem = memoryCache.get("template_order");
     if (mem && Array.isArray(mem)) return sanitizeOrder(mem);
     if (typeof window !== "undefined" && window.localStorage) {
@@ -375,15 +438,83 @@ export const catalogCache = {
         }
       } catch {}
     }
-    return null;
+    return SEED_TEMPLATE_ORDER;
+  },
+
+  peekActiveTemplatePairs: (): TemplateLogicalPair[] => {
+    const mem = memoryCache.get("active_template_pairs");
+    if (Array.isArray(mem) && mem.length > 0) {
+      return mem.filter((p: any) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+    }
+    if (typeof window !== "undefined" && window.localStorage) {
+      try {
+        const raw = window.localStorage.getItem(`${STORAGE_PREFIX}active_template_pairs`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const clean = parsed.filter((p: any) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+            memoryCache.set("active_template_pairs", clean);
+            return clean;
+          }
+        }
+      } catch {}
+    }
+    const computed = getActiveTemplatePairs(
+      catalogCache.peekPublishedTemplates(),
+      catalogCache.peekTemplateOrder()
+    ).filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+    if (computed.length > 0) {
+      memoryCache.set("active_template_pairs", computed);
+    }
+    return computed;
+  },
+
+  getActiveTemplatePairs: async (forceRefresh = false): Promise<TemplateLogicalPair[]> => {
+    // 1. If not forcing refresh, return memoryCache or storage immediately and trigger background sync
+    if (!forceRefresh) {
+      const mem = memoryCache.get("active_template_pairs");
+      if (Array.isArray(mem) && mem.length > 0) {
+        catalogCache.revalidateTemplates().catch(() => {});
+        return mem.filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+      }
+      const stored = await storage.get<TemplateLogicalPair[]>(`${STORAGE_PREFIX}active_template_pairs`, null as any);
+      if (Array.isArray(stored) && stored.length > 0) {
+        const clean = stored.filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
+        memoryCache.set("active_template_pairs", clean);
+        catalogCache.revalidateTemplates().catch(() => {});
+        return clean;
+      }
+    }
+
+    // 2. Fetch fresh published templates and order atomically via Promise.all
+    const [tpls, order] = await Promise.all([
+      catalogCache.getPublishedTemplates(forceRefresh),
+      catalogCache.getTemplateOrder(forceRefresh),
+    ]);
+    const computed = getActiveTemplatePairs(tpls, order).filter(
+      (p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)
+    );
+
+    if (computed.length > 0) {
+      const prev = memoryCache.get("active_template_pairs");
+      const hasChanged = !prev || !isPairsEqual(prev, computed);
+      memoryCache.set("active_template_pairs", computed);
+      await storage.set(`${STORAGE_PREFIX}active_template_pairs`, computed);
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.setItem(`${STORAGE_PREFIX}active_template_pairs`, JSON.stringify(computed));
+        } catch {}
+      }
+      if (hasChanged) {
+        notify("active_template_pairs", computed);
+      }
+    }
+    return computed;
   },
 
   revalidateTemplates: async () => {
     try {
-      await Promise.all([
-        catalogCache.getPublishedTemplates(true),
-        catalogCache.getTemplateOrder(true),
-      ]);
+      await catalogCache.getActiveTemplatePairs(true);
     } catch {
       // Ignore background network errors
     }
@@ -405,9 +536,19 @@ export const catalogCache = {
     inFlightRequests.clear();
     try {
       await Promise.all([
+        storage.remove(`${STORAGE_PREFIX}active_template_pairs`),
         storage.remove(`${STORAGE_PREFIX}template_order`),
         storage.remove(`${STORAGE_PREFIX}published_templates`),
+        storage.remove(`${STORAGE_PREFIX}fav_courts`),
       ]);
+      if (typeof window !== "undefined" && window.localStorage) {
+        try {
+          window.localStorage.removeItem(`${STORAGE_PREFIX}active_template_pairs`);
+          window.localStorage.removeItem(`${STORAGE_PREFIX}template_order`);
+          window.localStorage.removeItem(`${STORAGE_PREFIX}published_templates`);
+          window.localStorage.removeItem(`${STORAGE_PREFIX}fav_courts`);
+        } catch {}
+      }
     } catch {
       // Ignore storage remove errors
     }

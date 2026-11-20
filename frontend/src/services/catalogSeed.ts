@@ -2178,3 +2178,90 @@ export const SEED_CASE_FORMS = [
     ]
   }
 ];
+
+export const SEED_TEMPLATE_ORDER: string[] = [
+  "vakilatnama_criminal",
+  "vakilatnama_civil",
+  "exemption_arji",
+  "mudat_arji",
+  "certified_copy_application",
+  "document_exhibit_application",
+  "closing_purshish",
+  "closing_argument_right_application",
+  "reopen_right_to_argue_application",
+  "dd_karavani_arji",
+];
+
+export const SEED_PUBLISHED_TEMPLATES: any[] = [
+  {
+    id: "vakilatnama_criminal",
+    template_id: "vakilatnama_criminal",
+    name_gu: "વકાલાતનામું (ફોજદારી)",
+    name_en: "Vakalatnama (Criminal)",
+    category: "Criminal",
+  },
+  {
+    id: "vakilatnama_civil",
+    template_id: "vakilatnama_civil",
+    name_gu: "વકાલાતનામું (દીવાની)",
+    name_en: "Vakalatnama (Civil)",
+    category: "Civil",
+  },
+  {
+    id: "exemption_arji",
+    template_id: "exemption_arji",
+    name_gu: "હાજરી માફી અરજી",
+    name_en: "Exemption Application",
+    category: "Criminal",
+  },
+  {
+    id: "mudat_arji",
+    template_id: "mudat_arji",
+    name_gu: "મુદત અરજી",
+    name_en: "Adjournment Application",
+    category: "General",
+  },
+  {
+    id: "certified_copy_application",
+    template_id: "certified_copy_application",
+    name_gu: "પ્રમાણિત નકલ મેળવવા બાબત",
+    name_en: "Application for Obtaining Certified Copy",
+    category: "General",
+  },
+  {
+    id: "document_exhibit_application",
+    template_id: "document_exhibit_application",
+    name_gu: "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
+    name_en: "Application for Marking Documents as Exhibits",
+    category: "Civil",
+  },
+  {
+    id: "closing_purshish",
+    template_id: "closing_purshish",
+    name_gu: "ક્લોઝિંગ પુરસીસ",
+    name_en: "Closing Purshish",
+    category: "General",
+  },
+  {
+    id: "closing_argument_right_application",
+    template_id: "closing_argument_right_application",
+    name_gu: "દલીલોનો હક બંધ કરાવવાની અરજી",
+    name_en: "Application for Closing the Right to Make Arguments",
+    category: "General",
+  },
+  {
+    id: "reopen_right_to_argue_application",
+    template_id: "reopen_right_to_argue_application",
+    name_gu: "દલીલો કરવા નો હક ફરીથી ખોલાવવાની અરજી",
+    name_en: "Application for Reopening the Right to Make Arguments",
+    category: "General",
+  },
+  {
+    id: "dd_karavani_arji",
+    template_id: "dd_karavani_arji",
+    name_gu: "ડી.ડી. કરાવવાની અરજી",
+    name_en: "Application for Demand Draft (DD)",
+    category: "General",
+  },
+];
+

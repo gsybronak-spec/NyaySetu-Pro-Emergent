@@ -1,4 +1,8 @@
-import { TEMPLATE_LOGICAL_PAIRS, TemplateLogicalPair } from "@/src/data/templateCatalogPairs";
+import {
+  TEMPLATE_LOGICAL_PAIRS,
+  TemplateLogicalPair,
+  PERMANENTLY_DELETED_BASE_KEYS,
+} from "@/src/data/templateCatalogPairs";
 
 export interface SearchMatchedPair {
   pair: TemplateLogicalPair;
@@ -86,7 +90,10 @@ export function searchTemplatePairs(
     qTokens = allTokens;
   }
 
-  const catalog = sourcePairs !== undefined ? sourcePairs : TEMPLATE_LOGICAL_PAIRS;
+  const catalog =
+    sourcePairs !== undefined
+      ? sourcePairs
+      : TEMPLATE_LOGICAL_PAIRS.filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
   const results: SearchMatchedPair[] = [];
 
   for (const pair of catalog) {
@@ -204,9 +211,15 @@ export function searchTemplatePairs(
     return results;
   }
 
-  // Sort descending by score, preserving catalog order on score ties
+  // Build catalog index map to guarantee deterministic catalog order on score ties
+  const catalogIndex = new Map<string, number>();
+  catalog.forEach((p, idx) => catalogIndex.set(p.baseKey, idx));
+
+  // Sort descending by score, preserving authoritative catalog order on score ties
   results.sort((a, b) => {
-    return b.score - a.score;
+    const diff = b.score - a.score;
+    if (diff !== 0) return diff;
+    return (catalogIndex.get(a.pair.baseKey) ?? 9999) - (catalogIndex.get(b.pair.baseKey) ?? 9999);
   });
 
   return results;
