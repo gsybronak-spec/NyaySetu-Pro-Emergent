@@ -921,6 +921,24 @@ def render_template(content_template: str, values: dict) -> str:
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
         result = re.sub(r"\{\{[^}]+\}\}", "____", result)
+
+    # DD Application (DD કરાવવાની અરજી / Application for Dismissal of Case):
+    # When filed from the accused-side advocate workflow, the opening party indicator
+    # is preserved ("અમો આરોપી ના એડવોકેટ..."), but the lack-of-interest clause in the
+    # main paragraph must state that the complainant ("ફરિયાદી") has no interest,
+    # never that the accused ("આરોપી") has no interest.
+    result = re.sub(
+        r"(વધુમાં\s+)આરોપી(\s+સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ)",
+        r"\g<1>ફરિયાદી\g<2>",
+        result,
+    )
+    result = re.sub(
+        r"(Furthermore,\s+)Accused(\s+is not interested in proceeding with the said case)",
+        r"\g<1>the Complainant\g<2>",
+        result,
+        flags=re.IGNORECASE,
+    )
+
     return result
 
 

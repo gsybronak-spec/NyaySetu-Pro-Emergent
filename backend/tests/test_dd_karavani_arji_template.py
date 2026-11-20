@@ -677,7 +677,50 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(subject_blocks[0]["text"], "બાબત :- કેસ ડીસમીસ કરવા બાબત ...")
         self.assertEqual(subject_blocks[0]["align"], "center")
 
+    def test_36_accused_side_workflow_uses_fariyadi_in_main_paragraph(self):
+        """36. Verify accused-side workflow preserves advocate for accused opening and uses ફરિયાદી in main paragraph."""
+        user = {"advocate_name_gu": "રોનક સોલંકી"}
+        values = {
+            "template_id": "dd_karavani_arji",
+            "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+            "district": "ગાંધીનગર",
+            "taluka": "કલોલ",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૨૩૪/૨૦૨૬",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "રમેશભાઈ પટેલ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "સુરેશભાઈ શાહ",
+            "advocate_for": "party_2",
+            "dismissal_reason": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી",
+            "date": "2026-11-20",
+        }
+        import asyncio
+        ctx = asyncio.run(server.build_render_context(user, None, values, "gu"))
+        self.assertEqual(ctx["advocate_for_role"], "આરોપી")
+        rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+
+        # 1. Opening party indicator must state advocate for accused (આરોપી)
+        self.assertIn("સદર કામમાં અમો આરોપી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", rendered)
+
+        # 2. Main paragraph must state complainant (ફરિયાદી) has no interest, NOT accused (આરોપી)
+        self.assertIn("વધુમાં ફરિયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertNotIn("વધુમાં આરોપી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", rendered)
+
+        # 3. Verify PDF block structure preserves 2 body paragraphs with ફરિયાદી in body block
+        blocks = doc_generator.build_blocks(
+            rendered,
+            self.tpl["name_en"],
+            self.tpl["name_gu"],
+            self.tpl.get("settings", {}).get("block_align"),
+        )
+        body_blocks = [b for b in blocks if b.get("align") == "justify" and b.get("indent") is True]
+        self.assertEqual(len(body_blocks), 2, "Must have exactly 2 body paragraphs")
+        self.assertIn("વધુમાં ફરિયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", body_blocks[1]["text"])
+        self.assertNotIn("આરોપી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", body_blocks[1]["text"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
