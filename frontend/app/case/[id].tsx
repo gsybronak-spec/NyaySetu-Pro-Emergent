@@ -432,6 +432,8 @@ export default function CaseDetail() {
               ))}
             </>
           )}
+        </View>
+
         {caseDrafts.length > 0 && (
           <View style={{ marginTop: Spacing.lg }}>
             <Text style={[styles.section, { color: colors.onSurface, fontSize: 15 }]}>Incomplete Drafts / અધૂરી અરજીઓ</Text>

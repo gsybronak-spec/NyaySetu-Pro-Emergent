@@ -379,29 +379,16 @@ _SETTING_DEFAULTS = {
     "otp_resend_cooldown_seconds": OTP_RESEND_COOLDOWN_SECONDS,
     "otp_max_attempts": OTP_MAX_ATTEMPTS,
     "template_display_order": [
-        "document_exhibit_application",
-        "certified_copy_application",
-        "mudat_arji",
-        "exemption_arji",
-        "warrant_rad_karvani_arji",
-        "vakilatnama_civil",
         "vakilatnama_criminal",
+        "vakilatnama_civil",
+        "exemption_arji",
+        "mudat_arji",
+        "certified_copy_application",
+        "document_exhibit_application",
+        "closing_purshish",
         "closing_argument_right_application",
         "reopen_right_to_argue_application",
-        "jamin_bond_swikarvani_arji",
-        "document_swikaravani_arji",
-        "document_parat_levani_arji",
-        "samadhan_purshish",
-        "closing_purshish",
-        "saaxi_ne_summons",
-        "kam_board_par_levani_arji",
         "dd_karavani_arji",
-        "warrant_no_hath_bido_apvani_arji",
-        "undertaking",
-        "ulat_tapas_no_haq_bandh_karavani_arji",
-        "ulat_tapas_no_haq_kholvani_arji",
-        "fs_no_haq_bandh_karvani_arji",
-        "fs_no_haq_kholvani_arji",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -4397,6 +4384,8 @@ async def _get_published_templates() -> list:
             setting_order = json.loads(setting_order)
         except Exception:
             setting_order = None
+    if not isinstance(setting_order, list) or not setting_order:
+        setting_order = _SETTING_DEFAULTS.get("template_display_order", [])
     if isinstance(setting_order, list) and setting_order:
         order_map = {}
         for idx, k in enumerate(setting_order):
