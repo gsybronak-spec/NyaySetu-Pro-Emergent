@@ -939,6 +939,9 @@ def render_template(content_template: str, values: dict) -> str:
         or "reopening the right to make arguments" in result.lower()
         or "એફ.એસ.નો હક બંધ કરવા બાબત" in result
         or "closing further statement" in result.lower()
+        or "એફ.એસ.નો હક ફરીથી ખોલવા બાબત" in result
+        or "reopening further statement" in result.lower()
+        or "reopen further statement" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:

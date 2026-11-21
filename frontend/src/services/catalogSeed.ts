@@ -2191,6 +2191,7 @@ export const SEED_TEMPLATE_ORDER: string[] = [
   "reopen_right_to_argue_application",
   "dd_karavani_arji",
   "fs_right_closure_application",
+  "fs_right_reopen_application",
 ];
 
 export const SEED_PUBLISHED_TEMPLATES: any[] = [
@@ -2269,6 +2270,13 @@ export const SEED_PUBLISHED_TEMPLATES: any[] = [
     template_id: "fs_right_closure_application",
     name_gu: "એફ.એસ.નો હક બંધ કરાવવાની અરજી",
     name_en: "Application for Closing Further Statement (F.S.) Right",
+    category: "General",
+  },
+  {
+    id: "fs_right_reopen_application",
+    template_id: "fs_right_reopen_application",
+    name_gu: "એફ.એસ.નો હક ફરીથી ખોલવાની અરજી",
+    name_en: "Application for Reopening Further Statement (F.S.) Right",
     category: "General",
   },
 ];

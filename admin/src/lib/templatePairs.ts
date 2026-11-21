@@ -216,6 +216,14 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
     name_en: 'Application for Closing Further Statement (F.S.) Right',
     category: 'General',
   },
+  {
+    baseKey: 'fs_right_reopen_application',
+    guId: 'fs_right_reopen_application',
+    enId: 'fs_right_reopen_application',
+    name_gu: 'એફ.એસ.નો હક ફરીથી ખોલવાની અરજી',
+    name_en: 'Application for Reopening Further Statement (F.S.) Right',
+    category: 'General',
+  },
 ];
 
 export function getOrderedAdminPairs(order?: string[] | null): AdminTemplatePair[] {
