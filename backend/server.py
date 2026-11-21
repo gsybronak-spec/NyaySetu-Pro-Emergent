@@ -128,6 +128,7 @@ CANONICAL_TEMPLATE_IDS = [
     "vakilatnama_criminal",
     "warrant_no_hath_bido_apvani_arji",
     "warrant_rad_karvani_arji",
+    "fs_right_closure_application",
 ]
 
 TEMPLATE_CANONICAL_MAP = {
@@ -184,6 +185,10 @@ TEMPLATE_CANONICAL_MAP = {
     # Legacy aliases
     "document_return_application": "document_parat_levani_arji",
     "document_exhibit": "document_exhibit_application",
+
+    # FS Right Closure Application variants
+    "fs_right_closure_application_gu": "fs_right_closure_application",
+    "fs_right_closure_application_en": "fs_right_closure_application",
 }
 
 def resolve_canonical_template_id(template_id: str) -> str:
@@ -389,6 +394,7 @@ _SETTING_DEFAULTS = {
         "closing_argument_right_application",
         "reopen_right_to_argue_application",
         "dd_karavani_arji",
+        "fs_right_closure_application",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -2848,8 +2854,11 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.add(clean)
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
-        expanded.add(f"{base}_gu")
-        expanded.add(f"{base}_en")
+    # Active canonical templates must never be masked by historical tombstones
+    for active_id in ("fs_right_closure_application",):
+        expanded.discard(active_id)
+        expanded.discard(f"{active_id}_gu")
+        expanded.discard(f"{active_id}_en")
     return expanded
 
 
@@ -3505,6 +3514,17 @@ def _get_canonical_vakilatnama_civil_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "vakilatnama_civil"), None)
 
 
+def _get_canonical_fs_right_closure_application_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "fs_right_closure_application"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "fs_right_closure_application"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     if db is None:
@@ -3883,6 +3903,51 @@ async def _ensure_seed_complete() -> None:
                         if needs_update:
                             await doc_ref_vciv.update(update_dict)
                             invalidate_published_templates_cache()
+
+            if "fs_right_closure_application" not in deleted_ids:
+                doc_ref_fs = db.collection("templates").document("fs_right_closure_application")
+                snap_fs = await doc_ref_fs.get()
+                fs_seed = _get_canonical_fs_right_closure_application_template()
+                if fs_seed:
+                    if not snap_fs.exists:
+                        await doc_ref_fs.set({
+                            **fs_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
+                    else:
+                        cur_fs = snap_fs.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_fs.get("content_gu") != fs_seed["content_gu"]:
+                            update_dict["content_gu"] = fs_seed["content_gu"]
+                            needs_update = True
+                        if cur_fs.get("content_en") != fs_seed["content_en"]:
+                            update_dict["content_en"] = fs_seed["content_en"]
+                            needs_update = True
+                        if cur_fs.get("settings") != fs_seed["settings"]:
+                            update_dict["settings"] = fs_seed["settings"]
+                            needs_update = True
+                        if cur_fs.get("fields") != fs_seed.get("fields"):
+                            update_dict["fields"] = fs_seed["fields"]
+                            needs_update = True
+                        if cur_fs.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_fs.get("category") != fs_seed.get("category"):
+                            update_dict["category"] = fs_seed["category"]
+                            needs_update = True
+                        if cur_fs.get("name_gu") != fs_seed.get("name_gu"):
+                            update_dict["name_gu"] = fs_seed["name_gu"]
+                            needs_update = True
+                        if cur_fs.get("name_en") != fs_seed.get("name_en"):
+                            update_dict["name_en"] = fs_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_fs.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -4197,6 +4262,44 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "fs_right_closure_application" or t.get("template_id") == "fs_right_closure_application"):
+                fs_seed = _get_canonical_fs_right_closure_application_template()
+                if fs_seed:
+                    needs_update = False
+                    if t.get("content_gu") != fs_seed["content_gu"]:
+                        t["content_gu"] = fs_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != fs_seed["content_en"]:
+                        t["content_en"] = fs_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != fs_seed["settings"]:
+                        t["settings"] = fs_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != fs_seed.get("fields"):
+                        t["fields"] = fs_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != fs_seed.get("name_gu"):
+                        t["name_gu"] = fs_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != fs_seed.get("name_en"):
+                        t["name_en"] = fs_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != fs_seed.get("category"):
+                        t["category"] = fs_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "fs_right_closure_application")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -4335,6 +4438,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("vakilatnama_civil").set({
                             **v_civ_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_fs = any((t.get("id") == "fs_right_closure_application" or t.get("template_id") == "fs_right_closure_application") for t in db_templates)
+        if not found_fs and "fs_right_closure_application" not in deleted_ids:
+            fs_seed = _get_canonical_fs_right_closure_application_template()
+            if fs_seed:
+                db_templates.append(dict(fs_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("fs_right_closure_application").set({
+                            **fs_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -4738,6 +4857,44 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "fs_right_closure_application" or template_id in ("fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en") or base_cand == "fs_right_closure_application"):
+            fs_seed = _get_canonical_fs_right_closure_application_template()
+            if fs_seed:
+                needs_update = False
+                if t.get("content_gu") != fs_seed["content_gu"]:
+                    t["content_gu"] = fs_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != fs_seed["content_en"]:
+                    t["content_en"] = fs_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != fs_seed["settings"]:
+                    t["settings"] = fs_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != fs_seed.get("fields"):
+                    t["fields"] = fs_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != fs_seed.get("name_gu"):
+                    t["name_gu"] = fs_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != fs_seed.get("name_en"):
+                    t["name_en"] = fs_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != fs_seed.get("category"):
+                    t["category"] = fs_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -4784,6 +4941,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         v_civ_seed = _get_canonical_vakilatnama_civil_template()
         if v_civ_seed and "vakilatnama_civil" not in deleted_ids:
             return {**v_civ_seed, "format_version": v_civ_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "fs_right_closure_application" or template_id in ("fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en")):
+        fs_seed = _get_canonical_fs_right_closure_application_template()
+        if fs_seed and "fs_right_closure_application" not in deleted_ids:
+            return {**fs_seed, "format_version": fs_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t:
         for cand in lookup_candidates:
@@ -5822,7 +5984,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -5832,7 +5994,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -7063,6 +7225,9 @@ async def get_catalog_template_order():
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
+    for active_id in _SETTING_DEFAULTS["template_display_order"]:
+        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
+            order.append(active_id)
     return {"template_order": order}
 
 
@@ -9785,6 +9950,9 @@ async def admin_get_template_order(admin=Depends(get_admin)):
         order = _SETTING_DEFAULTS["template_display_order"]
     deleted_ids = await _get_deleted_template_ids()
     order = [x for x in order if x not in deleted_ids and f"{x}_gu" not in deleted_ids and f"{x}_en" not in deleted_ids]
+    for active_id in _SETTING_DEFAULTS["template_display_order"]:
+        if active_id not in deleted_ids and active_id not in order and f"{active_id}_gu" not in order and f"{active_id}_en" not in order:
+            order.append(active_id)
     return {"template_order": order}
 
 
@@ -10003,7 +10171,7 @@ async def admin_list_templates(
     # Include any canonical seed templates not yet materialized in Firestore
     for tid, s_tpl in seed_map.items():
         if tid not in seen_ids and tid in CANONICAL_TEMPLATE_IDS and tid not in deleted_ids:
-            all_db.append(dict(s_tpl, status="seed", source="seed"))
+            all_db.append(dict(s_tpl, status=s_tpl.get("status") or "published", source="seed"))
 
     all_db = [t for t in all_db if not (t.get("id", "").endswith(("_gu", "_en")) and resolve_canonical_template_id(t.get("id", "")) != t.get("id", ""))]
 
@@ -11200,6 +11368,26 @@ async def seed_templates(force: bool = False, mark_system_seed_complete: bool = 
                         "name_gu": vciv_seed["name_gu"],
                         "name_en": vciv_seed["name_en"],
                         "category": vciv_seed["category"],
+                    })
+            if t["id"] == "fs_right_closure_application":
+                fs_seed = _get_canonical_fs_right_closure_application_template()
+                if fs_seed and (
+                    existing.get("content_gu") != fs_seed["content_gu"]
+                    or existing.get("content_en") != fs_seed["content_en"]
+                    or existing.get("settings") != fs_seed["settings"]
+                    or existing.get("fields") != fs_seed.get("fields")
+                    or existing.get("name_gu") != fs_seed.get("name_gu")
+                    or existing.get("name_en") != fs_seed.get("name_en")
+                    or existing.get("category") != fs_seed.get("category")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": fs_seed["content_gu"],
+                        "content_en": fs_seed["content_en"],
+                        "settings": fs_seed["settings"],
+                        "fields": fs_seed["fields"],
+                        "name_gu": fs_seed["name_gu"],
+                        "name_en": fs_seed["name_en"],
+                        "category": fs_seed["category"],
                     })
             skipped_ids.append(t["id"])
             continue

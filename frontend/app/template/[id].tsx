@@ -338,7 +338,7 @@ export default function TemplateApplication() {
         (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
         language
       );
-      if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") {
+      if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") {
         const rawAdvFor = initialValues["advocate_for"];
         const effectiveRole = rawAdvFor === "party_1" ? initialValues["party_1_role"] : rawAdvFor === "party_2" ? initialValues["party_2_role"] : rawAdvFor;
         initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language) : "";
@@ -475,7 +475,7 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
-      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
+      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
         const curAdvFor = k === "advocate_for" ? v : next["advocate_for"];
         if (curAdvFor) {
           const effectiveRole = curAdvFor === "party_1" ? next["party_1_role"] : curAdvFor === "party_2" ? next["party_2_role"] : curAdvFor;
@@ -484,7 +484,7 @@ export default function TemplateApplication() {
           next["advocate_name"] = "";
         }
       }
-      if (templateId === "reopen_right_to_argue_application" && k === "district") {
+      if ((templateId === "reopen_right_to_argue_application" || templateId === "fs_right_closure_application") && k === "district") {
         const distVal = v;
         const distObj = districts.find((d: any) => d.id === distVal || d.gu === distVal || d.en === distVal);
         const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (distVal || "");
@@ -621,7 +621,7 @@ export default function TemplateApplication() {
     } else if (rawTal) {
       derivedPlace = rawTal;
     }
-    if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application") {
+    if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "fs_right_closure_application") {
       out["place"] = (v["place"] !== undefined && v["place"] !== null && v["place"] !== "") ? v["place"] : derivedPlace;
     } else {
       out["place"] = derivedPlace;
@@ -811,7 +811,7 @@ export default function TemplateApplication() {
         if (templateId === "certified_copy_application" && (f.key === "court_name" || f.key === "court")) {
           return true;
         }
-        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
@@ -820,13 +820,13 @@ export default function TemplateApplication() {
       } else {
         // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
         if (f.mode === "SAVED_CASE") return false;
-        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
       }
       if (f.key === "representing_party") return false;
-      if (f.key === "date" && templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji") return false;
+      if (f.key === "date" && templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application") return false;
       return true;
     });
   }, [templateFields, caseId, templateId]);
@@ -844,7 +844,7 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
-    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") {
+    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") {
       return [];
     }
     const missing: string[] = [];
@@ -1294,12 +1294,12 @@ export default function TemplateApplication() {
       );
     }
 
-    if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") && f.key === "advocate_name") {
+    if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") && f.key === "advocate_name") {
       return (
         <Field
           key={f.key}
           testID="field-advocate_name"
-          label={language === "gu" ? (templateId === "dd_karavani_arji" ? (f.label_gu || "વકીલશ્રી નું નામ") : templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "mudat_arji" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : (f.label_en || "Advocate Name")}
+          label={language === "gu" ? (templateId === "dd_karavani_arji" ? (f.label_gu || "વકીલશ્રી નું નામ") : templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : (f.label_en || "Advocate Name")}
           placeholder={language === "gu" ? "કોના તરફે એડવોકેટ માંથી આપોઆપ આવશે" : "Auto-derived from Advocate For"}
           value={fvalue || ""}
           editable={false}
@@ -1308,7 +1308,7 @@ export default function TemplateApplication() {
       );
     }
 
-    if ((templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji") && f.key === "place") {
+    if ((templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application") && f.key === "place") {
       return (
         <Field
           key={f.key}
@@ -1763,7 +1763,7 @@ export default function TemplateApplication() {
                   }}
                 />
 
-                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && !isVakalatnama && (
+                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && !isVakalatnama && (
                   <Field
                     testID="field-advocate_name"
                     label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
@@ -1811,8 +1811,8 @@ export default function TemplateApplication() {
 
             {appSpecificFields.map((f: any) => renderFieldInput(f))}
 
-            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji and mudat_arji where date is in template sequence) */}
-            {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && (
+            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji and fs_right_closure_application where date is in template sequence) */}
+            {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && (
               <View style={{ marginTop: Spacing.sm }}>
                 {renderFieldInput(dateField)}
               </View>
