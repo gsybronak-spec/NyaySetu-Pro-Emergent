@@ -401,6 +401,7 @@ _SETTING_DEFAULTS = {
         "dd_karavani_arji",
         "fs_right_closure_application",
         "fs_right_reopen_application",
+        "kam_board_par_levani_arji",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -2861,7 +2862,7 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application"):
+    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3542,6 +3543,17 @@ def _get_canonical_fs_right_reopen_application_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "fs_right_reopen_application"), None)
 
 
+def _get_canonical_kam_board_par_levani_arji_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "kam_board_par_levani_arji"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "kam_board_par_levani_arji"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     if db is None:
@@ -4010,6 +4022,51 @@ async def _ensure_seed_complete() -> None:
                         if needs_update:
                             await doc_ref_fs_reopen.update(update_dict)
                             invalidate_published_templates_cache()
+
+            if "kam_board_par_levani_arji" not in deleted_ids:
+                doc_ref_kam_board = db.collection("templates").document("kam_board_par_levani_arji")
+                snap_kam_board = await doc_ref_kam_board.get()
+                kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+                if kam_board_seed:
+                    if not snap_kam_board.exists:
+                        await doc_ref_kam_board.set({
+                            **kam_board_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
+                    else:
+                        cur_kb = snap_kam_board.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_kb.get("content_gu") != kam_board_seed["content_gu"]:
+                            update_dict["content_gu"] = kam_board_seed["content_gu"]
+                            needs_update = True
+                        if cur_kb.get("content_en") != kam_board_seed["content_en"]:
+                            update_dict["content_en"] = kam_board_seed["content_en"]
+                            needs_update = True
+                        if cur_kb.get("settings") != kam_board_seed["settings"]:
+                            update_dict["settings"] = kam_board_seed["settings"]
+                            needs_update = True
+                        if cur_kb.get("fields") != kam_board_seed.get("fields"):
+                            update_dict["fields"] = kam_board_seed["fields"]
+                            needs_update = True
+                        if cur_kb.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_kb.get("category") != kam_board_seed.get("category"):
+                            update_dict["category"] = kam_board_seed["category"]
+                            needs_update = True
+                        if cur_kb.get("name_gu") != kam_board_seed.get("name_gu"):
+                            update_dict["name_gu"] = kam_board_seed["name_gu"]
+                            needs_update = True
+                        if cur_kb.get("name_en") != kam_board_seed.get("name_en"):
+                            update_dict["name_en"] = kam_board_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_kam_board.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -4399,6 +4456,44 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "kam_board_par_levani_arji" or t.get("template_id") == "kam_board_par_levani_arji"):
+                kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+                if kam_board_seed:
+                    needs_update = False
+                    if t.get("content_gu") != kam_board_seed["content_gu"]:
+                        t["content_gu"] = kam_board_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != kam_board_seed["content_en"]:
+                        t["content_en"] = kam_board_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != kam_board_seed["settings"]:
+                        t["settings"] = kam_board_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != kam_board_seed.get("fields"):
+                        t["fields"] = kam_board_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != kam_board_seed.get("name_gu"):
+                        t["name_gu"] = kam_board_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != kam_board_seed.get("name_en"):
+                        t["name_en"] = kam_board_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != kam_board_seed.get("category"):
+                        t["category"] = kam_board_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "kam_board_par_levani_arji")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -4569,6 +4664,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("fs_right_reopen_application").set({
                             **fs_reopen_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_kam_board = any((t.get("id") == "kam_board_par_levani_arji" or t.get("template_id") == "kam_board_par_levani_arji") for t in db_templates)
+        if not found_kam_board and "kam_board_par_levani_arji" not in deleted_ids:
+            kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+            if kam_board_seed:
+                db_templates.append(dict(kam_board_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("kam_board_par_levani_arji").set({
+                            **kam_board_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -5048,6 +5159,44 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "kam_board_par_levani_arji" or template_id in ("kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or base_cand == "kam_board_par_levani_arji"):
+            kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+            if kam_board_seed:
+                needs_update = False
+                if t.get("content_gu") != kam_board_seed["content_gu"]:
+                    t["content_gu"] = kam_board_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != kam_board_seed["content_en"]:
+                    t["content_en"] = kam_board_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != kam_board_seed["settings"]:
+                    t["settings"] = kam_board_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != kam_board_seed.get("fields"):
+                    t["fields"] = kam_board_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != kam_board_seed.get("name_gu"):
+                    t["name_gu"] = kam_board_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != kam_board_seed.get("name_en"):
+                    t["name_en"] = kam_board_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != kam_board_seed.get("category"):
+                    t["category"] = kam_board_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -5104,6 +5253,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         fs_reopen_seed = _get_canonical_fs_right_reopen_application_template()
         if fs_reopen_seed and "fs_right_reopen_application" not in deleted_ids:
             return {**fs_reopen_seed, "format_version": fs_reopen_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "kam_board_par_levani_arji" or template_id in ("kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en")):
+        kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+        if kam_board_seed and "kam_board_par_levani_arji" not in deleted_ids:
+            return {**kam_board_seed, "format_version": kam_board_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t:
         for cand in lookup_candidates:
@@ -6145,7 +6299,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -6155,7 +6309,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -6458,7 +6612,53 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             if ctx.get("adjournment_reason") in mudat_reason_map_en:
                 ctx["adjournment_reason"] = mudat_reason_map_en[ctx["adjournment_reason"]]
 
-    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji & mudat_arji template keys are clean strings (never None or undefined)
+    # Kam Board Par Levani Arji (કામ બોર્ડ પર લેવા બાબત / Application for Taking the Matter on Board)
+    is_kam_board_app = (tpl_id in ("kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or "urgent_reason" in ctx or "urgent_reason" in values)
+    if is_kam_board_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        # Format scheduled_date if YYYY-MM-DD
+        _sch = ctx.get("scheduled_date")
+        if isinstance(_sch, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _sch):
+            ctx["scheduled_date"] = f"{_sch[8:10]}/{_sch[5:7]}/{_sch[0:4]}"
+
+        raw_kb_reason = str(ctx.get("urgent_reason") or "").strip()
+        custom_kb_reason = str(ctx.get("urgent_reason_custom") or ctx.get("urgent_reason_other") or "").strip()
+        if raw_kb_reason in ("અન્ય", "other", "Other"):
+            ctx["urgent_reason"] = custom_kb_reason if custom_kb_reason else ("અન્ય" if language == "gu" else "Other")
+        elif not raw_kb_reason and custom_kb_reason:
+            ctx["urgent_reason"] = custom_kb_reason
+        else:
+            ctx["urgent_reason"] = raw_kb_reason
+            ctx["urgent_reason_custom"] = ""
+            ctx["urgent_reason_other"] = ""
+
+        if language == "en":
+            urgent_reason_map_en = {
+                "વોરંટ રદ કરાવવાનો હોય": "a warrant is required to be cancelled",
+                "જામીન રજૂ કરવાના હોય": "bail is required to be submitted",
+                "હુકમ કરાવવાનો હોય": "an order is required to be passed",
+                "અન્ય": "other reasons",
+                "Other": "other reasons",
+                "A warrant is required to be cancelled": "a warrant is required to be cancelled",
+                "Bail is required to be submitted": "bail is required to be submitted",
+                "An order is required to be passed": "an order is required to be passed",
+            }
+            if ctx.get("urgent_reason") in urgent_reason_map_en:
+                ctx["urgent_reason"] = urgent_reason_map_en[ctx["urgent_reason"]]
+
+    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji & kam_board_par_levani_arji template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
@@ -6470,6 +6670,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "disinterested_party", "disinterested_party_role",
         "adjournment_reason", "other_adjournment_reason", "adjournment_reason_custom",
         "fs_failure_reason", "fs_failure_reason_custom", "fs_failure_reason_other",
+        "scheduled_date", "urgent_reason", "urgent_reason_custom",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
@@ -11620,6 +11821,26 @@ async def seed_templates(force: bool = False, mark_system_seed_complete: bool = 
                         "name_gu": fs_reopen_seed["name_gu"],
                         "name_en": fs_reopen_seed["name_en"],
                         "category": fs_reopen_seed["category"],
+                    })
+            if t["id"] == "kam_board_par_levani_arji":
+                kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
+                if kam_board_seed and (
+                    existing.get("content_gu") != kam_board_seed["content_gu"]
+                    or existing.get("content_en") != kam_board_seed["content_en"]
+                    or existing.get("settings") != kam_board_seed["settings"]
+                    or existing.get("fields") != kam_board_seed.get("fields")
+                    or existing.get("name_gu") != kam_board_seed.get("name_gu")
+                    or existing.get("name_en") != kam_board_seed.get("name_en")
+                    or existing.get("category") != kam_board_seed.get("category")
+                ):
+                    await db.collection('templates').document(t["id"]).update({
+                        "content_gu": kam_board_seed["content_gu"],
+                        "content_en": kam_board_seed["content_en"],
+                        "settings": kam_board_seed["settings"],
+                        "fields": kam_board_seed["fields"],
+                        "name_gu": kam_board_seed["name_gu"],
+                        "name_en": kam_board_seed["name_en"],
+                        "category": kam_board_seed["category"],
                     })
             skipped_ids.append(t["id"])
             continue

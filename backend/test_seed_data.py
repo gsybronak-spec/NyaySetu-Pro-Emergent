@@ -6166,6 +6166,298 @@ Place : {{place}}
 
 {{advocate_name}}""",
     },
+    {
+        "id": "kam_board_par_levani_arji",
+        "name_gu": "કામ બોર્ડ પર લેવા બાબત",
+        "name_en": "Application for Taking the Matter on Board",
+        "category": "General",
+        "description": "Application to take the matter on board (preponement) on urgent grounds.",
+        "status": "published",
+        "aliases": [
+            "kam_board",
+            "preponement",
+            "board par",
+            "કામ બોર્ડ પર",
+            "કામ બોર્ડ",
+            "કામ બોર્ડ પર લેવા બાબત",
+            "કામ બોર્ડ પર લેવાની અરજી",
+            "kam_board_par_levani_arji",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટ નું નામ",
+                "type": "select",
+                "required": False,
+                "source": "court_name",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge Court", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ શ્રીની કોર્ટ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate Court", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "additional_chief_judicial_magistrate", "label_en": "Additional Chief Judicial Magistrate Court", "label_gu": "એડિશનલ ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "judicial_magistrate_first_class", "label_en": "Judicial Magistrate First Class Court", "label_gu": "જ્યુડિશિયલ મેજીસ્ટ્રેટ ફર્સ્ટ ક્લાસ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                    {"value": "sessions_court", "label_en": "Sessions Court", "label_gu": "સેશન્સ કોર્ટ"},
+                    {"value": "special_court", "label_en": "Special Court", "label_gu": "સ્પેશિયલ કોર્ટ"},
+                    {"value": "commercial_court", "label_en": "Commercial Court", "label_gu": "કોમર્શિયલ કોર્ટ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": False,
+                "source": "district",
+                "mode": ["saved_case", "direct_template"],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ફરજીયાત નથી. જો તાલુકો પસંદ કરશો તો ડ્રાફ્ટિંગમાં તાલુકો આગળ અને જિલ્લો પાછળ આવશે (દા.ત. કલોલ, ગાંધીનગર).",
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસનો પ્રકાર",
+                "type": "select",
+                "required": False,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "motor_accident_claim", "label_en": "MACP", "label_gu": "મોટર અકસ્માત ક્લેઈમ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": False,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર - ૧ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર - ૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "source": "case_opposite_party_role",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_opposite_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Advocate For",
+                "label_gu": "કોના તરફે એડવોકેટ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "scheduled_date",
+                "label_en": "Next Court Date",
+                "label_gu": "આગામી તારીખ જે કોર્ટ દ્વારા નીમવામા આવેલ હોય તે",
+                "type": "date",
+                "required": False,
+                "placeholder": "DD/MM/YYYY",
+            },
+            {
+                "key": "urgent_reason",
+                "label_en": "Reason for taking matter on board",
+                "label_gu": "કામ બોર્ડ પર લેવાનું કારણ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "વોરંટ રદ કરાવવાનો હોય", "label_gu": "વોરંટ રદ કરાવવાનો હોય", "label_en": "વોરંટ રદ કરાવવાનો હોય"},
+                    {"value": "જામીન રજૂ કરવાના હોય", "label_gu": "જામીન રજૂ કરવાના હોય", "label_en": "જામીન રજૂ કરવાના હોય"},
+                    {"value": "હુકમ કરાવવાનો હોય", "label_gu": "હુકમ કરાવવાનો હોય", "label_en": "હુકમ કરાવવાનો હોય"},
+                    {"value": "અન્ય", "label_gu": "અન્ય", "label_en": "અન્ય"},
+                ],
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": False,
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "સ્થળ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
+                "type": "text",
+                "required": False,
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True, "indent": False},
+                {"contains": "In the Court of the Hon'ble", "align": "center", "bold": True, "indent": False},
+                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"prefix": "Place :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"contains": "નં. :", "align": "right", "bold": False, "indent": False},
+                {"contains": "No. :", "align": "right", "bold": False, "indent": False},
+                {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
+                {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
+                {"contains": "બાબત :- કામ બોર્ડ પર લેવા બાબત...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "Subject :- Application for taking the matter on board ...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"prefix": "સદર કામમાં", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "In the said matter", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "સદર કેસ", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "The said case is pending", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "તારીખ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Date :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "સ્થળ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Place :", "align": "left", "bold": False, "indent": False},
+                {"contains": "----------", "align": "right", "bold": False, "indent": False},
+                {"contains": "--------------------", "align": "right", "bold": False, "indent": False},
+                {"contains": "ના એડવોકેટ", "align": "right", "bold": False, "indent": False},
+                {"contains": "Advocate for", "align": "right", "bold": False, "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
+મુકામ :- {{taluka_place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+વિરુદ્ધ
+
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત :- કામ બોર્ડ પર લેવા બાબત...
+
+સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે તેમજ કેસની આગામી તા. {{scheduled_date}} નીમવામાં આવેલ છે પરંતુ સદર કામમાં આજ રોજ {{urgent_reason}} જેથી કામ બોર્ડ પર લેવામાં આવે તે જરૂરી છે. સદર કાર્યવાહી ન્યાયના હિતમાં હોય, જેથી સદર કામને આજ રોજ બોર્ડ પર લઈ જરૂરી કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """In the Court of the Hon'ble {{court_name}},
+
+Place :- {{taluka_place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+Versus
+
+{{party_2_role}} :- {{party_2_name}}
+
+Subject :- Application for taking the matter on board ...
+
+In the said matter, we, the advocate for {{advocate_for_role}}, respectfully submit before this Hon'ble Court that.....
+
+The said case is pending before this Hon'ble Court and the next date of the case is fixed on {{scheduled_date}}, but in the said matter today {{urgent_reason}} hence it is necessary to take the matter on board. As the said proceeding is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to take up the said matter on board today and pass appropriate orders for conducting necessary proceedings.
+
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

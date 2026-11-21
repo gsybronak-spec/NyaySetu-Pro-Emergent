@@ -122,10 +122,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'kam_board_par_levani_arji',
-    guId: 'kam_board_par_levani_arji_gu',
-    enId: 'kam_board_par_levani_arji_en',
-    name_gu: 'કામ બોર્ડ પર લેવાની અરજી',
-    name_en: 'Application to Take Matter on Board (Early Hearing)',
+    guId: 'kam_board_par_levani_arji',
+    enId: 'kam_board_par_levani_arji',
+    name_gu: 'કામ બોર્ડ પર લેવા બાબત',
+    name_en: 'Application for Taking the Matter on Board',
     category: 'General',
   },
   {

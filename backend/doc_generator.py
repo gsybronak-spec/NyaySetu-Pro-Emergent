@@ -942,6 +942,9 @@ def render_template(content_template: str, values: dict) -> str:
         or "એફ.એસ.નો હક ફરીથી ખોલવા બાબત" in result
         or "reopening further statement" in result.lower()
         or "reopen further statement" in result.lower()
+        or "કામ બોર્ડ પર લેવા બાબત" in result
+        or "taking the matter on board" in result.lower()
+        or "take up matter on board" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
