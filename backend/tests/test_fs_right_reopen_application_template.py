@@ -177,10 +177,34 @@ class TestFsRightReopenApplicationTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("આરોપી :- સુરેશભાઇ શાહ", rendered)
         self.assertIn("બાબત :- એફ.એસ.નો હક ફરીથી ખોલવા બાબત...", rendered)
         self.assertIn("સદર કામમા અમો આરોપી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", rendered)
+        self.assertIn("અમોનો એફ. એસ. નો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે.", rendered)
         self.assertIn("જે અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે કારણોસર એફ. એસ. થઈ શકેલ નહિ", rendered)
+        self.assertIn("અમોનો એફ. એસ. નો હક ફરીથી ખોલી અમોને એફ.એસ. કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertNotIn("એફ. એસ. કરવાનો હક", rendered)
         self.assertIn("તારીખ : 21/11/2024", rendered)
         self.assertIn("સ્થળ : કલોલ, ગાંધીનગર", rendered)
-        self.assertIn("આરોપી ના એડવોકેટ", rendered)
+        # Advocate designation for આરોપી must be exactly આરોપીના (no એડવોકેટ appended)
+        self.assertEqual(ctx["advocate_name"], "આરોપીના")
+        bottom_designation = rendered.split("----------")[-1].strip()
+        self.assertEqual(bottom_designation, "આરોપીના")
+
+    async def test_07b_advocate_designation_other_roles(self):
+        """7b. Verify selecting other roles still correctly appends ના એડવોકેટ."""
+        user = {"name": "Test Advocate"}
+        # Test Plaintiff / વાદી
+        vals_vadi = {"advocate_for": "વાદી"}
+        ctx_vadi = await server.build_render_context(user, None, vals_vadi, "gu", template_id="fs_right_reopen_application")
+        self.assertEqual(ctx_vadi["advocate_name"], "વાદી ના એડવોકેટ")
+
+        # Test Complainant / ફરિયાદી
+        vals_fariyadi = {"advocate_for": "ફરિયાદી"}
+        ctx_fariyadi = await server.build_render_context(user, None, vals_fariyadi, "gu", template_id="fs_right_reopen_application")
+        self.assertEqual(ctx_fariyadi["advocate_name"], "ફરીયાદી ના એડવોકેટ")
+
+        # Test Opponent / સામાવાળા
+        vals_samawala = {"advocate_for": "સામાવાળા"}
+        ctx_samawala = await server.build_render_context(user, None, vals_samawala, "gu", template_id="fs_right_reopen_application")
+        self.assertEqual(ctx_samawala["advocate_name"], "સામાવાળા ના એડવોકેટ")
 
     async def test_08_custom_reason_resolution(self):
         """8. Verify dynamic custom reason resolution when 'અન્ય' is selected."""

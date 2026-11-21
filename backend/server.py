@@ -6139,7 +6139,10 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         adv_for_role = resolve_party_role_label(target_role, language)
         ctx["advocate_for_role"] = adv_for_role
         if language == "gu":
-            default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
+            if (tpl_id in ("fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en") or "fs_failure_reason" in ctx or "fs_failure_reason" in values) and adv_for_role in ("આરોપી", "accused", "Accused"):
+                default_adv_desig = "આરોપીના"
+            else:
+                default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
         is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values)
@@ -6257,6 +6260,11 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             }
             if ctx.get("fs_failure_reason") in fs_reason_map_en:
                 ctx["fs_failure_reason"] = fs_reason_map_en[ctx["fs_failure_reason"]]
+
+        if language == "gu":
+            eff_adv_role = ctx.get("advocate_for_role") or ctx.get("advocate_for")
+            if eff_adv_role in ("આરોપી", "accused", "Accused") or ctx.get("advocate_name") in ("આરોપી ના એડવોકેટ", "આરોપીના એડવોકેટ"):
+                ctx["advocate_name"] = "આરોપીના"
 
     # Exemption Application (હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ))
     is_exemption_app = (tpl_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance") or "absence_reason" in ctx or "absence_reason" in values)

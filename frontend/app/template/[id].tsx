@@ -101,7 +101,7 @@ const NORMALIZE_ROLE_MAP: Record<string, string> = {
   Accused: "accused",
 };
 
-function getAdvocateDesignation(roleStr: string, lang: "gu" | "en"): string {
+function getAdvocateDesignation(roleStr: string, lang: "gu" | "en", templateId?: string): string {
   const r = String(roleStr || "").trim();
   if (!r) return "";
   let roleGu = r;
@@ -112,7 +112,13 @@ function getAdvocateDesignation(roleStr: string, lang: "gu" | "en"): string {
   else if (r === "accused" || r === "આરોપી") { roleGu = "આરોપી"; roleEn = "Accused"; }
   else if (r === "opponent" || r === "respondent" || r === "સામાવાળા") { roleGu = "સામાવાળા"; roleEn = "Opponent"; }
   else if (r === "defendant" || r === "પ્રતિવાદી") { roleGu = "પ્રતિવાદી"; roleEn = "Defendant"; }
-  return lang === "gu" ? `${roleGu} ના એડવોકેટ` : `Advocate for ${roleEn}`;
+  if (lang === "gu") {
+    if (templateId === "fs_right_reopen_application" && roleGu === "આરોપી") {
+      return "આરોપીના";
+    }
+    return `${roleGu} ના એડવોકેટ`;
+  }
+  return `Advocate for ${roleEn}`;
 }
 
 function RoleChips({
@@ -341,7 +347,7 @@ export default function TemplateApplication() {
       if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application") {
         const rawAdvFor = initialValues["advocate_for"];
         const effectiveRole = rawAdvFor === "party_1" ? initialValues["party_1_role"] : rawAdvFor === "party_2" ? initialValues["party_2_role"] : rawAdvFor;
-        initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language) : "";
+        initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language, templateId) : "";
       } else {
         initialValues["advocate_name"] = advName;
       }
@@ -479,7 +485,7 @@ export default function TemplateApplication() {
         const curAdvFor = k === "advocate_for" ? v : next["advocate_for"];
         if (curAdvFor) {
           const effectiveRole = curAdvFor === "party_1" ? next["party_1_role"] : curAdvFor === "party_2" ? next["party_2_role"] : curAdvFor;
-          next["advocate_name"] = getAdvocateDesignation(effectiveRole, language);
+          next["advocate_name"] = getAdvocateDesignation(effectiveRole, language, templateId);
         } else {
           next["advocate_name"] = "";
         }
@@ -654,6 +660,13 @@ export default function TemplateApplication() {
       } else {
         delete out["fs_failure_reason_custom"];
         delete out["fs_failure_reason_other"];
+      }
+      if (language === "gu") {
+        const rawAdvFor = out["advocate_for"];
+        const effRole = rawAdvFor === "party_1" ? out["party_1_role"] : rawAdvFor === "party_2" ? out["party_2_role"] : rawAdvFor;
+        if (effRole === "આરોપી" || effRole === "accused" || out["advocate_name"] === "આરોપી ના એડવોકેટ" || out["advocate_name"] === "આરોપીના એડવોકેટ") {
+          out["advocate_name"] = "આરોપીના";
+        }
       }
     }
 
