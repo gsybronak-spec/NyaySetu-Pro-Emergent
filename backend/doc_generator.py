@@ -904,6 +904,26 @@ def render_template(content_template: str, values: dict) -> str:
             elif raw_dep.lower().startswith("inr"): raw_dep = raw_dep[len("inr"):].strip()
             vals["deposit_amount"] = raw_dep
 
+    # DD Application backwards compatibility: replace legacy {{advocate_for_role}} in paragraph 2 with disinterested_party
+    if "વધુમાં" in content_template or "Furthermore," in content_template:
+        if "disinterested_party" not in vals:
+            vals["disinterested_party"] = "the Complainant" if ("Furthermore," in content_template or "Application for Dismissal of Case" in content_template) else "ફરિયાદી"
+        if "disinterested_party_role" not in vals:
+            vals["disinterested_party_role"] = vals["disinterested_party"]
+        dp = vals.get("disinterested_party") or vals.get("disinterested_party_role") or "ફરિયાદી"
+        content_template = re.sub(
+            r"(વધુમાં\s+)\{\{advocate_for_role\}\}(\s+સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ)",
+            rf"\g<1>{dp}\g<2>",
+            content_template,
+        )
+        dp_en = vals.get("disinterested_party") or vals.get("disinterested_party_role") or "the Complainant"
+        content_template = re.sub(
+            r"(Furthermore,\s+)\{\{advocate_for_role\}\}(\s+is not interested in proceeding with the said case)",
+            rf"\g<1>{dp_en}\g<2>",
+            content_template,
+            flags=re.IGNORECASE,
+        )
+
     result = content_template
     for k, v in vals.items():
         result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
@@ -921,23 +941,6 @@ def render_template(content_template: str, values: dict) -> str:
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
         result = re.sub(r"\{\{[^}]+\}\}", "____", result)
-
-    # DD Application (DD કરાવવાની અરજી / Application for Dismissal of Case):
-    # When filed from the accused-side advocate workflow, the opening party indicator
-    # is preserved ("અમો આરોપી ના એડવોકેટ..."), but the lack-of-interest clause in the
-    # main paragraph must state that the complainant ("ફરિયાદી") has no interest,
-    # never that the accused ("આરોપી") has no interest.
-    result = re.sub(
-        r"(વધુમાં\s+)આરોપી(\s+સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ)",
-        r"\g<1>ફરિયાદી\g<2>",
-        result,
-    )
-    result = re.sub(
-        r"(Furthermore,\s+)Accused(\s+is not interested in proceeding with the said case)",
-        r"\g<1>the Complainant\g<2>",
-        result,
-        flags=re.IGNORECASE,
-    )
 
     return result
 

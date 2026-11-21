@@ -392,6 +392,14 @@ export default function TemplateApplication() {
       initialValues["representing_party"] = initialValues["representing_party"] || "party";
       initialValues["today"] = new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
 
+      // Support f.default for template fields (e.g. disinterested_party dropdown)
+      for (const f of t?.fields || []) {
+        if (f.default && !initialValues[f.key]) initialValues[f.key] = f.default;
+      }
+      if (templateId === "dd_karavani_arji" && !initialValues["disinterested_party"]) {
+        initialValues["disinterested_party"] = "ફરિયાદી";
+      }
+
       // Date fields default to today when unset (always editable)
       for (const f of t?.fields || []) {
         if (f.type === "date" && !initialValues[f.key]) initialValues[f.key] = new Date().toISOString().slice(0, 10);

@@ -4313,6 +4313,22 @@ Place : {{place}}
                 ],
             },
             {
+                "key": "disinterested_party",
+                "label_en": "Party Not Interested in Proceeding",
+                "label_gu": "કેસ ચલાવવામાં રસ ન ધરાવનાર પક્ષકાર",
+                "type": "select",
+                "required": False,
+                "default": "ફરિયાદી",
+                "options": [
+                    {"value": "ફરિયાદી", "label_en": "Complainant", "label_gu": "ફરિયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
                 "key": "date",
                 "label_en": "Date",
                 "label_gu": "તારીખ",
@@ -4408,7 +4424,7 @@ Place : {{place}}
 
     સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{disinterested_party}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 
@@ -4433,7 +4449,7 @@ Subject :- Application for Dismissal of Case ...
 
     In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that...
 
-    The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}. Furthermore, {{advocate_for_role}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
+    The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}. Furthermore, {{disinterested_party}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
 
 Date : {{date}}
 

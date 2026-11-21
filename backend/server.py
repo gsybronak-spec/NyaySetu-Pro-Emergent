@@ -5979,6 +5979,62 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             if ctx.get("dismissal_reason") in dd_reason_map_en:
                 ctx["dismissal_reason"] = dd_reason_map_en[ctx["dismissal_reason"]]
 
+        raw_disinterested_party = ctx.get("disinterested_party") or ctx.get("disinterested_party_role") or values.get("disinterested_party") or values.get("disinterested_party_role")
+        if language == "en":
+            dp_en_map = {
+                "ફરિયાદી": "the Complainant",
+                "ફરીયાદી": "the Complainant",
+                "complainant": "the Complainant",
+                "the Complainant": "the Complainant",
+                "the complainant": "the Complainant",
+                "અરજદાર": "the Applicant",
+                "applicant": "the Applicant",
+                "the Applicant": "the Applicant",
+                "the applicant": "the Applicant",
+                "વાદી": "the Plaintiff",
+                "plaintiff": "the Plaintiff",
+                "the Plaintiff": "the Plaintiff",
+                "the plaintiff": "the Plaintiff",
+                "આરોપી": "the Accused",
+                "accused": "the Accused",
+                "the Accused": "the Accused",
+                "the accused": "the Accused",
+                "સામાવાળા": "the Opponent",
+                "સામેવાળા": "the Opponent",
+                "opponent": "the Opponent",
+                "the Opponent": "the Opponent",
+                "the opponent": "the Opponent",
+                "પ્રતિવાદી": "the Defendant",
+                "defendant": "the Defendant",
+                "the Defendant": "the Defendant",
+                "the defendant": "the Defendant",
+            }
+            resolved_party = dp_en_map.get(str(raw_disinterested_party).strip()) if raw_disinterested_party else None
+            if not resolved_party:
+                resolved_party = "the Complainant"
+        else:
+            dp_gu_map = {
+                "complainant": "ફરિયાદી",
+                "the complainant": "ફરિયાદી",
+                "applicant": "અરજદાર",
+                "the applicant": "અરજદાર",
+                "plaintiff": "વાદી",
+                "the plaintiff": "વાદી",
+                "accused": "આરોપી",
+                "the accused": "આરોપી",
+                "opponent": "સામાવાળા",
+                "the opponent": "સામાવાળા",
+                "defendant": "પ્રતિવાદી",
+                "the defendant": "પ્રતિવાદી",
+            }
+            if raw_disinterested_party:
+                s = str(raw_disinterested_party).strip()
+                resolved_party = dp_gu_map.get(s.lower(), s)
+            else:
+                resolved_party = "ફરિયાદી"
+        ctx["disinterested_party"] = resolved_party
+        ctx["disinterested_party_role"] = resolved_party
+
     # Mudat Application (મુદત અરજી / Application for Adjournment)
     is_mudat_app = (tpl_id in ("mudat_arji", "mudat_arji_gu", "mudat_arji_en") or "adjournment_reason" in ctx or "adjournment_reason" in values)
     if is_mudat_app:
@@ -6038,6 +6094,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "argument_failure_reason", "argument_failure_reason_custom",
         "absence_reason", "absence_reason_custom",
         "dismissal_reason", "dismissal_reason_custom",
+        "disinterested_party", "disinterested_party_role",
         "adjournment_reason", "other_adjournment_reason", "adjournment_reason_custom",
         "date", "place", "advocate_name",
     ):

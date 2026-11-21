@@ -240,6 +240,14 @@ Place : {{taluka_place}}
                 {"value": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી", "label_gu": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી", "label_en": "The complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf"},
                 {"value": "અન્ય", "label_gu": "અન્ય", "label_en": "Other"},
             ]},
+            {"key": "disinterested_party", "label_gu": "કેસ ચલાવવામાં રસ ન ધરાવનાર પક્ષકાર", "label_en": "Party Not Interested in Proceeding", "type": "select", "required": False, "default": "ફરિયાદી", "options": [
+                {"value": "ફરિયાદી", "label_gu": "ફરિયાદી", "label_en": "Complainant"},
+                {"value": "અરજદાર", "label_gu": "અરજદાર", "label_en": "Applicant"},
+                {"value": "વાદી", "label_gu": "વાદી", "label_en": "Plaintiff"},
+                {"value": "આરોપી", "label_gu": "આરોપી", "label_en": "Accused"},
+                {"value": "સામાવાળા", "label_gu": "સામાવાળા", "label_en": "Opponent"},
+                {"value": "પ્રતિવાદી", "label_gu": "પ્રતિવાદી", "label_en": "Defendant"},
+            ]},
             {"key": "date", "label_gu": "તારીખ", "label_en": "Date", "type": "date", "required": False},
             {"key": "place", "label_gu": "સ્થળ", "label_en": "Place", "type": "text", "required": False},
             {"key": "advocate_name", "label_gu": "વકીલશ્રી નું નામ", "label_en": "Advocate Name", "type": "text", "required": False},
@@ -281,7 +289,7 @@ Place : {{taluka_place}}
 
     સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+    સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{disinterested_party}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
 
@@ -306,7 +314,7 @@ Subject :- Application for Dismissal of Case ...
 
     In the said matter, we, the Advocate for {{advocate_for_role}}, humbly submit before this Hon'ble Court that...
 
-    The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}. Furthermore, {{advocate_for_role}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
+    The said case is pending before this Hon'ble Court. In the said matter, {{dismissal_reason}}. Furthermore, {{disinterested_party}} is not interested in proceeding with the said case, therefore it is prayed that this Hon'ble Court may be pleased to pass appropriate orders to dismiss the said case.
 
 Date : {{date}}
 

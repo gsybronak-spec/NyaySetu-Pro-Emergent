@@ -90,10 +90,10 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(canonical)
         self.assertEqual(canonical["id"], "dd_karavani_arji")
 
-    def test_02_field_count_is_exactly_14(self):
-        """2. Verify template has exactly 14 advocate-facing fields."""
+    def test_02_field_count_is_exactly_15(self):
+        """2. Verify template has exactly 15 advocate-facing fields."""
         fields = self.tpl.get("fields", [])
-        self.assertEqual(len(fields), 14, f"Expected exactly 14 fields, found {len(fields)}")
+        self.assertEqual(len(fields), 15, f"Expected exactly 15 fields, found {len(fields)}")
 
     def test_03_field_order_and_canonical_types(self):
         """3. Verify exact field keys, sequence, and types matching Page 1 of canonical PDF."""
@@ -102,7 +102,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         expected_keys = [
             "court_name", "district", "taluka", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "advocate_for", "dismissal_reason",
+            "advocate_for", "dismissal_reason", "disinterested_party",
             "date", "place", "advocate_name",
         ]
         self.assertEqual(keys, expected_keys)
@@ -119,6 +119,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_name": "text",
             "advocate_for": "select",
             "dismissal_reason": "select",
+            "disinterested_party": "select",
             "date": "date",
             "place": "text",
             "advocate_name": "text",
@@ -126,8 +127,8 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         for f in fields:
             self.assertEqual(f["type"], expected_types[f["key"]], f"Field {f['key']} type mismatch")
 
-    def test_04_all_14_fields_have_required_false(self):
-        """4. Verify all 14 fields have required: False."""
+    def test_04_all_15_fields_have_required_false(self):
+        """4. Verify all 15 fields have required: False."""
         for f in self.tpl["fields"]:
             self.assertFalse(f.get("required"), f"Field {f['key']} must have required=False")
 
@@ -154,6 +155,26 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         opt_values = [o["value"] for o in options]
         self.assertEqual(opt_values[0], "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી")
         self.assertEqual(opt_values[1], "અન્ય")
+
+    def test_07b_disinterested_party_field(self):
+        """7b. Verify disinterested_party is select dropdown with exact 6 options."""
+        f = next(f for f in self.tpl["fields"] if f["key"] == "disinterested_party")
+        self.assertEqual(f["type"], "select")
+        self.assertEqual(f["label_gu"], "કેસ ચલાવવામાં રસ ન ધરાવનાર પક્ષકાર")
+        self.assertFalse(f.get("required"))
+        self.assertEqual(f.get("default"), "ફરિયાદી")
+        options = f.get("options", [])
+        self.assertEqual(len(options), 6)
+        expected_options = [
+            "ફરિયાદી",
+            "અરજદાર",
+            "વાદી",
+            "આરોપી",
+            "સામાવાળા",
+            "પ્રતિવાદી",
+        ]
+        opt_values = [o["value"] if isinstance(o, dict) else o for o in options]
+        self.assertEqual(opt_values, expected_options)
 
     def test_08_advocate_for_options(self):
         """8. Verify advocate_for options include party roles."""
@@ -252,7 +273,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         # Opening paragraph
         self.assertIn("સદર કામમાં અમો {{advocate_for_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", content_gu)
         # Continuous Paragraph 2: 'સદર કેસ...' and 'વધુમાં...' in ONE single paragraph with 'જેથી'
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{advocate_for_role}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં {{dismissal_reason}}. વધુમાં {{disinterested_party}} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", content_gu)
         self.assertIn("જેથી", content_gu)
         self.assertNotIn("જથી", content_gu)
         self.assertNotIn("જથી ે", content_gu)
@@ -339,7 +360,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("આરોપી :- સુરેશભાઈ શાહ", rendered)
         self.assertIn("બાબત :- કેસ ડીસમીસ કરવા બાબત ...", rendered)
         self.assertIn("સદર કામમાં અમો ફરીયાદી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", rendered)
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય. વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કામમાં પક્ષકારો વચ્ચે સમાધાન થઈ ગયેલ હોય. વધુમાં ફરિયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
         self.assertIn("જેથી", rendered)
         self.assertNotIn("જથી", rendered)
         self.assertNotIn("જથી ે", rendered)
@@ -667,7 +688,7 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         body_blocks = [b for b in blocks if b.get("align") == "justify" and b.get("indent") is True]
         self.assertEqual(len(body_blocks), 2, "Must have exactly 2 body paragraphs")
         self.assertTrue(body_blocks[1]["text"].startswith("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે."))
-        self.assertIn("વધુમાં ફરીયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ", body_blocks[1]["text"])
+        self.assertIn("વધુમાં ફરિયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ", body_blocks[1]["text"])
 
         vadhumo_blocks = [b for b in blocks if b.get("text", "").strip().startswith("વધુમાં")]
         self.assertEqual(len(vadhumo_blocks), 0)
@@ -718,6 +739,118 @@ class TestDDKaravaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(body_blocks), 2, "Must have exactly 2 body paragraphs")
         self.assertIn("વધુમાં ફરિયાદી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", body_blocks[1]["text"])
         self.assertNotIn("આરોપી સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", body_blocks[1]["text"])
+
+    def test_37_dynamic_party_dropdown_all_six_options_independent_of_advocate_role(self):
+        """37. Verify all six options dynamically insert into main paragraph and preserve opening/signature."""
+        options = ["ફરિયાદી", "અરજદાર", "વાદી", "આરોપી", "સામાવાળા", "પ્રતિવાદી"]
+        user = {"advocate_name_gu": "રોનક સોલંકી"}
+        import asyncio
+
+        for opt in options:
+            with self.subTest(selected_option=opt):
+                values = {
+                    "template_id": "dd_karavani_arji",
+                    "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+                    "district": "ગાંધીનગર",
+                    "taluka": "કલોલ",
+                    "case_type": "ક્રિમિનલ કેસ",
+                    "case_number": "૧૨૩૪/૨૦૨૬",
+                    "party_1_role": "ફરીયાદી",
+                    "party_1_name": "રમેશભાઈ પટેલ",
+                    "party_2_role": "આરોપી",
+                    "party_2_name": "સુરેશભાઈ શાહ",
+                    "advocate_for": "party_2",
+                    "dismissal_reason": "ફરીયાદી આપ નામદાર કોર્ટ સમક્ષ હાજર રહેતા નથી તેમજ તેમના તરફે કોઈ વકીલશ્રી હાજર રહેતા નથી",
+                    "disinterested_party": opt,
+                    "date": "2026-11-20",
+                }
+                ctx = asyncio.run(server.build_render_context(user, None, values, "gu"))
+
+                # 1. Advocate role and signature must remain advocate for accused
+                self.assertEqual(ctx["advocate_for_role"], "આરોપી")
+                self.assertEqual(ctx["advocate_name"], "આરોપી ના એડવોકેટ")
+                self.assertEqual(ctx["disinterested_party"], opt)
+
+                rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+
+                # 2. Opening paragraph must preserve advocate for accused
+                self.assertIn("સદર કામમાં અમો આરોપી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", rendered)
+
+                # 3. Dynamic selection must be inserted exactly into main paragraph
+                expected_phrase = f"વધુમાં {opt} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ, જેથી સદર કેસ ડિસમીસ કરવા સારૂ યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી."
+                self.assertIn(expected_phrase, rendered)
+
+                # 4. Signature block must remain advocate for accused
+                self.assertIn("આરોપી ના એડવોકેટ", rendered)
+
+                # 5. Build blocks & generate actual PDF to verify layout
+                blocks = doc_generator.build_blocks(
+                    rendered,
+                    self.tpl["name_en"],
+                    self.tpl["name_gu"],
+                    self.tpl.get("settings", {}).get("block_align"),
+                )
+                body_blocks = [b for b in blocks if b.get("align") == "justify" and b.get("indent") is True]
+                self.assertEqual(len(body_blocks), 2, "Must have exactly 2 body paragraphs")
+                self.assertIn(f"વધુમાં {opt} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", body_blocks[1]["text"])
+
+                pdf_b64 = doc_generator.generate_pdf(
+                    blocks,
+                    language="gu",
+                    settings=self.tpl.get("settings"),
+                    template_id=self.tpl["id"],
+                    raw_content=rendered,
+                    ctx=ctx,
+                )
+                pdf_bytes = base64.b64decode(pdf_b64)
+                self.assertTrue(pdf_bytes.startswith(b"%PDF-"))
+                self.assertGreater(len(pdf_bytes), 1000)
+
+                import subprocess
+                res = subprocess.run(["pdftotext", "-", "-"], input=pdf_bytes, capture_output=True)
+                pdf_text = re.sub(r"\s+", " ", res.stdout.decode("utf-8", errors="replace"))
+                self.assertIn("સદર કામમાં અમો આરોપી ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...", pdf_text)
+                self.assertIn(f"વધુમાં {opt} સદર કેસ ચલાવવામાં રસ ધરાવતા ન હોઈ", pdf_text)
+                self.assertIn("આરોપી ના એડવોકેટ", pdf_text)
+
+    def test_38_dynamic_party_dropdown_english_all_six_options(self):
+        """38. Verify all six options map cleanly in English template without disturbing advocate role."""
+        mappings = [
+            ("complainant", "the Complainant"),
+            ("applicant", "the Applicant"),
+            ("plaintiff", "the Plaintiff"),
+            ("accused", "the Accused"),
+            ("opponent", "the Opponent"),
+            ("defendant", "the Defendant"),
+        ]
+        user = {"advocate_name_en": "Ronak Solanki"}
+        import asyncio
+
+        for raw_val, expected_en in mappings:
+            with self.subTest(selected_option=raw_val):
+                values = {
+                    "template_id": "dd_karavani_arji",
+                    "court_name": "Principal Civil Judge",
+                    "district": "Gandhinagar",
+                    "taluka": "Kalol",
+                    "case_type": "Criminal Case",
+                    "case_number": "1234/2026",
+                    "party_1_role": "Complainant",
+                    "party_1_name": "Rameshbhai Patel",
+                    "party_2_role": "Accused",
+                    "party_2_name": "Sureshbhai Shah",
+                    "advocate_for": "party_2",
+                    "dismissal_reason": "The complainant does not remain present before this Hon'ble Court nor does any advocate appear on their behalf",
+                    "disinterested_party": raw_val,
+                    "date": "2026-11-20",
+                }
+                ctx = asyncio.run(server.build_render_context(user, None, values, "en"))
+                self.assertEqual(ctx["advocate_for_role"], "Accused")
+                self.assertEqual(ctx["disinterested_party"], expected_en)
+
+                rendered = doc_generator.render_template(self.tpl["content_en"], ctx)
+                self.assertIn("In the said matter, we, the Advocate for Accused, humbly submit", rendered)
+                self.assertIn(f"Furthermore, {expected_en} is not interested in proceeding with the said case", rendered)
 
 
 if __name__ == "__main__":
