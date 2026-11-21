@@ -6458,6 +6458,292 @@ Place : {{place}}
 
 {{advocate_name}}""",
     },
+    {
+        "id": "warrant_rad_karvani_arji",
+        "name_gu": "વોરંટ રદ કરાવવા બાબત",
+        "name_en": "Application for Cancellation of Warrant",
+        "category": "Criminal",
+        "description": "Application for cancellation or recall of warrant on bona fide grounds.",
+        "status": "published",
+        "aliases": [
+            "warrant_rad",
+            "cancel warrant",
+            "recall warrant",
+            "વોરંટ રદ",
+            "વોરંટ રીકોલ",
+            "વોરંટ રદ કરાવવા બાબત",
+            "વોરંટ રદ કરવાની અરજી",
+            "warrant cancellation",
+            "cancellation of warrant",
+            "warrant_rad_karvani_arji",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટ નું નામ",
+                "type": "select",
+                "required": False,
+                "source": "court_name",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge Court", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ શ્રીની કોર્ટ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate Court", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "additional_chief_judicial_magistrate", "label_en": "Additional Chief Judicial Magistrate Court", "label_gu": "એડિશનલ ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "judicial_magistrate_first_class", "label_en": "Judicial Magistrate First Class Court", "label_gu": "જ્યુડિશિયલ મેજીસ્ટ્રેટ ફર્સ્ટ ક્લાસ સાહેબશ્રીની કોર્ટ"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                    {"value": "sessions_court", "label_en": "Sessions Court", "label_gu": "સેશન્સ કોર્ટ"},
+                    {"value": "special_court", "label_en": "Special Court", "label_gu": "સ્પેશિયલ કોર્ટ"},
+                    {"value": "commercial_court", "label_en": "Commercial Court", "label_gu": "કોમર્શિયલ કોર્ટ"},
+                    {"value": "other", "label_en": "Other", "label_gu": "અન્ય"},
+                ],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": False,
+                "source": "district",
+                "mode": ["saved_case", "direct_template"],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "ફરજીયાત નથી. જો તાલુકો પસંદ કરશો તો ડ્રાફ્ટિંગમાં તાલુકો આગળ અને જિલ્લો પાછળ આવશે (દા.ત. કલોલ, ગાંધીનગર).",
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસનો પ્રકાર",
+                "type": "select",
+                "required": False,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": False,
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "default": "ફરીયાદી",
+                "options": [
+                    {"value": "ફરીયાદી", "label_gu": "ફરીયાદી", "label_en": "Complainant"},
+                    {"value": "અરજદાર", "label_gu": "અરજદાર", "label_en": "Applicant"},
+                    {"value": "વાદી", "label_gu": "વાદી", "label_en": "Plaintiff"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": False,
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "default": "આરોપી",
+                "options": [
+                    {"value": "આરોપી", "label_gu": "આરોપી", "label_en": "Accused"},
+                    {"value": "સામાવાળા", "label_gu": "સામાવાળા", "label_en": "Opponent"},
+                    {"value": "પ્રતિવાદી", "label_gu": "પ્રતિવાદી", "label_en": "Defendant"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": False,
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Advocate For",
+                "label_gu": "કોના તરફે એડવોકેટ",
+                "type": "select",
+                "required": False,
+                "source": "case_parties",
+                "options": [
+                    {"value": "party_1", "label_gu": "પક્ષકાર-૧ તરફથી", "label_en": "Party 1 Side"},
+                    {"value": "party_2", "label_gu": "પક્ષકાર-૨ તરફથી", "label_en": "Party 2 Side"},
+                ],
+            },
+            {
+                "key": "warrant_date",
+                "label_en": "Date Warrant was Issued / Next Date",
+                "label_gu": "વોરંટ કાઢ્યાની તારીખ / આગામી મુદત",
+                "type": "date",
+                "required": False,
+            },
+            {
+                "key": "absence_reason",
+                "label_en": "Reason for Absence",
+                "label_gu": "ગેરહાજરીનું યોગ્ય કારણ",
+                "type": "select",
+                "required": False,
+                "options": [
+                    {"value": "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ", "label_gu": "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ", "label_en": "Went out of station for studies"},
+                    {"value": "માંદગીના", "label_gu": "માંદગીના", "label_en": "Due to illness"},
+                    {"value": "વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ", "label_gu": "વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ", "label_en": "Went out of station for business / occupation"},
+                    {"value": "સામાજીક કામમાં રોકાયેલ હોઈ", "label_gu": "સામાજીક કામમાં રોકાયેલ હોઈ", "label_en": "Engaged in social work"},
+                    {"value": "અમોના સગામાં અવસાન થયેલ હોઈ", "label_gu": "અમોના સગામાં અવસાન થયેલ હોઈ", "label_en": "Due to demise in family / relatives"},
+                    {"value": "અન્ય", "label_gu": "અન્ય", "label_en": "Other"},
+                ],
+            },
+            {
+                "key": "absence_reason_custom",
+                "label_en": "Custom Absence Reason",
+                "label_gu": "અન્ય કારણની વિગત",
+                "type": "text",
+                "required": False,
+                "placeholder": "અન્ય યોગ્ય કારણ લખો...",
+                "depends_on": "absence_reason=અન્ય",
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": False,
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "સ્થળ",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
+                "type": "text",
+                "required": False,
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True, "indent": False},
+                {"contains": "In the Court of the Hon'ble", "align": "center", "bold": True, "indent": False},
+                {"prefix": "મુકામ :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"prefix": "Place :-", "position": 2, "align": "center", "bold": False, "indent": False},
+                {"contains": "નં. :", "align": "right", "bold": False, "indent": False},
+                {"contains": "No. :", "align": "right", "bold": False, "indent": False},
+                {"prefix": "વિરુદ્ધ", "contains": "વિરુદ્ધ", "align": "center", "bold": False, "indent": False},
+                {"prefix": "Versus", "contains": "Versus", "align": "center", "bold": False, "indent": False},
+                {"contains": "બાબત :- વોરંટ રદ કરાવવા બાબત...", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"contains": "Subject :- Application for Cancellation of Warrant", "align": "center", "bold": True, "underline": True, "indent": False},
+                {"prefix": "સદર કામમાં", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "In the said matter", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "સદર કેસ", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "The said case is pending", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "વધુમાં,", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "Furthermore,", "align": "justify", "bold": False, "indent": True},
+                {"prefix": "તારીખ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Date :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "સ્થળ :", "align": "left", "bold": False, "indent": False},
+                {"prefix": "Place :", "align": "left", "bold": False, "indent": False},
+                {"contains": "----------", "align": "right", "bold": False, "indent": False},
+                {"contains": "--------------------", "align": "right", "bold": False, "indent": False},
+                {"contains": "ના એડવોકેટ", "align": "right", "bold": False, "indent": False},
+                {"contains": "Advocate for", "align": "right", "bold": False, "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
+મુકામ :- {{taluka_place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+વિરુદ્ધ
+
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત :- વોરંટ રદ કરાવવા બાબત...
+
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે તેમજ કેસની આગામી તા. {{warrant_date}} નિમવામાં આવેલ છે. અમોના અસીલ {{absence_reason}} કારણોસર આપ નામદાર કોર્ટમાં હાજર રહી શકેલ ન હોઈ, જેથી અમોના અસીલ પર વોરંટ કાઢવામાં આવેલ છે.
+
+વધુમાં, ગેરહાજર રહેવાનો કોઈ દુર્ભાવ કે આપ નામદાર કોર્ટની કાર્યવાહીમાં વિલંબ કરવાનો આશય નથી તેમજ હવે પછી કેસની દરેક તારીખે નિયમિત હાજર રહી આપ નામદાર કોર્ટની કાર્યવાહીમાં સંપૂર્ણ સહકાર આપીશું. જેથી સદર {{accused_name_role}} વિરુદ્ધ કાઢવામાં આવેલ વોરંટ રદ કરી કેસમાં આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """In the Court of the Hon'ble {{court_name}},
+
+Place :- {{taluka_place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+Versus
+
+{{party_2_role}} :- {{party_2_name}}
+
+Subject :- Application for Cancellation of Warrant
+
+In the said matter, we, the advocate for {{advocate_for_role}}, respectfully submit before this Hon'ble Court that.....
+
+The said case is pending before this Hon'ble Court and the next date of the case is fixed on {{warrant_date}}. Our client could not remain present before this Hon'ble Court due to {{absence_reason}} reason, hence a warrant has been issued against our client.
+
+Furthermore, there was no mala fide intention to remain absent or cause delay in the proceedings of this Hon'ble Court, and hereafter our client will remain regularly present on every date of the case and extend full cooperation in the proceedings of this Hon'ble Court. It is therefore prayed that this Hon'ble Court may be pleased to cancel the warrant issued against the said {{accused_name_role}} and pass appropriate orders for conducting further proceedings in the case.
+
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

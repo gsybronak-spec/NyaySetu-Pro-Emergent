@@ -484,14 +484,14 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
   },
   {
     baseKey: "warrant_rad_karvani_arji",
-    guId: "warrant_rad_karvani_arji_gu",
-    enId: "warrant_rad_karvani_arji_en",
-    name_gu: "વોરંટ રદ કરવાની અરજી",
-    name_en: "Application for Cancellation / Recall of Warrant",
+    guId: "warrant_rad_karvani_arji",
+    enId: "warrant_rad_karvani_arji",
+    name_gu: "વોરંટ રદ કરાવવા બાબત",
+    name_en: "Application for Cancellation of Warrant",
     category: "Criminal",
     description_gu: "કોર્ટ દ્વારા ઇસ્યુ થયેલ વોરંટ રદ કે રીકોલ કરવા યોગ્ય કારણો દર્શાવતી અરજી",
     description_en: "Application to cancel or recall a warrant issued against the accused on showing bona fide cause",
-    keywords_gu: ["વોરંટ રદ", "વોરંટ રીકોલ", "વોરંટ કેન્સલ", "બિનજામીન વોરંટ રદ", "વોરંટ માફી"],
+    keywords_gu: ["વોરંટ રદ", "વોરંટ રીકોલ", "વોરંટ કેન્સલ", "બિનજામીન વોરંટ રદ", "વોરંટ માફી", "વોરંટ રદ કરાવવા બાબત"],
     keywords_en: [
       "warrant cancellation",
       "cancel warrant",
@@ -511,6 +511,7 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
       "warrant recall",
       "વોરંટ રદ",
       "વોરંટ રીકોલ",
+      "વોરંટ રદ કરાવવા બાબત",
     ],
   },
 ];

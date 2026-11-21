@@ -34,10 +34,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'warrant_rad_karvani_arji',
-    guId: 'warrant_rad_karvani_arji_gu',
-    enId: 'warrant_rad_karvani_arji_en',
-    name_gu: 'વોરંટ રદ કરવાની અરજી',
-    name_en: 'Application for Cancellation / Recall of Warrant',
+    guId: 'warrant_rad_karvani_arji',
+    enId: 'warrant_rad_karvani_arji',
+    name_gu: 'વોરંટ રદ કરાવવા બાબત',
+    name_en: 'Application for Cancellation of Warrant',
     category: 'Criminal',
   },
   {

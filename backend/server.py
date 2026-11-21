@@ -402,6 +402,7 @@ _SETTING_DEFAULTS = {
         "fs_right_closure_application",
         "fs_right_reopen_application",
         "kam_board_par_levani_arji",
+        "warrant_rad_karvani_arji",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -2862,7 +2863,7 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji"):
+    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3554,6 +3555,17 @@ def _get_canonical_kam_board_par_levani_arji_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "kam_board_par_levani_arji"), None)
 
 
+def _get_canonical_warrant_rad_karvani_arji_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "warrant_rad_karvani_arji"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "warrant_rad_karvani_arji"), None)
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     if db is None:
@@ -4067,6 +4079,51 @@ async def _ensure_seed_complete() -> None:
                         if needs_update:
                             await doc_ref_kam_board.update(update_dict)
                             invalidate_published_templates_cache()
+
+            if "warrant_rad_karvani_arji" not in deleted_ids:
+                doc_ref_warrant_rad = db.collection("templates").document("warrant_rad_karvani_arji")
+                snap_warrant_rad = await doc_ref_warrant_rad.get()
+                warrant_rad_seed = _get_canonical_warrant_rad_karvani_arji_template()
+                if warrant_rad_seed:
+                    if not snap_warrant_rad.exists:
+                        await doc_ref_warrant_rad.set({
+                            **warrant_rad_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
+                    else:
+                        cur_wr = snap_warrant_rad.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_wr.get("content_gu") != warrant_rad_seed["content_gu"]:
+                            update_dict["content_gu"] = warrant_rad_seed["content_gu"]
+                            needs_update = True
+                        if cur_wr.get("content_en") != warrant_rad_seed["content_en"]:
+                            update_dict["content_en"] = warrant_rad_seed["content_en"]
+                            needs_update = True
+                        if cur_wr.get("settings") != warrant_rad_seed["settings"]:
+                            update_dict["settings"] = warrant_rad_seed["settings"]
+                            needs_update = True
+                        if cur_wr.get("fields") != warrant_rad_seed.get("fields"):
+                            update_dict["fields"] = warrant_rad_seed["fields"]
+                            needs_update = True
+                        if cur_wr.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_wr.get("category") != warrant_rad_seed.get("category"):
+                            update_dict["category"] = warrant_rad_seed["category"]
+                            needs_update = True
+                        if cur_wr.get("name_gu") != warrant_rad_seed.get("name_gu"):
+                            update_dict["name_gu"] = warrant_rad_seed["name_gu"]
+                            needs_update = True
+                        if cur_wr.get("name_en") != warrant_rad_seed.get("name_en"):
+                            update_dict["name_en"] = warrant_rad_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_warrant_rad.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -4494,6 +4551,44 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "warrant_rad_karvani_arji" or t.get("template_id") == "warrant_rad_karvani_arji"):
+                warrant_rad_seed = _get_canonical_warrant_rad_karvani_arji_template()
+                if warrant_rad_seed:
+                    needs_update = False
+                    if t.get("content_gu") != warrant_rad_seed["content_gu"]:
+                        t["content_gu"] = warrant_rad_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != warrant_rad_seed["content_en"]:
+                        t["content_en"] = warrant_rad_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != warrant_rad_seed["settings"]:
+                        t["settings"] = warrant_rad_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != warrant_rad_seed.get("fields"):
+                        t["fields"] = warrant_rad_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != warrant_rad_seed.get("name_gu"):
+                        t["name_gu"] = warrant_rad_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != warrant_rad_seed.get("name_en"):
+                        t["name_en"] = warrant_rad_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != warrant_rad_seed.get("category"):
+                        t["category"] = warrant_rad_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "warrant_rad_karvani_arji")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -4680,6 +4775,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("kam_board_par_levani_arji").set({
                             **kam_board_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_warrant_rad = any((t.get("id") == "warrant_rad_karvani_arji" or t.get("template_id") == "warrant_rad_karvani_arji") for t in db_templates)
+        if not found_warrant_rad and "warrant_rad_karvani_arji" not in deleted_ids:
+            warrant_rad_seed = _get_canonical_warrant_rad_karvani_arji_template()
+            if warrant_rad_seed:
+                db_templates.append(dict(warrant_rad_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("warrant_rad_karvani_arji").set({
+                            **warrant_rad_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -5197,6 +5308,44 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "warrant_rad_karvani_arji" or template_id in ("warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en") or base_cand == "warrant_rad_karvani_arji"):
+            warrant_rad_seed = _get_canonical_warrant_rad_karvani_arji_template()
+            if warrant_rad_seed:
+                needs_update = False
+                if t.get("content_gu") != warrant_rad_seed["content_gu"]:
+                    t["content_gu"] = warrant_rad_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != warrant_rad_seed["content_en"]:
+                    t["content_en"] = warrant_rad_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != warrant_rad_seed["settings"]:
+                    t["settings"] = warrant_rad_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != warrant_rad_seed.get("fields"):
+                    t["fields"] = warrant_rad_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != warrant_rad_seed.get("name_gu"):
+                    t["name_gu"] = warrant_rad_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != warrant_rad_seed.get("name_en"):
+                    t["name_en"] = warrant_rad_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != warrant_rad_seed.get("category"):
+                    t["category"] = warrant_rad_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -5258,6 +5407,11 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         kam_board_seed = _get_canonical_kam_board_par_levani_arji_template()
         if kam_board_seed and "kam_board_par_levani_arji" not in deleted_ids:
             return {**kam_board_seed, "format_version": kam_board_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand == "warrant_rad_karvani_arji" or template_id in ("warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en")):
+        warrant_rad_seed = _get_canonical_warrant_rad_karvani_arji_template()
+        if warrant_rad_seed and "warrant_rad_karvani_arji" not in deleted_ids:
+            return {**warrant_rad_seed, "format_version": warrant_rad_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t:
         for cand in lookup_candidates:
@@ -6299,7 +6453,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -6309,7 +6463,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -6421,7 +6575,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 ctx["advocate_name"] = "આરોપીના"
 
     # Exemption Application (હાજરી મુક્તિ આપવા બાબત... (એક્ઝામ્પ્શન રીપોર્ટ))
-    is_exemption_app = (tpl_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance") or "absence_reason" in ctx or "absence_reason" in values)
+    is_exemption_app = (tpl_id in ("exemption_arji", "exemption_arji_gu", "exemption_arji_en", "exemption_application", "exemption_appearance") or ("absence_reason" in ctx and tpl_id not in ("warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en") and "warrant_date" not in ctx and "warrant_date" not in values))
     if is_exemption_app:
         if _tal and _dist:
             ctx["place"] = f"{_tal}, {_dist}"
@@ -6658,19 +6812,98 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             if ctx.get("urgent_reason") in urgent_reason_map_en:
                 ctx["urgent_reason"] = urgent_reason_map_en[ctx["urgent_reason"]]
 
-    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji & kam_board_par_levani_arji template keys are clean strings (never None or undefined)
+    # Warrant Rad Karvani Arji (વોરંટ રદ કરાવવા બાબત / Application for Cancellation of Warrant)
+    is_warrant_rad_app = (tpl_id in ("warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en") or "warrant_date" in ctx or "warrant_date" in values)
+    if is_warrant_rad_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        # Format warrant_date if YYYY-MM-DD
+        _wd = ctx.get("warrant_date") or ctx.get("scheduled_date")
+        if isinstance(_wd, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", _wd):
+            _wd_formatted = f"{_wd[8:10]}/{_wd[5:7]}/{_wd[0:4]}"
+            ctx["warrant_date"] = _wd_formatted
+            ctx["scheduled_date"] = _wd_formatted
+        elif _wd:
+            ctx["warrant_date"] = str(_wd)
+            ctx["scheduled_date"] = str(_wd)
+
+        raw_warrant_reason = str(ctx.get("absence_reason") or "").strip()
+        custom_warrant_reason = str(ctx.get("absence_reason_custom") or ctx.get("absence_reason_other") or "").strip()
+        if raw_warrant_reason in ("અન્ય", "other", "Other"):
+            ctx["absence_reason"] = custom_warrant_reason if custom_warrant_reason else ("અન્ય" if language == "gu" else "Other")
+        elif not raw_warrant_reason and custom_warrant_reason:
+            ctx["absence_reason"] = custom_warrant_reason
+        else:
+            ctx["absence_reason"] = raw_warrant_reason
+            ctx["absence_reason_custom"] = ""
+            ctx["absence_reason_other"] = ""
+
+        # Accused role designation in paragraph: party_2_role or accused
+        p2_role = str(ctx.get("party_2_role") or "").strip()
+        ctx["accused_name_role"] = p2_role if p2_role else ("આરોપી" if language == "gu" else "Accused")
+
+        # Advocate designation
+        adv_role = str(ctx.get("advocate_for_role") or "").strip()
+        if not adv_role:
+            adv_for = str(ctx.get("advocate_for") or "").strip()
+            if adv_for == "party_1":
+                adv_role = str(ctx.get("party_1_role") or "ફરીયાદી").strip()
+            elif adv_for == "party_2":
+                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
+            elif adv_for in ("complainant", "applicant", "plaintiff"):
+                adv_role = str(ctx.get("party_1_role") or "ફરીયાદી").strip()
+            elif adv_for in ("accused", "opponent", "defendant"):
+                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
+            elif adv_for:
+                adv_role = adv_for
+            else:
+                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
+        ctx["advocate_for_role"] = adv_role
+
+        if not ctx.get("advocate_name"):
+            if language == "gu":
+                ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
+            else:
+                ctx["advocate_name"] = f"Advocate for {adv_role}"
+
+        if language == "en":
+            warrant_reason_map_en = {
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ": "having gone out of station for studies",
+                "માંદગીના": "illness",
+                "વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ": "having gone out of station for business / occupation",
+                "સામાજીક કામમાં રોકાયેલ હોઈ": "being engaged in social work",
+                "અમોના સગામાં અવસાન થયેલ હોઈ": "demise in family / relatives",
+                "અન્ય": "other reasons",
+                "Other": "other reasons",
+            }
+            if ctx.get("absence_reason") in warrant_reason_map_en:
+                ctx["absence_reason"] = warrant_reason_map_en[ctx["absence_reason"]]
+
+    # Ensure closing_purshish, closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji, kam_board_par_levani_arji & warrant_rad_karvani_arji template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
         "case_type", "case_number",
         "party_1_role", "party_1_name", "party_2_role", "party_2_name",
         "advocate_for", "advocate_for_role", "closed_party", "closed_party_role",
         "argument_failure_reason", "argument_failure_reason_custom",
-        "absence_reason", "absence_reason_custom",
+        "absence_reason", "absence_reason_custom", "absence_reason_other",
         "dismissal_reason", "dismissal_reason_custom",
         "disinterested_party", "disinterested_party_role",
         "adjournment_reason", "other_adjournment_reason", "adjournment_reason_custom",
         "fs_failure_reason", "fs_failure_reason_custom", "fs_failure_reason_other",
         "scheduled_date", "urgent_reason", "urgent_reason_custom",
+        "warrant_date", "accused_name_role",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:

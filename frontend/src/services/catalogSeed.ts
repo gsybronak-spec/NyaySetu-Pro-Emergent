@@ -2193,6 +2193,7 @@ export const SEED_TEMPLATE_ORDER: string[] = [
   "fs_right_closure_application",
   "fs_right_reopen_application",
   "kam_board_par_levani_arji",
+  "warrant_rad_karvani_arji",
 ];
 
 export const SEED_PUBLISHED_TEMPLATES: any[] = [
@@ -2286,6 +2287,13 @@ export const SEED_PUBLISHED_TEMPLATES: any[] = [
     name_gu: "કામ બોર્ડ પર લેવા બાબત",
     name_en: "Application for Taking the Matter on Board",
     category: "General",
+  },
+  {
+    id: "warrant_rad_karvani_arji",
+    template_id: "warrant_rad_karvani_arji",
+    name_gu: "વોરંટ રદ કરાવવા બાબત",
+    name_en: "Application for Cancellation of Warrant",
+    category: "Criminal",
   },
 ];
 
