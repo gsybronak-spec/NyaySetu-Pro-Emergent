@@ -3368,6 +3368,8 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
         payload["custom_court_name_en"] = None
         payload["court_custom"] = None
 
+    if not _CATALOG_MAPS_SYNCED:
+        await _refresh_catalog_maps()
     validate_case_refs(payload)
     validate_custom_fields(payload.get("custom_fields"))
     client_ctx = client_ctx_from(payload)
@@ -3458,6 +3460,8 @@ async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
         updates["court_custom"] = None
 
     merged_payload = {**existing, **updates}
+    if not _CATALOG_MAPS_SYNCED:
+        await _refresh_catalog_maps()
     validate_case_refs(merged_payload, existing=existing)
 
     # custom_fields: merge into existing so admin-configured values are never lost.
@@ -13636,6 +13640,7 @@ async def create_indexes():
 
         if is_seeded is True:
             logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding bypassed.")
+            await _refresh_catalog_maps()
             # In serverless production, super_admin is already seeded; avoid cold-start queries.
             if not os.environ.get("VERCEL") and not _PRODUCTION:
                 try:
