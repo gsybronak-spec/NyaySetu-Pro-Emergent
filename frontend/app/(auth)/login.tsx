@@ -3,7 +3,7 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 
 import { Button } from "@/src/components/Button";
 import { Field } from "@/src/components/Field";
@@ -12,6 +12,7 @@ import { useGoogleAuth } from "@/src/hooks/useGoogleAuth";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
+import { storage } from "@/src/utils/storage";
 import {
   destroyFirebaseRecaptcha,
   firebaseConfigured as fbConfigured,
@@ -39,6 +40,32 @@ export default function Login() {
   // container to be empty, and this anchor is invisible — no checkbox, no
   // badge, no visible container is ever rendered on the login page.
   const recaptchaAnchorRef = useRef<View | null>(null);
+
+  const searchParams = useLocalSearchParams<{ ref?: string; referral?: string; coupon?: string; code?: string }>();
+
+  // Auto-detect and pre-fill coupon/referral code from link or storage
+  useEffect(() => {
+    (async () => {
+      let code = searchParams?.coupon || searchParams?.ref || searchParams?.referral || searchParams?.code;
+      if (!code && Platform.OS === "web" && typeof window !== "undefined") {
+        try {
+          const urlParams = new URLSearchParams(window.location.search);
+          code = urlParams.get("coupon") || urlParams.get("ref") || urlParams.get("referral") || urlParams.get("code") || undefined;
+        } catch {
+          // Safe fallback
+        }
+      }
+      if (!code) {
+        code = (await storage.getItem("nyaysetu_pending_referral", "")) || undefined;
+      }
+      if (code && typeof code === "string" && code.trim()) {
+        const clean = code.trim().toUpperCase();
+        setReferral(clean);
+        setShowReferral(true);
+        await storage.setItem("nyaysetu_pending_referral", clean);
+      }
+    })();
+  }, [searchParams]);
 
   // Destroy the invisible reCAPTCHA widget when leaving the login screen so no
   // stale widget/iframe is ever left behind.
@@ -218,15 +245,27 @@ export default function Login() {
                 <Button testID="login-password-button" title="Login" loading={loading} onPress={submitPassword} />
 
                 {showReferral ? (
-                  <Field
-                    testID="login-referral-input"
-                    label="Referral Code (optional)"
-                    labelColor="#D1D8E5"
-                    placeholder="e.g. NSA1B2C3"
-                    autoCapitalize="characters"
-                    value={referral}
-                    onChangeText={setReferral}
-                  />
+                  <>
+                    <Field
+                      testID="login-referral-input"
+                      label="Referral / Coupon Code"
+                      labelColor="#D1D8E5"
+                      placeholder="e.g. LAUNCH50"
+                      autoCapitalize="characters"
+                      value={referral}
+                      onChangeText={setReferral}
+                    />
+                    {referral.trim().toUpperCase() === "LAUNCH50" && (
+                      <View style={{ backgroundColor: "#062215", borderColor: "#10B981", borderWidth: 1, borderRadius: Radius.sm, padding: Spacing.sm, marginTop: 4, marginBottom: Spacing.xs }}>
+                        <Text style={{ color: "#34D399", fontSize: 12, fontWeight: "700" }}>
+                          🎉 Launch Offer Applied: LAUNCH50
+                        </Text>
+                        <Text style={{ color: "#A7F3D0", fontSize: 11, marginTop: 2 }}>
+                          First 100 new accounts receive 50 free template credits!
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <Pressable testID="login-referral-toggle" onPress={() => setShowReferral(true)} style={{ marginTop: Spacing.md }}>
                     <Text style={{ color: "#C5A059", fontSize: 13, fontWeight: "600" }}>Have a referral code?</Text>
@@ -251,15 +290,27 @@ export default function Login() {
                 />
 
                 {showReferral ? (
-                  <Field
-                    testID="login-referral-input"
-                    label="Referral Code (optional)"
-                    labelColor="#D1D8E5"
-                    placeholder="e.g. NSA1B2C3"
-                    autoCapitalize="characters"
-                    value={referral}
-                    onChangeText={setReferral}
-                  />
+                  <>
+                    <Field
+                      testID="login-referral-input"
+                      label="Referral / Coupon Code"
+                      labelColor="#D1D8E5"
+                      placeholder="e.g. LAUNCH50"
+                      autoCapitalize="characters"
+                      value={referral}
+                      onChangeText={setReferral}
+                    />
+                    {referral.trim().toUpperCase() === "LAUNCH50" && (
+                      <View style={{ backgroundColor: "#062215", borderColor: "#10B981", borderWidth: 1, borderRadius: Radius.sm, padding: Spacing.sm, marginTop: 4, marginBottom: Spacing.xs }}>
+                        <Text style={{ color: "#34D399", fontSize: 12, fontWeight: "700" }}>
+                          🎉 Launch Offer Applied: LAUNCH50
+                        </Text>
+                        <Text style={{ color: "#A7F3D0", fontSize: 11, marginTop: 2 }}>
+                          First 100 new accounts receive 50 free template credits!
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <Pressable testID="login-referral-toggle" onPress={() => setShowReferral(true)} style={{ marginBottom: Spacing.md }}>
                     <Text style={{ color: "#C5A059", fontSize: 13, fontWeight: "600" }}>Have a referral code?</Text>

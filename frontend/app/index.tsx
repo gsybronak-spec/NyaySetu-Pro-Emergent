@@ -7,10 +7,25 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Spacing } from "@/src/theme/tokens";
+import { storage } from "@/src/utils/storage";
 
 export default function Index() {
   const { ready, user } = useAuth();
   const { colors } = useTheme();
+
+  useEffect(() => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get("coupon") || urlParams.get("ref") || urlParams.get("referral") || urlParams.get("code");
+        if (code && code.trim()) {
+          storage.setItem("nyaysetu_pending_referral", code.trim().toUpperCase()).catch(() => {});
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+  }, []);
 
   if (!ready) {
     return (
@@ -29,7 +44,17 @@ export default function Index() {
   }
 
   const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? true;
-  return <Redirect href={user ? (isComplete ? "/(tabs)/home" : "/profile-completion" as any) : "/(auth)/login"} />;
+  let target = user ? (isComplete ? "/(tabs)/home" : "/profile-completion" as any) : "/(auth)/login";
+  if (!user && Platform.OS === "web" && typeof window !== "undefined") {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("coupon") || urlParams.get("ref") || urlParams.get("referral") || urlParams.get("code");
+      if (code && code.trim()) {
+        target = `/(auth)/login?coupon=${encodeURIComponent(code.trim().toUpperCase())}`;
+      }
+    } catch {}
+  }
+  return <Redirect href={target as any} />;
 }
 
 const styles = StyleSheet.create({

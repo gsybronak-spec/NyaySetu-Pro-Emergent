@@ -1003,14 +1003,128 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
 
 
 REFERRAL_REWARD = 10
+LAUNCH_COUPON_CODES = {"LAUNCH50", "NYAY50", "NYAYSETU50"}
+LAUNCH_COUPON_MAX_CLAIMS = 100
+LAUNCH_COUPON_CREDITS = 50
+
+
+async def apply_launch_coupon(code: str, new_user: dict) -> bool:
+    """Apply the launch promo coupon for the first 100 new users.
+    Grants 50 free template credits to the new user's wallet.
+    Once 100 claims are reached, returns False and standard credits remain."""
+    if db is None or not code or code.upper() not in LAUNCH_COUPON_CODES:
+        return False
+    
+    clean_code = code.upper()
+    try:
+        coupon_ref = db.collection("coupons").document(clean_code)
+        coupon_snap = await coupon_ref.get()
+        coupon_data = coupon_snap.to_dict() if coupon_snap.exists else None
+        current_claims = (coupon_data or {}).get("claimed_count", 0)
+        
+        if current_claims >= LAUNCH_COUPON_MAX_CLAIMS:
+            # 100 slots exhausted: do nothing, user keeps standard default credits
+            return False
+        
+        # Anti-abuse: check if this user already claimed it
+        claim_id = f"{clean_code}_{new_user['id']}"
+        claim_ref = db.collection("coupon_claims").document(claim_id)
+        claim_snap = await claim_ref.get()
+        if claim_snap.exists:
+            return True
+        
+        # Record claim
+        claim_doc = {
+            "id": claim_id,
+            "code": clean_code,
+            "user_id": new_user["id"],
+            "user_name": new_user.get("name"),
+            "user_mobile": new_user.get("mobile"),
+            "user_email": new_user.get("email"),
+            "credits_granted": LAUNCH_COUPON_CREDITS,
+            "created_at": now().isoformat(),
+        }
+        await claim_ref.set(claim_doc)
+        
+        # Atomically update coupon claimed count
+        if not coupon_snap.exists:
+            await coupon_ref.set({
+                "code": clean_code,
+                "credit_reward": LAUNCH_COUPON_CREDITS,
+                "max_claims": LAUNCH_COUPON_MAX_CLAIMS,
+                "claimed_count": 1,
+                "active": True,
+                "created_at": now().isoformat(),
+                "updated_at": now().isoformat(),
+            })
+        else:
+            await coupon_ref.update({
+                "claimed_count": firestore.Increment(1),
+                "updated_at": now().isoformat(),
+            })
+        
+        # Update user's wallet to 50 free credits
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", new_user["id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        
+        if wallet_doc:
+            await wallet_doc.reference.update({
+                "balance": LAUNCH_COUPON_CREDITS,
+                "free_credits_granted": LAUNCH_COUPON_CREDITS,
+                "updated_at": now().isoformat(),
+            })
+        else:
+            await db.collection("wallets").document(str(uuid.uuid4())).set({
+                "user_id": new_user["id"],
+                "balance": LAUNCH_COUPON_CREDITS,
+                "free_credits_granted": LAUNCH_COUPON_CREDITS,
+                "total_used": 0,
+                "updated_at": now().isoformat(),
+            })
+        
+        # Record transaction log
+        txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+        txn_doc = {
+            "id": txn_id,
+            "user_id": new_user["id"],
+            "type": "launch_promo_grant",
+            "coupon_code": clean_code,
+            "amount": LAUNCH_COUPON_CREDITS,
+            "description": f"Launch Offer: {LAUNCH_COUPON_CREDITS} Free Template Credits ({clean_code})",
+            "status": "completed",
+            "created_at": now().isoformat(),
+        }
+        await db.collection("transactions").document(txn_id).set(txn_doc)
+        
+        # Mark coupon on user profile
+        await db.collection("users").document(new_user["id"]).set({
+            "coupon_code": clean_code,
+            "launch_promo_applied": True,
+        }, merge=True)
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error applying launch coupon {code}: {e}")
+        return False
 
 
 async def apply_referral(referral_code: Optional[str], new_user: dict):
-    """Reward the referrer with free templates. Anti-abuse: no self-referral,
-    one reward per referred user."""
+    """Reward the referrer with free templates, or apply launch coupon.
+    Anti-abuse: no self-referral, one reward per referred user."""
     if not referral_code:
         return
     code = referral_code.strip().upper()
+    
+    # Check if this is a launch promo coupon
+    if code in LAUNCH_COUPON_CODES:
+        applied = await apply_launch_coupon(code, new_user)
+        if applied:
+            return
+        # If 100 slots exhausted, user keeps default 5 signup credits
+        return
+
     _d = [x async for x in db.collection('users').where(filter=firestore.FieldFilter('referral_code', '==', code)).limit(1).stream()]
     referrer = _d[0].to_dict() if _d else None
     if not referrer:
@@ -8712,6 +8826,33 @@ async def referral_me(user=Depends(get_user)):
         "total_referred": len(refs),
         "total_reward_credits": total_reward,
         "referrals": refs,
+    }
+
+
+@api.get("/coupon/status")
+async def get_coupon_status(code: str = "LAUNCH50"):
+    """Check availability and remaining claims for promotional launch coupons."""
+    clean_code = (code or "LAUNCH50").strip().upper()
+    if clean_code not in LAUNCH_COUPON_CODES:
+        raise HTTPException(404, f"Coupon '{code}' not found")
+    
+    current_claims = 0
+    if db is not None:
+        try:
+            coupon_snap = await db.collection("coupons").document(clean_code).get()
+            if coupon_snap.exists:
+                current_claims = (coupon_snap.to_dict() or {}).get("claimed_count", 0)
+        except Exception:
+            current_claims = 0
+    
+    remaining = max(0, LAUNCH_COUPON_MAX_CLAIMS - current_claims)
+    return {
+        "code": clean_code,
+        "credit_reward": LAUNCH_COUPON_CREDITS,
+        "max_claims": LAUNCH_COUPON_MAX_CLAIMS,
+        "claimed_count": current_claims,
+        "remaining": remaining,
+        "is_active": remaining > 0,
     }
 
 

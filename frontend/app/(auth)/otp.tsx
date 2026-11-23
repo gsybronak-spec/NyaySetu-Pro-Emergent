@@ -13,6 +13,7 @@ import {
   getPendingPhoneConfirmation,
 } from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
+import { storage } from "@/src/utils/storage";
 
 export default function Otp() {
   const { mobile, referral, firebase } = useLocalSearchParams<{ mobile: string; referral?: string; firebase?: string }>();
@@ -27,6 +28,8 @@ export default function Otp() {
       return;
     }
     try {
+      const storedRef = (await storage.getItem("nyaysetu_pending_referral", "")) || undefined;
+      const effectiveRef = referral ? String(referral).trim() : storedRef;
       // Firebase phone-auth OTP: confirm with Firebase, exchange the ID token.
       if (firebase === "1") {
         const confirmation = getPendingPhoneConfirmation();
@@ -35,12 +38,14 @@ export default function Otp() {
           return;
         }
         const idToken = await firebaseConfirmPhoneOtp(confirmation, otp);
-        const { is_new, is_profile_complete, profile_completed } = await firebaseExchange(idToken, referral ? String(referral) : undefined);
+        const { is_new, is_profile_complete, profile_completed } = await firebaseExchange(idToken, effectiveRef);
+        await storage.removeItem("nyaysetu_pending_referral");
         const isComplete = profile_completed ?? is_profile_complete ?? true;
         router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
         return;
       }
-      const { is_new, is_profile_complete, profile_completed } = await verifyOtp(String(mobile), otp, referral ? String(referral) : undefined);
+      const { is_new, is_profile_complete, profile_completed } = await verifyOtp(String(mobile), otp, effectiveRef);
+      await storage.removeItem("nyaysetu_pending_referral");
       const isComplete = profile_completed ?? is_profile_complete ?? true;
       router.replace((isComplete ? "/(tabs)/home" : "/profile-completion") as any);
     } catch (e: any) {
