@@ -325,6 +325,18 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
   const update = (k: keyof CaseFormValues, v: any) => {
     if (formError) setFormError(null);
+    if (k === "complaint_type" && v === "private") {
+      setForm((f) => ({ ...f, complaint_type: v, police_station_id: null, police_station_custom: "" }));
+      setCustomValues((prev) => {
+        const next = { ...prev };
+        delete next.fir_number;
+        delete next.police_station;
+        delete next.investigating_officer;
+        delete next.arrest_date;
+        return next;
+      });
+      return;
+    }
     setForm((f) => ({ ...f, [k]: v }));
   };
   const updateCustom = (k: string, v: any) => {
@@ -409,7 +421,19 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       .map((k) => ({ key: k, label_en: k, label_gu: k, type: "text", required: false, order: 99 }));
   }, [dynamicFields, initial?.custom_fields]);
 
-  const allDynamicFields = useMemo(() => [...dynamicFields, ...orphanCustomFields], [dynamicFields, orphanCustomFields]);
+  const allDynamicFields = useMemo(() => {
+    const fields = [...dynamicFields, ...orphanCustomFields];
+    if (form.complaint_type === "private") {
+      return fields.filter(
+        (df) =>
+          df.key !== "fir_number" &&
+          df.key !== "police_station" &&
+          df.key !== "investigating_officer" &&
+          df.key !== "arrest_date"
+      );
+    }
+    return fields;
+  }, [dynamicFields, orphanCustomFields, form.complaint_type]);
 
   const handleFormSubmit = () => {
     if (saving) return;
@@ -437,7 +461,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     // 1. Resolve autofill_map against client context for any empty mapped fields (D1).
     const ctx = buildClientContext(form, districts);
     const finalCustom: Record<string, any> = { ...customValues };
-    for (const df of dynamicFields) {
+    if (form.complaint_type === "private") {
+      delete finalCustom.fir_number;
+      delete finalCustom.police_station;
+      delete finalCustom.investigating_officer;
+      delete finalCustom.arrest_date;
+    }
+    for (const df of allDynamicFields) {
       const am = df.autofill_map;
       if (am && (finalCustom[df.key] === undefined || finalCustom[df.key] === "")) {
         const val = resolveAutofill(am, ctx);
@@ -451,6 +481,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     const d = districts.find((x) => x.id === form.district_id);
     const payload: any = {
       ...form,
+      police_station_id: form.complaint_type === "private" ? null : form.police_station_id,
+      police_station_custom: form.complaint_type === "private" ? "" : form.police_station_custom,
       court_id: isCustomCourt ? null : form.court_id,
       court_source: isCustomCourt ? "custom" : "catalog",
       custom_court_name_gu: isCustomCourt ? form.custom_court_name_gu?.trim() : null,
@@ -991,19 +1023,6 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             <Field testID="case-type-custom" label="Other Case Type" placeholder="Enter case type" value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
           )}
 
-          {/* Dynamic Admin Fields */}
-          {allDynamicFields.length > 0 && (
-            <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
-              <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
-                {language === "gu"
-                  ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
-                  : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
-              </Text>
-              {allDynamicFields.map((df) => renderDynamicField(df))}
-            </View>
-          )}
-
           {showComplaint && (
             <Dropdown
               testID="complaint-type"
@@ -1069,6 +1088,19 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
           {showOther && (
             <Field testID="complaint-custom" label="Other Complaint Type" placeholder="Describe complaint type" value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
+          )}
+
+          {/* Dynamic Admin Fields */}
+          {allDynamicFields.length > 0 && (
+            <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
+              <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
+              <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
+                {language === "gu"
+                  ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
+                  : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
+              </Text>
+              {allDynamicFields.map((df) => renderDynamicField(df))}
+            </View>
           )}
 
           <View style={{ height: Spacing.md }} />

@@ -3198,6 +3198,11 @@ def enrich_case(c: dict) -> dict:
     else:
         c["police_station_label"] = c.get("police_station_custom") or c.get("police_station") or None
     c["complaint_label"] = _COMPLAINT_LABELS.get(c.get("complaint_type")) if c.get("complaint_type") else None
+    if c.get("complaint_type") == "private":
+        c["police_station_label"] = None
+        c["police_station"] = None
+        c["police_station_id"] = None
+        c["police_station_custom"] = None
     return c
 
 
@@ -3368,6 +3373,16 @@ async def create_case(req: CaseCreate, user=Depends(get_user)):
         payload["custom_court_name_en"] = None
         payload["court_custom"] = None
 
+    if payload.get("complaint_type") == "private":
+        payload["police_station_id"] = None
+        payload["police_station"] = None
+        payload["police_station_custom"] = None
+        if isinstance(payload.get("custom_fields"), dict):
+            payload["custom_fields"].pop("fir_number", None)
+            payload["custom_fields"].pop("police_station", None)
+            payload["custom_fields"].pop("investigating_officer", None)
+            payload["custom_fields"].pop("arrest_date", None)
+
     if not _CATALOG_MAPS_SYNCED:
         await _refresh_catalog_maps()
     validate_case_refs(payload)
@@ -3460,6 +3475,24 @@ async def update_case(case_id: str, req: CaseUpdate, user=Depends(get_user)):
         updates["court_custom"] = None
 
     merged_payload = {**existing, **updates}
+    if merged_payload.get("complaint_type") == "private":
+        updates["police_station_id"] = None
+        updates["police_station"] = None
+        updates["police_station_custom"] = None
+        merged_payload["police_station_id"] = None
+        merged_payload["police_station"] = None
+        merged_payload["police_station_custom"] = None
+        if isinstance(updates.get("custom_fields"), dict):
+            updates["custom_fields"].pop("fir_number", None)
+            updates["custom_fields"].pop("police_station", None)
+            updates["custom_fields"].pop("investigating_officer", None)
+            updates["custom_fields"].pop("arrest_date", None)
+        if isinstance(merged_payload.get("custom_fields"), dict):
+            merged_payload["custom_fields"].pop("fir_number", None)
+            merged_payload["custom_fields"].pop("police_station", None)
+            merged_payload["custom_fields"].pop("investigating_officer", None)
+            merged_payload["custom_fields"].pop("arrest_date", None)
+
     if not _CATALOG_MAPS_SYNCED:
         await _refresh_catalog_maps()
     validate_case_refs(merged_payload, existing=existing)
