@@ -88,9 +88,9 @@ elif os.environ.get("RENDER", "").strip().lower() == "true" and not _PRODUCTION:
         "Render dashboard; until then the development JWT fallback is in use."
     )
 
-# Admin seed — loaded from env, with authoritative fallback defaults
+# Admin seed — loaded securely from environment variables (no hardcoded password fallback)
 ADMIN_SEED_EMAIL = os.environ.get("ADMIN_SEED_EMAIL") or "admin@nyaysetu.com"
-ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD") or "NyaySetu@Admin2026!"
+ADMIN_SEED_PASSWORD = os.environ.get("ADMIN_SEED_PASSWORD", "")
 
 def _is_auto_seed_enabled() -> bool:
     if "PYTEST_CURRENT_TEST" in os.environ or os.environ.get("TESTING") == "true":
@@ -336,7 +336,10 @@ def rate_limit(key: str, limit: int, window_sec: int = 60) -> bool:
             return False
         bucket.append(now)
         if len(_rate_buckets) > 10000:
-            _rate_buckets.clear()
+            # Evict only empty or expired buckets instead of wiping active rate-limit buckets
+            stale_keys = [k for k, b in _rate_buckets.items() if not b or b[-1] <= now - window_sec]
+            for k in stale_keys:
+                _rate_buckets.pop(k, None)
         return True
 
 
@@ -2818,6 +2821,8 @@ async def _get_deleted_template_ids() -> set[str]:
     try:
         catalog_tombstones = await _get_deleted_catalog_ids("template")
         raw_ids.update(catalog_tombstones)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning(f"Failed to fetch deleted_catalog_items via _get_deleted_catalog_ids: {e}")
 
@@ -8455,29 +8460,41 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
     if not _razorpay_verify_signature(req.order_id, req.payment_id, req.signature):
         raise HTTPException(400, "Payment signature verification failed")
 
-    # Idempotency: a transaction already recorded for this payment_id means
-    # credits were already granted — never grant twice.
+    # Authoritative Plan: ALWAYS read plan from saved order to prevent client plan-tampering!
+    order_plan_id = order.get("plan_id")
+    if not order_plan_id:
+        raise HTTPException(400, "Order is missing plan reference")
+    if req.plan_id and req.plan_id != order_plan_id:
+        logger.warning(f"Plan ID mismatch attempt: req={req.plan_id} vs order={order_plan_id}")
+        raise HTTPException(400, "Requested plan does not match order plan")
+
+    plan = await _get_plan(order_plan_id)
+    if not plan or plan.get("active") is False:
+        raise HTTPException(404, "Plan not found or inactive")
+
+    # Deterministic Idempotency: doc_id derived directly from razorpay_payment_id
+    txn_doc_id = f"rp_{req.payment_id}"
+
+    # Check deterministic doc_id first, then query fallback
     existing = None
-    async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", req.payment_id)).limit(1).stream():
-        existing = _d.to_dict()
-        break
+    _txn_snap = await db.collection("transactions").document(txn_doc_id).get()
+    if _txn_snap.exists:
+        existing = _txn_snap.to_dict()
+    else:
+        async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", req.payment_id)).limit(1).stream():
+            existing = _d.to_dict()
+            break
+
     if existing:
         _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
         w = _snap[0].to_dict() if _snap else None
         return {
             "success": True,
             "already_processed": True,
-            "transaction_id": existing["id"],
+            "transaction_id": existing.get("id", txn_doc_id),
             "balance": (w or {}).get("balance", 0),
         }
 
-    plan = await _get_plan(req.plan_id)
-    if not plan or plan.get("active") is False:
-        raise HTTPException(404, "Plan not found or inactive")
-
-    txn_id = str(uuid.uuid4())
-    # Atomic credit grant. The unique sparse index on razorpay_payment_id makes
-    # concurrent replays fail the insert instead of double-granting.
     wallet_doc = None
     async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
         wallet_doc = _d
@@ -8495,7 +8512,8 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
             "updated_at": now().isoformat()
         })
     try:
-        _doc = {"id": txn_id,
+        _doc = {
+            "id": txn_doc_id,
             "user_id": user["id"],
             "plan_id": plan["id"],
             "plan_name": plan["name"],
@@ -8505,13 +8523,12 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
             "provider": "razorpay",
             "razorpay_order_id": req.order_id,
             "razorpay_payment_id": req.payment_id,
-            "created_at": now().isoformat(),}
-        doc_id = _doc.get('id') or str(uuid.uuid4())
-        _doc['id'] = doc_id
-        await db.collection('transactions').document(doc_id).set(_doc)
-    except Exception:
-        # Insert failed (e.g. duplicate razorpay_payment_id race) — roll back
-        # the credit grant so the user is never credited twice for one payment.
+            "created_at": now().isoformat(),
+        }
+        await db.collection('transactions').document(txn_doc_id).set(_doc)
+    except Exception as exc:
+        # Insert failed (e.g. duplicate payment_id race) — roll back
+        logger.error(f"Transaction insert failed for {txn_doc_id}: {exc}")
         wallet_doc = None
         async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
             wallet_doc = _d
@@ -8521,20 +8538,23 @@ async def razorpay_verify(req: RazorpayVerifyReq, user=Depends(get_user)):
                 "balance": firestore.Increment(-plan["credits"])
             })
         raise HTTPException(409, "Payment already processed")
-    await db.collection("payment_orders").document(req.order_id).set({"status": "paid"}, merge=True)
+    await db.collection("payment_orders").document(req.order_id).set({
+        "status": "paid",
+        "razorpay_payment_id": req.payment_id,
+        "updated_at": now().isoformat()
+    }, merge=True)
     _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
     w = _snap[0].to_dict() if _snap else None
-    return {"success": True, "already_processed": False, "transaction_id": txn_id,
-            "balance": w.get("balance", 0)}
+    return {"success": True, "already_processed": False, "transaction_id": txn_doc_id,
+            "balance": w.get("balance", 0) if w else plan["credits"]}
 
 
 @api.post("/verify-payment")
-async def verify_payment_endpoint(req: VerifyPaymentReq, user: Optional[dict] = Depends(get_optional_user)):
+async def verify_payment_endpoint(req: VerifyPaymentReq, user: dict = Depends(get_user)):
     """Standard Razorpay payment verification endpoint.
     
     Verifies HMAC-SHA256 signature generated over '{order_id}|{payment_id}'
-    using RAZORPAY_KEY_SECRET.
-    Returns 200 on success, 400 on signature mismatch or missing params.
+    using RAZORPAY_KEY_SECRET. Requires authenticated user.
     """
     if not _razorpay_enabled():
         raise HTTPException(
@@ -8558,85 +8578,111 @@ async def verify_payment_endpoint(req: VerifyPaymentReq, user: Optional[dict] = 
         raise HTTPException(400, "Payment signature verification failed")
 
     order = None
-    existing = None
     if db is not None:
-        # Fetch order record
         _snap = await db.collection("payment_orders").document(order_id).get()
         order = _snap.to_dict() if _snap.exists else None
 
-        # Idempotency check: see if payment_id was already processed
-        async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", payment_id)).limit(1).stream():
-            existing = _d.to_dict()
-            break
+    if not order:
+        raise HTTPException(404, "Order not found")
+    if order.get("user_id") and order.get("user_id") != user["id"]:
+        raise HTTPException(403, "Order belongs to another user")
 
-        # Mark payment order as paid
-        await db.collection("payment_orders").document(order_id).set({
-            "status": "paid",
-            "razorpay_payment_id": payment_id,
-            "updated_at": now().isoformat(),
-        }, merge=True)
+    order_plan_id = order.get("plan_id")
+    if req.plan_id and order_plan_id and req.plan_id != order_plan_id:
+        raise HTTPException(400, "Requested plan does not match order plan")
+    plan_id = order_plan_id or req.plan_id
+    if not plan_id:
+        raise HTTPException(400, "No plan associated with order")
 
-    current_user_id = user["id"] if user else (order.get("user_id") if order else None)
-    plan_id = req.plan_id or (order.get("plan_id") if order else None)
-    balance = None
+    plan = await _get_plan(plan_id)
+    if not plan or plan.get("active") is False:
+        raise HTTPException(404, "Plan not found or inactive")
 
-    if current_user_id and db is not None:
-        if existing:
-            _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
-            w = _snap_w[0].to_dict() if _snap_w else None
-            balance = (w or {}).get("balance", 0)
-        elif plan_id:
-            plan = await _get_plan(plan_id)
-            if plan and plan.get("active") is not False:
-                wallet_doc = None
-                async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).stream():
-                    wallet_doc = _d
-                    break
-                if wallet_doc:
-                    await wallet_doc.reference.update({
-                        "balance": firestore.Increment(plan["credits"]),
-                        "updated_at": now().isoformat()
-                    })
-                else:
-                    await db.collection("wallets").document(str(uuid.uuid4())).set({
-                        "user_id": current_user_id,
-                        "balance": plan["credits"],
-                        "total_used": 0,
-                        "updated_at": now().isoformat()
-                    })
-                txn_id = str(uuid.uuid4())
-                try:
-                    await db.collection("transactions").document(txn_id).set({
-                        "id": txn_id,
-                        "user_id": current_user_id,
-                        "plan_id": plan["id"],
-                        "plan_name": plan["name"],
-                        "amount": plan["price"],
-                        "credits": plan["credits"],
-                        "status": "success",
-                        "provider": "razorpay",
-                        "razorpay_order_id": order_id,
-                        "razorpay_payment_id": payment_id,
-                        "created_at": now().isoformat(),
-                    })
-                except Exception:
-                    pass
-                _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
-                w = _snap_w[0].to_dict() if _snap_w else None
-                balance = (w or {}).get("balance", 0)
+    txn_doc_id = f"rp_{payment_id}"
+    existing = None
+    if db is not None:
+        _txn_snap = await db.collection("transactions").document(txn_doc_id).get()
+        if _txn_snap.exists:
+            existing = _txn_snap.to_dict()
         else:
-            _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", current_user_id)).limit(1).get()
-            w = _snap_w[0].to_dict() if _snap_w else None
-            balance = (w or {}).get("balance", 0) if w else None
+            async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", payment_id)).limit(1).stream():
+                existing = _d.to_dict()
+                break
 
+    if existing:
+        _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+        w = _snap_w[0].to_dict() if _snap_w else None
+        return {
+            "success": True,
+            "status": "success",
+            "verified": True,
+            "already_processed": True,
+            "message": "Payment already processed",
+            "order_id": order_id,
+            "payment_id": payment_id,
+            "balance": (w or {}).get("balance", 0),
+        }
+
+    wallet_doc = None
+    async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+        wallet_doc = _d
+        break
+    if wallet_doc:
+        await wallet_doc.reference.update({
+            "balance": firestore.Increment(plan["credits"]),
+            "updated_at": now().isoformat()
+        })
+    else:
+        await db.collection("wallets").document(str(uuid.uuid4())).set({
+            "user_id": user["id"],
+            "balance": plan["credits"],
+            "total_used": 0,
+            "updated_at": now().isoformat()
+        })
+
+    try:
+        await db.collection("transactions").document(txn_doc_id).set({
+            "id": txn_doc_id,
+            "user_id": user["id"],
+            "plan_id": plan["id"],
+            "plan_name": plan["name"],
+            "amount": plan["price"],
+            "credits": plan["credits"],
+            "status": "success",
+            "provider": "razorpay",
+            "razorpay_order_id": order_id,
+            "razorpay_payment_id": payment_id,
+            "created_at": now().isoformat(),
+        })
+    except Exception as exc:
+        logger.error(f"Transaction write error in verify-payment: {exc}")
+        wallet_doc = None
+        async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
+            wallet_doc = _d
+            break
+        if wallet_doc:
+            await wallet_doc.reference.update({
+                "balance": firestore.Increment(-plan["credits"])
+            })
+        raise HTTPException(409, "Payment already processed")
+
+    await db.collection("payment_orders").document(order_id).set({
+        "status": "paid",
+        "razorpay_payment_id": payment_id,
+        "updated_at": now().isoformat(),
+    }, merge=True)
+
+    _snap_w = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
+    w = _snap_w[0].to_dict() if _snap_w else None
     return {
         "success": True,
         "status": "success",
         "verified": True,
+        "already_processed": False,
         "message": "Payment verified successfully",
         "order_id": order_id,
         "payment_id": payment_id,
-        "balance": balance,
+        "balance": (w or {}).get("balance", plan["credits"]),
     }
 
 
@@ -8674,7 +8720,12 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
     if not payment_id or not order_id:
         return {"success": True, "handled": False}
 
-    # Idempotent grant — never credit the same payment twice.
+    # Idempotent grant via deterministic document ID — never credit the same payment twice.
+    txn_doc_id = f"rp_{payment_id}"
+    _txn_snap = await db.collection("transactions").document(txn_doc_id).get()
+    if _txn_snap.exists:
+        return {"success": True, "handled": True, "already_processed": True}
+
     existing = None
     async for _d in db.collection("transactions").where(filter=firestore.FieldFilter("razorpay_payment_id", "==", payment_id)).limit(1).stream():
         existing = _d.to_dict()
@@ -8695,7 +8746,6 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
         logger.warning(f"[RAZORPAY] captured payment {payment_id} for missing plan")
         return {"success": True, "handled": False}
 
-    txn_id = str(uuid.uuid4())
     wallet_doc = None
     async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", order["user_id"])).limit(1).stream():
         wallet_doc = _d
@@ -8713,7 +8763,8 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
             "updated_at": now().isoformat()
         })
     try:
-        _doc = {"id": txn_id,
+        _doc = {
+            "id": txn_doc_id,
             "user_id": order["user_id"],
             "plan_id": plan["id"],
             "plan_name": plan["name"],
@@ -8723,11 +8774,11 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
             "provider": "razorpay",
             "razorpay_order_id": order_id,
             "razorpay_payment_id": payment_id,
-            "created_at": now().isoformat(),}
-        doc_id = _doc.get('id') or str(uuid.uuid4())
-        _doc['id'] = doc_id
-        await db.collection('transactions').document(doc_id).set(_doc)
-    except Exception:
+            "created_at": now().isoformat(),
+        }
+        await db.collection('transactions').document(txn_doc_id).set(_doc)
+    except Exception as exc:
+        logger.error(f"Transaction write error in webhook: {exc}")
         wallet_doc = None
         async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", order["user_id"])).limit(1).stream():
             wallet_doc = _d
@@ -8737,7 +8788,7 @@ async def razorpay_webhook(request: Request, x_razorpay_signature: str = Header(
                 "balance": firestore.Increment(-plan["credits"])
             })
         raise HTTPException(409, "Payment already processed")
-    await db.collection("payment_orders").document(order_id).set({"status": "paid"}, merge=True)
+    await db.collection("payment_orders").document(order_id).set({"status": "paid", "razorpay_payment_id": payment_id, "updated_at": now().isoformat()}, merge=True)
     return {"success": True, "handled": True}
 
 
@@ -9572,12 +9623,12 @@ async def admin_login(req: AdminLoginReq, request: Request = None, response: Res
             admin = _d.to_dict()
             break
 
-    # Self-healing reconciliation for canonical admin accounts
+    # Self-healing reconciliation for canonical admin accounts (only if explicit seed password configured)
     seed_email = (ADMIN_SEED_EMAIL or "admin@nyaysetu.com").strip().lower()
-    seed_pwd = ADMIN_SEED_PASSWORD or "NyaySetu@Admin2026!"
+    seed_pwd = (ADMIN_SEED_PASSWORD or "").strip()
     canonical_admin_emails = {seed_email, "admin@nyaysetu.com", "admin@nyaysetupro.in"}
 
-    if email in canonical_admin_emails and password == seed_pwd and db is not None:
+    if seed_pwd and email in canonical_admin_emails and password == seed_pwd and db is not None:
         needs_reconcile = False
         if not admin:
             needs_reconcile = True
@@ -10075,17 +10126,16 @@ async def admin_bulk_user_status(req: AdminUserBulkStatusReq, admin=Depends(requ
 async def admin_set_user_status(user_id: str, req: AdminUserStatusReq,
                                 admin=Depends(require_super_admin)):
     """Enable/disable a user account (super admin only)."""
-    user = (await db.collection('users').document(user_id).get()).to_dict()
-    print("API received patch for user_id:", user_id)
-    print("User found from db:", user)
-    
+    _snap = await db.collection('users').document(user_id).get()
+    user = _snap.to_dict() if _snap.exists else None
+
     if not user:
-        print("Wait! Trying to find it via query instead of document get:")
-        _docs = [x async for x in db.collection("users").where(filter=firestore.FieldFilter("id", "==", user_id)).stream()]
-        print("Query found:", len(_docs))
+        _docs = [x async for x in db.collection("users").where(filter=firestore.FieldFilter("id", "==", user_id)).limit(1).stream()]
         if _docs:
-            print("Query found doc ID:", _docs[0].id, "data:", _docs[0].to_dict())
-        raise HTTPException(404, "User not found")
+            user = _docs[0].to_dict()
+            user_id = _docs[0].id
+        else:
+            raise HTTPException(404, "User not found")
     ts = now().isoformat()
     updates = {"active": req.active, "status": "active" if req.active else "suspended", "updated_at": ts}
     updates["enabled_at" if req.active else "disabled_at"] = ts
@@ -13282,7 +13332,10 @@ async def seed_super_admin():
     if db is None:
         return
     seed_email = (ADMIN_SEED_EMAIL or "admin@nyaysetu.com").strip().lower()
-    seed_pwd = ADMIN_SEED_PASSWORD or "NyaySetu@Admin2026!"
+    seed_pwd = (ADMIN_SEED_PASSWORD or "").strip()
+    if not seed_pwd:
+        logger.info("ADMIN_SEED_PASSWORD not configured; skipping seed_super_admin to avoid setting default passwords.")
+        return
     target_emails = list(dict.fromkeys([seed_email, "admin@nyaysetu.com", "admin@nyaysetupro.in"]))
 
     for email in target_emails:
@@ -13340,7 +13393,7 @@ async def root_create_order(req: CreateOrderReq, user: Optional[dict] = Depends(
     return await create_order_endpoint(req, user)
 
 @app.post("/verify-payment")
-async def root_verify_payment(req: VerifyPaymentReq, user: Optional[dict] = Depends(get_optional_user)):
+async def root_verify_payment(req: VerifyPaymentReq, user: dict = Depends(get_user)):
     return await verify_payment_endpoint(req, user)
 # CORS — explicit allowlist, never '*' in production. Env CORS_ORIGINS (comma-
 # separated) overrides the defaults; localhost origins stay available for dev via
@@ -13371,17 +13424,27 @@ app.add_middleware(
 )
 
 
+def _is_allowed_origin(origin: str) -> bool:
+    if not origin:
+        return False
+    if origin in _CORS_ORIGINS:
+        return True
+    if _CORS_ORIGIN_REGEX and re.match(_CORS_ORIGIN_REGEX, origin):
+        return True
+    return False
+
+
 def _cors_headers_for_request(request: Request) -> dict:
-    """Ensure CORS headers are present on exception responses so browsers never mask
-    server errors or validation failures as network errors."""
+    """Ensure CORS headers are present on exception responses for allowed origins
+    so browsers never mask server errors as network errors, while preventing origin reflection."""
     origin = request.headers.get("origin") or ""
     headers = {
-        "Access-Control-Allow-Credentials": "true",
         "Access-Control-Allow-Methods": "*",
         "Access-Control-Allow-Headers": "*",
     }
-    if origin:
+    if _is_allowed_origin(origin):
         headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return headers
 
 
