@@ -204,6 +204,14 @@ TEMPLATE_CANONICAL_MAP = {
     "ulta_tapas_no_haq_kholvani_arji_en": "ulat_tapas_no_haq_kholvani_arji",
     "ulat_tapas_khol": "ulat_tapas_no_haq_kholvani_arji",
     "ulat_tapas_kholvani_arji": "ulat_tapas_no_haq_kholvani_arji",
+
+    # Samadhan Purshish variants
+    "samadhan": "samadhan_purshish",
+    "compromise_purshish": "samadhan_purshish",
+    "settlement_purshish": "samadhan_purshish",
+    "settlement_memo": "samadhan_purshish",
+    "સમાધાન પુરસીસ": "samadhan_purshish",
+    "સમાધાન પુરશીસ": "samadhan_purshish",
 }
 
 def resolve_canonical_template_id(template_id: str) -> str:
@@ -415,6 +423,7 @@ _SETTING_DEFAULTS = {
         "warrant_rad_karvani_arji",
         "ulat_tapas_no_haq_bandh_karavani_arji",
         "ulat_tapas_no_haq_kholvani_arji",
+        "samadhan_purshish",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -2875,7 +2884,7 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji"):
+    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "samadhan_purshish"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3600,6 +3609,17 @@ def _get_canonical_ulat_tapas_no_haq_kholvani_arji_template() -> Optional[dict]:
     return next((t for t in TEMPLATES if t.get("id") == "ulat_tapas_no_haq_kholvani_arji"), None)
 
 
+def _get_canonical_samadhan_purshish_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "samadhan_purshish"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "samadhan_purshish"), None)
+
+
 
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
@@ -4249,6 +4269,50 @@ async def _ensure_seed_complete() -> None:
                         if needs_update:
                             await doc_ref_ut_khol.update(update_dict)
                             invalidate_published_templates_cache()
+            if "samadhan_purshish" not in deleted_ids:
+                doc_ref_samadhan = db.collection("templates").document("samadhan_purshish")
+                snap_samadhan = await doc_ref_samadhan.get()
+                samadhan_seed = _get_canonical_samadhan_purshish_template()
+                if samadhan_seed:
+                    if not snap_samadhan.exists:
+                        await doc_ref_samadhan.set({
+                            **samadhan_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
+                    else:
+                        cur_sam = snap_samadhan.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_sam.get("content_gu") != samadhan_seed["content_gu"]:
+                            update_dict["content_gu"] = samadhan_seed["content_gu"]
+                            needs_update = True
+                        if cur_sam.get("content_en") != samadhan_seed["content_en"]:
+                            update_dict["content_en"] = samadhan_seed["content_en"]
+                            needs_update = True
+                        if cur_sam.get("settings") != samadhan_seed["settings"]:
+                            update_dict["settings"] = samadhan_seed["settings"]
+                            needs_update = True
+                        if cur_sam.get("fields") != samadhan_seed.get("fields"):
+                            update_dict["fields"] = samadhan_seed["fields"]
+                            needs_update = True
+                        if cur_sam.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_sam.get("category") != samadhan_seed.get("category"):
+                            update_dict["category"] = samadhan_seed["category"]
+                            needs_update = True
+                        if cur_sam.get("name_gu") != samadhan_seed.get("name_gu"):
+                            update_dict["name_gu"] = samadhan_seed["name_gu"]
+                            needs_update = True
+                        if cur_sam.get("name_en") != samadhan_seed.get("name_en"):
+                            update_dict["name_en"] = samadhan_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_samadhan.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -4790,6 +4854,44 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "samadhan_purshish" or t.get("template_id") == "samadhan_purshish"):
+                samadhan_seed = _get_canonical_samadhan_purshish_template()
+                if samadhan_seed:
+                    needs_update = False
+                    if t.get("content_gu") != samadhan_seed["content_gu"]:
+                        t["content_gu"] = samadhan_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != samadhan_seed["content_en"]:
+                        t["content_en"] = samadhan_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != samadhan_seed["settings"]:
+                        t["settings"] = samadhan_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != samadhan_seed.get("fields"):
+                        t["fields"] = samadhan_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != samadhan_seed.get("name_gu"):
+                        t["name_gu"] = samadhan_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != samadhan_seed.get("name_en"):
+                        t["name_en"] = samadhan_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != samadhan_seed.get("category"):
+                        t["category"] = samadhan_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "samadhan_purshish")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
 
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
@@ -5025,6 +5127,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("ulat_tapas_no_haq_kholvani_arji").set({
                             **ut_khol_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_samadhan = any((t.get("id") == "samadhan_purshish" or t.get("template_id") == "samadhan_purshish") for t in db_templates)
+        if not found_samadhan and "samadhan_purshish" not in deleted_ids:
+            samadhan_seed = _get_canonical_samadhan_purshish_template()
+            if samadhan_seed:
+                db_templates.append(dict(samadhan_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("samadhan_purshish").set({
+                            **samadhan_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -5660,7 +5778,50 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "samadhan_purshish" or template_id in ("samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan") or base_cand == "samadhan_purshish"):
+            samadhan_seed = _get_canonical_samadhan_purshish_template()
+            if samadhan_seed:
+                needs_update = False
+                if t.get("content_gu") != samadhan_seed["content_gu"]:
+                    t["content_gu"] = samadhan_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != samadhan_seed["content_en"]:
+                    t["content_en"] = samadhan_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != samadhan_seed["settings"]:
+                    t["settings"] = samadhan_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != samadhan_seed.get("fields"):
+                    t["fields"] = samadhan_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != samadhan_seed.get("name_gu"):
+                    t["name_gu"] = samadhan_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != samadhan_seed.get("name_en"):
+                    t["name_en"] = samadhan_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != samadhan_seed.get("category"):
+                    t["category"] = samadhan_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand in ("samadhan_purshish", "samadhan") or template_id in ("samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo")):
+        samadhan_seed = _get_canonical_samadhan_purshish_template()
+        if samadhan_seed and "samadhan_purshish" not in deleted_ids:
+            return {**samadhan_seed, "format_version": samadhan_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
         cc_seed = _get_canonical_certified_copy_template()
@@ -6778,7 +6939,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -6788,7 +6949,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -7395,6 +7556,52 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
         ctx["reason_text"] = reason_text
         ctx["reopen_reason"] = reason_text
+
+    # Samadhan Purshish (સમાધાન પુરસીસ)
+    is_samadhan_purshish_app = (tpl_id in (
+        "samadhan_purshish",
+        "samadhan_purshish_gu",
+        "samadhan_purshish_en",
+        "samadhan",
+        "compromise_purshish",
+        "settlement_purshish",
+        "settlement_memo",
+    ))
+    if is_samadhan_purshish_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        adv_for = str(ctx.get("advocate_for") or "").strip()
+        if adv_for in ("આરોપી", "સામાવાળા", "પ્રતિવાદી", "ફરીયાદી", "અરજદાર", "વાદી"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for in ("accused", "opponent", "defendant", "complainant", "applicant", "plaintiff", "Accused", "Opponent", "Defendant", "Complainant", "Applicant", "Plaintiff"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for == "party_1":
+            adv_role = resolve_party_role_label(str(ctx.get("party_1_role") or "ફરીયાદી").strip(), language)
+        elif adv_for == "party_2":
+            adv_role = resolve_party_role_label(str(ctx.get("party_2_role") or "આરોપી").strip(), language)
+        else:
+            adv_role = str(ctx.get("advocate_for_role") or "").strip()
+            if not adv_role:
+                adv_role = resolve_party_role_label(adv_for, language) if adv_for else resolve_party_role_label(str(ctx.get("party_1_role") or "ફરીયાદી").strip(), language)
+            else:
+                adv_role = resolve_party_role_label(adv_role, language)
+
+        ctx["advocate_for_role"] = adv_role
+        if language == "gu":
+            ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
+        else:
+            ctx["advocate_name"] = f"Advocate for {adv_role}"
 
     # Ensure template keys are clean strings (never None or undefined)
     for k in (

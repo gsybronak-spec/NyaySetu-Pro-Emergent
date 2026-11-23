@@ -169,6 +169,14 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
     category: 'General',
   },
   {
+    baseKey: 'samadhan_purshish',
+    guId: 'samadhan_purshish',
+    enId: 'samadhan_purshish',
+    name_gu: 'સમાધાન પુરસીસ',
+    name_en: 'Settlement Purshish / Settlement Memo',
+    category: 'General',
+  },
+  {
     baseKey: 'fs_no_haq_bandh_karvani_arji',
     guId: 'fs_no_haq_bandh_karvani_arji_gu',
     enId: 'fs_no_haq_bandh_karvani_arji_en',

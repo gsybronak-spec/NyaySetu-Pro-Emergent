@@ -556,7 +556,7 @@ POLICE_STATIONS = [
 # fields: list of {key, label_en, label_gu, type, required}
 try:
     from test_seed_data import TEMPLATES as _TEST_TEMPLATES
-    TEMPLATES = [t for t in _TEST_TEMPLATES if t.get("id") in ("document_exhibit_application", "document_return_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil", "fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji")]
+    TEMPLATES = [t for t in _TEST_TEMPLATES if t.get("id") in ("document_exhibit_application", "document_return_application", "certified_copy_application", "closing_purshish", "closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "dd_karavani_arji", "mudat_arji", "vakilatnama_criminal", "vakilatnama_civil", "fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "samadhan_purshish")]
 except Exception:
     TEMPLATES = []
 

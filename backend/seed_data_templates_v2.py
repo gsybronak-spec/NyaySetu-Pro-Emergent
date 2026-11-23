@@ -1089,56 +1089,76 @@ Advocate for {{selected_party_role}}""",
     },
     {
         "base_key": "samadhan_purshish",
-        "aliases": ["samadhan", "compromise", "settlement", "સમાધાન", "પુરશિસ સમાધાન"],
-        "name_gu": "સમાધાન પુરશિસ (Compromise Purshis)",
-        "name_en": "Compromise Purshis (Settlement Terms)",
-        "category": "Civil",
-        "description": "Joint purshis submitted by both parties recording amicable settlement and terms of compromise.",
+        "aliases": ["samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo", "સમાધાન પુરસીસ", "સમાધાન", "પુરસીસ સમાધાન", "સમાધાન પુરશીસ"],
+        "name_gu": "સમાધાન પુરસીસ",
+        "name_en": "Settlement Purshish / Settlement Memo",
+        "category": "General",
+        "description": "Purshis submitted by advocate recording amicable settlement arrived between the parties.",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'settlement_terms', 'label_en': 'Settlement terms / conditions (e.g. subject to conditions...)', 'label_gu': 'સમાધાનની શરતો (દા.ત. શરતો ને આધીન / એવી શરત ને આધીન)', 'type': 'textarea', 'required': True},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {'key': 'court_name', 'label_en': 'Court Name', 'label_gu': 'કોર્ટ નું નામ', 'type': 'select', 'required': False},
+            {'key': 'district', 'label_en': 'District', 'label_gu': 'જીલ્લો', 'type': 'select', 'required': False},
+            {'key': 'taluka', 'label_en': 'Taluka', 'label_gu': 'તાલુકો', 'type': 'select', 'required': False},
+            {'key': 'case_type', 'label_en': 'Case Type', 'label_gu': 'કેસ પ્રકાર', 'type': 'select', 'required': False},
+            {'key': 'case_number', 'label_en': 'Case Number', 'label_gu': 'કેસ નંબર', 'type': 'text', 'required': False},
+            {'key': 'party_1_role', 'label_en': 'Party 1 Role', 'label_gu': 'પક્ષકાર-૧ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'ફરીયાદી', 'label_gu': 'ફરીયાદી', 'label_en': 'Complainant'}, {'value': 'અરજદાર', 'label_gu': 'અરજદાર', 'label_en': 'Applicant'}, {'value': 'વાદી', 'label_gu': 'વાદી', 'label_en': 'Plaintiff'}]},
+            {'key': 'party_1_name', 'label_en': 'Party 1 Name', 'label_gu': 'પક્ષકાર - ૧ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'party_2_role', 'label_en': 'Party 2 Role', 'label_gu': 'પક્ષકાર-૨ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'આરોપી', 'label_gu': 'આરોપી', 'label_en': 'Accused'}, {'value': 'સામાવાળા', 'label_gu': 'સામાવાળા', 'label_en': 'Opponent'}, {'value': 'પ્રતિવાદી', 'label_gu': 'પ્રતિવાદી', 'label_en': 'Defendant'}]},
+            {'key': 'party_2_name', 'label_en': 'Party 2 Name', 'label_gu': 'પક્ષકાર - ૨ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'advocate_for', 'label_en': 'Advocate For', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': False, 'default': 'ફરીયાદી', 'options': [{'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}, {'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}]},
+            {'key': 'date', 'label_en': 'Application Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': False},
+            {'key': 'place', 'label_en': 'Place', 'label_gu': 'સ્થળ', 'type': 'text', 'required': False},
+            {'key': 'advocate_name', 'label_en': 'Advocate Designation', 'label_gu': 'ના એડવોકેટ', 'type': 'text', 'required': False},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
+
+{{party_2_role}} :- {{party_2_name}}
 
 સમાધાન પુરસીસ
 
-સદર કામમા અમો {{selected_party_role}} ના એડવોકેટ આપ નામદાર કોર્ટમાં પુરસીસ થી જાહેર કરીએ છીએ કે.....
+સદર કામમા અમો {{advocate_for_role}}ના એડવોકેટ આપ નામદાર કોર્ટમાં પુરસીસ થી જાહેર કરીએ છીએ કે .....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસના પક્ષકારો વચ્ચે {{settlement_terms}} પરસ્પર સમાધાન થયેલ છે. બંને પક્ષકારોએ પોતાની સ્વતંત્ર ઇચ્છાથી તથા કોઈપણ જાતના દબાણ, ધાકધમકી કે લાલચ વગર સમાધાન કરેલ છે અને સમાધાન મુજબ આગળની કાર્યવાહી કરવા બંને પક્ષકારો સંમત છે. સદર સમાધાન પુરસીસ રેકોર્ડ પર લઈ યોગ્ય કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસના પક્ષકારો વચ્ચે પરસ્પર સમાધાન થયેલ છે. બંને પક્ષકારોએ પોતાની સ્વતંત્ર ઇચ્છાથી તથા કોઈપણ જાતના દબાણ, ધાકધમકી કે લાલચ વગર સમાધાન કરેલ છે અને સમાધાન મુજબ આગળની કાર્યવાહી કરવા બંને પક્ષકારો સંમત છે. સદર સમાધાન પુરસીસ રેકોર્ડ પર લઈ યોગ્ય કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
 
 ----------
-{{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+
+AT: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 Versus
-{{opposite_party_line}}
 
-COMPROMISE PURSHIS
+{{party_2_role}} :- {{party_2_name}}
 
-In the above matter, we, the advocate for {{selected_party_role}}, hereby declare by purshis before this Hon'ble Court that:
+SETTLEMENT PURSHISH / MEMO
 
-The said case is pending before this Hon'ble Court. A mutual compromise has been arrived at between the parties {{settlement_terms}}. Both parties have entered into the said compromise voluntarily of their own free will and without any coercion, threat or undue influence, and both parties agree to proceed further in terms of the said compromise. It is therefore prayed that this Hon'ble Court may be pleased to take this compromise purshis on record and pass appropriate orders.
+In the above matter, we, the advocate for {{advocate_for_role}}, hereby state before this Hon'ble Court by way of this purshish that:
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+The said case is pending before this Hon'ble Court. An amicable settlement has been arrived at between the parties to the said case. Both parties have entered into this settlement voluntarily of their own free will and without any duress, coercion, threat or undue inducement, and both parties agree to proceed further as per the terms of settlement. It is therefore prayed that this Hon'ble Court may be pleased to take this settlement purshish on record and pass appropriate orders to take further necessary proceedings.
+
+Date : {{date}}
+
+Place : {{place}}
 
 ----------
-Advocate for {{selected_party_role}}""",
+
+{{advocate_name}}""",
     },
     {
         "base_key": "ulat_tapas_no_haq_bandh_karavani_arji",
