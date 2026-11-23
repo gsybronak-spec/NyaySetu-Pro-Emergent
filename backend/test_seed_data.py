@@ -7579,8 +7579,6 @@ Place : {{place}}
             "block_align": [
                 {"contains": "મુકામ :-", "align": "center", "bold": True, "indent": False},
                 {"contains": "AT:", "align": "center", "bold": True, "indent": False},
-                {"contains": "સમાધાન પુરસીસ", "align": "center", "bold": True, "underline": True, "indent": False},
-                {"contains": "SETTLEMENT PURSHISH", "align": "center", "bold": True, "underline": True, "indent": False},
             ],
         },
         "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,

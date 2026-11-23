@@ -5177,8 +5177,9 @@ async def _get_published_templates() -> list:
         if canon_id in canonical_map:
             merged = dict(canonical_map[canon_id])
             merged.update({k: v for k, v in t.items() if v is not None})
-            if canon_id in ("warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji"):
+            if canon_id in ("warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "samadhan_purshish"):
                 merged["fields"] = canonical_map[canon_id]["fields"]
+                merged["settings"] = canonical_map[canon_id]["settings"]
                 merged["content_gu"] = canonical_map[canon_id]["content_gu"]
                 merged["content_en"] = canonical_map[canon_id]["content_en"]
             filtered_db_templates.append(merged)

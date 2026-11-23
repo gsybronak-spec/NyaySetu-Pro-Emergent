@@ -275,6 +275,23 @@ class TestSamadhanPurshishTemplate(unittest.IsolatedAsyncioTestCase):
         ctx = await server.build_render_context(self.user, None, values, "gu", template_id="samadhan_purshish")
         rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
         blocks = doc_generator.build_blocks(rendered, align_rules=self.tpl["settings"].get("block_align"))
+        
+        # Verify title block has center align, bold, underline
+        title_block = next((b for b in blocks if b.get("text") == "સમાધાન પુરસીસ"), None)
+        self.assertIsNotNone(title_block)
+        self.assertEqual(title_block["align"], "center")
+        self.assertTrue(title_block["bold"])
+        self.assertTrue(title_block["underline"])
+
+        # Verify main legal body paragraph is JUSTIFIED, NOT underlined, NOT bold, with indent
+        body_blocks = [b for b in blocks if "સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે" in b.get("text", "")]
+        self.assertEqual(len(body_blocks), 1)
+        main_body = body_blocks[0]
+        self.assertEqual(main_body["align"], "justify", "Main body paragraph must be justified")
+        self.assertFalse(main_body["underline"], "Main body paragraph must NOT be underlined")
+        self.assertFalse(main_body["bold"], "Main body paragraph must NOT be bold")
+        self.assertTrue(main_body["indent"], "Main body paragraph must have first line indent")
+
         pdf_b64 = doc_generator.generate_pdf(
             blocks,
             language="gu",
