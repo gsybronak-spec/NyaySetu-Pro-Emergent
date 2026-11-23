@@ -87,13 +87,14 @@ class TestCanonicalExhibitMetadata(unittest.TestCase):
         self.tpl = next((t for t in test_seed_data.TEMPLATES if t["id"] == "document_exhibit_application"), None)
         self.assertIsNotNone(self.tpl, "document_exhibit_application missing from test_seed_data")
 
-    def test_11_field_architecture(self):
+    def test_16_field_architecture(self):
         fields = self.tpl["fields"]
-        self.assertEqual(len(fields), 11)
+        self.assertEqual(len(fields), 16)
         expected_keys = [
-            "district", "taluka", "court_name", "case_type", "case_number",
+            "court_name", "district", "taluka", "case_type", "case_number",
             "party_1_role", "party_1_name", "party_2_role", "party_2_name",
-            "representing_party", "date"
+            "advocate_for", "aank_number", "document_index_from", "document_index_to",
+            "date", "place", "advocate_name"
         ]
         self.assertEqual([f["key"] for f in fields], expected_keys)
 
@@ -113,13 +114,14 @@ class TestCanonicalExhibitMetadata(unittest.TestCase):
         opts = [o["value"] for o in f["options"]]
         self.assertEqual(opts, ["આરોપી", "સામાવાળા", "પ્રતિવાદી"])
 
-    def test_representing_party_metadata(self):
-        f = next(f for f in self.tpl["fields"] if f["key"] == "representing_party")
+    def test_advocate_for_metadata(self):
+        f = next(f for f in self.tpl["fields"] if f["key"] == "advocate_for")
         self.assertEqual(f["label_gu"], "કોના તરફે એડવોકેટ")
         self.assertEqual(f["type"], "select")
         self.assertTrue(f["required"])
         opts = [o["value"] for o in f["options"]]
-        self.assertEqual(opts, ["party_1", "party_2"])
+        self.assertIn("વાદી", opts)
+        self.assertIn("પ્રતિવાદી", opts)
 
     def test_case_number_placeholder(self):
         f = next(f for f in self.tpl["fields"] if f["key"] == "case_number")

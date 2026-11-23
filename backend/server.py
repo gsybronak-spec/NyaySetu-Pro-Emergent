@@ -134,7 +134,7 @@ CANONICAL_TEMPLATE_IDS = [
 
 TEMPLATE_CANONICAL_MAP = {
     # 21 Gujarati variants
-    "aanke_padvani_arji_gu": "aanke_padvani_arji",
+    "aanke_padvani_arji_gu": "document_exhibit_application",
     "certified_report_gu": "certified_report",
     "closing_purshish_gu": "closing_purshish",
     "dd_karavani_arji_gu": "dd_karavani_arji",
@@ -157,7 +157,7 @@ TEMPLATE_CANONICAL_MAP = {
     "warrant_rad_karvani_arji_gu": "warrant_rad_karvani_arji",
 
     # 21 English variants
-    "aanke_padvani_arji_en": "aanke_padvani_arji",
+    "aanke_padvani_arji_en": "document_exhibit_application",
     "certified_report_en": "certified_report",
     "closing_purshish_en": "closing_purshish",
     "dd_karavani_arji_en": "dd_karavani_arji",
@@ -222,6 +222,16 @@ TEMPLATE_CANONICAL_MAP = {
     "વોરંટ હાથબીડો": "warrant_no_hath_bido_apvani_arji",
     "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત": "warrant_no_hath_bido_apvani_arji",
     "સમન્સ / વોરંટનો હાથબીડો આપવા બાબતની અરજી": "warrant_no_hath_bido_apvani_arji",
+
+    # Document Marking Application variants (આંક પાડવાની અરજી / દસ્તાવેજને આંક પાડવા બાબતની અરજી)
+    "aanke_padvani_arji": "document_exhibit_application",
+    "aanke": "document_exhibit_application",
+    "exhibit": "document_exhibit_application",
+    "aanke padva": "document_exhibit_application",
+    "dastavejne aank padva": "document_exhibit_application",
+    "આંક પાડવાની અરજી": "document_exhibit_application",
+    "દસ્તાવેજને આંક પાડવા બાબતની અરજી": "document_exhibit_application",
+    "આંક": "document_exhibit_application",
 }
 
 def resolve_canonical_template_id(template_id: str) -> str:
@@ -3009,7 +3019,7 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "samadhan_purshish", "warrant_no_hath_bido_apvani_arji"):
+    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "samadhan_purshish", "warrant_no_hath_bido_apvani_arji", "document_exhibit_application"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3779,17 +3789,20 @@ async def _ensure_seed_complete() -> None:
                     if ex_seed:
                         needs_update = False
                         update_dict = {}
-                        if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in cur_gu or "---------------------------" in cur_gu or "-----------------" in cur_gu:
+                        if cur_gu != ex_seed["content_gu"]:
                             update_dict["content_gu"] = ex_seed["content_gu"]
                             needs_update = True
                         if cur.get("content_en") != ex_seed["content_en"]:
                             update_dict["content_en"] = ex_seed["content_en"]
                             needs_update = True
-                        if (cur.get("settings") or {}).get("line_spacing") != 19.5:
+                        if cur.get("settings") != ex_seed["settings"]:
                             update_dict["settings"] = ex_seed["settings"]
                             needs_update = True
                         if cur.get("fields") != ex_seed.get("fields"):
                             update_dict["fields"] = ex_seed["fields"]
+                            needs_update = True
+                        if cur.get("aliases") != ex_seed.get("aliases"):
+                            update_dict["aliases"] = ex_seed["aliases"]
                             needs_update = True
                         if needs_update:
                             await doc_ref.update(update_dict)
@@ -4528,17 +4541,20 @@ async def _get_published_templates() -> list:
                 ex_seed = _get_canonical_exhibit_template()
                 if ex_seed:
                     needs_update = False
-                    if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                    if t.get("content_gu") != ex_seed["content_gu"]:
                         t["content_gu"] = ex_seed["content_gu"]
                         needs_update = True
                     if t.get("content_en") != ex_seed["content_en"]:
                         t["content_en"] = ex_seed["content_en"]
                         needs_update = True
-                    if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                    if t.get("settings") != ex_seed["settings"]:
                         t["settings"] = ex_seed["settings"]
                         needs_update = True
                     if t.get("fields") != ex_seed.get("fields"):
                         t["fields"] = ex_seed["fields"]
+                        needs_update = True
+                    if t.get("aliases") != ex_seed.get("aliases"):
+                        t["aliases"] = ex_seed["aliases"]
                         needs_update = True
                     if needs_update and db is not None:
                         try:
@@ -4547,6 +4563,7 @@ async def _get_published_templates() -> list:
                                 "content_en": t["content_en"],
                                 "settings": t["settings"],
                                 "fields": t["fields"],
+                                "aliases": t["aliases"],
                             }))
                         except Exception:
                             pass
@@ -5506,17 +5523,20 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
             ex_seed = _get_canonical_exhibit_template()
             if ex_seed:
                 needs_update = False
-                if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                if t.get("content_gu") != ex_seed["content_gu"]:
                     t["content_gu"] = ex_seed["content_gu"]
                     needs_update = True
                 if t.get("content_en") != ex_seed["content_en"]:
                     t["content_en"] = ex_seed["content_en"]
                     needs_update = True
-                if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                if t.get("settings") != ex_seed["settings"]:
                     t["settings"] = ex_seed["settings"]
                     needs_update = True
                 if t.get("fields") != ex_seed.get("fields"):
                     t["fields"] = ex_seed["fields"]
+                    needs_update = True
+                if t.get("aliases") != ex_seed.get("aliases"):
+                    t["aliases"] = ex_seed["aliases"]
                     needs_update = True
                 if needs_update and db is not None:
                     try:
@@ -5525,6 +5545,7 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                             "content_en": t["content_en"],
                             "settings": t["settings"],
                             "fields": t["fields"],
+                            "aliases": t["aliases"],
                         }))
                     except Exception:
                         pass
@@ -6266,14 +6287,16 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
         if (t.get("id") == "document_exhibit_application" or t_id == "document_exhibit_application"):
             ex_seed = _get_canonical_exhibit_template()
             if ex_seed:
-                if "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in t.get("content_gu", "") or "---------------------------" in t.get("content_gu", "") or "-----------------" in t.get("content_gu", ""):
+                if t.get("content_gu") != ex_seed["content_gu"]:
                     t["content_gu"] = ex_seed["content_gu"]
                 if t.get("content_en") != ex_seed["content_en"]:
                     t["content_en"] = ex_seed["content_en"]
-                if (t.get("settings") or {}).get("line_spacing") != 19.5:
+                if t.get("settings") != ex_seed["settings"]:
                     t["settings"] = ex_seed["settings"]
                 if t.get("fields") != ex_seed.get("fields"):
                     t["fields"] = ex_seed["fields"]
+                if t.get("aliases") != ex_seed.get("aliases"):
+                    t["aliases"] = ex_seed["aliases"]
         if (t.get("id") == "certified_copy_application" or t_id == "certified_copy_application"):
             cc_seed = _get_canonical_certified_copy_template()
             if cc_seed:
@@ -7218,7 +7241,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo", "warrant_no_hath_bido_apvani_arji", "warrant_no_hath_bido_apvani_arji_gu", "warrant_no_hath_bido_apvani_arji_en", "warrant_hathbido", "hathbido", "direct_service") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo", "warrant_no_hath_bido_apvani_arji", "warrant_no_hath_bido_apvani_arji_gu", "warrant_no_hath_bido_apvani_arji_en", "warrant_hathbido", "hathbido", "direct_service", "document_exhibit_application", "document_exhibit_application_gu", "document_exhibit_application_en", "document_exhibit", "aanke_padvani_arji", "aanke_padvani_arji_gu", "aanke_padvani_arji_en", "aanke", "exhibit") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -7228,7 +7251,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo", "warrant_no_hath_bido_apvani_arji", "warrant_no_hath_bido_apvani_arji_gu", "warrant_no_hath_bido_apvani_arji_en", "warrant_hathbido", "hathbido", "direct_service") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji", "samadhan_purshish", "samadhan_purshish_gu", "samadhan_purshish_en", "samadhan", "compromise_purshish", "settlement_purshish", "settlement_memo", "warrant_no_hath_bido_apvani_arji", "warrant_no_hath_bido_apvani_arji_gu", "warrant_no_hath_bido_apvani_arji_en", "warrant_hathbido", "hathbido", "direct_service", "document_exhibit_application", "document_exhibit_application_gu", "document_exhibit_application_en", "document_exhibit", "aanke_padvani_arji", "aanke_padvani_arji_gu", "aanke_padvani_arji_en", "aanke", "exhibit") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -7939,6 +7962,75 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         else:
             ctx["advocate_name"] = f"Advocate for {adv_role}"
 
+    # Document Marking Application (દસ્તાવેજને આંક પાડવા બાબત / આંક પાડવાની અરજી)
+    is_doc_exhibit_app = (tpl_id in (
+        "document_exhibit_application",
+        "document_exhibit_application_gu",
+        "document_exhibit_application_en",
+        "document_exhibit",
+        "aanke_padvani_arji",
+        "aanke_padvani_arji_gu",
+        "aanke_padvani_arji_en",
+        "aanke",
+        "exhibit",
+    ))
+    if is_doc_exhibit_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        # aank_number: if empty/0/null/None/undefined -> render exactly "__________" (10 underscores)
+        raw_aank = str(ctx.get("aank_number") if ctx.get("aank_number") is not None else (values.get("aank_number") if values.get("aank_number") is not None else "")).strip()
+        if not raw_aank or raw_aank in ("0", "None", "null", "undefined"):
+            ctx["aank_number"] = "__________"
+        else:
+            ctx["aank_number"] = raw_aank
+
+        # document_index_from & document_index_to
+        raw_from = str(ctx.get("document_index_from") if ctx.get("document_index_from") is not None else (values.get("document_index_from") if values.get("document_index_from") is not None else "")).strip()
+        if not raw_from or raw_from in ("None", "null", "undefined"):
+            ctx["document_index_from"] = ""
+        else:
+            ctx["document_index_from"] = raw_from
+
+        raw_to = str(ctx.get("document_index_to") if ctx.get("document_index_to") is not None else (values.get("document_index_to") if values.get("document_index_to") is not None else "")).strip()
+        if not raw_to or raw_to in ("None", "null", "undefined"):
+            ctx["document_index_to"] = ""
+        else:
+            ctx["document_index_to"] = raw_to
+
+        adv_for = str(ctx.get("advocate_for") or ctx.get("representing_party") or "").strip()
+        if adv_for in ("આરોપી", "સામાવાળા", "પ્રતિવાદી", "ફરીયાદી", "અરજદાર", "વાદી"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for in ("accused", "opponent", "defendant", "complainant", "applicant", "plaintiff", "Accused", "Opponent", "Defendant", "Complainant", "Applicant", "Plaintiff"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for == "party_1":
+            adv_role = resolve_party_role_label(str(ctx.get("party_1_role") or "વાદી").strip(), language)
+        elif adv_for == "party_2":
+            adv_role = resolve_party_role_label(str(ctx.get("party_2_role") or "પ્રતિવાદી").strip(), language)
+        else:
+            adv_role = str(ctx.get("advocate_for_role") or "").strip()
+            if not adv_role:
+                adv_role = resolve_party_role_label(adv_for, language) if adv_for else resolve_party_role_label(str(ctx.get("party_1_role") or "વાદી").strip(), language)
+            else:
+                adv_role = resolve_party_role_label(adv_role, language)
+
+        ctx["advocate_for_role"] = adv_role
+        ctx["representing_party_role"] = adv_role
+        if language == "gu":
+            ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
+        else:
+            ctx["advocate_name"] = f"Advocate for {adv_role}"
+
     # Ensure template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
@@ -7955,6 +8047,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "scheduled_date", "urgent_reason", "urgent_reason_custom",
         "warrant_date", "accused_name_role",
         "reason", "custom_reason", "reason_text", "reopen_reason", "reopen_reason_other",
+        "aank_number", "document_index_from", "document_index_to",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:
@@ -12942,18 +13035,18 @@ async def seed_templates(force: bool = False, mark_system_seed_complete: bool = 
             if t["id"] == "document_exhibit_application":
                 ex_seed = _get_canonical_exhibit_template()
                 if ex_seed and (
-                    "દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ" not in existing.get("content_gu", "")
+                    existing.get("content_gu") != ex_seed["content_gu"]
                     or existing.get("content_en") != ex_seed["content_en"]
-                    or (existing.get("settings") or {}).get("line_spacing") != 19.5
+                    or existing.get("settings") != ex_seed["settings"]
                     or existing.get("fields") != ex_seed.get("fields")
-                    or "---------------------------" in existing.get("content_gu", "")
-                    or "-----------------" in existing.get("content_gu", "")
+                    or existing.get("aliases") != ex_seed.get("aliases")
                 ):
                     await db.collection('templates').document(t["id"]).update({
                         "content_gu": ex_seed["content_gu"],
                         "content_en": ex_seed["content_en"],
                         "settings": ex_seed["settings"],
                         "fields": ex_seed["fields"],
+                        "aliases": ex_seed["aliases"],
                     })
             if t["id"] == "certified_copy_application":
                 cc_seed = _get_canonical_certified_copy_template()

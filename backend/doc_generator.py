@@ -720,16 +720,11 @@ def build_blocks(content: str, title_en: str = "", title_gu: str = "",
             )
         )
         if is_dash_line:
-            if len(line.strip()) >= 15:
-                line = "--------------------"
-            elif len(line.strip()) <= 12:
+            is_gujarati_doc = bool(re.search(r"[\u0a80-\u0aff]", content)) and not ("In the Court of" in content or "IN THE COURT OF" in content)
+            if is_gujarati_doc:
                 line = "----------"
             else:
-                is_gujarati_doc = bool(re.search(r"[\u0a80-\u0aff]", content)) and not ("In the Court of" in content or "IN THE COURT OF" in content)
-                if is_gujarati_doc:
-                    line = "----------"
-                else:
-                    line = "--------------------"
+                line = "--------------------"
         is_date_place = (
             bool(
                 re.match(r"^(તારીખ|તા\.|સ્થળ|Date|Place)\s*[:\.]?", line, re.IGNORECASE)
@@ -924,6 +919,16 @@ def render_template(content_template: str, values: dict) -> str:
             flags=re.IGNORECASE,
         )
 
+    # Synchronize advocate and place keys
+    if "advocate_for_role" in vals and "representing_party_role" not in vals:
+        vals["representing_party_role"] = vals["advocate_for_role"]
+    elif "representing_party_role" in vals and "advocate_for_role" not in vals:
+        vals["advocate_for_role"] = vals["representing_party_role"]
+    if "place" in vals and "taluka_place" not in vals:
+        vals["taluka_place"] = vals["place"]
+    elif "taluka_place" in vals and "place" not in vals:
+        vals["place"] = vals["taluka_place"]
+
     result = content_template
     for k, v in vals.items():
         result = result.replace("{{" + k + "}}", str(v) if v is not None else "")
@@ -962,6 +967,10 @@ def render_template(content_template: str, values: dict) -> str:
         or "hath-bido" in result.lower()
         or "service process" in result.lower()
         or "hand delivery" in result.lower()
+        or "દસ્તાવેજને આંક પાડવા બાબત" in result
+        or "આંક પાડવા બાબત" in result
+        or "regarding marking the document(s) as exhibit(s)" in result.lower()
+        or "marking the document" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:

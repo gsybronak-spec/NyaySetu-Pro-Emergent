@@ -49,50 +49,71 @@ BASE_TEMPLATES = [
         "category": "General",
         "description": "Application to mark/assign exhibit numbers to documents produced on record.",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Plaintiff side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'document_details', 'label_en': 'Document details to be exhibited', 'label_gu': 'ક્યા દસ્તાવેજને આંક પાડવાના તેની વિગત', 'type': 'textarea', 'required': True},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {'key': 'court_name', 'label_en': 'Court Name', 'label_gu': 'કોર્ટનું નામ', 'type': 'select', 'required': True},
+            {'key': 'district', 'label_en': 'District', 'label_gu': 'જીલ્લો', 'type': 'select', 'required': True},
+            {'key': 'taluka', 'label_en': 'Taluka', 'label_gu': 'તાલુકો', 'type': 'select', 'required': False},
+            {'key': 'case_type', 'label_en': 'Case Type', 'label_gu': 'કેસ પ્રકાર', 'type': 'select', 'required': True},
+            {'key': 'case_number', 'label_en': 'Case Number', 'label_gu': 'કેસ નંબર', 'type': 'text', 'required': True, 'placeholder': '૧૦૧/૨૦૨૪'},
+            {'key': 'party_1_role', 'label_en': 'Party 1 Role', 'label_gu': 'પક્ષકાર-૧ની ભૂમિકા', 'type': 'radio', 'required': True, 'options': [{'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}]},
+            {'key': 'party_1_name', 'label_en': 'Party 1 Name', 'label_gu': 'પક્ષકાર - ૧ નું નામ', 'type': 'text', 'required': True, 'placeholder': 'પક્ષકાર - ૧ નું નામ'},
+            {'key': 'party_2_role', 'label_en': 'Party 2 Role', 'label_gu': 'પક્ષકાર-૨ની ભૂમિકા', 'type': 'radio', 'required': True, 'options': [{'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}]},
+            {'key': 'party_2_name', 'label_en': 'Party 2 Name', 'label_gu': 'પક્ષકાર - ૨ નું નામ', 'type': 'text', 'required': True, 'placeholder': 'પક્ષકાર - ૨ નું નામ'},
+            {'key': 'advocate_for', 'label_en': 'Advocate Representing', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'default': 'વાદી', 'options': [{'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}, {'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}]},
+            {'key': 'aank_number', 'label_en': 'Aank Number', 'label_gu': 'આંક નંબર', 'type': 'number', 'required': False, 'placeholder': 'ખાલી રાખી શકો છો (જેમ કે. ૩)'},
+            {'key': 'document_index_from', 'label_en': 'Serial No. From', 'label_gu': 'અનુક્રમ નં. From', 'type': 'number', 'required': False, 'placeholder': '૧'},
+            {'key': 'document_index_to', 'label_en': 'Serial No. To', 'label_gu': 'અનુક્રમ નં. To', 'type': 'number', 'required': False, 'placeholder': '૫'},
+            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True, 'default': 'today'},
+            {'key': 'place', 'label_en': 'Place', 'label_gu': 'સ્થળ', 'type': 'text', 'required': False, 'placeholder': 'તાલુકા અને જીલ્લા માંથી આપોઆપ આવશે'},
+            {'key': 'advocate_name', 'label_en': 'Advocate Designation', 'label_gu': 'ના એડવોકેટ', 'type': 'text', 'required': False, 'placeholder': 'ના એડવોકેટ'},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
 
- બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
+{{party_2_role}} :- {{party_2_name}}
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{document_details}} ખુબ જ મહત્વ ધરાવે છે અને કેસના યોગ્ય નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોય, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને યોગ્ય આંક આપવાનો હુકમ કરવા મહેરબાની કરશોજી.
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં અમો {{advocate_for_role}}એ દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ / ઓનલાઈન અસલ નકલ આંક {{aank_number}} ના પુરાવા લિસ્ટથી અનુક્રમ નં. {{document_index_from}} થી {{document_index_to}} રજુ કરેલ છે કે જેને જુબાનીમાં રીફર કરેલ છે અને કેસના ન્યાયિક નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોઈ, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને આંક આપી પુરાવામાં વંચાણે લેવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
 
 ----------
-{{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+{{representing_party_role}} ના એડવોકેટ""",
+        "content_en": """BEFORE THE COURT OF THE HON'BLE {{court_name}}
+
+Place: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
-Versus
-{{opposite_party_line}}
+{{party_1_role}} :- {{party_1_name}}
 
-SUBJECT: APPLICATION TO EXHIBIT DOCUMENT
+VERSUS
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+{{party_2_role}} :- {{party_2_name}}
 
-The said case is pending before this Hon'ble Court. In the said case, {{document_details}} is of great significance and is necessary for the proper adjudication of the case. As it is in the interest of justice to take the said document on record as evidence, it is prayed that this Hon'ble Court may be pleased to take the said document on record and assign appropriate exhibit number to it.
+Subject: Regarding marking the document(s) as exhibit(s)...
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+In the above matter, I/We, the Advocate for the {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that...
 
------------------
-Advocate for {{selected_party_role}}""",
+The above case is pending before this Hon'ble Court. In the said case, we, the {{advocate_for_role}}, have produced original document(s) / online original copy vide documentary evidence list Exhibit {{aank_number}} from Serial No. {{document_index_from}} to {{document_index_to}} which has/have been referred to in the deposition and is/are necessary for the judicial decision of the case. Further, as it is in the interest of justice to take the said document(s) on record as evidence, it is therefore most respectfully prayed that this Hon'ble Court may be pleased to take the said document(s) on record, assign exhibit number(s) to the same and read them in evidence.
+
+Date : {{date}}
+
+Place : {{place}}
+
+--------------------
+{{representing_party_role}}'s Advocate""",
     },
     {
         "base_key": "certified_report",

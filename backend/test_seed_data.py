@@ -2208,8 +2208,35 @@ Advocate for the Applicant
             "dastavejne aank padva",
             "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
             "આંક પાડવાની અરજી",
+            "આંક",
+            "aanke",
+            "exhibit",
+            "aanke_padvani_arji",
         ],
         "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટનું નામ",
+                "type": "select",
+                "required": True,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
+                    {"value": "additional_senior_civil_judge_acjm", "label_en": "Additional Senior Civil Judge & ACJM", "label_gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
+                    {"value": "principal_district_sessions_judge", "label_en": "Principal District & Sessions Judge", "label_gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
+                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
+                    {"value": "additional_civil_judge_jmfc", "label_en": "Additional Civil Judge & JMFC", "label_gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
+                    {"value": "civil_judge_jmfc", "label_en": "Civil Judge & JMFC", "label_gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
+                    {"value": "senior_civil_judge", "label_en": "Senior Civil Judge", "label_gu": "સિનિયર સિવિલ જજ"},
+                    {"value": "additional_district_judge", "label_en": "Additional District Judge", "label_gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
+                    {"value": "metropolitan_magistrate", "label_en": "Metropolitan Magistrate", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
+                    {"value": "court_of_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
+                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
+                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
+                ],
+            },
             {
                 "key": "district",
                 "label_en": "District",
@@ -2312,29 +2339,6 @@ Advocate for the Applicant
                 ],
             },
             {
-                "key": "court_name",
-                "label_en": "Court Name",
-                "label_gu": "કોર્ટનું નામ",
-                "type": "select",
-                "required": True,
-                "source": "case_court",
-                "mode": ["saved_case", "direct_template"],
-                "options": [
-                    {"value": "principal_senior_civil_judge", "label_en": "Principal Senior Civil Judge", "label_gu": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ"},
-                    {"value": "additional_senior_civil_judge_acjm", "label_en": "Additional Senior Civil Judge & ACJM", "label_gu": "એડિશનલ સિનિયર સિવિલ જજ & એડી. ચીફ જ્યુડી. મેજી."},
-                    {"value": "principal_district_sessions_judge", "label_en": "Principal District & Sessions Judge", "label_gu": "પ્રિન્સીપાલ ડીસ્ટ્રીક્ટ એન્ડ સેસન્સ જજ"},
-                    {"value": "chief_judicial_magistrate", "label_en": "Chief Judicial Magistrate", "label_gu": "ચીફ જ્યુડિશિયલ મેજીસ્ટ્રેટ"},
-                    {"value": "additional_civil_judge_jmfc", "label_en": "Additional Civil Judge & JMFC", "label_gu": "એડિશનલ સિવિલ જજ & જ્યુડી. મેજી. ફ. ક."},
-                    {"value": "civil_judge_jmfc", "label_en": "Civil Judge & JMFC", "label_gu": "સિવિલ જજ અને જે.એમ.એફ.સી."},
-                    {"value": "senior_civil_judge", "label_en": "Senior Civil Judge", "label_gu": "સિનિયર સિવિલ જજ"},
-                    {"value": "additional_district_judge", "label_en": "Additional District Judge", "label_gu": "એડિશનલ ડિસ્ટ્રિક્ટ જજ"},
-                    {"value": "metropolitan_magistrate", "label_en": "Metropolitan Magistrate", "label_gu": "મેટ્રોપોલિટન મેજિસ્ટ્રેટ"},
-                    {"value": "court_of_jmfc", "label_en": "Court of JMFC", "label_gu": "જે.એમ.એફ.સી. ન્યાયાલય"},
-                    {"value": "family_court", "label_en": "Family Court", "label_gu": "ફેમિલી કોર્ટ"},
-                    {"value": "city_civil_court", "label_en": "City Civil Court", "label_gu": "સિટી સિવિલ કોર્ટ"},
-                ],
-            },
-            {
                 "key": "case_type",
                 "label_en": "Case Type",
                 "label_gu": "કેસ પ્રકાર",
@@ -2400,17 +2404,70 @@ Advocate for the Applicant
             },
             {"key": "party_2_name", "label_en": "Party 2 Name", "label_gu": "પક્ષકાર - ૨ નું નામ", "type": "text", "required": True, "source": "case_opposite_party_name", "mode": ["saved_case", "direct_template"], "placeholder": "પક્ષકાર - ૨ નું નામ"},
             {
-                "key": "representing_party",
-                "label_en": "Advocate acting on behalf of",
+                "key": "advocate_for",
+                "label_en": "Advocate Representing",
                 "label_gu": "કોના તરફે એડવોકેટ",
                 "type": "select",
                 "required": True,
+                "default": "વાદી",
                 "options": [
-                    {"value": "party_1", "label_en": "Applicant / Complainant / Plaintiff side", "label_gu": "ફરીયાદી / અરજદાર / વાદી તરફે"},
-                    {"value": "party_2", "label_en": "Accused / Opponent / Defendant side", "label_gu": "આરોપી / સામાવાળા / પ્રતિવાદી તરફે"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
                 ],
             },
-            {"key": "date", "label_en": "Date", "label_gu": "તારીખ", "type": "date", "required": True},
+            {
+                "key": "aank_number",
+                "label_en": "Aank Number",
+                "label_gu": "આંક નંબર",
+                "type": "number",
+                "required": False,
+                "placeholder": "ખાલી રાખી શકો છો (જેમ કે. ૩)",
+            },
+            {
+                "key": "document_index_from",
+                "label_en": "Serial No. From",
+                "label_gu": "અનુક્રમ નં. From",
+                "type": "number",
+                "required": False,
+                "placeholder": "૧",
+            },
+            {
+                "key": "document_index_to",
+                "label_en": "Serial No. To",
+                "label_gu": "અનુક્રમ નં. To",
+                "type": "number",
+                "required": False,
+                "placeholder": "૫",
+            },
+            {
+                "key": "date",
+                "label_en": "Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": True,
+                "default": "today",
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "તાલુકા અને જીલ્લા માંથી આપોઆપ આવશે",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
+                "type": "text",
+                "required": False,
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
+            },
         ],
         "settings": {
             "page_size": "A4",
@@ -2431,71 +2488,61 @@ Advocate for the Applicant
             "paragraph_spacing": 6.0,
             "first_line_indent_pt": 28.35,
             "block_align": [
-                {"contains": "સાહેબશ્રીની કોર્ટમાં", "align": "center", "bold": True},
-                {"contains": "COURT OF", "align": "center", "bold": True},
-                {"contains": "મુકામ :-", "align": "center"},
-                {"contains": "Place:", "align": "center"},
-                {"contains": " નં. :", "align": "right"},
-                {"contains": " No. :", "align": "right"},
-                {"contains": "વિરુદ્ધ", "align": "center"},
-                {"contains": "VERSUS", "align": "center"},
-                {"contains": "બાબત :- દસ્તાવેજને આંક પાડવા બાબત...", "align": "center", "bold": True},
-                {"contains": "બાબત :- દસ્તાવેજને આંક પાડવા બાબત ...", "align": "center", "bold": True},
-                {"contains": "Subject: Regarding marking the document(s) as exhibit(s)...", "align": "center", "bold": True},
-                {"contains": "સદર કામમાં અમો", "align": "justify", "indent": True},
-                {"contains": "સદર કેસ આપ નામદાર", "align": "justify", "indent": True},
-                {"contains": "In the above matter", "align": "justify", "indent": True},
-                {"contains": "The above case is pending", "align": "justify", "indent": True},
-                {"contains": "તારીખ :", "align": "left"},
-                {"contains": "Date :", "align": "left"},
-                {"contains": "સ્થળ :", "align": "left"},
-                {"contains": "Place :", "align": "left"},
+                {"contains": "મુકામ :-", "align": "center", "bold": True, "indent": False},
+                {"contains": "Place:", "align": "center", "bold": True, "indent": False},
+                {"contains": "AT:", "align": "center", "bold": True, "indent": False},
                 {"contains": "----------", "align": "right", "indent": False},
                 {"contains": "--------------------", "align": "right", "indent": False},
-                {"contains": "-----------------", "align": "right", "indent": False},
-                {"contains": "---------------------------", "align": "right", "indent": False},
                 {"contains": "ના એડવોકેટ", "align": "right"},
                 {"contains": "'s Advocate", "align": "right"},
                 {"contains": "Advocate", "align": "right"},
             ],
         },
         "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
 {{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
+
 {{party_2_role}} :- {{party_2_name}}
 
 બાબત :- દસ્તાવેજને આંક પાડવા બાબત...
 
-સદર કામમાં અમો {{representing_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં અમો {{representing_party_role}}એ દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ રજુ કરેલ છે કે જેને જુબાનીમાં રીફર કરેલ છે અને કેસના ન્યાયિક નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોઈ, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને આંક આપી પુરાવામાં વંચાણે લેવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં અમો {{advocate_for_role}}એ દસ્તાવેજી પુરાવા લીસ્ટથી અસલ દસ્તાવેજ / ઓનલાઈન અસલ નકલ આંક {{aank_number}} ના પુરાવા લિસ્ટથી અનુક્રમ નં. {{document_index_from}} થી {{document_index_to}} રજુ કરેલ છે કે જેને જુબાનીમાં રીફર કરેલ છે અને કેસના ન્યાયિક નિર્ણય માટે જરૂરી છે. તેમજ સદર દસ્તાવેજને પુરાવા તરીકે રેકર્ડ પર લેવા ન્યાયના હિતમાં હોઈ, સદર દસ્તાવેજને રેકર્ડ પર લઈ તેને આંક આપી પુરાવામાં વંચાણે લેવા મહેરબાની કરશોજી.
 
 તારીખ : {{date}}
-સ્થળ : {{taluka_place}}
+
+સ્થળ : {{place}}
 
 ----------
 {{representing_party_role}} ના એડવોકેટ""",
         "content_en": """BEFORE THE COURT OF THE HON'BLE {{court_name}}
+
 Place: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
 {{party_1_role}} :- {{party_1_name}}
+
 VERSUS
+
 {{party_2_role}} :- {{party_2_name}}
 
 Subject: Regarding marking the document(s) as exhibit(s)...
 
-In the above matter, I/We, the Advocate for the {{representing_party_role}}, most respectfully submit before this Hon'ble Court that...
+In the above matter, I/We, the Advocate for the {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that...
 
-The above case is pending before this Hon'ble Court. In the said case, we, the {{representing_party_role}}, have produced original document(s) vide documentary evidence list which has/have been referred to in the deposition and is/are necessary for the judicial decision of the case. Further, as it is in the interest of justice to take the said document(s) on record as evidence, it is therefore most respectfully prayed that this Hon'ble Court may be pleased to take the said document(s) on record, assign exhibit number(s) to the same and read them in evidence.
+The above case is pending before this Hon'ble Court. In the said case, we, the {{advocate_for_role}}, have produced original document(s) / online original copy vide documentary evidence list Exhibit {{aank_number}} from Serial No. {{document_index_from}} to {{document_index_to}} which has/have been referred to in the deposition and is/are necessary for the judicial decision of the case. Further, as it is in the interest of justice to take the said document(s) on record as evidence, it is therefore most respectfully prayed that this Hon'ble Court may be pleased to take the said document(s) on record, assign exhibit number(s) to the same and read them in evidence.
 
 Date : {{date}}
-Place : {{taluka_place}}
+
+Place : {{place}}
 
 --------------------
 {{representing_party_role}}'s Advocate""",

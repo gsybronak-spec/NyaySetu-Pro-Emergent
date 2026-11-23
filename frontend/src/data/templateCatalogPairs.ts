@@ -33,6 +33,11 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
       "aanke padva",
       "dastavejne aank padva",
       "દસ્તાવેજને આંક પાડવા બાબતની અરજી",
+      "આંક પાડવાની અરજી",
+      "આંક",
+      "aanke",
+      "exhibit",
+      "aanke_padvani_arji",
     ],
   },
   {
