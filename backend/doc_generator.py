@@ -972,7 +972,6 @@ def render_template(content_template: str, values: dict) -> str:
     ):
         result = (
             result.replace("કારણોસર કારણોસર", "કારણોસર")
-            .replace("હોવાથી કારણોસર", "હોવાથી")
             .replace("હોવાના કારણોસર કારણોસર", "હોવાના કારણોસર")
             .replace("reason reason", "reason")
         )

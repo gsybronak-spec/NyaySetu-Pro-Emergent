@@ -7373,14 +7373,18 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         elif custom_reason:
             reason_text = custom_reason
         else:
-            reason_text = "માંદગીના" if language == "gu" else "illness"
+            reason_text = "માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે" if language == "gu" else "we could not attend this Hon'ble Court due to illness, for which"
 
         if language == "en":
             reason_en_map = {
-                "માંદગીના કારણોસર": "illness",
-                "સામાજીક કામે રોકાયેલ હોવાના કારણોસર": "being engaged in social work",
-                "સગા ગુજરી ગયેલ હોવાથી": "demise of a relative",
-                "આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી": "traveling out of station for business work",
+                "માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to illness, for which",
+                "સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "we could not attend this Hon'ble Court due to being engaged in social work, for which",
+                "ના સગા ગુજરી ગયેલ જેથી અમો આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે": "due to the demise of a relative we could not attend this Hon'ble Court, for which",
+                "આર્થિક કામ અર્થે બહારગામ ગયેલ હતા, જે": "having gone out of station for financial / business work, for which",
+                "માંદગીના કારણોસર": "we could not attend this Hon'ble Court due to illness, for which",
+                "સામાજીક કામે રોકાયેલ હોવાના કારણોસર": "we could not attend this Hon'ble Court due to being engaged in social work, for which",
+                "સગા ગુજરી ગયેલ હોવાથી": "due to the demise of a relative we could not attend this Hon'ble Court, for which",
+                "આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી": "having gone out of station for financial / business work, for which",
                 "illness": "illness",
                 "Due to illness": "illness",
                 "Being engaged in social work": "being engaged in social work",

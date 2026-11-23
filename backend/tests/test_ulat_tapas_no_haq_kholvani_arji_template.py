@@ -158,15 +158,15 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
 
         reason_opts = [o.get("value") or o.get("key") for o in fields["reason"].get("options", [])]
         self.assertEqual(reason_opts, [
-            "માંદગીના કારણોસર",
-            "સામાજીક કામે રોકાયેલ હોવાના કારણોસર",
-            "સગા ગુજરી ગયેલ હોવાથી",
-            "આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી",
+            "માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+            "સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+            "ના સગા ગુજરી ગયેલ જેથી અમો આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+            "આર્થિક કામ અર્થે બહારગામ ગયેલ હતા, જે",
             "અન્ય",
         ])
 
     def test_05_legal_draft_text_structure(self):
-        """5. Verify Gujarati legal draft structure matches PDF Page 2 exactly."""
+        """5. Verify Gujarati legal draft structure matches updated legal wording."""
         gu = self.tpl.get("content_gu", "")
         self.assertIn("મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,", gu)
         self.assertIn("મુકામ :- {{taluka_place}}", gu)
@@ -175,15 +175,15 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("વિરુદ્ધ", gu)
         self.assertIn("{{party_2_role}} :- {{party_2_name}}", gu)
         self.assertIn("બાબત :- ઉલટતપાસનો હક ફરીથી ખોલી આપવા બાબત...", gu)
-        self.assertIn("સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....", gu)
-        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં ચાલવા પર છે. જેમાં અમોનો ઉલટ-તપાસનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે.", gu)
-        self.assertIn("{{reason_text}} કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટ-તપાસ કરવાની તક મળવી એ ન્યાયના હિતમાં હોય, અમોનો ઉલટ-તપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટ-તપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.", gu)
+        self.assertIn("સદર કામમા અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", gu)
+        self.assertIn("સદર કેસ આપ નામદાર કોર્ટમાં ચાલવા પર છે. જેમા અમોનો ઉલટ-તપાસનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે.", gu)
+        self.assertIn("અમો {{reason_text}} કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટ-તપાસ કરવાની તક મળવીએ ન્યાયના હિતમા હોય, અમોનો ઉલટ-તપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટ-તપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", gu)
         self.assertIn("તારીખ : {{date}}", gu)
         self.assertIn("સ્થળ : {{place}}", gu)
         self.assertIn("{{advocate_name}}", gu)
 
     async def test_06_rendering_default_reason_illness(self):
-        """6. Test rendering with default reason 'માંદગીના કારણોસર' and verify grammar deduplication."""
+        """6. Test rendering with default full reason sentence for illness."""
         values = {
             "court_name": "ચીફ જ્યુડીશીયલ મેજીસ્ટ્રેટ",
             "district": "અમદાવાદ",
@@ -195,7 +195,7 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_role": "આરોપી",
             "party_2_name": "પ્રકાશભાઈ પટેલ",
             "advocate_for": "આરોપી",
-            "reason": "માંદગીના કારણોસર",
+            "reason": "માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
             "date": "2026-11-23",
         }
         ctx = await server.build_render_context(self.user, None, values, "gu", template_id="ulat_tapas_no_haq_kholvani_arji")
@@ -212,16 +212,15 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ફરીયાદી :- રાજેશભાઈ સોલંકી", rendered)
         self.assertIn("વિરુદ્ધ", rendered)
         self.assertIn("આરોપી :- પ્રકાશભાઈ પટેલ", rendered)
-        self.assertIn("સદર કામમાં અમો આરોપીના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....", rendered)
-        # Deduplication check: must be "માંદગીના કારણોસર", NOT "માંદગીના કારણોસર કારણોસર"
-        self.assertIn("માંદગીના કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ", rendered)
+        self.assertIn("સદર કામમા અમો આરોપીના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....", rendered)
+        self.assertIn("અમો માંદગીના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ", rendered)
         self.assertNotIn("કારણોસર કારણોસર", rendered)
         self.assertIn("તારીખ : 23/11/2026", rendered)
         self.assertIn("સ્થળ : દસક્રોઈ, અમદાવાદ", rendered)
         self.assertIn("આરોપી ના એડવોકેટ", rendered)
 
     async def test_07_rendering_bereavement_reason(self):
-        """7. Test rendering with 'સગા ગુજરી ગયેલ હોવાથી' reason."""
+        """7. Test rendering with 'ના સગા ગુજરી ગયેલ જેથી અમો આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે' reason."""
         values = {
             "court_name": "પ્રિન્સિપાલ સિનિયર સિવિલ જજ",
             "district": "સુરત",
@@ -233,7 +232,7 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
             "party_2_role": "પ્રતિવાદી",
             "party_2_name": "દિનેશભાઈ મહેતા",
             "advocate_for": "પ્રતિવાદી",
-            "reason": "સગા ગુજરી ગયેલ હોવાથી",
+            "reason": "ના સગા ગુજરી ગયેલ જેથી અમો આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
             "date": "2026-11-23",
         }
         ctx = await server.build_render_context(self.user, None, values, "gu", template_id="ulat_tapas_no_haq_kholvani_arji")
@@ -244,9 +243,38 @@ class TestUlatTapasNoHaqKholvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
 
         rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
         self.assertIn("મુકામ :- સુરત", rendered)
-        self.assertIn("સગા ગુજરી ગયેલ હોવાથી ઉલટ-તપાસ થઈ શકેલ નહિ", rendered)
-        self.assertNotIn("હોવાથી કારણોસર", rendered)
+        self.assertIn("અમો ના સગા ગુજરી ગયેલ જેથી અમો આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ", rendered)
         self.assertIn("પ્રતિવાદી ના એડવોકેટ", rendered)
+
+    async def test_07b_rendering_all_reason_options(self):
+        """7b. Verify options 2 and 4 render full sentences correctly without word cutting."""
+        # Test Option 2
+        vals2 = {
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "પી1",
+            "party_2_role": "આરોપી",
+            "party_2_name": "પી2",
+            "advocate_for": "આરોપી",
+            "reason": "સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે",
+        }
+        ctx2 = await server.build_render_context(self.user, None, vals2, "gu", template_id="ulat_tapas_no_haq_kholvani_arji")
+        self.assertEqual(ctx2["reason_text"], "સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે")
+        r2 = doc_generator.render_template(self.tpl["content_gu"], ctx2)
+        self.assertIn("અમો સામાજીક કામે રોકાયેલ હોવાના કારણોસર આપ નામદાર કોર્ટમાં આવી શકીએ તેમ ન હતા, જે કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ", r2)
+
+        # Test Option 4
+        vals4 = {
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "પી1",
+            "party_2_role": "આરોપી",
+            "party_2_name": "પી2",
+            "advocate_for": "આરોપી",
+            "reason": "આર્થિક કામ અર્થે બહારગામ ગયેલ હતા, જે",
+        }
+        ctx4 = await server.build_render_context(self.user, None, vals4, "gu", template_id="ulat_tapas_no_haq_kholvani_arji")
+        self.assertEqual(ctx4["reason_text"], "આર્થિક કામ અર્થે બહારગામ ગયેલ હતા, જે")
+        r4 = doc_generator.render_template(self.tpl["content_gu"], ctx4)
+        self.assertIn("અમો આર્થિક કામ અર્થે બહારગામ ગયેલ હતા, જે કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ", r4)
 
     async def test_08_rendering_custom_reason(self):
         """8. Test rendering with custom reason (અન્ય)."""
