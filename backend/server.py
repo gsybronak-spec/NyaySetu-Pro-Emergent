@@ -3019,7 +3019,13 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji", "samadhan_purshish", "warrant_no_hath_bido_apvani_arji", "document_exhibit_application"):
+    for active_id in (
+        "fs_right_closure_application", "fs_right_reopen_application",
+        "kam_board_par_levani_arji", "warrant_rad_karvani_arji",
+        "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji",
+        "samadhan_purshish", "warrant_no_hath_bido_apvani_arji",
+        "document_exhibit_application", "aanke_padvani_arji", "aanke", "exhibit", "document_exhibit",
+    ):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
