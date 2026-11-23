@@ -951,6 +951,10 @@ def render_template(content_template: str, values: dict) -> str:
         or "ઉલટ તપાસનો હક બંધ કરવા બાબત" in result
         or "close cross-examination" in result.lower()
         or "application to close cross-examination right" in result.lower()
+        or "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત" in result
+        or "ઉલટતપાસનો હક ફરીથી ખોલી આપવા બાબત" in result
+        or "reopen cross-examination" in result.lower()
+        or "application to reopen cross-examination right" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:
@@ -959,6 +963,19 @@ def render_template(content_template: str, values: dict) -> str:
     if "વોરંટ રદ કરાવવા બાબત" in result or "cancellation of warrant" in result.lower():
         result = result.replace("કારણોસર કારણોસર", "કારણોસર")
         result = result.replace("reason reason", "reason")
+
+    if (
+        "ઉલટતપાસનો હક ફરીથી ખોલી આપવા બાબત" in result
+        or "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત" in result
+        or "reopen cross-examination" in result.lower()
+        or "application to reopen cross-examination right" in result.lower()
+    ):
+        result = (
+            result.replace("કારણોસર કારણોસર", "કારણોસર")
+            .replace("હોવાથી કારણોસર", "હોવાથી")
+            .replace("હોવાના કારણોસર કારણોસર", "હોવાના કારણોસર")
+            .replace("reason reason", "reason")
+        )
 
     return result
 

@@ -184,8 +184,8 @@ export async function runDraftBulkDeleteTests() {
   // 9. Safe Partial Failure Handling
   // Add 2 drafts, one will fail during deletion
   const newDrafts = [
-    { id: "draft_good_1", user_id: "user_1", template_id: "t1", template_name: "T1", updated_at: "now" },
-    { id: "draft_broken_network", user_id: "user_1", template_id: "t2", template_name: "T2", updated_at: "now" },
+    { id: "draft_good_1", user_id: "user_1", case_id: null, template_id: "t1", template_name: "T1", updated_at: "now" },
+    { id: "draft_broken_network", user_id: "user_1", case_id: null, template_id: "t2", template_name: "T2", updated_at: "now" },
   ];
   drafts = [...drafts, ...newDrafts];
   selectedDraftIds = new Set(["draft_good_1", "draft_broken_network"]);

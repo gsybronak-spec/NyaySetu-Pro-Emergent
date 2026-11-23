@@ -414,17 +414,17 @@ export const TEMPLATE_LOGICAL_PAIRS: TemplateLogicalPair[] = [
   },
   {
     baseKey: "ulat_tapas_no_haq_kholvani_arji",
-    guId: "ulat_tapas_no_haq_kholvani_arji_gu",
-    enId: "ulat_tapas_no_haq_kholvani_arji_en",
-    name_gu: "ઉલટતપાસનો હક્ક ખોલવાની અરજી",
+    guId: "ulat_tapas_no_haq_kholvani_arji",
+    enId: "ulat_tapas_no_haq_kholvani_arji",
+    name_gu: "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત",
     name_en: "Application to Reopen Cross-Examination Right",
     category: "General",
-    description_gu: "બંધ થયેલ ઉલટતપાસ કરવાનો હક્ક ફરીથી ચાલુ કરી સાક્ષીને ઉલટતપાસ માટે બોલાવવાની અરજી",
-    description_en: "Application to reopen the closed right of cross-examination and recall witness",
-    keywords_gu: ["ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ", "ક્રોસ ખોલવો", "સાક્ષી ફરી બોલાવવા"],
+    description_gu: "બંધ થયેલ ઉલટ-તપાસ કરવાનો હક ફરીથી ખોલી ઉલટ-તપાસ કરવાની તક આપવાની અરજી",
+    description_en: "Application to reopen the closed right of cross-examination and grant opportunity to cross-examine",
+    keywords_gu: ["ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ", "ક્રોસ ખોલવો", "સાક્ષી ફરી બોલાવવા", "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત"],
     keywords_en: ["reopen cross examination", "reopen cross", "recall witness for cross", "cross-examination reopen"],
     transliterations: ["ulat tapas khol", "reopen cross", "ulat tapas", "cross reopen"],
-    aliases: ["ulat_tapas_khol", "reopen cross examination", "ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ"],
+    aliases: ["ulat_tapas_khol", "ulta_tapas_no_haq_kholvani_arji", "reopen cross examination", "ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ", "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત"],
   },
   {
     baseKey: "undertaking",
@@ -540,7 +540,7 @@ export function resolveTemplateId(idOrBaseKey: string, lang: "gu" | "en" = "gu")
   return raw;
 }
 
-function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null): TemplateLogicalPair[] {
+export function sortPairsByOrder(pairs: TemplateLogicalPair[], order?: string[] | null): TemplateLogicalPair[] {
   if (!Array.isArray(order) || order.length === 0) {
     return pairs;
   }

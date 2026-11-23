@@ -344,7 +344,7 @@ export default function TemplateApplication() {
         (language === "gu" ? me?.advocate_name_gu : me?.advocate_name_en) || me?.name,
         language
       );
-      if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") {
+      if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") {
         const rawAdvFor = initialValues["advocate_for"];
         const effectiveRole = rawAdvFor === "party_1" ? initialValues["party_1_role"] : rawAdvFor === "party_2" ? initialValues["party_2_role"] : rawAdvFor;
         initialValues["advocate_name"] = effectiveRole ? getAdvocateDesignation(effectiveRole, language, templateId) : "";
@@ -481,7 +481,7 @@ export default function TemplateApplication() {
       const next = { ...prev, [k]: v };
       if (k === "court") next["court_name"] = v;
       if (k === "court_name") next["court"] = v;
-      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
+      if ((templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && (k === "advocate_for" || k === "party_1_role" || k === "party_2_role")) {
         const curAdvFor = k === "advocate_for" ? v : next["advocate_for"];
         if (curAdvFor) {
           const effectiveRole = curAdvFor === "party_1" ? next["party_1_role"] : curAdvFor === "party_2" ? next["party_2_role"] : curAdvFor;
@@ -496,12 +496,18 @@ export default function TemplateApplication() {
         const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (distVal || "");
         next["place"] = distLabel || "";
       }
-      if ((templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && (k === "district" || k === "taluka")) {
+      if ((templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && (k === "district" || k === "taluka")) {
         const curDist = k === "district" ? v : next["district"];
         const curTal = k === "taluka" ? v : next["taluka"];
         const distObj = districts.find((d: any) => d.id === curDist || d.gu === curDist || d.en === curDist);
         const distLabel = distObj ? (language === "gu" ? distObj.gu : distObj.en) : (curDist || "");
         next["place"] = curTal ? `${curTal}, ${distLabel}` : (distLabel || "");
+      }
+      if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (k === "reason" || k === "reopen_reason")) {
+        if (v !== "અન્ય" && v !== "other" && v !== "Other") {
+          next["custom_reason"] = "";
+          next["reopen_reason_other"] = "";
+        }
       }
       if (templateId === "warrant_rad_karvani_arji" && k === "absence_reason") {
         if (v !== "અન્ય" && v !== "other" && v !== "Other") {
@@ -643,7 +649,7 @@ export default function TemplateApplication() {
     } else if (rawTal) {
       derivedPlace = rawTal;
     }
-    if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") {
+    if (templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") {
       out["place"] = (v["place"] !== undefined && v["place"] !== null && v["place"] !== "") ? v["place"] : derivedPlace;
     } else {
       out["place"] = derivedPlace;
@@ -658,6 +664,25 @@ export default function TemplateApplication() {
       }
       if (out["closed_party"]) {
         out["closed_party_role"] = out["closed_party"];
+      }
+    }
+
+    if (templateId === "ulat_tapas_no_haq_kholvani_arji") {
+      out["place"] = rawTal ? `${rawTal}, ${rawDist}` : (rawDist || "");
+      if (out["advocate_for"]) {
+        out["advocate_for_role"] = out["advocate_for"];
+        out["advocate_name"] = getAdvocateDesignation(out["advocate_for"], language, templateId);
+      }
+      const curReason = out["reason"] || out["reopen_reason"];
+      const customReason = (out["custom_reason"] || out["reopen_reason_other"] || "").trim();
+      if (curReason === "અન્ય" || curReason === "other" || curReason === "Other") {
+        out["reason_text"] = customReason || curReason;
+        out["reason"] = customReason || curReason;
+        out["reopen_reason"] = customReason || curReason;
+      } else {
+        out["reason_text"] = curReason || "";
+        delete out["custom_reason"];
+        delete out["reopen_reason_other"];
       }
     }
 
@@ -891,7 +916,7 @@ export default function TemplateApplication() {
         if (templateId === "certified_copy_application" && (f.key === "court_name" || f.key === "court")) {
           return true;
         }
-        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
@@ -900,13 +925,13 @@ export default function TemplateApplication() {
       } else {
         // In Direct Template mode: hide saved-case-only fields and base fields handled in Case Details section
         if (f.mode === "SAVED_CASE") return false;
-        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
+        if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && (f.key === "advocate_name" || f.key === "place" || f.key === "date")) {
           return true;
         }
         if (BASE_FIELD_KEYS.has(f.key)) return false;
       }
       if (f.key === "representing_party") return false;
-      if (f.key === "date" && templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji") return false;
+      if (f.key === "date" && templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji" && templateId !== "ulat_tapas_no_haq_kholvani_arji") return false;
       return true;
     });
   }, [templateFields, caseId, templateId]);
@@ -924,7 +949,7 @@ export default function TemplateApplication() {
 
   // Validation
   const missingRequired = useMemo(() => {
-    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") {
+    if (templateId === "certified_copy_application" || templateId === "closing_purshish" || templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") {
       return [];
     }
     const missing: string[] = [];
@@ -967,6 +992,13 @@ export default function TemplateApplication() {
       Alert.alert(
         language === "gu" ? "અધૂરી વિગત" : "Missing Information",
         language === "gu" ? "કૃપા કરીને બધી જરૂરી વિગતો ભરો." : "Please fill all required fields before continuing."
+      );
+      return;
+    }
+    if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (values.reason === "અન્ય" || values.reason === "other" || values.reason === "Other" || values.reopen_reason === "અન્ય" || values.reopen_reason === "other" || values.reopen_reason === "Other") && !(values.custom_reason || values.reopen_reason_other)?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને ઉલટ-તપાસ ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for cross-examination."
       );
       return;
     }
@@ -1081,6 +1113,13 @@ export default function TemplateApplication() {
       setShowPurchaseModal(true);
       return;
     }
+    if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (values.reason === "અન્ય" || values.reason === "other" || values.reason === "Other" || values.reopen_reason === "અન્ય" || values.reopen_reason === "other" || values.reopen_reason === "Other") && !(values.custom_reason || values.reopen_reason_other)?.trim()) {
+      Alert.alert(
+        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
+        language === "gu" ? "કૃપા કરીને ઉલટ-તપાસ ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for cross-examination."
+      );
+      return;
+    }
     if (templateId === "warrant_rad_karvani_arji" && (values.absence_reason === "અન્ય" || values.absence_reason === "other" || values.absence_reason === "Other") && !(values.absence_reason_custom || values.absence_reason_other)?.trim()) {
       Alert.alert(
         language === "gu" ? "અધૂરી વિગત" : "Missing Information",
@@ -1181,7 +1220,7 @@ export default function TemplateApplication() {
   };
 
   const renderFieldInput = (f: any) => {
-    if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason") return null;
+    if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason" || (templateId === "ulat_tapas_no_haq_kholvani_arji" && (f.key === "custom_reason" || f.key === "reopen_reason_other"))) return null;
     if (f.depends_on && values[f.depends_on] !== f.show_when) return null;
     const label = (language === "gu" ? (f.label_gu || f.label_en || f.label || f.key) : (f.label_en || f.label_gu || f.label || f.key)) + (f.required ? " *" : "");
     const pickLabel = (o: any) => typeof o === "string" ? o : (language === "gu" ? (o.label_gu || o.label_en || o.label || o.value || o.id || o.key || "") : (o.label_en || o.label_gu || o.label || o.value || o.id || o.key || ""));
@@ -1313,6 +1352,7 @@ export default function TemplateApplication() {
       const isOtherDismissalReason = f.key === "dismissal_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       const isOtherAdjournmentReason = f.key === "adjournment_reason" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       const isOtherCopyRequestPurpose = f.key === "copy_request_purpose" && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
+      const isOtherUlatTapasReason = (f.key === "reason" || f.key === "reopen_reason") && (fvalue === "અન્ય" || fvalue === "other" || fvalue === "Other");
       return (
         <View key={f.key} style={{ marginBottom: Spacing.md }}>
           <Dropdown
@@ -1404,6 +1444,19 @@ export default function TemplateApplication() {
               style={{ marginTop: Spacing.sm }}
             />
           )}
+          {isOtherUlatTapasReason && (
+            <Field
+              testID="field-custom_reason"
+              label={language === "gu" ? "અન્ય કારણ" : "Custom Reason"}
+              placeholder={language === "gu" ? "ઉલટ-તપાસ ન થઈ શકવાનું ચોક્કસ કારણ લખો" : "Enter specific reason"}
+              value={values.custom_reason || values.reopen_reason_other || ""}
+              onChangeText={(txt) => {
+                update("custom_reason", txt);
+                update("reopen_reason_other", txt);
+              }}
+              style={{ marginTop: Spacing.sm }}
+            />
+          )}
         </View>
       );
     }
@@ -1440,12 +1493,12 @@ export default function TemplateApplication() {
       );
     }
 
-    if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && f.key === "advocate_name") {
+    if ((templateId === "closing_argument_right_application" || templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && f.key === "advocate_name") {
       return (
         <Field
           key={f.key}
           testID="field-advocate_name"
-          label={language === "gu" ? (templateId === "dd_karavani_arji" ? (f.label_gu || "વકીલશ્રી નું નામ") : templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : (f.label_en || "Advocate Name")}
+          label={language === "gu" ? (templateId === "dd_karavani_arji" ? (f.label_gu || "વકીલશ્રી નું નામ") : templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji" ? "ના એડવોકેટ" : "ના એડવોકેટ (હોદ્દો)") : (f.label_en || "Advocate Name")}
           placeholder={language === "gu" ? "કોના તરફે એડવોકેટ માંથી આપોઆપ આવશે" : "Auto-derived from Advocate For"}
           value={fvalue || ""}
           editable={false}
@@ -1454,13 +1507,13 @@ export default function TemplateApplication() {
       );
     }
 
-    if ((templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji") && f.key === "place") {
+    if ((templateId === "reopen_right_to_argue_application" || templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji") && f.key === "place") {
       return (
         <Field
           key={f.key}
           testID="field-place"
           label={label}
-          placeholder={language === "gu" ? (templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" ? "તાલુકા અને જીલ્લા માંથી આપોઆપ આવશે" : "જીલ્લા માંથી આપોઆપ આવશે") : "Auto-derived from Location"}
+          placeholder={language === "gu" ? (templateId === "exemption_arji" || templateId === "dd_karavani_arji" || templateId === "mudat_arji" || templateId === "fs_right_closure_application" || templateId === "fs_right_reopen_application" || templateId === "kam_board_par_levani_arji" || templateId === "warrant_rad_karvani_arji" || templateId === "ulat_tapas_no_haq_bandh_karavani_arji" || templateId === "ulat_tapas_no_haq_kholvani_arji" ? "તાલુકા અને જીલ્લા માંથી આપોઆપ આવશે" : "જીલ્લા માંથી આપોઆપ આવશે") : "Auto-derived from Location"}
           value={fvalue || ""}
           editable={false}
           style={{ opacity: 0.9, backgroundColor: colors.surfaceSecondary }}
@@ -1909,7 +1962,7 @@ export default function TemplateApplication() {
                   }}
                 />
 
-                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji" && !isVakalatnama && (
+                {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji" && templateId !== "ulat_tapas_no_haq_kholvani_arji" && !isVakalatnama && (
                   <Field
                     testID="field-advocate_name"
                     label={(language === "gu" ? "એડવોકેટનું નામ" : "Advocate Name") + " *"}
@@ -1957,8 +2010,8 @@ export default function TemplateApplication() {
 
             {appSpecificFields.map((f: any) => renderFieldInput(f))}
 
-            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji, fs_right_closure_application, fs_right_reopen_application, kam_board_par_levani_arji, warrant_rad_karvani_arji and ulat_tapas_no_haq_bandh_karavani_arji where date is in template sequence) */}
-            {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji" && (
+            {/* Date Field — ALWAYS THE LAST FIELD (except closing_argument_right_application, reopen_right_to_argue_application, exemption_arji, dd_karavani_arji, mudat_arji, fs_right_closure_application, fs_right_reopen_application, kam_board_par_levani_arji, warrant_rad_karvani_arji, ulat_tapas_no_haq_bandh_karavani_arji and ulat_tapas_no_haq_kholvani_arji where date is in template sequence) */}
+            {templateId !== "closing_argument_right_application" && templateId !== "reopen_right_to_argue_application" && templateId !== "exemption_arji" && templateId !== "dd_karavani_arji" && templateId !== "mudat_arji" && templateId !== "fs_right_closure_application" && templateId !== "fs_right_reopen_application" && templateId !== "kam_board_par_levani_arji" && templateId !== "warrant_rad_karvani_arji" && templateId !== "ulat_tapas_no_haq_bandh_karavani_arji" && templateId !== "ulat_tapas_no_haq_kholvani_arji" && (
               <View style={{ marginTop: Spacing.sm }}>
                 {renderFieldInput(dateField)}
               </View>

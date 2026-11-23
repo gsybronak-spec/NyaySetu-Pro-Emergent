@@ -199,6 +199,11 @@ TEMPLATE_CANONICAL_MAP = {
     "ulta_tapas_no_haq_bandh_karavani_arji": "ulat_tapas_no_haq_bandh_karavani_arji",
     "ulta_tapas_no_haq_bandh_karavani_arji_gu": "ulat_tapas_no_haq_bandh_karavani_arji",
     "ulta_tapas_no_haq_bandh_karavani_arji_en": "ulat_tapas_no_haq_bandh_karavani_arji",
+    "ulta_tapas_no_haq_kholvani_arji": "ulat_tapas_no_haq_kholvani_arji",
+    "ulta_tapas_no_haq_kholvani_arji_gu": "ulat_tapas_no_haq_kholvani_arji",
+    "ulta_tapas_no_haq_kholvani_arji_en": "ulat_tapas_no_haq_kholvani_arji",
+    "ulat_tapas_khol": "ulat_tapas_no_haq_kholvani_arji",
+    "ulat_tapas_kholvani_arji": "ulat_tapas_no_haq_kholvani_arji",
 }
 
 def resolve_canonical_template_id(template_id: str) -> str:
@@ -409,6 +414,7 @@ _SETTING_DEFAULTS = {
         "kam_board_par_levani_arji",
         "warrant_rad_karvani_arji",
         "ulat_tapas_no_haq_bandh_karavani_arji",
+        "ulat_tapas_no_haq_kholvani_arji",
     ],
 }
 _SETTING_DESCRIPTIONS = {
@@ -2869,7 +2875,7 @@ async def _get_deleted_template_ids() -> set[str]:
         base = clean[:-3] if clean.endswith(("_gu", "_en")) else clean
         expanded.add(base)
     # Active canonical templates must never be masked by historical tombstones
-    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji"):
+    for active_id in ("fs_right_closure_application", "fs_right_reopen_application", "kam_board_par_levani_arji", "warrant_rad_karvani_arji", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_kholvani_arji"):
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
@@ -3583,6 +3589,18 @@ def _get_canonical_ulat_tapas_no_haq_bandh_karavani_arji_template() -> Optional[
     return next((t for t in TEMPLATES if t.get("id") == "ulat_tapas_no_haq_bandh_karavani_arji"), None)
 
 
+def _get_canonical_ulat_tapas_no_haq_kholvani_arji_template() -> Optional[dict]:
+    try:
+        from test_seed_data import TEMPLATES as _TEST_TPLS
+        match = next((t for t in _TEST_TPLS if t.get("id") == "ulat_tapas_no_haq_kholvani_arji"), None)
+        if match:
+            return match
+    except Exception:
+        pass
+    return next((t for t in TEMPLATES if t.get("id") == "ulat_tapas_no_haq_kholvani_arji"), None)
+
+
+
 async def _ensure_seed_complete() -> None:
     """Ensure database has been initialized with seed templates on first run."""
     if db is None:
@@ -4186,6 +4204,51 @@ async def _ensure_seed_complete() -> None:
                         if needs_update:
                             await doc_ref_ulat_tapas.update(update_dict)
                             invalidate_published_templates_cache()
+
+            if "ulat_tapas_no_haq_kholvani_arji" not in deleted_ids:
+                doc_ref_ut_khol = db.collection("templates").document("ulat_tapas_no_haq_kholvani_arji")
+                snap_ut_khol = await doc_ref_ut_khol.get()
+                ut_khol_seed = _get_canonical_ulat_tapas_no_haq_kholvani_arji_template()
+                if ut_khol_seed:
+                    if not snap_ut_khol.exists:
+                        await doc_ref_ut_khol.set({
+                            **ut_khol_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        })
+                        invalidate_published_templates_cache()
+                    else:
+                        cur_utk = snap_ut_khol.to_dict()
+                        needs_update = False
+                        update_dict = {}
+                        if cur_utk.get("content_gu") != ut_khol_seed["content_gu"]:
+                            update_dict["content_gu"] = ut_khol_seed["content_gu"]
+                            needs_update = True
+                        if cur_utk.get("content_en") != ut_khol_seed["content_en"]:
+                            update_dict["content_en"] = ut_khol_seed["content_en"]
+                            needs_update = True
+                        if cur_utk.get("settings") != ut_khol_seed["settings"]:
+                            update_dict["settings"] = ut_khol_seed["settings"]
+                            needs_update = True
+                        if cur_utk.get("fields") != ut_khol_seed.get("fields"):
+                            update_dict["fields"] = ut_khol_seed["fields"]
+                            needs_update = True
+                        if cur_utk.get("status") != "published":
+                            update_dict["status"] = "published"
+                            needs_update = True
+                        if cur_utk.get("category") != ut_khol_seed.get("category"):
+                            update_dict["category"] = ut_khol_seed["category"]
+                            needs_update = True
+                        if cur_utk.get("name_gu") != ut_khol_seed.get("name_gu"):
+                            update_dict["name_gu"] = ut_khol_seed["name_gu"]
+                            needs_update = True
+                        if cur_utk.get("name_en") != ut_khol_seed.get("name_en"):
+                            update_dict["name_en"] = ut_khol_seed["name_en"]
+                            needs_update = True
+                        if needs_update:
+                            await doc_ref_ut_khol.update(update_dict)
+                            invalidate_published_templates_cache()
     except Exception as e:
         logger.warning(f"Could not heal templates in db: {e}")
 
@@ -4689,6 +4752,45 @@ async def _get_published_templates() -> list:
                             }))
                         except Exception:
                             pass
+            if (t.get("id") == "ulat_tapas_no_haq_kholvani_arji" or t.get("template_id") == "ulat_tapas_no_haq_kholvani_arji"):
+                ut_khol_seed = _get_canonical_ulat_tapas_no_haq_kholvani_arji_template()
+                if ut_khol_seed:
+                    needs_update = False
+                    if t.get("content_gu") != ut_khol_seed["content_gu"]:
+                        t["content_gu"] = ut_khol_seed["content_gu"]
+                        needs_update = True
+                    if t.get("content_en") != ut_khol_seed["content_en"]:
+                        t["content_en"] = ut_khol_seed["content_en"]
+                        needs_update = True
+                    if t.get("settings") != ut_khol_seed["settings"]:
+                        t["settings"] = ut_khol_seed["settings"]
+                        needs_update = True
+                    if t.get("fields") != ut_khol_seed.get("fields"):
+                        t["fields"] = ut_khol_seed["fields"]
+                        needs_update = True
+                    if t.get("name_gu") != ut_khol_seed.get("name_gu"):
+                        t["name_gu"] = ut_khol_seed["name_gu"]
+                        needs_update = True
+                    if t.get("name_en") != ut_khol_seed.get("name_en"):
+                        t["name_en"] = ut_khol_seed["name_en"]
+                        needs_update = True
+                    if t.get("category") != ut_khol_seed.get("category"):
+                        t["category"] = ut_khol_seed["category"]
+                        needs_update = True
+                    if needs_update and db is not None:
+                        try:
+                            asyncio.create_task(db.collection("templates").document(t.get("id", "ulat_tapas_no_haq_kholvani_arji")).update({
+                                "content_gu": t["content_gu"],
+                                "content_en": t["content_en"],
+                                "settings": t["settings"],
+                                "fields": t["fields"],
+                                "name_gu": t["name_gu"],
+                                "name_en": t["name_en"],
+                                "category": t["category"],
+                            }))
+                        except Exception:
+                            pass
+
 
         found_cc = any((t.get("id") == "certified_copy_application" or t.get("template_id") == "certified_copy_application") for t in db_templates)
         if not found_cc and "certified_copy_application" not in deleted_ids:
@@ -4907,6 +5009,22 @@ async def _get_published_templates() -> list:
                     try:
                         asyncio.create_task(db.collection("templates").document("ulat_tapas_no_haq_bandh_karavani_arji").set({
                             **ulat_tapas_seed,
+                            "status": "published",
+                            "updated_at": now().isoformat(),
+                            "created_at": now().isoformat(),
+                        }))
+                    except Exception:
+                        pass
+
+        found_ulat_tapas_khol = any((t.get("id") == "ulat_tapas_no_haq_kholvani_arji" or t.get("template_id") == "ulat_tapas_no_haq_kholvani_arji") for t in db_templates)
+        if not found_ulat_tapas_khol and "ulat_tapas_no_haq_kholvani_arji" not in deleted_ids:
+            ut_khol_seed = _get_canonical_ulat_tapas_no_haq_kholvani_arji_template()
+            if ut_khol_seed:
+                db_templates.append(dict(ut_khol_seed))
+                if db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document("ulat_tapas_no_haq_kholvani_arji").set({
+                            **ut_khol_seed,
                             "status": "published",
                             "updated_at": now().isoformat(),
                             "created_at": now().isoformat(),
@@ -5504,6 +5622,44 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
                         }))
                     except Exception:
                         pass
+        if (t.get("id") == "ulat_tapas_no_haq_kholvani_arji" or template_id in ("ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji") or base_cand in ("ulat_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji", "ulat_tapas_khol")):
+            ut_khol_seed = _get_canonical_ulat_tapas_no_haq_kholvani_arji_template()
+            if ut_khol_seed:
+                needs_update = False
+                if t.get("content_gu") != ut_khol_seed["content_gu"]:
+                    t["content_gu"] = ut_khol_seed["content_gu"]
+                    needs_update = True
+                if t.get("content_en") != ut_khol_seed["content_en"]:
+                    t["content_en"] = ut_khol_seed["content_en"]
+                    needs_update = True
+                if t.get("settings") != ut_khol_seed["settings"]:
+                    t["settings"] = ut_khol_seed["settings"]
+                    needs_update = True
+                if t.get("fields") != ut_khol_seed.get("fields"):
+                    t["fields"] = ut_khol_seed["fields"]
+                    needs_update = True
+                if t.get("name_gu") != ut_khol_seed.get("name_gu"):
+                    t["name_gu"] = ut_khol_seed["name_gu"]
+                    needs_update = True
+                if t.get("name_en") != ut_khol_seed.get("name_en"):
+                    t["name_en"] = ut_khol_seed["name_en"]
+                    needs_update = True
+                if t.get("category") != ut_khol_seed.get("category"):
+                    t["category"] = ut_khol_seed["category"]
+                    needs_update = True
+                if needs_update and db is not None:
+                    try:
+                        asyncio.create_task(db.collection("templates").document(t.get("id", template_id)).update({
+                            "content_gu": t["content_gu"],
+                            "content_en": t["content_en"],
+                            "settings": t["settings"],
+                            "fields": t["fields"],
+                            "name_gu": t["name_gu"],
+                            "name_en": t["name_en"],
+                            "category": t["category"],
+                        }))
+                    except Exception:
+                        pass
         return {**t, "format_version": t.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
 
     if not t and (base_cand == "certified_copy_application" or template_id in ("certified_copy_application", "certified_copy_application_gu", "certified_copy_application_en")):
@@ -5575,6 +5731,12 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
         ulat_tapas_seed = _get_canonical_ulat_tapas_no_haq_bandh_karavani_arji_template()
         if ulat_tapas_seed and "ulat_tapas_no_haq_bandh_karavani_arji" not in deleted_ids:
             return {**ulat_tapas_seed, "format_version": ulat_tapas_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
+    if not t and (base_cand in ("ulat_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji", "ulat_tapas_khol") or template_id in ("ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji")):
+        ut_khol_seed = _get_canonical_ulat_tapas_no_haq_kholvani_arji_template()
+        if ut_khol_seed and "ulat_tapas_no_haq_kholvani_arji" not in deleted_ids:
+            return {**ut_khol_seed, "format_version": ut_khol_seed.get("format_version") or NYAYSETU_LEGAL_FORMAT_V1}
+
 
     if not t:
         for cand in lookup_candidates:
@@ -6616,7 +6778,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
                 default_adv_desig = f"{adv_for_role} ના એડવોકેટ"
         else:
             default_adv_desig = f"Advocate for {adv_for_role}"
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if tpl_id in ("vakilatnama_criminal", "vakilatnama_civil", "vakilatnama", "vakalatnama"):
             # For Vakilatnama, advocate_name is the actual advocate name (Field 1), not a designation!
             pass
@@ -6626,7 +6788,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["advocate_name"] = default_adv_desig
     else:
         ctx.setdefault("advocate_for_role", "")
-        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values)
+        is_closing_or_reopen = (tpl_id in ("closing_argument_right_application", "reopen_right_to_argue_application", "exemption_arji", "exemption_arji_gu", "exemption_arji_en", "dd_karavani_arji", "dd_karavani_arji_gu", "dd_karavani_arji_en", "mudat_arji", "mudat_arji_gu", "mudat_arji_en", "fs_right_closure_application", "fs_right_closure_application_gu", "fs_right_closure_application_en", "fs_right_reopen_application", "fs_right_reopen_application_gu", "fs_right_reopen_application_en", "kam_board_par_levani_arji", "kam_board_par_levani_arji_gu", "kam_board_par_levani_arji_en", "warrant_rad_karvani_arji", "warrant_rad_karvani_arji_gu", "warrant_rad_karvani_arji_en", "ulat_tapas_no_haq_bandh_karavani_arji", "ulat_tapas_no_haq_bandh_karavani_arji_gu", "ulat_tapas_no_haq_bandh_karavani_arji_en", "ulta_tapas_no_haq_bandh_karavani_arji", "ulta_tapas_no_haq_bandh_karavani_arji_gu", "ulta_tapas_no_haq_bandh_karavani_arji_en", "ulat_tapas_no_haq_kholvani_arji", "ulat_tapas_no_haq_kholvani_arji_gu", "ulat_tapas_no_haq_kholvani_arji_en", "ulta_tapas_no_haq_kholvani_arji", "ulta_tapas_no_haq_kholvani_arji_gu", "ulta_tapas_no_haq_kholvani_arji_en", "ulat_tapas_khol", "ulat_tapas_kholvani_arji") or "closed_party" in ctx or "closed_party" in values or "argument_failure_reason" in ctx or "argument_failure_reason" in values or "absence_reason" in ctx or "absence_reason" in values or "dismissal_reason" in ctx or "dismissal_reason" in values or "adjournment_reason" in ctx or "adjournment_reason" in values or "fs_failure_reason" in ctx or "fs_failure_reason" in values or "urgent_reason" in ctx or "urgent_reason" in values or "warrant_date" in ctx or "warrant_date" in values or "reason_text" in ctx or "reason_text" in values)
         if is_closing_or_reopen:
             if not values.get("advocate_name") or values.get("advocate_name") in (adv_en_profile, adv_gu_profile, "એડવોકેટ", "Advocate"):
                 ctx["advocate_name"] = ""
@@ -7154,6 +7316,82 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
 
         ctx["closed_party_role"] = closed_role
 
+    # Ulta Tapas No Haq Kholvani Arji (ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત)
+    is_ulat_tapas_khol_app = (tpl_id in (
+        "ulat_tapas_no_haq_kholvani_arji",
+        "ulat_tapas_no_haq_kholvani_arji_gu",
+        "ulat_tapas_no_haq_kholvani_arji_en",
+        "ulta_tapas_no_haq_kholvani_arji",
+        "ulta_tapas_no_haq_kholvani_arji_gu",
+        "ulta_tapas_no_haq_kholvani_arji_en",
+        "ulat_tapas_khol",
+        "ulat_tapas_kholvani_arji",
+    ))
+    if is_ulat_tapas_khol_app:
+        if _tal and _dist:
+            ctx["place"] = f"{_tal}, {_dist}"
+            ctx["taluka_place"] = f"{_tal}, {_dist}"
+        elif _dist:
+            ctx["place"] = _dist
+            ctx["taluka_place"] = _dist
+        elif _tal:
+            ctx["place"] = _tal
+            ctx["taluka_place"] = _tal
+        else:
+            ctx["place"] = ""
+            ctx["taluka_place"] = ""
+
+        adv_for = str(ctx.get("advocate_for") or "").strip()
+        if adv_for in ("આરોપી", "સામાવાળા", "પ્રતિવાદી", "ફરીયાદી", "અરજદાર", "વાદી"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for in ("accused", "opponent", "defendant", "complainant", "applicant", "plaintiff", "Accused", "Opponent", "Defendant", "Complainant", "Applicant", "Plaintiff"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for == "party_1":
+            adv_role = resolve_party_role_label(str(ctx.get("party_1_role") or "ફરીયાદી").strip(), language)
+        elif adv_for == "party_2":
+            adv_role = resolve_party_role_label(str(ctx.get("party_2_role") or "આરોપી").strip(), language)
+        else:
+            adv_role = str(ctx.get("advocate_for_role") or "").strip()
+            if not adv_role:
+                adv_role = resolve_party_role_label(adv_for, language) if adv_for else resolve_party_role_label(str(ctx.get("party_2_role") or "આરોપી").strip(), language)
+            else:
+                adv_role = resolve_party_role_label(adv_role, language)
+
+        ctx["advocate_for_role"] = adv_role
+        if language == "gu":
+            ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
+        else:
+            ctx["advocate_name"] = f"Advocate for {adv_role}"
+
+        raw_reason = str(ctx.get("reason") or ctx.get("reopen_reason") or "").strip()
+        custom_reason = str(ctx.get("custom_reason") or ctx.get("reopen_reason_other") or "").strip()
+
+        if raw_reason == "અન્ય" or raw_reason.lower() == "other":
+            reason_text = custom_reason
+        elif raw_reason:
+            reason_text = raw_reason
+        elif custom_reason:
+            reason_text = custom_reason
+        else:
+            reason_text = "માંદગીના" if language == "gu" else "illness"
+
+        if language == "en":
+            reason_en_map = {
+                "માંદગીના કારણોસર": "illness",
+                "સામાજીક કામે રોકાયેલ હોવાના કારણોસર": "being engaged in social work",
+                "સગા ગુજરી ગયેલ હોવાથી": "demise of a relative",
+                "આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી": "traveling out of station for business work",
+                "illness": "illness",
+                "Due to illness": "illness",
+                "Being engaged in social work": "being engaged in social work",
+                "Due to demise of a relative": "demise of a relative",
+                "Gone out of station for financial / business work": "traveling out of station for business work",
+            }
+            reason_text = reason_en_map.get(reason_text, reason_text)
+
+        ctx["reason_text"] = reason_text
+        ctx["reopen_reason"] = reason_text
+
     # Ensure template keys are clean strings (never None or undefined)
     for k in (
         "court_name", "court", "district", "taluka", "taluka_place",
@@ -7168,6 +7406,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         "fs_failure_reason", "fs_failure_reason_custom", "fs_failure_reason_other",
         "scheduled_date", "urgent_reason", "urgent_reason_custom",
         "warrant_date", "accused_name_role",
+        "reason", "custom_reason", "reason_text", "reopen_reason", "reopen_reason_other",
         "date", "place", "advocate_name",
     ):
         if k not in ctx or ctx[k] is None:

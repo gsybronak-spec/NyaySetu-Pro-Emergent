@@ -162,10 +162,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'ulat_tapas_no_haq_kholvani_arji',
-    guId: 'ulat_tapas_no_haq_kholvani_arji_gu',
-    enId: 'ulat_tapas_no_haq_kholvani_arji_en',
-    name_gu: 'ઉલટ તપાસનો હક ખોલવાની અરજી',
-    name_en: 'Application to Reopen / Recall Right of Cross-Examination',
+    guId: 'ulat_tapas_no_haq_kholvani_arji',
+    enId: 'ulat_tapas_no_haq_kholvani_arji',
+    name_gu: 'ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત',
+    name_en: 'Application to Reopen Cross-Examination Right',
     category: 'General',
   },
   {

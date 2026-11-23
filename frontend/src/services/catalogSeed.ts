@@ -2195,6 +2195,7 @@ export const SEED_TEMPLATE_ORDER: string[] = [
   "kam_board_par_levani_arji",
   "warrant_rad_karvani_arji",
   "ulat_tapas_no_haq_bandh_karavani_arji",
+  "ulat_tapas_no_haq_kholvani_arji",
 ];
 
 export const SEED_PUBLISHED_TEMPLATES: any[] = [
@@ -2301,6 +2302,13 @@ export const SEED_PUBLISHED_TEMPLATES: any[] = [
     template_id: "ulat_tapas_no_haq_bandh_karavani_arji",
     name_gu: "ઉલટ તપાસનો હક બંધ કરવા બાબત",
     name_en: "Application to Close Cross-Examination Right",
+    category: "General",
+  },
+  {
+    id: "ulat_tapas_no_haq_kholvani_arji",
+    template_id: "ulat_tapas_no_haq_kholvani_arji",
+    name_gu: "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત",
+    name_en: "Application to Reopen Cross-Examination Right",
     category: "General",
   },
 ];

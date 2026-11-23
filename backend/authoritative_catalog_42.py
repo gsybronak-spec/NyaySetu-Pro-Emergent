@@ -869,55 +869,78 @@ Place : {{place}}
     },
     {
         "base_key": "ulat_tapas_no_haq_kholvani_arji",
-        "aliases": ["ulat_tapas_khol", "reopen cross examination", "ઉલટતપાસ ખોલવા", "હક ખોલવો ઉલટતપાસ"],
-        "name_gu": "ઉલટતપાસનો હક્ક ખોલવાની અરજી",
+        "aliases": ["ulat_tapas_khol", "ulta_tapas_no_haq_kholvani_arji", "ulat_tapas_kholvani_arji", "reopen cross examination", "ઉલટતપાસ ખોલવા", "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત", "હક ખોલવો ઉલટતપાસ"],
+        "name_gu": "ઉલટ તપાસનો હક ફરીથી ખોલી આપવા બાબત",
         "name_en": "Application to Reopen Cross-Examination Right",
         "category": "General",
-        "description": "Application to reopen the closed right of cross-examination and recall witness.",
+        "description": "Application to reopen the closed right of cross-examination and grant opportunity to cross-examine.",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'opposite', 'label_en': 'Accused / Respondent side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}, {'value': 'party', 'label_en': 'Applicant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}]},
-            {'key': 'reopen_reason', 'label_en': 'Reason for reopening cross-examination', 'label_gu': 'ઉલટતપાસ ન થઈ શકવાનું કારણ', 'type': 'select', 'required': True, 'options': [{'value': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના', 'label_en': 'Bereavement in family', 'label_gu': 'આરોપીના દાદા ગુજરી ગયેલ હોવાના'}, {'value': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના', 'label_en': 'Travelled abroad for business', 'label_gu': 'આરોપીને વ્યવસાયના કામ અર્થે વિદેશ જવાનુ થયેલ હોવાના'}, {'value': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના', 'label_en': 'Advocate was indisposed due to illness', 'label_gu': 'આરોપીના વકીલશ્રી માંદગીના કારણોસર આપ નામદાર કોર્ટમા આવી શકે તેમ ન હોવાના'}, {'value': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય', 'label_en': 'Accused was in custody in another matter', 'label_gu': 'આરોપી બીજા ગુન્હાના કામ અર્થે જેલ મા હોય'}, {'value': 'other', 'label_en': 'Other reason', 'label_gu': 'અન્ય કારણ'}]},
-            {'key': 'reopen_reason_other', 'label_en': 'If other, specify reason', 'label_gu': 'અન્ય કારણની વિગત', 'type': 'text', 'required': False, 'depends_on': 'reopen_reason=other'},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {'key': 'court_name', 'label_en': 'Court Name', 'label_gu': 'કોર્ટ નું નામ', 'type': 'select', 'required': False},
+            {'key': 'district', 'label_en': 'District', 'label_gu': 'જીલ્લો', 'type': 'select', 'required': False},
+            {'key': 'taluka', 'label_en': 'Taluka', 'label_gu': 'તાલુકો', 'type': 'select', 'required': False},
+            {'key': 'case_type', 'label_en': 'Case Type', 'label_gu': 'કેસ પ્રકાર', 'type': 'select', 'required': False},
+            {'key': 'case_number', 'label_en': 'Case Number', 'label_gu': 'કેસ નંબર', 'type': 'text', 'required': False},
+            {'key': 'party_1_role', 'label_en': 'Party 1 Role', 'label_gu': 'પક્ષકાર-૧ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'ફરીયાદી', 'label_gu': 'ફરીયાદી', 'label_en': 'Complainant'}, {'value': 'અરજદાર', 'label_gu': 'અરજદાર', 'label_en': 'Applicant'}, {'value': 'વાદી', 'label_gu': 'વાદી', 'label_en': 'Plaintiff'}]},
+            {'key': 'party_1_name', 'label_en': 'Party 1 Name', 'label_gu': 'પક્ષકાર - ૧ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'party_2_role', 'label_en': 'Party 2 Role', 'label_gu': 'પક્ષકાર-૨ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'આરોપી', 'label_gu': 'આરોપી', 'label_en': 'Accused'}, {'value': 'સામાવાળા', 'label_gu': 'સામાવાળા', 'label_en': 'Opponent'}, {'value': 'પ્રતિવાદી', 'label_gu': 'પ્રતિવાદી', 'label_en': 'Defendant'}]},
+            {'key': 'party_2_name', 'label_en': 'Party 2 Name', 'label_gu': 'પક્ષકાર - ૨ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'advocate_for', 'label_en': 'Advocate For', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': False, 'default': 'આરોપી', 'options': [{'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}, {'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}]},
+            {'key': 'reason', 'label_en': 'Reason cross-examination could not take place', 'label_gu': 'ઉલટ-તપાસ ન થઈ શકવાનું કારણ', 'type': 'select', 'required': False, 'default': 'માંદગીના કારણોસર', 'options': [{'value': 'માંદગીના કારણોસર', 'label_en': 'Due to illness', 'label_gu': 'માંદગીના કારણોસર'}, {'value': 'સામાજીક કામે રોકાયેલ હોવાના કારણોસર', 'label_en': 'Being engaged in social work', 'label_gu': 'સામાજીક કામે રોકાયેલ હોવાના કારણોસર'}, {'value': 'સગા ગુજરી ગયેલ હોવાથી', 'label_en': 'Due to demise of a relative', 'label_gu': 'સગા ગુજરી ગયેલ હોવાથી'}, {'value': 'આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી', 'label_en': 'Gone out of station for financial / business work', 'label_gu': 'આર્થિક કામ અર્થે બહારગામ ગયેલ હોવાથી'}, {'value': 'અન્ય', 'label_en': 'Other', 'label_gu': 'અન્ય'}]},
+            {'key': 'custom_reason', 'label_en': 'Custom Reason', 'label_gu': 'અન્ય કારણ', 'type': 'text', 'required': False, 'depends_on': {'field': 'reason', 'value': 'અન્ય'}},
+            {'key': 'date', 'label_en': 'Application Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': False},
+            {'key': 'place', 'label_en': 'Place', 'label_gu': 'સ્થળ', 'type': 'text', 'required': False},
+            {'key': 'advocate_name', 'label_en': 'Advocate Designation', 'label_gu': 'ના એડવોકેટ', 'type': 'text', 'required': False},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
+
+{{party_2_role}} :- {{party_2_name}}
 
 બાબત :- ઉલટતપાસનો હક ફરીથી ખોલી આપવા બાબત...
 
-સદર કામમા અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. જેમા અમોનો ઉલટતપાસ કરવાનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. જે {{reopen_reason}} હોવાના કારણોસર થઈ શકેલ નહી તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટતપાસ કરવાની તક મળવી એ ન્યાયના હિતમા હોય, અમોનો ઉલટતપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટતપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટમાં ચાલવા પર છે. જેમાં અમોનો ઉલટ-તપાસનો હક આપ નામદાર કોર્ટ દ્વારા બંધ કરવામાં આવેલ છે. {{reason_text}} કારણોસર ઉલટ-તપાસ થઈ શકેલ નહિ તેમજ સદર કારણ વાજબી હોવાથી તથા ઉલટ-તપાસ કરવાની તક મળવી એ ન્યાયના હિતમાં હોય, અમોનો ઉલટ-તપાસ કરવાનો હક ફરીથી ખોલી અમોને ઉલટ-તપાસ કરવાની તક આપવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશો જી.
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+તારીખ : {{date}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+
+AT: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 Versus
-{{opposite_party_line}}
 
-SUBJECT: APPLICATION TO REOPEN RIGHT OF CROSS-EXAMINATION
+{{party_2_role}} :- {{party_2_name}}
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+SUBJECT: APPLICATION TO REOPEN CROSS-EXAMINATION RIGHT
 
-The said case is pending before this Hon'ble Court, wherein our right of cross-examination was closed by this Hon'ble Court. Cross-examination could not be conducted on account of {{reopen_reason}}, and as the said reason is reasonable and genuine and getting an opportunity to cross-examine is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to reopen our right of cross-examination and grant us an opportunity to cross-examine.
+In the above matter, we, the advocate for {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that:
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+The said case is pending for hearing before this Hon'ble Court, wherein our right of cross-examination was closed by this Hon'ble Court. Due to {{reason_text}}, cross-examination could not be conducted, and as the said reason is genuine and bona fide and an opportunity to cross-examine is in the interest of justice, it is prayed that this Hon'ble Court may be pleased to reopen our right of cross-examination and grant us an opportunity to cross-examine and pass appropriate orders.
 
---------------------------- Advocate for {{selected_party_role}}""",
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
     },
     {
         "base_key": "undertaking",
