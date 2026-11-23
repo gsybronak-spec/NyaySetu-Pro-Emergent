@@ -123,7 +123,7 @@ class TestWarrantRadKarvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(field_map["advocate_name"]["type"], "text")
 
     def test_04_dropdown_options(self):
-        """4. Verify party roles and absence reasons dropdown options."""
+        """4. Verify party roles, complete 6 individual advocate party roles, and absence reasons dropdown options."""
         field_map = {f["key"]: f for f in self.tpl.get("fields", [])}
 
         p1_opts = [o["value"] for o in field_map["party_1_role"]["options"]]
@@ -136,14 +136,24 @@ class TestWarrantRadKarvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("સામાવાળા", p2_opts)
         self.assertIn("પ્રતિવાદી", p2_opts)
 
+        # FIX 1: Verify complete 6 individual party roles for advocate_for
+        adv_opts = [o["value"] for o in field_map["advocate_for"]["options"]]
+        expected_adv_roles = ["આરોપી", "સામાવાળા", "પ્રતિવાદી", "ફરીયાદી", "અરજદાર", "વાદી"]
+        self.assertEqual(adv_opts, expected_adv_roles, f"Expected {expected_adv_roles}, got {adv_opts}")
+        self.assertEqual(field_map["advocate_for"].get("default"), "આરોપી")
+        self.assertNotIn("source", field_map["advocate_for"])
+
+        # FIX 2: Verify grammatically corrected phrasing for all 6 absence reasons (without 'કારણોસર' in dropdown)
         reason_opts = [o["value"] for o in field_map["absence_reason"]["options"]]
-        self.assertEqual(len(reason_opts), 6)
-        self.assertIn("અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ", reason_opts)
-        self.assertIn("માંદગીના", reason_opts)
-        self.assertIn("વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ", reason_opts)
-        self.assertIn("સામાજીક કામમાં રોકાયેલ હોઈ", reason_opts)
-        self.assertIn("અમોના સગામાં અવસાન થયેલ હોઈ", reason_opts)
-        self.assertIn("અન્ય", reason_opts)
+        expected_reasons = [
+            "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના",
+            "માંદગીના",
+            "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના",
+            "સામાજીક કામમાં રોકાયેલ હોવાના",
+            "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના",
+            "અન્ય",
+        ]
+        self.assertEqual(reason_opts, expected_reasons, f"Expected {expected_reasons}, got {reason_opts}")
 
     def test_05_settings_and_layout(self):
         """5. Verify template settings: A4, 2cm top/bottom margins, 4cm left/right margins, 18pt line spacing."""
@@ -158,63 +168,54 @@ class TestWarrantRadKarvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(settings.get("margin_right_cm"), 4.0)
 
     async def test_06_advocate_designation_and_accused_role(self):
-        """6. Verify auto-derived advocate designation and accused_name_role."""
+        """6. Verify all 6 individual advocate party roles and accused_name_role."""
         user = {"name": "Test Advocate"}
-        # For accused / આરોપી: advocate designation is f"{role} ના એડવોકેટ"
-        vals_aaropi = {
-            "party_1_role": "ફરીયાદી",
-            "party_1_name": "રમેશભાઈ",
-            "party_2_role": "આરોપી",
-            "party_2_name": "સુરેશભાઈ",
-            "advocate_for": "આરોપી",
-            "absence_reason": "માંદગીના",
-            "warrant_date": "2026-12-15",
-        }
-        ctx_aaropi = await server.build_render_context(user, None, vals_aaropi, "gu", template_id="warrant_rad_karvani_arji")
-        self.assertEqual(ctx_aaropi["advocate_name"], "આરોપી ના એડવોકેટ")
-        self.assertEqual(ctx_aaropi["accused_name_role"], "આરોપી")
 
-        # For samawala / સામાવાળા
-        vals_samawala = {
-            "party_1_role": "અરજદાર",
-            "party_1_name": "રમેશભાઈ",
-            "party_2_role": "સામાવાળા",
-            "party_2_name": "સુરેશભાઈ",
-            "advocate_for": "સામાવાળા",
-            "absence_reason": "સામાજીક કામમાં રોકાયેલ હોઈ",
-            "warrant_date": "2026-12-15",
-        }
-        ctx_samawala = await server.build_render_context(user, None, vals_samawala, "gu", template_id="warrant_rad_karvani_arji")
-        self.assertEqual(ctx_samawala["advocate_name"], "સામાવાળા ના એડવોકેટ")
-        self.assertEqual(ctx_samawala["accused_name_role"], "સામાવાળા")
+        # Test all 6 individual roles in Gujarati
+        roles_gu_expected = [
+            ("આરોપી", "આરોપી ના એડવોકેટ"),
+            ("સામાવાળા", "સામાવાળા ના એડવોકેટ"),
+            ("પ્રતિવાદી", "પ્રતિવાદી ના એડવોકેટ"),
+            ("ફરીયાદી", "ફરીયાદી ના એડવોકેટ"),
+            ("અરજદાર", "અરજદાર ના એડવોકેટ"),
+            ("વાદી", "વાદી ના એડવોકેટ"),
+        ]
+        for role_val, expected_desig in roles_gu_expected:
+            vals = {
+                "party_1_role": "ફરીયાદી",
+                "party_1_name": "રમેશભાઈ",
+                "party_2_role": "આરોપી",
+                "party_2_name": "સુરેશભાઈ",
+                "advocate_for": role_val,
+                "absence_reason": "માંદગીના",
+                "warrant_date": "2026-12-15",
+            }
+            ctx = await server.build_render_context(user, None, vals, "gu", template_id="warrant_rad_karvani_arji")
+            self.assertEqual(ctx["advocate_name"], expected_desig, f"Failed for role {role_val}")
+            self.assertEqual(ctx["advocate_for_role"], role_val)
 
-        # For prativadi / પ્રતિવાદી
-        vals_prativadi = {
-            "party_1_role": "વાદી",
-            "party_1_name": "રમેશભાઈ",
-            "party_2_role": "પ્રતિવાદી",
-            "party_2_name": "સુરેશભાઈ",
-            "advocate_for": "પ્રતિવાદી",
-            "absence_reason": "માંદગીના",
-            "warrant_date": "2026-12-15",
-        }
-        ctx_prativadi = await server.build_render_context(user, None, vals_prativadi, "gu", template_id="warrant_rad_karvani_arji")
-        self.assertEqual(ctx_prativadi["advocate_name"], "પ્રતિવાદી ના એડવોકેટ")
-        self.assertEqual(ctx_prativadi["accused_name_role"], "પ્રતિવાદી")
-
-        # In English
-        vals_en = {
-            "party_1_role": "Complainant",
-            "party_1_name": "Ramesh",
-            "party_2_role": "Accused",
-            "party_2_name": "Suresh",
-            "advocate_for": "party_2",
-            "absence_reason": "Illness",
-            "warrant_date": "2026-12-15",
-        }
-        ctx_en = await server.build_render_context(user, None, vals_en, "en", template_id="warrant_rad_karvani_arji")
-        self.assertEqual(ctx_en["advocate_name"], "Advocate for Accused")
-        self.assertEqual(ctx_en["accused_name_role"], "Accused")
+        # Test all 6 roles in English
+        roles_en_expected = [
+            ("આરોપી", "Advocate for Accused", "Accused"),
+            ("સામાવાળા", "Advocate for Opponent", "Opponent"),
+            ("પ્રતિવાદી", "Advocate for Defendant", "Defendant"),
+            ("ફરીયાદી", "Advocate for Complainant", "Complainant"),
+            ("અરજદાર", "Advocate for Applicant", "Applicant"),
+            ("વાદી", "Advocate for Plaintiff", "Plaintiff"),
+        ]
+        for role_val, expected_desig_en, expected_role_en in roles_en_expected:
+            vals_en = {
+                "party_1_role": "Complainant",
+                "party_1_name": "Ramesh",
+                "party_2_role": "Accused",
+                "party_2_name": "Suresh",
+                "advocate_for": role_val,
+                "absence_reason": "Illness",
+                "warrant_date": "2026-12-15",
+            }
+            ctx_en = await server.build_render_context(user, None, vals_en, "en", template_id="warrant_rad_karvani_arji")
+            self.assertEqual(ctx_en["advocate_name"], expected_desig_en, f"Failed for role {role_val} in EN")
+            self.assertEqual(ctx_en["advocate_for_role"], expected_role_en)
 
     async def test_07_place_and_taluka_derivation(self):
         """7. Verify place derivation with and without optional taluka."""
@@ -282,7 +283,32 @@ class TestWarrantRadKarvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("જેથી સદર આરોપી વિરુદ્ધ કાઢવામાં આવેલ વોરંટ રદ કરી કેસમાં આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
         self.assertIn("સ્થળ : કલોલ, ગાંધીનગર", rendered)
         self.assertIn("આરોપી ના એડવોકેટ", rendered)
+        self.assertNotIn("કારણોસર કારણોસર", rendered)
         self.assertNotIn("{{", rendered)
+
+        # Verify all 6 absence reason options produce grammatically correct combined wording with paragraph
+        all_reasons = [
+            ("અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના", "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના કારણોસર"),
+            ("માંદગીના", "માંદગીના કારણોસર"),
+            ("વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના", "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના કારણોસર"),
+            ("સામાજીક કામમાં રોકાયેલ હોવાના", "સામાજીક કામમાં રોકાયેલ હોવાના કારણોસર"),
+            ("સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના", "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના કારણોસર"),
+            ("અન્ય", "અન્ય કારણોસર"),
+        ]
+        for opt_val, expected_combined in all_reasons:
+            s_val = dict(sample_values, absence_reason=opt_val)
+            ctx_r = await server.build_render_context(user, None, s_val, "gu", template_id="warrant_rad_karvani_arji")
+            rend_r = doc_generator.render_template(self.tpl["content_gu"], ctx_r)
+            self.assertIn(expected_combined, rend_r, f"Expected '{expected_combined}' in rendered text for '{opt_val}'")
+            self.assertNotIn("કારણોસર કારણોસર", rend_r, f"Duplicate 'કારણોસર કારણોસર' found for reason {opt_val}")
+            self.assertNotIn("{{", rend_r)
+
+        # Also verify custom text functionality for અન્ય
+        s_val_custom = dict(sample_values, absence_reason="અન્ય", absence_reason_custom="ટ્રાફિકમાં ફસાઈ ગયેલ હોવાના")
+        ctx_custom = await server.build_render_context(user, None, s_val_custom, "gu", template_id="warrant_rad_karvani_arji")
+        rend_custom = doc_generator.render_template(self.tpl["content_gu"], ctx_custom)
+        self.assertIn("ટ્રાફિકમાં ફસાઈ ગયેલ હોવાના કારણોસર", rend_custom)
+        self.assertNotIn("કારણોસર કારણોસર", rend_custom)
 
     async def test_11_english_rendering_and_text(self):
         """11. Verify English legal paragraphs and rendered document."""

@@ -953,6 +953,10 @@ def render_template(content_template: str, values: dict) -> str:
     else:
         result = re.sub(r"\{\{[^}]+\}\}", "____", result)
 
+    if "વોરંટ રદ કરાવવા બાબત" in result or "cancellation of warrant" in result.lower():
+        result = result.replace("કારણોસર કારણોસર", "કારણોસર")
+        result = result.replace("reason reason", "reason")
+
     return result
 
 

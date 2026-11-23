@@ -660,6 +660,10 @@ export default function TemplateApplication() {
         delete out["absence_reason_custom"];
         delete out["absence_reason_other"];
       }
+      if (out["advocate_for"]) {
+        out["advocate_for_role"] = out["advocate_for"];
+        out["advocate_name"] = getAdvocateDesignation(out["advocate_for"], language, templateId);
+      }
     }
 
     if (templateId === "kam_board_par_levani_arji") {
@@ -1275,7 +1279,7 @@ export default function TemplateApplication() {
           rawOpts.push({ value: "other", label_en: "Other", label_gu: "અન્ય" });
         }
       }
-      if ((f.key === "advocate_for" || f.key === "closed_party") && (values.party_1_role || values.party_2_role)) {
+      if (templateId !== "warrant_rad_karvani_arji" && (f.key === "advocate_for" || f.key === "closed_party") && (values.party_1_role || values.party_2_role)) {
         const p1 = values.party_1_role;
         const p2 = values.party_2_role;
         const prioritized: any[] = [];

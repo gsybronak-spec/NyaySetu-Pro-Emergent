@@ -6841,7 +6841,7 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
         raw_warrant_reason = str(ctx.get("absence_reason") or "").strip()
         custom_warrant_reason = str(ctx.get("absence_reason_custom") or ctx.get("absence_reason_other") or "").strip()
         if raw_warrant_reason in ("અન્ય", "other", "Other"):
-            ctx["absence_reason"] = custom_warrant_reason if custom_warrant_reason else ("અન્ય" if language == "gu" else "Other")
+            ctx["absence_reason"] = custom_warrant_reason if custom_warrant_reason else ("અન્ય" if language == "gu" else "other")
         elif not raw_warrant_reason and custom_warrant_reason:
             ctx["absence_reason"] = custom_warrant_reason
         else:
@@ -6849,43 +6849,88 @@ async def build_render_context(user: dict, case: Optional[dict], values: dict, l
             ctx["absence_reason_custom"] = ""
             ctx["absence_reason_other"] = ""
 
+        if language == "gu":
+            warrant_reason_map_gu = {
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ": "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના",
+                "વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ": "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના",
+                "સામાજીક કામમાં રોકાયેલ હોઈ": "સામાજીક કામમાં રોકાયેલ હોવાના",
+                "સામાજિક કામમાં રોકાયેલ હોઈ": "સામાજીક કામમાં રોકાયેલ હોવાના",
+                "અમોના સગામાં અવસાન થયેલ હોઈ": "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના",
+                "અમોના સગાનું અવસાન થયેલ હોવાના": "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના",
+                # Intermediate mappings
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના કારણોસર": "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના",
+                "માંદગીના કારણોસર": "માંદગીના",
+                "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના કારણોસર": "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના",
+                "સામાજિક કામમાં રોકાયેલ હોવાના કારણોસર": "સામાજીક કામમાં રોકાયેલ હોવાના",
+                "સામાજીક કામમાં રોકાયેલ હોવાના કારણોસર": "સામાજીક કામમાં રોકાયેલ હોવાના",
+                "અમોના સગાનું અવસાન થયેલ હોવાના કારણોસર": "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના",
+                "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના કારણોસર": "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના",
+            }
+            if ctx.get("absence_reason") in warrant_reason_map_gu:
+                ctx["absence_reason"] = warrant_reason_map_gu[ctx["absence_reason"]]
+
         # Accused role designation in paragraph: party_2_role or accused
         p2_role = str(ctx.get("party_2_role") or "").strip()
         ctx["accused_name_role"] = p2_role if p2_role else ("આરોપી" if language == "gu" else "Accused")
 
-        # Advocate designation
-        adv_role = str(ctx.get("advocate_for_role") or "").strip()
-        if not adv_role:
-            adv_for = str(ctx.get("advocate_for") or "").strip()
-            if adv_for == "party_1":
-                adv_role = str(ctx.get("party_1_role") or "ફરીયાદી").strip()
-            elif adv_for == "party_2":
-                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
-            elif adv_for in ("complainant", "applicant", "plaintiff"):
-                adv_role = str(ctx.get("party_1_role") or "ફરીયાદી").strip()
-            elif adv_for in ("accused", "opponent", "defendant"):
-                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
-            elif adv_for:
-                adv_role = adv_for
+        # Advocate designation: support 6 direct party roles and party_1/party_2 references
+        adv_for = str(ctx.get("advocate_for") or "").strip()
+        if adv_for in ("આરોપી", "સામાવાળા", "પ્રતિવાદી", "ફરીયાદી", "અરજદાર", "વાદી"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for in ("accused", "opponent", "defendant", "complainant", "applicant", "plaintiff", "Accused", "Opponent", "Defendant", "Complainant", "Applicant", "Plaintiff"):
+            adv_role = resolve_party_role_label(adv_for, language)
+        elif adv_for == "party_1":
+            adv_role = resolve_party_role_label(str(ctx.get("party_1_role") or "ફરીયાદી").strip(), language)
+        elif adv_for == "party_2":
+            adv_role = resolve_party_role_label(str(ctx.get("party_2_role") or "આરોપી").strip(), language)
+        else:
+            adv_role = str(ctx.get("advocate_for_role") or "").strip()
+            if not adv_role:
+                adv_role = resolve_party_role_label(adv_for, language) if adv_for else resolve_party_role_label(str(ctx.get("party_2_role") or "આરોપી").strip(), language)
             else:
-                adv_role = str(ctx.get("party_2_role") or "આરોપી").strip()
+                adv_role = resolve_party_role_label(adv_role, language)
+
         ctx["advocate_for_role"] = adv_role
 
-        if not ctx.get("advocate_name"):
-            if language == "gu":
-                ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
-            else:
-                ctx["advocate_name"] = f"Advocate for {adv_role}"
+        if language == "gu":
+            ctx["advocate_name"] = f"{adv_role} ના એડવોકેટ"
+        else:
+            ctx["advocate_name"] = f"Advocate for {adv_role}"
 
         if language == "en":
             warrant_reason_map_en = {
-                "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ": "having gone out of station for studies",
+                # New Gujarati options
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના": "having gone out of station for studies",
                 "માંદગીના": "illness",
+                "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના": "having gone out of station for business / occupation",
+                "સામાજીક કામમાં રોકાયેલ હોવાના": "being engaged in social work",
+                "સામાજિક કામમાં રોકાયેલ હોવાના": "being engaged in social work",
+                "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના": "demise of a relative",
+                # Legacy Gujarati options
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોઈ": "having gone out of station for studies",
                 "વ્યવસાય અર્થે બહારગામ ગયેલ હોઈ": "having gone out of station for business / occupation",
                 "સામાજીક કામમાં રોકાયેલ હોઈ": "being engaged in social work",
-                "અમોના સગામાં અવસાન થયેલ હોઈ": "demise in family / relatives",
-                "અન્ય": "other reasons",
-                "Other": "other reasons",
+                "અમોના સગામાં અવસાન થયેલ હોઈ": "demise of a relative",
+                "અમોના સગાનું અવસાન થયેલ હોવાના": "demise of a relative",
+                # Intermediate options with કારણોસર
+                "અભ્યાસ અર્થે બહારગામ ગયેલ હોવાના કારણોસર": "having gone out of station for studies",
+                "માંદગીના કારણોસર": "illness",
+                "વ્યવસાય અર્થે બહારગામ ગયેલ હોવાના કારણોસર": "having gone out of station for business / occupation",
+                "સામાજિક કામમાં રોકાયેલ હોવાના કારણોસર": "being engaged in social work",
+                "સામાજીક કામમાં રોકાયેલ હોવાના કારણોસર": "being engaged in social work",
+                "અમોના સગાનું અવસાન થયેલ હોવાના કારણોસર": "demise of a relative",
+                "સગા-સબંધીમાં કોઈ સગાનું અવસાન થયેલ હોવાના કારણોસર": "demise of a relative",
+                # English strings
+                "અન્ય": "other",
+                "Other": "other",
+                "other": "other",
+                "Went out of station for studies": "having gone out of station for studies",
+                "Due to illness": "illness",
+                "Illness": "illness",
+                "illness": "illness",
+                "Went out of station for business / occupation": "having gone out of station for business / occupation",
+                "Engaged in social work": "being engaged in social work",
+                "Due to demise of a relative": "demise of a relative",
             }
             if ctx.get("absence_reason") in warrant_reason_map_en:
                 ctx["absence_reason"] = warrant_reason_map_en[ctx["absence_reason"]]
