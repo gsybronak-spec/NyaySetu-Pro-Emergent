@@ -1133,55 +1133,78 @@ Name of Client :-       Name of Advocate :-""",
     },
     {
         "base_key": "warrant_no_hath_bido_apvani_arji",
-        "aliases": ["warrant_hathbido", "hathbido", "direct service", "હાથબીડો", "સમન્સ હાથબીડો"],
-        "name_gu": "સમન્સ / વોરંટનો હાથબીડો આપવા બાબતની અરજી",
-        "name_en": "Application for Direct Service / Handing Over Summons or Warrant",
+        "aliases": ["warrant_hathbido", "hathbido", "direct service", "હાથબીડો", "સમન્સ હાથબીડો", "વોરંટ હાથબીડો", "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત"],
+        "name_gu": "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત",
+        "name_en": "Application for Issuance of Summons/Warrant Service Process",
         "category": "Criminal",
         "description": "Application to hand over summons or warrant directly to advocate/complainant for prompt service through police.",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'warrant_kind', 'label_en': 'Process Type', 'label_gu': 'પ્રક્રિયા પ્રકાર (સમન્સ / વોરંટ / નોટીસ)', 'type': 'select', 'required': True, 'options': [{'value': 'સમન્સ', 'label_en': 'Summons', 'label_gu': 'સમન્સ'}, {'value': 'વોરંટ', 'label_en': 'Warrant', 'label_gu': 'વોરંટ'}, {'value': 'નોટીસ', 'label_en': 'Notice', 'label_gu': 'નોટીસ'}]},
-            {'key': 'target_party', 'label_en': 'Name of party to be served', 'label_gu': 'જેની સામે બજવણી કરવાની હોય તેનું નામ (સાક્ષી / સામાવાળા)', 'type': 'text', 'required': True},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {'key': 'court_name', 'label_en': 'Court Name', 'label_gu': 'કોર્ટ નું નામ', 'type': 'select', 'required': False},
+            {'key': 'district', 'label_en': 'District', 'label_gu': 'જીલ્લો', 'type': 'select', 'required': False},
+            {'key': 'taluka', 'label_en': 'Taluka', 'label_gu': 'તાલુકો', 'type': 'select', 'required': False},
+            {'key': 'case_type', 'label_en': 'Case Type', 'label_gu': 'કેસ પ્રકાર', 'type': 'select', 'required': False},
+            {'key': 'case_number', 'label_en': 'Case Number', 'label_gu': 'કેસ નંબર', 'type': 'text', 'required': False},
+            {'key': 'party_1_role', 'label_en': 'Party 1 Role', 'label_gu': 'પક્ષકાર-૧ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'ફરીયાદી', 'label_gu': 'ફરીયાદી', 'label_en': 'Complainant'}, {'value': 'અરજદાર', 'label_gu': 'અરજદાર', 'label_en': 'Applicant'}, {'value': 'વાદી', 'label_gu': 'વાદી', 'label_en': 'Plaintiff'}]},
+            {'key': 'party_1_name', 'label_en': 'Party 1 Name', 'label_gu': 'પક્ષકાર - ૧ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'party_2_role', 'label_en': 'Party 2 Role', 'label_gu': 'પક્ષકાર-૨ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'આરોપી', 'label_gu': 'આરોપી', 'label_en': 'Accused'}, {'value': 'સામાવાળા', 'label_gu': 'સામાવાળા', 'label_en': 'Opponent'}, {'value': 'પ્રતિવાદી', 'label_gu': 'પ્રતિવાદી', 'label_en': 'Defendant'}]},
+            {'key': 'party_2_name', 'label_en': 'Party 2 Name', 'label_gu': 'પક્ષકાર - ૨ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'process_type', 'label_en': 'Process Type', 'label_gu': 'પ્રક્રિયા પ્રકાર', 'type': 'radio', 'required': False, 'default': 'સમન્સ', 'options': [{'value': 'સમન્સ', 'label_en': 'Summons', 'label_gu': 'સમન્સ'}, {'value': 'વોરંટ', 'label_en': 'Warrant', 'label_gu': 'વોરંટ'}]},
+            {'key': 'advocate_for', 'label_en': 'Advocate For', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': False, 'default': 'ફરીયાદી', 'options': [{'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}, {'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}]},
+            {'key': 'process_person', 'label_en': 'Whose Summons / Warrant to be Served', 'label_gu': 'જેમના સમન્સ / વોરંટની બજવણી કરવાની છે તે વ્યક્તિ', 'type': 'select', 'required': False, 'default': 'આરોપી', 'options': [{'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}, {'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}]},
+            {'key': 'date', 'label_en': 'Application Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': False},
+            {'key': 'place', 'label_en': 'Place', 'label_gu': 'સ્થળ', 'type': 'text', 'required': False},
+            {'key': 'advocate_name', 'label_en': 'Advocate Designation', 'label_gu': 'ના એડવોકેટ', 'type': 'text', 'required': False},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
 
-બાબત :- {{warrant_kind}}નો હાથબીડો આપવા બાબત...
+{{party_2_role}} :- {{party_2_name}}
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+બાબત :- {{process_type}}નો હાથબીડો આપવા બાબત...
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{target_party}}ને બજવણી માટે {{warrant_kind}} ઇશ્યુ કરવામા આવેલ છે જેની બજવણી યોગ્ય રીતે ન થતી હોય, તેમજ સદર {{warrant_kind}} ની યોગ્ય રીતે બજવણી થવી ન્યાયના હિતમાં હોય, સદર {{warrant_kind}} ની બજવણી કરાવવા માટે હાથબીડો આપવો જરૂરી છે. જેથી સમન્સ/વોરંટનો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{process_person}}ને બજવણી માટે {{process_type}} ઇશ્યુ કરવામાં આવેલ છે જેની બજવણી યોગ્ય રીતે ન થતી હોય, તેમજ સદર {{process_type}}ની યોગ્ય રીતે બજવણી થવી ન્યાયના હિતમાં હોય, સદર {{process_type}}ની બજવણી કરાવવા માટે {{process_type}}નો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+
+AT: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 Versus
-{{opposite_party_line}}
 
-SUBJECT: APPLICATION FOR HAND DELIVERY OF {{warrant_kind}}
+{{party_2_role}} :- {{party_2_name}}
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+SUBJECT: APPLICATION FOR ISSUANCE OF {{process_type}} SERVICE PROCESS / HAND DELIVERY...
 
-The said case is pending before this Hon'ble Court. In the said case, {{warrant_kind}} has been issued for service upon {{target_party}}, but the service is not taking place properly, and proper service of the said {{warrant_kind}} is in the interest of justice, for which hand delivery is necessary to effect service of the said {{warrant_kind}}. It is therefore prayed that this Hon'ble Court may be pleased to grant necessary hand delivery of summons/warrant to effect service and pass appropriate orders.
+In the above matter, we, the advocate for {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that:
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+The said case is pending before this Hon'ble Court. In the said case, {{process_type}} has been issued for service upon {{process_person}}, but the service is not taking place properly, and proper service of the said {{process_type}} is in the interest of justice. Therefore, to effect service of the said {{process_type}}, it is necessary to hand over the process directly. It is therefore prayed that this Hon'ble Court may be pleased to grant the necessary hand delivery of {{process_type}} to effect service and pass appropriate orders.
 
---------------------------- Advocate for {{selected_party_role}}""",
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
     },
     {
         "base_key": "warrant_rad_karvani_arji",

@@ -7632,6 +7632,310 @@ Place : {{place}}
 
 {{advocate_name}}""",
     },
+    {
+        "id": "warrant_no_hath_bido_apvani_arji",
+        "name_en": "Application for Issuance of Summons/Warrant Service Process",
+        "name_gu": "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત",
+        "category": "Criminal",
+        "status": "published",
+        "aliases": [
+            "warrant_no_hath_bido_apvani_arji",
+            "warrant_hathbido",
+            "hathbido",
+            "direct_service",
+            "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત",
+            "સમન્સ / વોરંટનો હાથબીડો આપવા બાબતની અરજી",
+            "હાથબીડો",
+            "સમન્સ હાથબીડો",
+            "વોરંટ હાથબીડો",
+        ],
+        "fields": [
+            {
+                "key": "court_name",
+                "label_en": "Court Name",
+                "label_gu": "કોર્ટ નું નામ",
+                "type": "select",
+                "required": False,
+                "source": "case_court",
+                "mode": ["saved_case", "direct_template"],
+                "options": [],
+            },
+            {
+                "key": "district",
+                "label_en": "District",
+                "label_gu": "જીલ્લો",
+                "type": "select",
+                "required": False,
+                "source": "case_district",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "ahmedabad", "label_en": "Ahmedabad", "label_gu": "અમદાવાદ"},
+                    {"value": "amreli", "label_en": "Amreli", "label_gu": "અમરેલી"},
+                    {"value": "anand", "label_en": "Anand", "label_gu": "આણંદ"},
+                    {"value": "aravalli", "label_en": "Aravalli", "label_gu": "અરવલ્લી"},
+                    {"value": "banaskantha", "label_en": "Banaskantha", "label_gu": "બનાસકાંઠા"},
+                    {"value": "bharuch", "label_en": "Bharuch", "label_gu": "ભરૂચ"},
+                    {"value": "bhavnagar", "label_en": "Bhavnagar", "label_gu": "ભાવનગર"},
+                    {"value": "botad", "label_en": "Botad", "label_gu": "બોટાદ"},
+                    {"value": "chhota_udepur", "label_en": "Chhota Udepur", "label_gu": "છોટા ઉદેપુર"},
+                    {"value": "dahod", "label_en": "Dahod", "label_gu": "દાહોદ"},
+                    {"value": "dang", "label_en": "Dang", "label_gu": "ડાંગ"},
+                    {"value": "devbhoomi_dwarka", "label_en": "Devbhoomi Dwarka", "label_gu": "દેવભૂમિ દ્વારકા"},
+                    {"value": "gandhinagar", "label_en": "Gandhinagar", "label_gu": "ગાંધીનગર"},
+                    {"value": "gir_somnath", "label_en": "Gir Somnath", "label_gu": "ગીર સોમનાથ"},
+                    {"value": "jamnagar", "label_en": "Jamnagar", "label_gu": "જામનગર"},
+                    {"value": "junagadh", "label_en": "Junagadh", "label_gu": "જૂનાગઢ"},
+                    {"value": "kheda", "label_en": "Kheda", "label_gu": "ખેડા"},
+                    {"value": "kutch", "label_en": "Kutch", "label_gu": "કચ્છ"},
+                    {"value": "mahisagar", "label_en": "Mahisagar", "label_gu": "મહીસાગર"},
+                    {"value": "mehsana", "label_en": "Mehsana", "label_gu": "મહેસાણા"},
+                    {"value": "morbi", "label_en": "Morbi", "label_gu": "મોરબી"},
+                    {"value": "narmada", "label_en": "Narmada", "label_gu": "નર્મદા"},
+                    {"value": "navsari", "label_en": "Navsari", "label_gu": "નવસારી"},
+                    {"value": "panchmahal", "label_en": "Panchmahal", "label_gu": "પંચમહાલ"},
+                    {"value": "patan", "label_en": "Patan", "label_gu": "પાટણ"},
+                    {"value": "porbandar", "label_en": "Porbandar", "label_gu": "પોરબંદર"},
+                    {"value": "rajkot", "label_en": "Rajkot", "label_gu": "રાજકોટ"},
+                    {"value": "sabarkantha", "label_en": "Sabarkantha", "label_gu": "સાબરકાંઠા"},
+                    {"value": "surat", "label_en": "Surat", "label_gu": "સુરત"},
+                    {"value": "surendranagar", "label_en": "Surendranagar", "label_gu": "સુરેન્દ્રનગર"},
+                    {"value": "tapi", "label_en": "Tapi", "label_gu": "તાપી"},
+                    {"value": "vadodara", "label_en": "Vadodara", "label_gu": "વડોદરા"},
+                    {"value": "valsad", "label_en": "Valsad", "label_gu": "વલસાડ"},
+                ],
+            },
+            {
+                "key": "taluka",
+                "label_en": "Taluka",
+                "label_gu": "તાલુકો",
+                "type": "select",
+                "required": False,
+                "source": "case_taluka",
+                "mode": ["saved_case", "direct_template"],
+                "description_gu": "તાલુકો ફરજીયાત નથી. જો કોઈ તાલુકો સિલેક્ટ કરે છે તો ડ્રાફ્ટીંગ મા ઓટોમેટીક તાલુકો આગળ થઈ જવો જોઈએ અને જિલ્લો પાછળ (દાત. કલોલ, ગાંધીનગર)",
+                "options": [],
+            },
+            {
+                "key": "case_type",
+                "label_en": "Case Type",
+                "label_gu": "કેસ પ્રકાર",
+                "type": "select",
+                "required": False,
+                "source": "case_type",
+                "mode": ["saved_case", "direct_template"],
+                "options": [
+                    {"value": "regular_civil_suit", "label_en": "Regular Civil Suit", "label_gu": "રેગ્યુલર દિવાની મુકદમો"},
+                    {"value": "special_civil_suit", "label_en": "Special Civil Suit", "label_gu": "સ્પેશિયલ દિવાની મુકદમો"},
+                    {"value": "criminal_case", "label_en": "Criminal Case", "label_gu": "ક્રિમિનલ કેસ"},
+                    {"value": "special_criminal_case", "label_en": "Special Criminal Case", "label_gu": "સ્પેશિયલ ક્રિમિનલ કેસ"},
+                    {"value": "sessions_case", "label_en": "Sessions Case", "label_gu": "સેશન્સ કેસ"},
+                    {"value": "civil_misc_app", "label_en": "Civil Misc. Application", "label_gu": "દિવાની પરચુરણ અરજી"},
+                    {"value": "criminal_misc_app", "label_en": "Criminal Misc. Application", "label_gu": "ક્રિમિનલ પરચુરણ અરજી"},
+                    {"value": "execution_petition", "label_en": "Execution Petition", "label_gu": "દરખાસ્ત અરજી"},
+                    {"value": "family_suit", "label_en": "Family Suit", "label_gu": "ફેમિલી મુકદમો"},
+                    {"value": "motor_accident_claim", "label_en": "Motor Accident Claim (MACP)", "label_gu": "મોટર અકસ્માત વળતર અરજી"},
+                    {"value": "negotiable_instrument_case", "label_en": "Negotiable Instruments Act (Cheque Bounce)", "label_gu": "ચેક બાઉન્સ કેસ (કલમ ૧૩૮)"},
+                ],
+            },
+            {
+                "key": "case_number",
+                "label_en": "Case Number",
+                "label_gu": "કેસ નંબર",
+                "type": "text",
+                "required": False,
+                "source": "case_number",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "દા.ત. ૧૦૧/૨૦૨૪",
+            },
+            {
+                "key": "party_1_role",
+                "label_en": "Party 1 Role",
+                "label_gu": "પક્ષકાર-૧ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "default": "ફરીયાદી",
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "party_1_name",
+                "label_en": "Party 1 Name",
+                "label_gu": "પક્ષકાર - ૧ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૧ નું નામ",
+            },
+            {
+                "key": "party_2_role",
+                "label_en": "Party 2 Role",
+                "label_gu": "પક્ષકાર-૨ ની ભૂમિકા",
+                "type": "radio",
+                "required": False,
+                "default": "આરોપી",
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "party_2_name",
+                "label_en": "Party 2 Name",
+                "label_gu": "પક્ષકાર - ૨ નું નામ",
+                "type": "text",
+                "required": False,
+                "source": "case_opposite_party_name",
+                "mode": ["saved_case", "direct_template"],
+                "placeholder": "પક્ષકાર - ૨ નું નામ",
+            },
+            {
+                "key": "process_type",
+                "label_en": "Process Type",
+                "label_gu": "પ્રક્રિયા પ્રકાર",
+                "type": "radio",
+                "required": False,
+                "default": "સમન્સ",
+                "options": [
+                    {"value": "સમન્સ", "label_en": "Summons", "label_gu": "સમન્સ"},
+                    {"value": "વોરંટ", "label_en": "Warrant", "label_gu": "વોરંટ"},
+                ],
+            },
+            {
+                "key": "advocate_for",
+                "label_en": "Advocate For",
+                "label_gu": "કોના તરફે એડવોકેટ",
+                "type": "select",
+                "required": False,
+                "default": "ફરીયાદી",
+                "options": [
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                ],
+            },
+            {
+                "key": "process_person",
+                "label_en": "Whose Summons / Warrant to be Served",
+                "label_gu": "જેમના સમન્સ / વોરંટની બજવણી કરવાની છે તે વ્યક્તિ",
+                "type": "select",
+                "required": False,
+                "default": "આરોપી",
+                "options": [
+                    {"value": "આરોપી", "label_en": "Accused", "label_gu": "આરોપી"},
+                    {"value": "સામાવાળા", "label_en": "Opponent", "label_gu": "સામાવાળા"},
+                    {"value": "પ્રતિવાદી", "label_en": "Defendant", "label_gu": "પ્રતિવાદી"},
+                    {"value": "ફરીયાદી", "label_en": "Complainant", "label_gu": "ફરીયાદી"},
+                    {"value": "અરજદાર", "label_en": "Applicant", "label_gu": "અરજદાર"},
+                    {"value": "વાદી", "label_en": "Plaintiff", "label_gu": "વાદી"},
+                ],
+            },
+            {
+                "key": "date",
+                "label_en": "Application Date",
+                "label_gu": "તારીખ",
+                "type": "date",
+                "required": False,
+                "default": "today",
+            },
+            {
+                "key": "place",
+                "label_en": "Place",
+                "label_gu": "સ્થળ",
+                "type": "text",
+                "required": False,
+                "placeholder": "તાલુકા અને જીલ્લા માંથી આપોઆપ આવશે",
+            },
+            {
+                "key": "advocate_name",
+                "label_en": "Advocate Designation",
+                "label_gu": "ના એડવોકેટ",
+                "type": "text",
+                "required": False,
+                "placeholder": "ના એડવોકેટ",
+                "description_gu": "કોના તરફે એડવોકેટ મા જે સિલેક્ટ કરે તેના એડવોકેટ",
+            },
+        ],
+        "settings": {
+            "page_size": "A4",
+            "margin_top_cm": 2.0,
+            "margin_bottom_cm": 2.0,
+            "margin_left_cm": 4.0,
+            "margin_right_cm": 4.0,
+            "gujarati_font": "LohitGujarati",
+            "gujarati_font_docx": "Lohit Gujarati",
+            "english_font": "Times-Roman",
+            "english_font_docx": "Times New Roman",
+            "body_size": 13,
+            "heading_size": 15,
+            "body_size_en": 14,
+            "heading_size_en": 16,
+            "line_spacing": 18.0,
+            "paragraph_spacing": 6.0,
+            "first_line_indent_pt": 28.35,
+            "block_align": [
+                {"contains": "મુકામ :-", "align": "center", "bold": True, "indent": False},
+                {"contains": "AT:", "align": "center", "bold": True, "indent": False},
+            ],
+        },
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
+મુકામ :- {{taluka_place}}
+
+{{case_type}} નં. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+વિરુદ્ધ
+
+{{party_2_role}} :- {{party_2_name}}
+
+બાબત :- {{process_type}}નો હાથબીડો આપવા બાબત...
+
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....
+
+સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે. સદર કેસમાં {{process_person}}ને બજવણી માટે {{process_type}} ઇશ્યુ કરવામાં આવેલ છે જેની બજવણી યોગ્ય રીતે ન થતી હોય, તેમજ સદર {{process_type}}ની યોગ્ય રીતે બજવણી થવી ન્યાયના હિતમાં હોય, સદર {{process_type}}ની બજવણી કરાવવા માટે {{process_type}}નો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+
+તારીખ : {{date}}
+
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+
+AT: {{taluka_place}}
+
+{{case_type}} No. : {{case_number}}
+
+{{party_1_role}} :- {{party_1_name}}
+
+Versus
+
+{{party_2_role}} :- {{party_2_name}}
+
+SUBJECT: APPLICATION FOR ISSUANCE OF {{process_type}} SERVICE PROCESS / HAND DELIVERY...
+
+In the above matter, we, the advocate for {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that:
+
+The said case is pending before this Hon'ble Court. In the said case, {{process_type}} has been issued for service upon {{process_person}}, but the service is not taking place properly, and proper service of the said {{process_type}} is in the interest of justice. Therefore, to effect service of the said {{process_type}}, it is necessary to hand over the process directly. It is therefore prayed that this Hon'ble Court may be pleased to grant the necessary hand delivery of {{process_type}} to effect service and pass appropriate orders.
+
+Date : {{date}}
+
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
+    },
 ]
 
 # Template-level page-size defaults (admin-controlled via template settings).

@@ -2197,6 +2197,7 @@ export const SEED_TEMPLATE_ORDER: string[] = [
   "ulat_tapas_no_haq_bandh_karavani_arji",
   "ulat_tapas_no_haq_kholvani_arji",
   "samadhan_purshish",
+  "warrant_no_hath_bido_apvani_arji",
 ];
 
 export const SEED_PUBLISHED_TEMPLATES: any[] = [
@@ -2318,6 +2319,13 @@ export const SEED_PUBLISHED_TEMPLATES: any[] = [
     name_gu: "સમાધાન પુરસીસ",
     name_en: "Settlement Purshish / Settlement Memo",
     category: "General",
+  },
+  {
+    id: "warrant_no_hath_bido_apvani_arji",
+    template_id: "warrant_no_hath_bido_apvani_arji",
+    name_gu: "સમન્સ / વોરંટનો હાથબીડો આપવા બાબત",
+    name_en: "Application for Issuance of Summons/Warrant Service Process",
+    category: "Criminal",
   },
 ];
 

@@ -958,6 +958,10 @@ def render_template(content_template: str, values: dict) -> str:
         or "સમાધાન પુરસીસ" in result
         or "settlement purshish" in result.lower()
         or "settlement memo" in result.lower()
+        or "હાથબીડો આપવા બાબત" in result
+        or "hath-bido" in result.lower()
+        or "service process" in result.lower()
+        or "hand delivery" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:

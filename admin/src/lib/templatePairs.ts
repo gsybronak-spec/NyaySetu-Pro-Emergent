@@ -138,10 +138,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'warrant_no_hath_bido_apvani_arji',
-    guId: 'warrant_no_hath_bido_apvani_arji_gu',
-    enId: 'warrant_no_hath_bido_apvani_arji_en',
-    name_gu: 'વોરંટ / સમન્સનો હાથબીડો આપવાની અરજી',
-    name_en: 'Application for Direct Service / Hand Delivery of Warrant or Summons',
+    guId: 'warrant_no_hath_bido_apvani_arji',
+    enId: 'warrant_no_hath_bido_apvani_arji',
+    name_gu: 'સમન્સ / વોરંટનો હાથબીડો આપવા બાબત',
+    name_en: 'Application for Issuance of Summons/Warrant Service Process',
     category: 'Criminal',
   },
   {
