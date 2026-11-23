@@ -948,6 +948,9 @@ def render_template(content_template: str, values: dict) -> str:
         or "વોરંટ રદ કરાવવા બાબત" in result
         or "cancellation of warrant" in result.lower()
         or "application for cancellation of warrant" in result.lower()
+        or "ઉલટ તપાસનો હક બંધ કરવા બાબત" in result
+        or "close cross-examination" in result.lower()
+        or "application to close cross-examination right" in result.lower()
     ):
         result = re.sub(r"\{\{[^}]+\}\}", "", result)
     else:

@@ -154,10 +154,10 @@ export const ADMIN_TEMPLATE_PAIRS: AdminTemplatePair[] = [
   },
   {
     baseKey: 'ulat_tapas_no_haq_bandh_karavani_arji',
-    guId: 'ulat_tapas_no_haq_bandh_karavani_arji_gu',
-    enId: 'ulat_tapas_no_haq_bandh_karavani_arji_en',
-    name_gu: 'ઉલટ તપાસનો હક બંધ કરવાની અરજી',
-    name_en: 'Application to Close the Right of Cross-Examination',
+    guId: 'ulat_tapas_no_haq_bandh_karavani_arji',
+    enId: 'ulat_tapas_no_haq_bandh_karavani_arji',
+    name_gu: 'ઉલટ તપાસનો હક બંધ કરવા બાબત',
+    name_en: 'Application to Close Cross-Examination Right',
     category: 'General',
   },
   {
