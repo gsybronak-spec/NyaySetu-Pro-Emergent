@@ -2377,186 +2377,16 @@ async def lookup_client(mobile: str, user=Depends(get_user)):
 # CATALOG & DYNAMIC CASE FORMS
 # ============================================================
 
-DEFAULT_CASE_FORMS = [
-    {
-        "case_type_id": "criminal_case",
-        "name_en": "Criminal Case",
-        "name_gu": "ક્રિમિનલ કેસ",
-        "category": "Criminal",
-        "fields": [
-            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "fir_number", "label_en": "FIR / Crime Number", "label_gu": "એફ.આઈ.આર. / ગુના નંબર", "type": "text", "required": True, "order": 2},
-            {"key": "police_station", "label_en": "Police Station", "label_gu": "પોલીસ સ્ટેશન", "type": "text", "required": True, "order": 3},
-            {"key": "sections", "label_en": "IPC / BNS Sections", "label_gu": "કલમો", "type": "text", "required": True, "order": 4},
-            {"key": "arrest_date", "label_en": "Incident / Arrest Date", "label_gu": "બનાવ / ધરપકડ તારીખ", "type": "date", "required": False, "order": 5},
-            {"key": "investigating_officer", "label_en": "Investigating Officer (I.O.)", "label_gu": "તપાસ અધિકારી (I.O.)", "type": "text", "required": False, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "bail_application",
-        "name_en": "Bail Application",
-        "name_gu": "જામીન અરજી",
-        "category": "Bail",
-        "fields": [
-            {"key": "client_name", "label_en": "Accused / Client Name", "label_gu": "આરોપી / અરજદારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "fir_number", "label_en": "FIR / Crime Number", "label_gu": "એફ.આઈ.આર. / ગુના નંબર", "type": "text", "required": True, "order": 2},
-            {"key": "police_station", "label_en": "Police Station", "label_gu": "પોલીસ સ્ટેશન", "type": "text", "required": True, "order": 3},
-            {"key": "sections", "label_en": "IPC / BNS Sections", "label_gu": "કલમો", "type": "text", "required": True, "order": 4},
-            {"key": "arrest_date", "label_en": "Arrest Date", "label_gu": "ધરપકડ તારીખ", "type": "date", "required": False, "order": 5},
-            {"key": "bail_grounds", "label_en": "Grounds for Bail", "label_gu": "જામીન મેળવવાના કારણો", "type": "textarea", "required": True, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "regular_civil_suit",
-        "name_en": "Regular Civil Suit",
-        "name_gu": "રેગ્યુલર સિવિલ સૂટ",
-        "category": "Civil",
-        "fields": [
-            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
-            {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
-            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
-            {"key": "property_value", "label_en": "Valuation of Suit (₹)", "label_gu": "દાવાની રકમ (રૂ.)", "type": "number", "required": False, "order": 5},
-            {"key": "relief_sought", "label_en": "Relief Sought", "label_gu": "માગેલ દાદ", "type": "textarea", "required": True, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "civil_suit",
-        "name_en": "Civil Suit",
-        "name_gu": "સિવિલ સૂટ",
-        "category": "Civil",
-        "fields": [
-            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
-            {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
-            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
-            {"key": "property_value", "label_en": "Valuation of Suit (₹)", "label_gu": "દાવાની રકમ (રૂ.)", "type": "number", "required": False, "order": 5},
-            {"key": "relief_sought", "label_en": "Relief Sought", "label_gu": "માગેલ દાદ", "type": "textarea", "required": True, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "special_civil_suit",
-        "name_en": "Special Civil Suit",
-        "name_gu": "સ્પેશિયલ સિવિલ સૂટ",
-        "category": "Civil",
-        "fields": [
-            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
-            {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
-            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
-            {"key": "property_value", "label_en": "Valuation of Suit (₹)", "label_gu": "દાવાની રકમ (રૂ.)", "type": "number", "required": False, "order": 5},
-            {"key": "relief_sought", "label_en": "Relief Sought", "label_gu": "માગેલ દાદ", "type": "textarea", "required": True, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "revenue",
-        "name_en": "Revenue / Land Matter",
-        "name_gu": "મહેસૂલી / જમીન કેસ",
-        "category": "Revenue",
-        "fields": [
-            {"key": "client_name", "label_en": "Applicant / Landholder Name", "label_gu": "અરજદાર / ખાતેદારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "survey_number", "label_en": "Block / Survey Number", "label_gu": "બ્લોક / સરવે નંબર", "type": "text", "required": True, "order": 2},
-            {"key": "village", "label_en": "Village", "label_gu": "ગામ", "type": "text", "required": True, "order": 3},
-            {"key": "taluka", "label_en": "Taluka", "label_gu": "તાલુકો", "type": "text", "required": True, "order": 4},
-            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 5, "autofill_map": "user.district"},
-        ]
-    },
-    # Legacy aliases for backward compatibility with older seed tests
-    {
-        "case_type_id": "civil",
-        "name_en": "Civil Suit",
-        "name_gu": "દીવાની મુકદ્દમો",
-        "category": "Civil",
-        "fields": [
-            {"key": "client_name", "label_en": "Client / Party Name", "label_gu": "અરજદાર / પક્ષકારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "email", "label_en": "Email Address", "label_gu": "ઈમેઈલ સરનામું", "type": "email", "required": False, "order": 2, "autofill_map": "user.email"},
-            {"key": "address", "label_en": "Client Address", "label_gu": "રહેઠાણનું સરનામું", "type": "textarea", "required": False, "order": 3, "autofill_map": "user.address"},
-            {"key": "district", "label_en": "District", "label_gu": "જીલ્લો", "type": "text", "required": True, "order": 4, "autofill_map": "user.district"},
-            {"key": "property_value", "label_en": "Valuation of Suit (₹)", "label_gu": "દાવાની રકમ (રૂ.)", "type": "number", "required": False, "order": 5},
-            {"key": "relief_sought", "label_en": "Relief Sought", "label_gu": "માગેલ દાદ", "type": "textarea", "required": True, "order": 6},
-        ]
-    },
-    {
-        "case_type_id": "bail",
-        "name_en": "Bail Application",
-        "name_gu": "જામીન અરજી",
-        "category": "Bail",
-        "fields": [
-            {"key": "client_name", "label_en": "Accused / Client Name", "label_gu": "આરોપી / અરજદારનું નામ", "type": "text", "required": True, "order": 0, "autofill_map": "user.name"},
-            {"key": "mobile", "label_en": "Mobile Number", "label_gu": "મોબાઈલ નંબર", "type": "mobile", "required": True, "order": 1, "autofill_map": "user.mobile"},
-            {"key": "fir_number", "label_en": "FIR / Crime Number", "label_gu": "એફ.આઈ.આર. / ગુના નંબર", "type": "text", "required": True, "order": 2},
-            {"key": "police_station", "label_en": "Police Station", "label_gu": "પોલીસ સ્ટેશન", "type": "text", "required": True, "order": 3},
-            {"key": "sections", "label_en": "IPC / BNS Sections", "label_gu": "કલમો", "type": "text", "required": True, "order": 4},
-            {"key": "arrest_date", "label_en": "Arrest Date", "label_gu": "ધરપકડ તારીખ", "type": "date", "required": False, "order": 5},
-            {"key": "bail_grounds", "label_en": "Grounds for Bail", "label_gu": "જામીન મેળવવાના કારણો", "type": "textarea", "required": True, "order": 6},
-        ]
-    }
-]
+DEFAULT_CASE_FORMS: list = []
 
 @api.get("/catalog/case-forms")
 async def get_all_case_forms():
-    """List all dynamic case form schemas."""
-    forms = [d.to_dict() async for d in db.collection('case_forms').limit(100).stream()]
-    form_map = {f["case_type_id"]: f for f in DEFAULT_CASE_FORMS}
-    for f in forms:
-        if "case_type_id" in f:
-            form_map[f["case_type_id"]] = f
-    return list(form_map.values())
+    """List all dynamic case form schemas (empty - admin configured case fields removed)."""
+    return []
 
 @api.get("/catalog/case-forms/{case_type_id}")
 async def get_case_form_config(case_type_id: str):
-    """Get dynamic case form configuration for a specific case type."""
-    # 1. Direct document lookup by ID in Firestore
-    doc_snap = await db.collection("case_forms").document(case_type_id).get()
-    if doc_snap.exists:
-        cfg = doc_snap.to_dict()
-        if cfg and cfg.get("fields") is not None:
-            return cfg
-
-    # 2. Query by case_type_id field in Firestore
-    _snap = await db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).get()
-    cfg = _snap[0].to_dict() if _snap else None
-    if cfg and cfg.get("fields") is not None:
-        return cfg
-
-    # 3. Exact match in DEFAULT_CASE_FORMS
-    cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
-    if cfg:
-        return cfg
-
-    # 4. Alias / Category fallback in Firestore or DEFAULT_CASE_FORMS
-    alias_key = None
-    if "bail" in case_type_id:
-        alias_key = "bail_application"
-    elif case_type_id.startswith("crim") or "sessions" in case_type_id or "warrant" in case_type_id or "summons" in case_type_id:
-        alias_key = "criminal_case"
-    elif "civil" in case_type_id or case_type_id == "execution":
-        alias_key = "regular_civil_suit"
-    elif "revenue" in case_type_id or "land" in case_type_id:
-        alias_key = "revenue"
-
-    if alias_key:
-        alias_doc = await db.collection("case_forms").document(alias_key).get()
-        if alias_doc.exists:
-            alias_cfg = alias_doc.to_dict()
-            if alias_cfg and alias_cfg.get("fields") is not None:
-                res = dict(alias_cfg)
-                res["case_type_id"] = case_type_id
-                return res
-        alias_cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == alias_key), None)
-        if alias_cfg:
-            res = dict(alias_cfg)
-            res["case_type_id"] = case_type_id
-            return res
-
-    # 5. True fallback for unconfigured custom types (dedicated Client Details on case handles identity)
+    """Get dynamic case form configuration for a specific case type (empty - no extra admin fields)."""
     return {
         "case_type_id": case_type_id,
         "name_en": case_type_id.replace("_", " ").title(),
@@ -3332,29 +3162,8 @@ def client_ctx_from(payload: dict) -> dict:
 
 
 async def resolve_custom_autofill(case_type_id: Optional[str], custom_fields: Optional[dict], client_ctx: dict) -> dict:
-    """Fill empty autofill-mapped custom fields from the client context.
-
-    Uses the admin-configured case form schema for the case type (DB first,
-    DEFAULT_CASE_FORMS fallback). Values the user already entered are never
-    overwritten. This is server-side enforcement so no data is silently dropped.
-    """
-    custom = dict(custom_fields or {})
-    if not case_type_id:
-        return custom
-    _snap = await db.collection("case_forms").where(filter=firestore.FieldFilter("case_type_id", "==", case_type_id)).limit(1).get()
-    cfg = _snap[0].to_dict() if _snap else None
-    if not cfg:
-        cfg = next((c for c in DEFAULT_CASE_FORMS if c["case_type_id"] == case_type_id), None)
-    if not cfg:
-        return custom
-    for f in cfg.get("fields", []):
-        key = f.get("key")
-        if not key or key in custom and custom.get(key) not in (None, ""):
-            continue
-        val = resolve_autofill_value(f.get("autofill_map"), client_ctx)
-        if val is not None:
-            custom[key] = val
-    return custom
+    """Return custom fields without unnecessary DB queries since dynamic case forms are removed."""
+    return dict(custom_fields or {})
 
 
 @api.post("/cases")

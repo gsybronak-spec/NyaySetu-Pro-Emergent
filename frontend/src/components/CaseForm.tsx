@@ -778,19 +778,6 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
               </View>
 
               <View style={{ flex: 1, minWidth: 0 }}>
-                {/* Dynamic admin fields */}
-                {allDynamicFields.length > 0 && (
-                  <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-                    <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
-                    <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
-                      {language === "gu"
-                        ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
-                        : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
-                    </Text>
-                    {allDynamicFields.map((df) => renderDynamicField(df))}
-                  </View>
-                )}
-
                 <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
                 <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
                 <RoleChips
@@ -1088,19 +1075,6 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
           {showOther && (
             <Field testID="complaint-custom" label="Other Complaint Type" placeholder="Describe complaint type" value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
-          )}
-
-          {/* Dynamic Admin Fields */}
-          {allDynamicFields.length > 0 && (
-            <View style={[styles.dynamicSection, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Admin Configured Case Fields</Text>
-              <Text style={{ fontSize: 12, color: colors.onSurfaceSecondary, marginBottom: Spacing.sm, lineHeight: 16 }}>
-                {language === "gu"
-                  ? "* દસ્તાવેજ નિર્માણ માટે જરૂરી વિગતો દર્શાવે છે. તમે કોઈપણ સમયે કેસને ડ્રાફ્ટ તરીકે સાચવી શકો છો."
-                  : "* Indicates fields required for document generation. You can save your case as a draft at any time."}
-              </Text>
-              {allDynamicFields.map((df) => renderDynamicField(df))}
-            </View>
           )}
 
           <View style={{ height: Spacing.md }} />

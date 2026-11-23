@@ -52,11 +52,11 @@ def test_get_all_case_forms():
     assert res.status_code == 200
     forms = res.json()
     assert isinstance(forms, list)
-    assert len(forms) >= 3
+    assert len(forms) == 0
 
 def test_get_specific_case_form():
     res = app_client.get(f"{API}/catalog/case-forms/civil")
     assert res.status_code == 200
     cfg = res.json()
     assert cfg["case_type_id"] == "civil"
-    assert "fields" in cfg
+    assert cfg["fields"] == []

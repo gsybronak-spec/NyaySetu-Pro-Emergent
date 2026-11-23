@@ -334,19 +334,12 @@ export const catalogCache = {
     return fetchCatalogWithSWR("laws", () => api.laws(), SEED_LAWS, forceRefresh);
   },
 
-  getCaseForms: (forceRefresh = false): Promise<any[]> => {
-    return fetchCatalogWithSWR("case_forms", () => api.listCaseForms(), SEED_CASE_FORMS, forceRefresh);
+  getCaseForms: async (_forceRefresh = false): Promise<any[]> => {
+    return [];
   },
 
-  getCaseFormConfig: async (case_type_id: string, forceRefresh = false): Promise<any> => {
-    const key = `case_form_cfg:${case_type_id}`;
-    const seedForm = SEED_CASE_FORMS.find((f: any) => f.case_type_id === case_type_id) || null;
-    return fetchCatalogWithSWR(
-      key,
-      () => api.caseFormConfig(case_type_id),
-      seedForm,
-      forceRefresh
-    );
+  getCaseFormConfig: async (case_type_id: string, _forceRefresh = false): Promise<any> => {
+    return { case_type_id, fields: [] };
   },
 
   getFavCourts: (forceRefresh = false): Promise<string[]> => {
