@@ -795,56 +795,77 @@ Place : {{taluka_place}}
     },
     {
         "base_key": "ulat_tapas_no_haq_bandh_karavani_arji",
-        "aliases": ["ulat_tapas_bandh", "close cross examination", "ઉલટતપાસ બંધ", "હક બંધ ઉલટતપાસ"],
-        "name_gu": "ઉલટતપાસનો હક્ક બંધ કરવાની અરજી",
+        "aliases": ["ulat_tapas_bandh", "ulta_tapas_no_haq_bandh_karavani_arji", "close cross examination", "ઉલટતપાસ બંધ", "ઉલટ તપાસનો હક બંધ કરવા બાબત", "હક બંધ ઉલટતપાસ"],
+        "name_gu": "ઉલટ તપાસનો હક બંધ કરવા બાબત",
         "name_en": "Application to Close Cross-Examination Right",
         "category": "General",
         "description": "Application to close the right of cross-examination due to repeated delay and absence of opposite party.",
         "fields": [
-            {'key': 'advocate_side', 'label_en': 'Advocate acting on behalf of', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': True, 'source': 'case_parties', 'options': [{'value': 'party', 'label_en': 'Applicant / Complainant side', 'label_gu': 'ફરિયાદી / અરજદાર / વાદી તરફથી'}, {'value': 'opposite', 'label_en': 'Opposite party side', 'label_gu': 'આરોપી / સામાવાળા / પ્રતિવાદી તરફથી'}]},
-            {'key': 'witness_name', 'label_en': 'Name of witness whose cross-examination was pending', 'label_gu': 'જે સાક્ષીની ઉલટતપાસ કરવાની છે તેમનું નામ', 'type': 'text', 'required': True},
-            {'key': 'target_party_role', 'label_en': 'Party failing to cross-examine (e.g. Accused)', 'label_gu': 'જેનો હક્ક બંધ કરવાનો છે તે (દા.ત. આરોપી)', 'type': 'text', 'required': True, 'default': 'આરોપી'},
-            {'key': 'delay_period', 'label_en': 'Period of default / delay', 'label_gu': 'વિલંબનો સમયગાળો (ઘણી મુદ્દતથી / આજ દીન સુધી)', 'type': 'select', 'required': True, 'options': [{'value': 'ઘણી મુદ્દતથી', 'label_en': 'Since several dates', 'label_gu': 'ઘણી મુદ્દતથી'}, {'value': 'આજ દીન સુધી', 'label_en': 'Till today', 'label_gu': 'આજ દીન સુધી'}]},
-            {'key': 'date', 'label_en': 'Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': True},
+            {'key': 'court_name', 'label_en': 'Court Name', 'label_gu': 'કોર્ટ નું નામ', 'type': 'select', 'required': False},
+            {'key': 'district', 'label_en': 'District', 'label_gu': 'જીલ્લો', 'type': 'select', 'required': False},
+            {'key': 'taluka', 'label_en': 'Taluka', 'label_gu': 'તાલુકો', 'type': 'select', 'required': False},
+            {'key': 'case_type', 'label_en': 'Case Type', 'label_gu': 'કેસ પ્રકાર', 'type': 'select', 'required': False},
+            {'key': 'case_number', 'label_en': 'Case Number', 'label_gu': 'કેસ નંબર', 'type': 'text', 'required': False},
+            {'key': 'party_1_role', 'label_en': 'Party 1 Role', 'label_gu': 'પક્ષકાર-૧ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'ફરીયાદી', 'label_gu': 'ફરીયાદી', 'label_en': 'Complainant'}, {'value': 'અરજદાર', 'label_gu': 'અરજદાર', 'label_en': 'Applicant'}, {'value': 'વાદી', 'label_gu': 'વાદી', 'label_en': 'Plaintiff'}]},
+            {'key': 'party_1_name', 'label_en': 'Party 1 Name', 'label_gu': 'પક્ષકાર - ૧ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'party_2_role', 'label_en': 'Party 2 Role', 'label_gu': 'પક્ષકાર-૨ ની ભૂમિકા', 'type': 'radio', 'required': False, 'options': [{'value': 'આરોપી', 'label_gu': 'આરોપી', 'label_en': 'Accused'}, {'value': 'સામાવાળા', 'label_gu': 'સામાવાળા', 'label_en': 'Opponent'}, {'value': 'પ્રતિવાદી', 'label_gu': 'પ્રતિવાદી', 'label_en': 'Defendant'}]},
+            {'key': 'party_2_name', 'label_en': 'Party 2 Name', 'label_gu': 'પક્ષકાર - ૨ નું નામ', 'type': 'text', 'required': False},
+            {'key': 'advocate_for', 'label_en': 'Advocate For', 'label_gu': 'કોના તરફે એડવોકેટ', 'type': 'select', 'required': False, 'default': 'ફરીયાદી', 'options': [{'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}, {'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}]},
+            {'key': 'closed_party', 'label_en': 'Party whose cross-examination right is to be closed', 'label_gu': 'જેનો હક્ક બંધ કરવાનો છે', 'type': 'select', 'required': False, 'default': 'આરોપી', 'options': [{'value': 'આરોપી', 'label_en': 'Accused', 'label_gu': 'આરોપી'}, {'value': 'સામાવાળા', 'label_en': 'Opponent', 'label_gu': 'સામાવાળા'}, {'value': 'પ્રતિવાદી', 'label_en': 'Defendant', 'label_gu': 'પ્રતિવાદી'}, {'value': 'ફરીયાદી', 'label_en': 'Complainant', 'label_gu': 'ફરીયાદી'}, {'value': 'અરજદાર', 'label_en': 'Applicant', 'label_gu': 'અરજદાર'}, {'value': 'વાદી', 'label_en': 'Plaintiff', 'label_gu': 'વાદી'}]},
+            {'key': 'date', 'label_en': 'Application Date', 'label_gu': 'તારીખ', 'type': 'date', 'required': False},
+            {'key': 'place', 'label_en': 'Place', 'label_gu': 'સ્થળ', 'type': 'text', 'required': False},
+            {'key': 'advocate_name', 'label_en': 'Advocate Designation', 'label_gu': 'ના એડવોકેટ', 'type': 'text', 'required': False},
         ],
-        "content_gu": """મહેરબાન {{court}} સાહેબશ્રીની કોર્ટમાં,
+        "content_gu": """મહેરબાન {{court_name}} સાહેબશ્રીની કોર્ટમાં,
+
 મુકામ :- {{taluka_place}}
 
 {{case_type}} નં. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 વિરુદ્ધ
-{{opposite_party_line}}
+
+{{party_2_role}} :- {{party_2_name}}
 
 બાબત :- ઉલટતપાસનો હક બંધ કરવા બાબત...
 
-સદર કામમાં અમો {{selected_party_role}} ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
+સદર કામમાં અમો {{advocate_for_role}}ના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે.....
 
-સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર અને કેસમાં {{witness_name}} નાઓની લેખીત જુબાની પૂર્ણ થયેલ હોવા છતાં {{target_party_role}} તરફથી {{witness_name}} ની ઉલટતપાસ કરવામાં આવેલ નથી. સામાવાળા ને ઉલટતપાસ માટે પૂરતી તક આપવામાં આવેલ હોવા છતાં {{delay_period}} આપ નામદાર સાહેબશ્રીની કોર્ટ સમક્ષ ઊપસ્થિત રહેલ ન હોય, તેમજ નામદાર કોર્ટનો સમય ખુબ જ કિંમતી છે. જેથી સદર {{target_party_role}} નાઓનો ઉલટતપાસનો હક બંધ કરવો ન્યાયના હિતમાં છે. આથી {{target_party_role}} નો {{witness_name}} નાઓની ઉલટતપાસ કરવાનો હક બંધ કરી આગળની કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
+સદર કેસ આપ નામદાર કોર્ટમાં આજરોજ ફરીયાદીની ઉલટ-તપાસ માટે રાખેલ છે. પરંતુ સદર કેસમાં {{closed_party_role}} પોતે જાતે કે તેમના વકીલશ્રી આજરોજ આપ નામદાર કોર્ટમાં હાજર ન હોઈ, તેમજ કોઈ રીપોર્ટ રજુ કરેલ ન હોઈ જેથી {{closed_party_role}}નો ઉલટ-તપાસનો હક બંધ કરી આગળની ન્યાયિક કાર્યવાહી કરવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.
 
-તારીખ : {{date_display}}
-સ્થળ : {{taluka_place}}
+તારીખ : {{date}}
 
---------------------------- {{selected_party_role}} ના એડવોકેટ""",
-        "content_en": """IN THE COURT OF {{court}},
-AT {{taluka_place}}
+સ્થળ : {{place}}
+
+----------
+
+{{advocate_name}}""",
+        "content_en": """IN THE COURT OF THE HON'BLE {{court_name}},
+
+AT: {{taluka_place}}
 
 {{case_type}} No. : {{case_number}}
 
-{{party_line}}
+{{party_1_role}} :- {{party_1_name}}
+
 Versus
-{{opposite_party_line}}
+
+{{party_2_role}} :- {{party_2_name}}
 
 SUBJECT: APPLICATION TO CLOSE RIGHT OF CROSS-EXAMINATION
 
-In the above matter, we, the advocate for {{selected_party_role}}, most respectfully submit before this Hon'ble Court that:
+In the above matter, we, the advocate for {{advocate_for_role}}, most respectfully submit before this Hon'ble Court that:
 
-The said case is pending before this Hon'ble Court, and though the examination-in-chief of {{witness_name}} has been completed, cross-examination of {{witness_name}} has not been conducted by {{target_party_role}}. Despite sufficient opportunity having been granted for cross-examination, {{target_party_role}} has not remained present before this Hon'ble Court {{delay_period}}, and the time of the Hon'ble Court is very precious. Therefore, it is in the interest of justice to close the right of {{target_party_role}} to cross-examine. It is therefore prayed that this Hon'ble Court may be pleased to close the right of {{target_party_role}} to cross-examine {{witness_name}} and pass appropriate orders to proceed further.
+The said case is pending before this Hon'ble Court and is scheduled today for the cross-examination of the complainant. However, in the said case, the {{closed_party_role}} in person or their advocate is not present before this Hon'ble Court today, nor has any report been submitted. Therefore, it is prayed that this Hon'ble Court may be pleased to close the right of cross-examination of the {{closed_party_role}} and pass appropriate orders to proceed further with the judicial proceedings.
 
-Date : {{date_display}}
-Place : {{taluka_place}}
+Date : {{date}}
 
---------------------------- Advocate for {{selected_party_role}}""",
+Place : {{place}}
+
+----------
+
+{{advocate_name}}""",
     },
     {
         "base_key": "ulat_tapas_no_haq_kholvani_arji",
