@@ -63,6 +63,11 @@ export default function Profile() {
   const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/profile/edit" as any) },
     {
+      icon: "book-outline",
+      label: "વપરાશકર્તા માર્ગદર્શિકા / User Guide",
+      onPress: () => router.push("/user-guide" as any),
+    },
+    {
       icon: "key-outline",
       label: user?.has_password ? "Change Password" : "Set Password",
       onPress: () => router.push("/profile/set-password" as any),

@@ -17,6 +17,8 @@ import { TemplateLogicalPair, getActiveTemplatePairs, PERMANENTLY_DELETED_BASE_K
 import { catalogCache } from "@/src/services/catalogCache";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 import { NotificationCenter } from "@/src/components/NotificationCenter";
+import { UserGuideModal } from "@/src/components/UserGuideModal";
+import { storage } from "@/src/utils/storage";
 
 export default function Home() {
   const { colors, isDark } = useTheme();
@@ -33,6 +35,7 @@ export default function Home() {
     catalogCache.peekActiveTemplatePairs().length
   );
   const [selectedPair, setSelectedPair] = useState<TemplateLogicalPair | null>(null);
+  const [showUserGuideModal, setShowUserGuideModal] = useState<boolean>(false);
   const [drafts, setDrafts] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
@@ -95,6 +98,24 @@ export default function Home() {
     setVisibleHomeCount((prev) => prev + 10);
   };
 
+  // First-time login onboarding popup check
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const seen = await storage.getItem("@nyaysetu_userguide_seen_v1", false);
+        if (!seen && active) {
+          setShowUserGuideModal(true);
+        }
+      } catch {
+        // Safe ignore
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const onRefresh = async () => {
@@ -124,14 +145,24 @@ export default function Home() {
         title={`${greeting}, ${advocateName || "Advocate"}`}
         subtitle="Your legal workspace — pick up where you left off."
         actions={
-          <Pressable
-            testID="home-search-btn"
-            onPress={() => router.push("/search" as any)}
-            style={[styles.desktopSearch, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
-          >
-            <Ionicons name="search" size={16} color={colors.muted} />
-            <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 6 }}>Search cases & templates</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+            <Pressable
+              testID="desktop-guide-btn"
+              onPress={() => router.push("/user-guide" as any)}
+              style={[styles.desktopSearch, { borderColor: colors.brandPrimary + "40", backgroundColor: colors.surfaceSecondary }]}
+            >
+              <Ionicons name="book-outline" size={16} color={colors.brandPrimary} />
+              <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", marginLeft: 6 }}>User Guide (માર્ગદર્શિકા)</Text>
+            </Pressable>
+            <Pressable
+              testID="home-search-btn"
+              onPress={() => router.push("/search" as any)}
+              style={[styles.desktopSearch, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
+            >
+              <Ionicons name="search" size={16} color={colors.muted} />
+              <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 6 }}>Search cases & templates</Text>
+            </Pressable>
+          </View>
         }
       >
         {loadError ? (
@@ -357,6 +388,11 @@ export default function Home() {
             }
           }}
         />
+        <UserGuideModal
+          visible={showUserGuideModal}
+          onClose={() => setShowUserGuideModal(false)}
+          onComplete={() => setShowUserGuideModal(false)}
+        />
       </DesktopPage>
     );
   }
@@ -374,6 +410,9 @@ export default function Home() {
           <Text style={[styles.brandName, { color: colors.onSurface }]}>NyaySetu <Text style={{ color: colors.brandPrimary }}>Pro</Text></Text>
         </View>
         <View style={{ flexDirection: "row", gap: Spacing.md, alignItems: "center" }}>
+          <Pressable testID="home-guide-btn" onPress={() => router.push("/user-guide" as any)} hitSlop={8}>
+            <Ionicons name="book-outline" size={22} color={colors.brandPrimary} />
+          </Pressable>
           <NotificationCenter />
           <Pressable testID="home-search-btn" onPress={() => router.push("/search" as any)}>
             <Ionicons name="search" size={22} color={colors.onSurface} />
@@ -553,6 +592,11 @@ export default function Home() {
             router.push({ pathname: "/template/[id]", params: { id, lang } });
           }
         }}
+      />
+      <UserGuideModal
+        visible={showUserGuideModal}
+        onClose={() => setShowUserGuideModal(false)}
+        onComplete={() => setShowUserGuideModal(false)}
       />
     </SafeAreaView>
   );
