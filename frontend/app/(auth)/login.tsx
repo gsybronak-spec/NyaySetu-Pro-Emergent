@@ -139,6 +139,7 @@ export default function Login() {
       router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim() } });
     } catch (e: any) {
       const code = e?.code as string | undefined;
+      const msg = (e?.message || "");
       if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
         setErr("SMS OTP is temporarily unavailable for this region. Please try again later or use password login.");
       } else if (code === "auth/too-many-requests") {
@@ -147,6 +148,8 @@ export default function Login() {
         setErr("Enter a valid 10-digit mobile number.");
       } else if (code === "auth/quota-exceeded") {
         setErr("SMS quota exceeded for today. Please use password login or contact support.");
+      } else if (code === "auth/captcha-check-failed" || msg.includes("Hostname match not found")) {
+        setErr("Firebase domain authorization is required for nyaysetupro.in in Firebase Console. Please add nyaysetupro.in to Authorized Domains.");
       } else {
         setErr(e?.message || "Could not send OTP. Please try again.");
       }

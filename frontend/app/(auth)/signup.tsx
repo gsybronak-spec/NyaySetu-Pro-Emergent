@@ -82,12 +82,15 @@ export default function Signup() {
       // never leak raw SDK text. SMS delivery itself depends on the Firebase
       // project's SMS region/billing config (an external setting).
       const code = e?.code as string | undefined;
+      const msg = (e?.message || "");
       if (code === "auth/operation-not-allowed" || code === "auth/unauthorized-continue-uri") {
         setErr("SMS OTP is temporarily unavailable for this region. Please try again later or use password login.");
       } else if (code === "auth/too-many-requests") {
         setErr("Too many OTP requests. Please wait a minute and try again.");
       } else if (code === "auth/invalid-phone-number") {
         setErr("Enter a valid 10-digit mobile number.");
+      } else if (code === "auth/captcha-check-failed" || msg.includes("Hostname match not found")) {
+        setErr("Firebase domain authorization is required for nyaysetupro.in in Firebase Console. Please add nyaysetupro.in to Authorized Domains.");
       } else {
         setErr(e?.message || "Could not send OTP. Please try again.");
       }

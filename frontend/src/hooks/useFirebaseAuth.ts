@@ -119,14 +119,28 @@ export function getOrCreateRecaptchaVerifier(
   }
 
   clearActiveVerifier();
-  if (typeof target !== 'string' && target instanceof HTMLElement) {
-    try {
-      target.innerHTML = '';
-    } catch {}
+
+  let mountTarget: HTMLElement | string = (target as any) || 'recaptcha-container';
+  if (typeof document !== 'undefined') {
+    let parentEl: HTMLElement | null = null;
+    if (typeof target === 'string') {
+      parentEl = document.getElementById(target);
+    } else if (target && typeof target === 'object' && 'appendChild' in target) {
+      parentEl = target as HTMLElement;
+    }
+    if (parentEl) {
+      try {
+        parentEl.innerHTML = '';
+        const freshChild = document.createElement('div');
+        freshChild.id = `recaptcha-mount-${Date.now()}`;
+        parentEl.appendChild(freshChild);
+        mountTarget = freshChild;
+      } catch {}
+    }
   }
 
   try {
-    const verifier = new RecaptchaVerifier(auth, target as any, {
+    const verifier = new RecaptchaVerifier(auth, mountTarget as any, {
       size: 'invisible',
     });
     activeVerifier = verifier;
