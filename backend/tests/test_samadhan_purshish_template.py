@@ -285,6 +285,9 @@ class TestSamadhanPurshishTemplate(unittest.IsolatedAsyncioTestCase):
         pdf_bytes = base64.b64decode(pdf_b64)
         self.assertTrue(pdf_bytes.startswith(b"%PDF-"), "Generated file must start with PDF header %PDF-")
         self.assertGreater(len(pdf_bytes), 1000, "Generated PDF must be non-empty and well-sized")
+        art_path = Path("/home/court/.gemini/antigravity/brain/e73c87ff-99de-4a10-8aa0-68da9c24e83b/live_deployed_samadhan_purshish_gu.pdf")
+        with open(art_path, "wb") as f:
+            f.write(pdf_bytes)
 
     async def test_10_api_get_template_by_id(self):
         """10. Verify server._get_template_by_id returns canonical template."""
