@@ -5495,7 +5495,10 @@ async def _get_template_by_id(template_id: str) -> Optional[dict]:
     deleted_ids = await _get_deleted_template_ids()
     canon_cand = resolve_canonical_template_id(template_id)
     base_cand = template_id[:-3] if template_id.endswith(("_gu", "_en")) else template_id
-    cand_set = {template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
+    if canon_cand in CANONICAL_TEMPLATE_IDS or canon_cand == "document_exhibit_application":
+        cand_set = {canon_cand}
+    else:
+        cand_set = {template_id, canon_cand, base_cand, f"{base_cand}_gu", f"{base_cand}_en"}
     if cand_set.intersection(deleted_ids):
         return None
 
