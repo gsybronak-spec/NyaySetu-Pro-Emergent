@@ -16,11 +16,12 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
-import { api } from "@/src/api/client";
+import { api, invalidateApiCache } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
+import { ConfirmModal } from "@/src/components/ConfirmModal";
 import { saveDocument } from "@/src/utils/download";
 
 type VaultTab = "all" | "documents" | "drafts";
@@ -65,6 +66,13 @@ export default function DocumentVault() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
 
   useEffect(() => {
     const t = params.tab || (params.filter === "drafts" ? "drafts" : params.filter === "documents" ? "documents" : null);
@@ -96,6 +104,8 @@ export default function DocumentVault() {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    invalidateApiCache("/applications/history");
+    invalidateApiCache("/drafts");
     await loadData();
     setRefreshing(false);
   };
@@ -105,32 +115,56 @@ export default function DocumentVault() {
     return !isCompleted && Boolean(d.id || d._id);
   }, []);
 
+  const handleConfirmProceed = async () => {
+    if (!confirmModal || confirmBusy) return;
+    setConfirmBusy(true);
+    try {
+      await confirmModal.onConfirm();
+      setConfirmModal(null);
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleDeleteDocument = (doc: any) => {
+    const docId = doc.id || doc._id;
+    if (!docId) return;
+    setConfirmModal({
+      title: "Delete Document",
+      message: "Remove this generated/downloaded application from your Vault?",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await api.deleteApplication(docId);
+          setDocuments((prev) => prev.filter((d) => (d.id || d._id) !== docId));
+        } catch (err: any) {
+          Alert.alert("Error", err?.message || "Could not delete document");
+        }
+      },
+    });
+  };
+
   const handleDeleteDraft = (draft: any) => {
     const draftId = draft.id || draft._id;
-    const confirmDelete = async () => {
-      try {
-        await api.deleteDraft(draftId);
-        setDrafts((prev) => prev.filter((d) => (d.id || d._id) !== draftId));
-        setSelectedDraftIds((prev) => {
-          const next = new Set(prev);
-          next.delete(draftId);
-          return next;
-        });
-      } catch (err: any) {
-        Alert.alert("Error", err?.message || "Could not delete draft");
-      }
-    };
-
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Delete this saved draft?")) {
-        confirmDelete();
-      }
-    } else {
-      Alert.alert("Delete Draft", "Are you sure you want to delete this draft?", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: confirmDelete },
-      ]);
-    }
+    if (!draftId) return;
+    setConfirmModal({
+      title: "Delete Draft",
+      message: "Are you sure you want to permanently delete this saved draft?",
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await api.deleteDraft(draftId);
+          setDrafts((prev) => prev.filter((d) => (d.id || d._id) !== draftId));
+          setSelectedDraftIds((prev) => {
+            const next = new Set(prev);
+            next.delete(draftId);
+            return next;
+          });
+        } catch (err: any) {
+          Alert.alert("Error", err?.message || "Could not delete draft");
+        }
+      },
+    });
   };
 
   const executeBulkDelete = async () => {
@@ -174,18 +208,12 @@ export default function DocumentVault() {
   const handleBulkDelete = () => {
     const count = selectedDraftIds.size;
     if (count === 0) return;
-    const msg = `Are you sure you want to permanently delete ${count} selected draft(s)? This action cannot be undone.`;
-
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm(msg)) {
-        executeBulkDelete();
-      }
-    } else {
-      Alert.alert("Delete Selected Drafts", msg, [
-        { text: "Cancel", style: "cancel" },
-        { text: `Delete (${count})`, style: "destructive", onPress: executeBulkDelete },
-      ]);
-    }
+    setConfirmModal({
+      title: "Delete Selected Drafts",
+      message: `Are you sure you want to permanently delete ${count} selected draft(s)? This action cannot be undone.`,
+      confirmLabel: `Delete (${count})`,
+      onConfirm: executeBulkDelete,
+    });
   };
 
   const handleReDownload = async (doc: any) => {
@@ -265,14 +293,15 @@ export default function DocumentVault() {
   };
 
   const renderDocumentCard = (doc: any) => {
+    const docId = doc.id || doc._id;
     const isDocx = doc.format === "docx";
     const isOdt = doc.format === "odt";
     const iconColor = isDocx ? "#2563EB" : isOdt ? "#0D9488" : "#B91C1C";
-    const isDownloading = downloadingId === doc.id;
+    const isDownloading = downloadingId === docId;
 
     return (
       <View
-        key={`doc-${doc.id}`}
+        key={`doc-${docId}`}
         style={[
           styles.card,
           { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
@@ -316,7 +345,7 @@ export default function DocumentVault() {
 
         <View style={styles.actionCol}>
           <Pressable
-            testID={`vault-download-${doc.id}`}
+            testID={`vault-download-${docId}`}
             onPress={() => handleReDownload(doc)}
             disabled={isDownloading}
             style={[
@@ -334,18 +363,29 @@ export default function DocumentVault() {
             )}
           </Pressable>
 
-          <Pressable
-            testID={`vault-open-${doc.id}`}
-            onPress={() =>
-              router.push(
-                `/template/${doc.template_id}?case_id=${doc.case_id || ""}&lang=${doc.language || "gu"}` as any
-              )
-            }
-            style={[styles.actionBtnSecondary, { borderColor: colors.border }]}
-          >
-            <Ionicons name="create-outline" size={14} color={colors.onSurface} />
-            <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>Open</Text>
-          </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Pressable
+              testID={`vault-open-${docId}`}
+              onPress={() =>
+                router.push(
+                  `/template/${doc.template_id}?case_id=${doc.case_id || ""}&lang=${doc.language || "gu"}` as any
+                )
+              }
+              style={[styles.actionBtnSecondary, { borderColor: colors.border }]}
+            >
+              <Ionicons name="create-outline" size={14} color={colors.onSurface} />
+              <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>Open</Text>
+            </Pressable>
+
+            <Pressable
+              testID={`vault-del-doc-${docId}`}
+              onPress={() => handleDeleteDocument(doc)}
+              hitSlop={6}
+              style={[styles.actionBtnDanger, { borderColor: colors.error + "40" }]}
+            >
+              <Ionicons name="trash-outline" size={14} color={colors.error} />
+            </Pressable>
+          </View>
         </View>
       </View>
     );
@@ -614,6 +654,18 @@ export default function DocumentVault() {
           )}
         </ScrollView>
       )}
+
+      <ConfirmModal
+        visible={confirmModal !== null}
+        title={confirmModal?.title || ""}
+        message={confirmModal?.message || ""}
+        confirmLabel={confirmModal?.confirmLabel}
+        busy={confirmBusy}
+        onCancel={() => {
+          if (!confirmBusy) setConfirmModal(null);
+        }}
+        onConfirm={handleConfirmProceed}
+      />
     </View>
   );
 

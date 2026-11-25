@@ -8260,10 +8260,15 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
 
     # Parallelize post-generation persistence tasks to reduce latency by ~1-1.5 seconds
     if db is not None:
+        draft_keys = {f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}"}
+        if req.template_id:
+            base_req_tid = re.sub(r"_(gu|en)$", "", req.template_id)
+            draft_keys.add(f"draft_{user['id']}_{req.template_id}_{req.case_id or 'none'}")
+            draft_keys.add(f"draft_{user['id']}_{base_req_tid}_{req.case_id or 'none'}")
         post_gen_tasks = [
             db.collection('applications').document(app_id).set(_doc),
             db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
-            db.collection('drafts').document(f"draft_{user['id']}_{t['id']}_{req.case_id or 'none'}").delete(),
+            *[db.collection('drafts').document(dk).delete() for dk in draft_keys],
         ]
         if req.case_id:
             post_gen_tasks.append(
@@ -8281,14 +8286,56 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     return resp
 
 
+def _normalize_user_doc(doc_snap) -> dict:
+    data = doc_snap.to_dict() or {}
+    if not data.get("id"):
+        data["id"] = data.get("_id") or doc_snap.id
+    return data
+
+
+async def _delete_user_doc(collection_name: str, target_id: str, user_id: str) -> int:
+    """Delete a user-owned doc matching Firestore doc.id, body `id`, or `_id`."""
+    if db is None or not target_id or target_id == "undefined":
+        return 0
+    deleted = 0
+    seen_doc_ids = set()
+
+    direct_ref = db.collection(collection_name).document(target_id)
+    direct_snap = await direct_ref.get()
+    if direct_snap.exists:
+        direct_data = direct_snap.to_dict() or {}
+        if direct_data.get("user_id") != user_id:
+            raise HTTPException(403, "Not authorized to delete this item")
+        await direct_ref.delete()
+        seen_doc_ids.add(direct_snap.id)
+        deleted += 1
+
+    async for snap in db.collection(collection_name).where(filter=firestore.FieldFilter("user_id", "==", user_id)).limit(500).stream():
+        if snap.id in seen_doc_ids:
+            continue
+        data = snap.to_dict() or {}
+        if snap.id == target_id or data.get("id") == target_id or data.get("_id") == target_id:
+            await db.collection(collection_name).document(snap.id).delete()
+            seen_doc_ids.add(snap.id)
+            deleted += 1
+
+    return deleted
+
+
 @api.get("/applications/history")
 async def application_history(user=Depends(get_user)):
     try:
-        items = [d.to_dict() async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).order_by("created_at", direction=firestore.Query.DESCENDING).limit(200).stream()]
+        items = [_normalize_user_doc(d) async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).order_by("created_at", direction=firestore.Query.DESCENDING).limit(200).stream()]
     except Exception:
-        items = [d.to_dict() async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(200).stream()]
+        items = [_normalize_user_doc(d) async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(200).stream()]
         items.sort(key=lambda a: a.get("created_at", ""), reverse=True)
     return items
+
+
+@api.delete("/applications/{app_id}")
+async def delete_application(app_id: str, user=Depends(get_user)):
+    deleted = await _delete_user_doc("applications", app_id, user["id"])
+    return {"success": True, "deleted": deleted}
 
 
 # ============================================================
@@ -9060,19 +9107,17 @@ async def save_draft(req: DraftSave, user=Depends(get_user)):
 @api.get("/drafts")
 async def list_drafts(user=Depends(get_user)):
     try:
-        items = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).order_by('updated_at', direction=firestore.Query.DESCENDING).limit(50).stream()]
+        items = [_normalize_user_doc(d) async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).order_by('updated_at', direction=firestore.Query.DESCENDING).limit(50).stream()]
     except Exception:
-        items = [d.to_dict() async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).limit(50).stream()]
+        items = [_normalize_user_doc(d) async for d in db.collection('drafts').where(filter=firestore.FieldFilter('user_id', '==', user["id"])).limit(50).stream()]
         items.sort(key=lambda d: d.get("updated_at") or "", reverse=True)
     return items
 
 
 @api.delete("/drafts/{draft_id}")
 async def delete_draft(draft_id: str, user=Depends(get_user)):
-    _draft = (await db.collection('drafts').document(draft_id).get()).to_dict()
-    if _draft and _draft.get("user_id") == user["id"]:
-        await db.collection('drafts').document(draft_id).delete()
-    return {"success": True}
+    deleted = await _delete_user_doc("drafts", draft_id, user["id"])
+    return {"success": True, "deleted": deleted}
 
 
 # ============================================================

@@ -11,6 +11,7 @@ interface CacheEntry {
 
 const apiGetCache = new Map<string, CacheEntry>();
 const apiInFlightGet = new Map<string, Promise<any>>();
+let cacheEpoch = 0;
 
 const CACHEABLE_GET_PREFIXES = [
   "/favourites/templates",
@@ -30,6 +31,7 @@ const CACHE_TTL_MS = 60000; // 60 seconds
 const FAST_CACHE_TTL_MS = 15000; // 15 seconds for dynamic user data (cases, wallet, drafts)
 
 export function invalidateApiCache(prefix?: string) {
+  cacheEpoch++;
   if (!prefix) {
     apiGetCache.clear();
     apiInFlightGet.clear();
@@ -358,10 +360,13 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     // SWR: return cached data immediately and refresh in background
     if (age < swrMaxAge) {
       if (!apiInFlightGet.has(cacheKey)) {
+        const startEpoch = cacheEpoch;
         const bgPromise = (async () => {
           try {
             const fresh = await rawRequest(path, method, body, timeoutMs, isRetry);
-            apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+            if (startEpoch === cacheEpoch) {
+              apiGetCache.set(cacheKey, { data: fresh, timestamp: Date.now() });
+            }
           } catch {
             // Keep existing cache on network failure
           } finally {
@@ -379,10 +384,13 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
     return inFlight;
   }
 
+  const startEpoch = cacheEpoch;
   const promise = (async () => {
     try {
       const data = await rawRequest(path, method, body, timeoutMs, isRetry);
-      apiGetCache.set(cacheKey, { data, timestamp: Date.now() });
+      if (startEpoch === cacheEpoch) {
+        apiGetCache.set(cacheKey, { data, timestamp: Date.now() });
+      }
       return data;
     } finally {
       apiInFlightGet.delete(cacheKey);
@@ -524,9 +532,15 @@ export const api = {
     invalidateApiCache("/wallet");
     invalidateApiCache("/profile/me");
     invalidateApiCache("/applications/history");
+    invalidateApiCache("/drafts");
     return res;
   },
   history: () => request("/applications/history"),
+  deleteApplication: async (id: string) => {
+    const res = await request(`/applications/${encodeURIComponent(id)}`, "DELETE");
+    invalidateApiCache("/applications/history");
+    return res;
+  },
   wallet: () => request("/wallet"),
   purchase: async (plan_id: string) => {
     const res = await request("/purchase/mock", "POST", { plan_id });
@@ -569,7 +583,7 @@ export const api = {
   },
   drafts: () => request("/drafts"),
   deleteDraft: async (id: string) => {
-    const res = await request(`/drafts/${id}`, "DELETE");
+    const res = await request(`/drafts/${encodeURIComponent(id)}`, "DELETE");
     invalidateApiCache("/drafts");
     return res;
   },

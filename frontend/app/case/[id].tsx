@@ -11,6 +11,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
+import { ConfirmModal } from "@/src/components/ConfirmModal";
 import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 
@@ -23,6 +24,8 @@ export default function CaseDetail() {
   const [fieldLabels, setFieldLabels] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [caseDrafts, setCaseDrafts] = useState<any[]>([]);
+  const [draftToDelete, setDraftToDelete] = useState<any>(null);
+  const [deletingDraft, setDeletingDraft] = useState(false);
   const [templatePairs, setTemplatePairs] = useState<TemplateLogicalPair[]>(() =>
     catalogCache.peekActiveTemplatePairs()
   );
@@ -49,24 +52,22 @@ export default function CaseDetail() {
     if (e && typeof e.stopPropagation === "function") {
       e.stopPropagation();
     }
-    const confirmDelete = async () => {
-      try {
-        await api.deleteDraft(draft.id || draft._id);
-        setCaseDrafts((prev) => prev.filter((d) => (d.id || d._id) !== (draft.id || draft._id)));
-      } catch (err: any) {
-        Alert.alert("Error", err?.message || "Could not delete draft");
-      }
-    };
+    if (!(draft?.id || draft?._id)) return;
+    setDraftToDelete(draft);
+  };
 
-    if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Delete this draft application? / આ ડ્રાફ્ટ અરજી કાયમ માટે કાઢી નાખવી છે?")) {
-        confirmDelete();
-      }
-    } else {
-      Alert.alert("Delete Draft / ડ્રાફ્ટ કાઢી નાખો", "Are you sure you want to delete this incomplete draft application? This cannot be undone.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: confirmDelete },
-      ]);
+  const confirmDeleteDraft = async () => {
+    const draftId = draftToDelete?.id || draftToDelete?._id;
+    if (!draftId || deletingDraft) return;
+    setDeletingDraft(true);
+    try {
+      await api.deleteDraft(draftId);
+      setCaseDrafts((prev) => prev.filter((d) => (d.id || d._id) !== draftId));
+      setDraftToDelete(null);
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Could not delete draft");
+    } finally {
+      setDeletingDraft(false);
     }
   };
 
@@ -379,6 +380,14 @@ export default function CaseDetail() {
             }
           }}
         />
+        <ConfirmModal
+          visible={draftToDelete !== null}
+          title="Delete Draft / ડ્રાફ્ટ કાઢી નાખો"
+          message="Are you sure you want to delete this draft application? This cannot be undone."
+          busy={deletingDraft}
+          onCancel={() => { if (!deletingDraft) setDraftToDelete(null); }}
+          onConfirm={confirmDeleteDraft}
+        />
       </DesktopPage>
       </ErrorBoundary>
     );
@@ -540,6 +549,14 @@ export default function CaseDetail() {
             });
           }
         }}
+      />
+      <ConfirmModal
+        visible={draftToDelete !== null}
+        title="Delete Draft / ડ્રાફ્ટ કાઢી નાખો"
+        message="Are you sure you want to delete this draft application? This cannot be undone."
+        busy={deletingDraft}
+        onCancel={() => { if (!deletingDraft) setDraftToDelete(null); }}
+        onConfirm={confirmDeleteDraft}
       />
     </SafeAreaView>
     </ErrorBoundary>

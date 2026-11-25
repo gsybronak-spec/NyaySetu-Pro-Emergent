@@ -1220,6 +1220,10 @@ export default function TemplateApplication() {
       );
       return;
     }
+    if (draftTimer.current) {
+      clearTimeout(draftTimer.current);
+      draftTimer.current = null;
+    }
     setBusy(true);
     setDownloading(format);
     setNotice(null);
