@@ -302,3 +302,12 @@ class TestPdfEngineUsesHarfBuzz:
             raw = base64.b64decode(generate_pdf_hb(
                 [{"text": GUJARATI_CONJUNCTS, "align": "left", "bold": False}], language="gu"))
             assert raw[:4] == b"%PDF"
+
+    def test_emails_and_sanad_codes_never_emit_notdef_in_lohit(self):
+        from doc_generator import _new_hb_font, _shape_hb_word
+        hb_font = _new_hb_font("LohitGujarati")
+        upem = hb_font.face.upem
+        for tok in ("svsv0020@gmail.com", "test@example.com", "G/5318/2026", "adv_1@yahoo.in"):
+            shaped = _shape_hb_word(hb_font, upem, tok, 14.0, latin_font="Times-Bold")
+            assert len(shaped) == 1 and shaped[0]["is_latin"], f"{tok} split unexpectedly: {shaped}"
+            assert not any(g.get("gid") == 0 for g in shaped), f"{tok} emitted .notdef: {shaped}"

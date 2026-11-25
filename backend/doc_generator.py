@@ -1422,11 +1422,11 @@ def _shape_hb_word(hb_font, upem, word: str, size_pt: float, latin_font: str = "
     import uharfbuzz as hb
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
-    if re.search(r"[A-Za-z]", word):
-        chunks = [c for c in re.split(r"([A-Za-z]+(?:['\.\-][A-Za-z0-9]+)*)", word) if c]
+    if re.search(r"[A-Za-z@]", word):
+        chunks = [c for c in re.split(r"([A-Za-z0-9@]+(?:['\.\-@_/][A-Za-z0-9]+)*@?)", word) if c]
         out = []
         for chunk in chunks:
-            if re.search(r"[A-Za-z]", chunk):
+            if re.search(r"[A-Za-z@]", chunk):
                 try:
                     adv = stringWidth(chunk, latin_font, size_pt)
                 except Exception:
@@ -1922,7 +1922,8 @@ def _generate_pdf_hb_inner(blocks: list, language: str = "en", settings: dict = 
     return b64, meta
 
 
-def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_start, img_size, language):
+def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_start, img_size, language,
+                                 hb_measure_fn=None, hb_draw_fn=None):
     """Render Advocate profile block as ONE clean vertical stack right-aligned to margin_l + max_width.
 
     Sequence:
@@ -1933,9 +1934,10 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
     5. Email ID (14 pt Bold, only when provided)
     6. Mobile Number (14 pt Bold, last line)
 
-    Uses Lohit Gujarati for all Gujarati text (matching canonical NyaySetu Pro templates)
-    and Latin fallback font (e.g. Times-Bold / LiberationSerif-Bold) for Latin glyphs,
-    degrees, enrollment numbers, emails, and phone numbers.
+    When `hb_measure_fn`/`hb_draw_fn` are provided (Gujarati HarfBuzz mode),
+    all Gujarati text is shaped via HarfBuzz so conjuncts and matras render
+    identically to the body, while non-Gujarati lines (degrees, enrollment
+    numbers, emails, ASCII phone numbers) render cleanly in Latin Bold.
     """
     adv_name_size = 18.0
     adv_detail_size = 14.0
@@ -1950,15 +1952,19 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
         gu_font = "Times-Bold"
         latin_font = "Times-Bold"
 
+    def _has_gu(text: str) -> bool:
+        return bool(re.search(r"[\u0A80-\u0AFF]", text or ""))
+
     def _get_hdr_tokens(text: str):
         if not text:
             return []
         if language != "gu":
             return [(text, latin_font)]
-        has_gu = bool(re.search(r"[\u0A80-\u0AFF]", text))
+        has_gu = _has_gu(text)
         has_en = bool(re.search(r"[A-Za-z@]", text))
         if not has_gu:
-            return [(text, latin_font if (has_en or any(c in text for c in ('@', 'G', 'B', 'L', '/'))) else gu_font)]
+            # Pure non-Gujarati header items (degrees, sanad, email, ASCII mobile) render cleanly in Latin Bold
+            return [(text, latin_font)]
         if not has_en:
             return [(text, gu_font)]
         tokens = []
@@ -1972,10 +1978,15 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
         return tokens
 
     def _get_hdr_width(text: str, sz: float) -> float:
+        if hb_measure_fn is not None and _has_gu(text):
+            return hb_measure_fn(text, sz)
         toks = _get_hdr_tokens(text)
         return sum(pdfmetrics.stringWidth(chunk, fn, sz) for chunk, fn in toks)
 
-    def _draw_hdr_line(text: str, sz: float, y_pos: float):
+    def _draw_hdr_line(text: str, sz: float, y_pos: float, is_name: bool = False):
+        if hb_draw_fn is not None and _has_gu(text):
+            hb_draw_fn(text, sz, y_pos, is_bold=is_name)
+            return
         toks = _get_hdr_tokens(text)
         lw = sum(pdfmetrics.stringWidth(chunk, fn, sz) for chunk, fn in toks)
         cur_x = margin_l + max_width - lw
@@ -1987,6 +1998,7 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
     for i, aln in enumerate(advocate_lines):
         sz = adv_name_size if i == 0 else adv_detail_size
         lead = 22.0 if i == 0 else 17.0
+        is_name = (i == 0)
 
         line_w = _get_hdr_width(aln, sz)
         if line_w > avail_hdr_w and " " in aln:
@@ -2003,10 +2015,10 @@ def _render_advocate_header_block(c, advocate_lines, margin_l, max_width, y_star
             if cur_words:
                 sub_lines.append(" ".join(cur_words))
             for sl in sub_lines:
-                _draw_hdr_line(sl, sz, adv_y)
+                _draw_hdr_line(sl, sz, adv_y, is_name=is_name)
                 adv_y -= lead
         else:
-            _draw_hdr_line(aln, sz, adv_y)
+            _draw_hdr_line(aln, sz, adv_y, is_name=is_name)
             adv_y -= lead
 
     return adv_y
@@ -2328,9 +2340,14 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                         for g in _shape_hb_word(hb_font, upem, word, 14.0):
                             if g.get("gid") is not None:
                                 used_gids.add(g["gid"])
+                for g in _shape_hb_word(hb_font, upem, " ", 14.0):
+                    if g.get("gid") is not None:
+                        used_gids.add(g["gid"])
 
+                hb_latin_norm = _resolve_latin_fallback_font(bold=False)
+                hb_latin_bold = _resolve_latin_fallback_font(bold=True)
                 for bln in body_lines:
-                    lines_wrap, _ = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent)
+                    lines_wrap, _ = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent, latin_font=hb_latin_norm)
                     for ln in lines_wrap:
                         for w in ln["words"]:
                             for g in w:
@@ -2341,11 +2358,12 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                     font_name, gid_to_pua = _register_hb_subset_font(used_gids, tmpdir, family)
                     c = pdfcanvas.Canvas(buf, pagesize=pagesize)
 
-                    def draw_hb_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False):
+                    def draw_hb_line(text, size_pt, x_start, y_pos, align="left", width_limit=max_width, is_bold=False, underline=False, latin_override=None):
                         if not text.strip():
                             return
+                        latin_fn = latin_override or (hb_latin_bold if is_bold else hb_latin_norm)
                         c.setFont(font_name, size_pt)
-                        w_shaped = _shape_hb_word(hb_font, upem, text, size_pt)
+                        w_shaped = _shape_hb_word(hb_font, upem, text, size_pt, latin_font=latin_fn)
                         line_w = sum(g["adv"] for g in w_shaped)
                         if align == "center":
                             cur_x = x_start + (width_limit - line_w) / 2.0
@@ -2353,23 +2371,32 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                             cur_x = x_start + width_limit - line_w
                         else:
                             cur_x = x_start
+                        start_x = cur_x
+                        bold_dx = round(max(0.20, size_pt * 0.018), 2) if is_bold else 0.0
 
+                        c._code.append(f"/Span<</ActualText <FEFF{text.encode('utf-16-be').hex().upper()}> >> BDC")
                         for g in w_shaped:
                             if g.get("is_latin"):
-                                c.setFont("Times-Bold" if is_bold else "Times-Roman", size_pt)
+                                c.setFont(g.get("font", latin_fn), size_pt)
                                 c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], g["text"])
                                 c.setFont(font_name, size_pt)
                             elif g.get("gid") is not None and g["gid"] in gid_to_pua:
                                 ch = chr(gid_to_pua[g["gid"]])
                                 c.drawString(cur_x + g["xoff"], y_pos + g["yoff"], ch)
-                                if is_bold:
-                                    c.drawString(cur_x + g["xoff"] + 0.45, y_pos + g["yoff"], ch)
+                                if is_bold and bold_dx > 0:
+                                    c.drawString(cur_x + g["xoff"] + bold_dx, y_pos + g["yoff"], ch)
                             cur_x += g["adv"]
+                        c._code.append("EMC")
 
                         if underline:
                             c.setLineWidth(1.0)
-                            ux = cur_x - line_w if align == "right" else (x_start + (width_limit - line_w) / 2.0 if align == "center" else x_start)
-                            c.line(ux, y_pos - 2.5, ux + line_w, y_pos - 2.5)
+                            c.line(start_x, y_pos - 2.5, start_x + line_w, y_pos - 2.5)
+
+                    def _hb_hdr_width(text: str, sz: float) -> float:
+                        return sum(g["adv"] for g in _shape_hb_word(hb_font, upem, text, sz, latin_font=hb_latin_bold))
+
+                    def _hb_hdr_draw(text: str, sz: float, y_pos: float, is_bold: bool = False):
+                        draw_hb_line(text, sz, margin_l, y_pos, align="right", width_limit=max_width, is_bold=is_bold, latin_override=hb_latin_bold)
 
                     y = page_h - margin_t
 
@@ -2387,6 +2414,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                         y_start=y,
                         img_size=img_size,
                         language=language,
+                        hb_measure_fn=_hb_hdr_width,
+                        hb_draw_fn=_hb_hdr_draw,
                     )
 
                     y = min(y - img_size - 10.0, adv_y - 10.0)
@@ -2431,7 +2460,7 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
                     # Legal Body Paragraphs
                     for bln in body_lines:
-                        lines_wrap, space_adv = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent)
+                        lines_wrap, space_adv = _wrap_hb_lines(hb_font, upem, bln, body_size, max_width, indent_pt=body_indent, latin_font=hb_latin_norm)
                         for ln in lines_wrap:
                             w_list = ln["words"]
                             width = ln["width"]
@@ -2443,10 +2472,12 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
 
                             cur_x = margin_l + line_indent
                             c.setFont(font_name, body_size)
+                            if ln.get("text"):
+                                c._code.append(f"/Span<</ActualText <FEFF{ln['text'].encode('utf-16-be').hex().upper()}> >> BDC")
                             for wi, w in enumerate(w_list):
                                 for g in w:
                                     if g.get("is_latin"):
-                                        c.setFont("Times-Roman", body_size)
+                                        c.setFont(hb_latin_norm, body_size)
                                         c.drawString(cur_x + g["xoff"], y + g["yoff"], g["text"])
                                         c.setFont(font_name, body_size)
                                     elif g.get("gid") is not None and g["gid"] in gid_to_pua:
@@ -2455,6 +2486,8 @@ def _generate_pdf_vakalatnama_inner(content: str, language: str = "gu", settings
                                     cur_x += g["adv"]
                                 if wi < len(w_list) - 1:
                                     cur_x += space_adv + extra
+                            if ln.get("text"):
+                                c._code.append("EMC")
                             y -= body_line_h
                         y -= 16.0
                     y -= 12.0

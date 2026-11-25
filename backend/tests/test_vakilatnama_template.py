@@ -942,7 +942,8 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(meta["font_family"], "LohitGujarati")
             raw_pdf = base64.b64decode(pdf_b64)
             fonts = [f.decode("latin1") for f in re.findall(rb"/BaseFont\s*/([^\s/>]+)", raw_pdf)]
-            self.assertTrue(any("Lohit-Gujarati" in f or "LohitGujarati" in f for f in fonts), f"Expected Lohit in {fonts}")
+            self.assertTrue(any("GujHB-" in f for f in fonts), f"Expected unique HarfBuzz Lohit subset in {fonts}")
+            self.assertFalse(any("Lohit-Gujarati" in f or "LohitGujarati" in f for f in fonts), f"Unshaped Lohit TTF must NOT be embedded: {fonts}")
             self.assertFalse(any("Noto" in f for f in fonts), f"Noto must NOT be present in {fonts}")
 
     def test_35_mixed_content_renders_correctly_without_missing_glyphs(self):
@@ -1115,6 +1116,46 @@ class TestVakilatnamaTemplate(unittest.IsolatedAsyncioTestCase):
             # Difference in byte length proves party names are rendered in A & B and absent in C
             self.assertNotEqual(len(raw_a), len(raw_c), f"{tid}: Scenario A byte length must differ from blank Scenario C")
             self.assertTrue(len(raw_b) > len(raw_a), f"{tid}: Scenario B must have more bytes than Scenario A")
+
+    def test_40_advocate_header_uses_harfbuzz_shaping_and_renders_conjuncts(self):
+        """40. Regression: top-right Vakalatnama advocate header shapes Gujarati conjuncts/matras via HarfBuzz and handles emails without .notdef."""
+        import pymupdf
+        ctx = {
+            "advocate_name": "એડવોકેટ વિશ્વજીતસિંહ",
+            "advocate_qualification": "bsc",
+            "advocate_enrollment_number": "G/5318/2026",
+            "advocate_address": "સેક્ટર ૧૧, ગાંધીનગર",
+            "advocate_email": "svsv0020@gmail.com",
+            "advocate_mobile": "9081719790",
+            "court_name": "એડીશનલ સિવીલ જજ",
+            "place": "ગાંધીનગર",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "૧૨૩૪/૨૦૨૫",
+            "party_1_role": "ફરીયાદી",
+            "party_1_name": "જયદીપ",
+            "party_2_role": "આરોપી",
+            "party_2_name": "રેહાન",
+            "advocate_for": "ફરીયાદી",
+            "date": "૨૫/૧૧/૨૦૨૬",
+            "party_signature_name": "જયદીપ",
+        }
+        for tid in ("vakilatnama_criminal", "vakilatnama_civil"):
+            pdf_b64, meta = doc_generator.generate_pdf_detailed([], "gu", settings=self.tpl_crim["settings"], template_id=tid, ctx=ctx)
+            self.assertEqual(meta["engine"], "harfbuzz_vakalatnama")
+            self.assertEqual(meta["font_family"], "LohitGujarati")
+            raw_pdf = base64.b64decode(pdf_b64)
+            fonts = [f.decode("latin1") for f in re.findall(rb"/BaseFont\s*/([^\s/>]+)", raw_pdf)]
+            self.assertFalse(any("Lohit-Gujarati" in f or "LohitGujarati" in f for f in fonts), f"Unshaped Lohit TTF leaked into {fonts}")
+            doc = pymupdf.open(stream=raw_pdf, filetype="pdf")
+            try:
+                flat = re.sub(r"\s+", "", "".join(p.get_text() for p in doc))
+            finally:
+                doc.close()
+            self.assertIn("એડવોકેટવિશ્વજીતસિંહ", flat)
+            self.assertIn("સેક્ટર૧૧", flat)
+            self.assertIn("svsv0020@gmail.com", flat)
+            self.assertIn("G/5318/2026", flat)
+            self.assertIn("9081719790", flat)
 
 
 if __name__ == "__main__":
