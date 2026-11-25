@@ -199,6 +199,9 @@ class TestWarrantNoHathBidoApvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("સદર કામમાં અમો ફરીયાદીના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....", rendered)
         self.assertIn("સદર કેસ આપ નામદાર કોર્ટ સમક્ષ ચાલવા પર છે.", rendered)
         self.assertIn("સદર કેસમાં આરોપીને બજવણી માટે સમન્સ ઇશ્યુ કરવામાં આવેલ છે", rendered)
+        self.assertIn("જેની બજવણી થતી ન હોય, તેમજ સદર સમન્સની બજવણી થવી ન્યાયના હિતમાં હોય,", rendered)
+        self.assertNotIn("યોગ્ય રીતે ન થતી હોય", rendered)
+        self.assertNotIn("યોગ્ય રીતે બજવણી થવી", rendered)
         self.assertIn("સદર સમન્સની બજવણી કરાવવા માટે સમન્સનો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
         self.assertIn("તારીખ : 23/11/2026", rendered)
         self.assertIn("સ્થળ : કલોલ, ગાંધીનગર", rendered)
@@ -240,6 +243,9 @@ class TestWarrantNoHathBidoApvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertIn("બાબત :- વોરંટનો હાથબીડો આપવા બાબત...", rendered)
         self.assertIn("સદર કામમાં અમો અરજદારના એડવોકેટની આપ નામદાર કોર્ટને નમ્ર અરજ છે કે .....", rendered)
         self.assertIn("સદર કેસમાં સામાવાળાને બજવણી માટે વોરંટ ઇશ્યુ કરવામાં આવેલ છે", rendered)
+        self.assertIn("જેની બજવણી થતી ન હોય, તેમજ સદર વોરંટની બજવણી થવી ન્યાયના હિતમાં હોય,", rendered)
+        self.assertNotIn("યોગ્ય રીતે ન થતી હોય", rendered)
+        self.assertNotIn("યોગ્ય રીતે બજવણી થવી", rendered)
         self.assertIn("સદર વોરંટની બજવણી કરાવવા માટે વોરંટનો જરૂરી હાથબીડો આપી બજવણી કરાવવા યોગ્ય તે હુકમ કરવા મહેરબાની કરશોજી.", rendered)
         self.assertNotIn("{{", rendered)
 
@@ -328,21 +334,21 @@ class TestWarrantNoHathBidoApvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(main_body["indent"], "Main body paragraph MUST have first-line indent")
 
     async def test_09_pdf_generation(self):
-        """9. Verify clean PDF generation without error."""
+        """9. Verify clean Gujarati PDF generation for Warrant Service Application with exact new sentence."""
         values = {
-            "court_name": "ચીફ જ્યુડીશીયલ મેજીસ્ટ્રેટ સાહેબશ્રીની કોર્ટ",
-            "district": "ગાંધીનગર",
-            "taluka": "કલોલ",
-            "case_type": "ફોજદારી કેસ",
-            "case_number": "1234/2026",
-            "party_1_role": "ફરીયાદી",
-            "party_1_name": "હસમુખભાઈ મોહનભાઈ પટેલ",
-            "party_2_role": "આરોપી",
-            "party_2_name": "ભરતભાઈ નારણભાઈ પરમાર",
-            "process_type": "સમન્સ",
-            "advocate_for": "ફરીયાદી",
-            "process_person": "આરોપી",
-            "date": "23/11/2026",
+            "court_name": "પ્રિન્સિપાલ સિવિલ જજ",
+            "district": "અમદાવાદ",
+            "taluka": "સાણંદ",
+            "case_type": "ક્રિમિનલ કેસ",
+            "case_number": "5678/2026",
+            "party_1_role": "અરજદાર",
+            "party_1_name": "રમણભાઈ પટેલ",
+            "party_2_role": "સામાવાળા",
+            "party_2_name": "વિષ્ણુભાઈ પ્રજાપતિ",
+            "process_type": "વોરંટ",
+            "advocate_for": "અરજદાર",
+            "process_person": "સામાવાળા",
+            "date": "25/11/2026",
         }
 
         ctx = await server.build_render_context(
@@ -353,6 +359,10 @@ class TestWarrantNoHathBidoApvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
             template_id="warrant_no_hath_bido_apvani_arji",
         )
         rendered = doc_generator.render_template(self.tpl["content_gu"], ctx)
+        self.assertIn("જેની બજવણી થતી ન હોય, તેમજ સદર વોરંટની બજવણી થવી ન્યાયના હિતમાં હોય,", rendered)
+        self.assertNotIn("યોગ્ય રીતે ન થતી હોય", rendered)
+        self.assertNotIn("યોગ્ય રીતે બજવણી થવી", rendered)
+
         align_rules = (self.tpl.get("settings") or {}).get("block_align")
         blocks = doc_generator.build_blocks(rendered, align_rules=align_rules)
         pdf_b64 = doc_generator.generate_pdf(
@@ -411,7 +421,22 @@ class TestWarrantNoHathBidoApvaniArjiTemplate(unittest.IsolatedAsyncioTestCase):
         with open(art_path, "wb") as f:
             f.write(pdf_bytes)
 
+    def test_11_exact_sentence_replacement(self):
+        """11. Verify exact full-sentence replacement in warrant_no_hath_bido_apvani_arji template."""
+        content_gu = self.tpl.get("content_gu", "")
+        old_sentence = "જેની બજવણી યોગ્ય રીતે ન થતી હોય, તેમજ સદર વોરંટની યોગ્ય રીતે બજવણી થવી ન્યાયના હિતમાં હોય,"
+        new_sentence = "જેની બજવણી થતી ન હોય, તેમજ સદર વોરંટની બજવણી થવી ન્યાયના હિતમાં હોય,"
+
+        # New sentence must be present
+        self.assertIn(new_sentence, content_gu)
+
+        # Old sentence and phrases must be completely removed
+        self.assertNotIn(old_sentence, content_gu)
+        self.assertNotIn("યોગ્ય રીતે ન થતી હોય", content_gu)
+        self.assertNotIn("યોગ્ય રીતે બજવણી થવી", content_gu)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

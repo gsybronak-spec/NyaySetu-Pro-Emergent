@@ -992,6 +992,10 @@ def render_template(content_template: str, values: dict) -> str:
             .replace("reason reason", "reason")
         )
 
+    if "હાથબીડો આપવા બાબત" in result or "hath-bido" in result.lower():
+        if vals.get("process_type") == "સમન્સ":
+            result = result.replace("સદર વોરંટની બજવણી થવી", "સદર સમન્સની બજવણી થવી")
+
     return result
 
 
