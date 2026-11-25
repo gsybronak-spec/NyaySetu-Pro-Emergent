@@ -14,10 +14,16 @@ const apiInFlightGet = new Map<string, Promise<any>>();
 
 const CACHEABLE_GET_PREFIXES = [
   "/favourites/templates",
+  "/favourites/courts",
   "/user/template-preferences",
   "/wallet",
   "/cases",
   "/drafts",
+  "/catalog/quote",
+  "/catalog/plans",
+  "/applications/history",
+  "/templates/",
+  "/profile/me",
 ];
 
 const CACHE_TTL_MS = 60000; // 60 seconds
@@ -334,7 +340,12 @@ async function request(path: string, method = "GET", body?: any, timeoutMs: numb
   const token = await getToken();
   const cacheKey = `${path}::${token || "anon"}`;
 
-  const isDynamicFast = path.startsWith("/wallet") || path.startsWith("/cases") || path.startsWith("/drafts");
+  const isDynamicFast =
+    path.startsWith("/wallet") ||
+    path.startsWith("/cases") ||
+    path.startsWith("/drafts") ||
+    path.startsWith("/applications/history") ||
+    path.startsWith("/profile/me");
   const ttl = isDynamicFast ? FAST_CACHE_TTL_MS : CACHE_TTL_MS;
   const swrMaxAge = isDynamicFast ? 60000 : 300000;
 
@@ -429,8 +440,16 @@ export const api = {
   courts: (district_id?: string) => request(`/catalog/courts${district_id ? `?district_id=${district_id}` : ""}`),
   policeStations: (district_id?: string) => request(`/catalog/police-stations${district_id ? `?district_id=${district_id}` : ""}`),
   favCourts: () => request("/favourites/courts"),
-  addFavCourt: (id: string) => request(`/favourites/courts/${id}`, "POST"),
-  removeFavCourt: (id: string) => request(`/favourites/courts/${id}`, "DELETE"),
+  addFavCourt: async (id: string) => {
+    const res = await request(`/favourites/courts/${id}`, "POST");
+    invalidateApiCache("/favourites/courts");
+    return res;
+  },
+  removeFavCourt: async (id: string) => {
+    const res = await request(`/favourites/courts/${id}`, "DELETE");
+    invalidateApiCache("/favourites/courts");
+    return res;
+  },
   plans: () => request("/catalog/plans"),
   quote: () => request("/catalog/quote"),
   createCase: async (data: any) => {
@@ -504,6 +523,7 @@ export const api = {
     const res = await request("/applications/download", "POST", data, 90000);
     invalidateApiCache("/wallet");
     invalidateApiCache("/profile/me");
+    invalidateApiCache("/applications/history");
     return res;
   },
   history: () => request("/applications/history"),

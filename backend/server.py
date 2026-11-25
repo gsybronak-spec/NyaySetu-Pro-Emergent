@@ -2784,13 +2784,24 @@ _CATALOG_KINDS = {
 _CATALOG_INTERNAL_FIELDS = ("active", "created_at", "updated_at", "created_by", "updated_by")
 
 _CATALOG_CACHE: dict[str, list] = {}
+_CATALOG_CACHE_EXPIRES: dict[str, float] = {}
+_CATALOG_CACHE_TTL_SEC = 60.0
+_DELETED_CATALOG_CACHE: dict[str, tuple[set[str], float]] = {}
+_DELETED_TPL_IDS_CACHE: dict = {"data": None, "expires_at": 0.0, "db_id": None}
+_TOMBSTONE_TTL_SEC = 30.0
 
 def _invalidate_catalog_cache(kind: Optional[str] = None) -> None:
-    global _CATALOG_CACHE
+    global _CATALOG_CACHE, _CATALOG_CACHE_EXPIRES
     if kind:
         _CATALOG_CACHE.pop(kind, None)
+        _CATALOG_CACHE_EXPIRES.pop(kind, None)
+        _DELETED_CATALOG_CACHE.pop(kind, None)
     else:
         _CATALOG_CACHE.clear()
+        _CATALOG_CACHE_EXPIRES.clear()
+        _DELETED_CATALOG_CACHE.clear()
+    _DELETED_TPL_IDS_CACHE["data"] = None
+    _DELETED_TPL_IDS_CACHE["expires_at"] = 0.0
 
 
 async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
@@ -2798,12 +2809,22 @@ async def _get_deleted_catalog_ids(kind: Optional[str] = None) -> set[str]:
     Raises HTTPException(503) if database read fails so callers never treat read errors as empty tombstones."""
     if db is None:
         return set()
+    cache_key = kind or "__all__"
+    use_cache = ("PYTEST_CURRENT_TEST" not in os.environ)
+    now_ts = time.time()
+    if use_cache and cache_key in _DELETED_CATALOG_CACHE:
+        cached_ids, exp, cached_db_id = _DELETED_CATALOG_CACHE[cache_key]
+        if now_ts < exp and cached_db_id == id(db):
+            return set(cached_ids)
     try:
         if kind:
             docs = [d.to_dict() async for d in db.collection("deleted_catalog_items").where(filter=firestore.FieldFilter("kind", "==", kind)).stream()]
         else:
             docs = [d.to_dict() async for d in db.collection("deleted_catalog_items").stream()]
-        return {d["id"] for d in docs if "id" in d}
+        res = {d["id"] for d in docs if "id" in d}
+        if use_cache:
+            _DELETED_CATALOG_CACHE[cache_key] = (set(res), now_ts + _TOMBSTONE_TTL_SEC, id(db))
+        return res
     except Exception as e:
         logger.warning(f"Failed to fetch deleted catalog items: {e}")
         raise HTTPException(
@@ -2817,33 +2838,67 @@ DELETED_OBSOLETE_TEMPLATE_IDS = set()
 
 async def _get_deleted_template_ids() -> set[str]:
     """Return set of permanently deleted template IDs, expanding base and variants."""
-    raw_ids = set(DELETED_OBSOLETE_TEMPLATE_IDS)
-    try:
-        catalog_tombstones = await _get_deleted_catalog_ids("template")
-        raw_ids.update(catalog_tombstones)
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.warning(f"Failed to fetch deleted_catalog_items via _get_deleted_catalog_ids: {e}")
+    use_cache = ("PYTEST_CURRENT_TEST" not in os.environ)
+    now_ts = time.time()
+    db_id = id(db)
+    if (
+        use_cache
+        and _DELETED_TPL_IDS_CACHE["data"] is not None
+        and _DELETED_TPL_IDS_CACHE["db_id"] == db_id
+        and now_ts < _DELETED_TPL_IDS_CACHE["expires_at"]
+    ):
+        return set(_DELETED_TPL_IDS_CACHE["data"])
 
-    if db is not None:
-        try:
-            async for d in db.collection("deleted_catalog_items").stream():
-                data = d.to_dict() or {}
-                if data.get("kind") == "template" or d.id.startswith("template:"):
-                    item_id = data.get("id") or (d.id[9:] if d.id.startswith("template:") else d.id)
-                    if item_id:
-                        raw_ids.add(item_id)
-        except Exception as e:
-            logger.warning(f"Failed streaming deleted_catalog_items: {e}")
-        try:
-            async for d in db.collection("deleted_templates").stream():
-                data = d.to_dict() or {}
-                item_id = data.get("id") or d.id
+    raw_ids = set(DELETED_OBSOLETE_TEMPLATE_IDS)
+
+    async def _fetch_cat_tomb():
+        return await _get_deleted_catalog_ids("template")
+
+    async def _fetch_all_cat_items():
+        if db is None:
+            return set()
+        ids = set()
+        async for d in db.collection("deleted_catalog_items").stream():
+            data = d.to_dict() or {}
+            if data.get("kind") == "template" or d.id.startswith("template:"):
+                item_id = data.get("id") or (d.id[9:] if d.id.startswith("template:") else d.id)
                 if item_id:
-                    raw_ids.add(item_id)
-        except Exception as e:
-            logger.warning(f"Failed to fetch deleted_templates: {e}")
+                    ids.add(item_id)
+        return ids
+
+    async def _fetch_del_tpls():
+        if db is None:
+            return set()
+        ids = set()
+        async for d in db.collection("deleted_templates").stream():
+            data = d.to_dict() or {}
+            item_id = data.get("id") or d.id
+            if item_id:
+                ids.add(item_id)
+        return ids
+
+    res_cat, res_all_cat, res_del_tpl = await asyncio.gather(
+        _fetch_cat_tomb(),
+        _fetch_all_cat_items(),
+        _fetch_del_tpls(),
+        return_exceptions=True,
+    )
+    if isinstance(res_cat, HTTPException):
+        raise res_cat
+    if isinstance(res_cat, Exception):
+        logger.warning(f"Failed to fetch deleted_catalog_items via _get_deleted_catalog_ids: {res_cat}")
+    else:
+        raw_ids.update(res_cat)
+
+    if isinstance(res_all_cat, Exception):
+        logger.warning(f"Failed streaming deleted_catalog_items: {res_all_cat}")
+    else:
+        raw_ids.update(res_all_cat)
+
+    if isinstance(res_del_tpl, Exception):
+        logger.warning(f"Failed to fetch deleted_templates: {res_del_tpl}")
+    else:
+        raw_ids.update(res_del_tpl)
 
     expanded = set()
     for tid in raw_ids:
@@ -2864,18 +2919,26 @@ async def _get_deleted_template_ids() -> set[str]:
         expanded.discard(active_id)
         expanded.discard(f"{active_id}_gu")
         expanded.discard(f"{active_id}_en")
+
+    if use_cache:
+        _DELETED_TPL_IDS_CACHE["data"] = set(expanded)
+        _DELETED_TPL_IDS_CACHE["expires_at"] = now_ts + _TOMBSTONE_TTL_SEC
+        _DELETED_TPL_IDS_CACHE["db_id"] = db_id
     return expanded
 
 
 
 async def _load_catalog(kind: str) -> list:
     """DB catalog entries from Firestore.
-    If cached in-memory, returns the warm cache.
+    If cached in-memory (and fresh), returns the warm cache.
     If database is unavailable and no warm cache exists, raises HTTPException(503).
     Does NOT fall back to static seed lists as authoritative live catalog data,
     preventing resurrection of deleted/inactive records and omission of admin-created records."""
+    now_ts = time.time()
     if kind in _CATALOG_CACHE:
-        return _CATALOG_CACHE[kind]
+        exp = _CATALOG_CACHE_EXPIRES.get(kind)
+        if exp is None or now_ts < exp:
+            return _CATALOG_CACHE[kind]
 
     if kind not in _CATALOG_KINDS:
         raise HTTPException(status_code=404, detail=f"Unknown catalog kind '{kind}'")
@@ -2883,17 +2946,22 @@ async def _load_catalog(kind: str) -> list:
     coll, seed_list = _CATALOG_KINDS[kind]
 
     if db is None:
+        if kind in _CATALOG_CACHE:
+            return _CATALOG_CACHE[kind]
         raise HTTPException(status_code=503, detail=f"Database service unavailable: catalog '{kind}' cannot be loaded.")
 
     try:
-        deleted_ids = await _get_deleted_catalog_ids(kind)
-        items = [d.to_dict() async for d in db.collection(coll).stream()]
+        async def _stream_coll():
+            return [d.to_dict() async for d in db.collection(coll).stream()]
+
+        deleted_ids, items = await asyncio.gather(_get_deleted_catalog_ids(kind), _stream_coll())
         items = [i for i in items if i.get("id") not in deleted_ids]
         if kind == "courts":
             # Admin Court Catalog is 100% the single source of truth.
             # When connected to DB, never resurrect seed list if collection is empty.
             items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
             _CATALOG_CACHE[kind] = items
+            _CATALOG_CACHE_EXPIRES[kind] = now_ts + _CATALOG_CACHE_TTL_SEC
             for c in items:
                 if isinstance(c, dict) and c.get("id"):
                     _COURT_MAP[c["id"]] = c
@@ -2901,6 +2969,7 @@ async def _load_catalog(kind: str) -> list:
 
         items.sort(key=lambda x: (x.get("sort_order") if x.get("sort_order") is not None else 999999, x.get("created_at", ""), x.get("en", "")))
         _CATALOG_CACHE[kind] = items
+        _CATALOG_CACHE_EXPIRES[kind] = now_ts + _CATALOG_CACHE_TTL_SEC
         return items
     except HTTPException:
         raise
@@ -2948,17 +3017,17 @@ _init_default_catalog_maps()
 
 
 async def _refresh_catalog_maps() -> None:
-    """Rebuild in-memory catalog maps + valid-id sets from database. Called at
-    startup and after every admin catalog mutation so labels, validation and
-    document rendering see admin-managed entries immediately."""
+    """Rebuild in-memory catalog maps + valid-id sets from database concurrently."""
     global _CATALOG_MAPS_SYNCED
     try:
-        case_types = await _load_catalog("case-types")
-        laws = await _load_catalog("laws")
-        districts = await _load_catalog("districts")
-        talukas = await _load_catalog("talukas")
-        loaded_courts = await _load_catalog("courts")
-        police_stations = await _load_catalog("police-stations")
+        case_types, laws, districts, talukas, loaded_courts, police_stations = await asyncio.gather(
+            _load_catalog("case-types"),
+            _load_catalog("laws"),
+            _load_catalog("districts"),
+            _load_catalog("talukas"),
+            _load_catalog("courts"),
+            _load_catalog("police-stations"),
+        )
 
         global _CASE_TYPE_MAP, _LAW_MAP, _DISTRICT_MAP, _TALUKA_MAP, _COURT_MAP, _PS_MAP, _ACTIVE_COURT_IDS
         global _VALID_CASE_TYPE_IDS, _VALID_LAW_IDS, _VALID_DISTRICT_IDS, _VALID_TALUKA_IDS, _VALID_COURT_IDS, _VALID_PS_IDS
@@ -2977,7 +3046,7 @@ async def _refresh_catalog_maps() -> None:
         _VALID_DISTRICT_IDS = {d["id"] for d in _DISTRICT_MAP.values()}
         _VALID_TALUKA_IDS = {t["id"] for t in _TALUKA_MAP.values()}
         _VALID_COURT_IDS = {c["id"] for c in _COURT_MAP.values()}
-        _VALID_PS_IDS = {p["id"]: p for p in _PS_MAP.values()}
+        _VALID_PS_IDS = {p["id"] for p in _PS_MAP.values()}
         _build_location_lookup()
         _CATALOG_MAPS_SYNCED = True
     except Exception as err:
@@ -4376,6 +4445,9 @@ def invalidate_published_templates_cache():
     with _PUBLISHED_TEMPLATES_LOCK:
         _PUBLISHED_TEMPLATES_CACHE["data"] = None
         _PUBLISHED_TEMPLATES_CACHE["expires_at"] = 0.0
+    _DELETED_TPL_IDS_CACHE["data"] = None
+    _DELETED_TPL_IDS_CACHE["expires_at"] = 0.0
+    _DELETED_CATALOG_CACHE.pop("template", None)
 
 async def _get_published_templates() -> list:
     """Return published templates from db.templates ONLY (single source of truth).
@@ -6281,10 +6353,7 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
     user = None
     if authorization and authorization.startswith("Bearer "):
         try:
-            token = authorization[7:].strip()
-            payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-            _snap = await db.collection("users").document(payload["sub"]).get()
-            user = _snap.to_dict() if _snap.exists else None
+            user = await get_user(authorization)
         except Exception:
             pass
 
@@ -13414,6 +13483,40 @@ _CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(","
 _CORS_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://([a-zA-Z0-9_-]+\.)*(nyaysetupro\.in|vercel\.app)$"
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+_PUBLIC_EDGE_CACHE_PATHS = (
+    "/api/templates",
+    "/api/catalog/template-order",
+    "/api/catalog/quote",
+    "/api/catalog/plans",
+    "/api/catalog/districts",
+    "/api/catalog/talukas",
+    "/api/catalog/courts",
+    "/api/catalog/case-types",
+    "/api/catalog/laws",
+    "/api/catalog/police-stations",
+    "/api/catalog/case-forms",
+)
+
+
+async def _edge_cache_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if (
+        request.method == "GET"
+        and response.status_code == 200
+        and not request.headers.get("authorization")
+        and any(request.url.path.startswith(p) for p in _PUBLIC_EDGE_CACHE_PATHS)
+        and "cache-control" not in response.headers
+    ):
+        response.headers["Cache-Control"] = "public, max-age=15, stale-while-revalidate=45"
+    return response
+
+
+if hasattr(app, "middleware"):
+    app.middleware("http")(_edge_cache_headers_middleware)
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -13545,7 +13648,10 @@ async def create_indexes():
 
         if is_seeded is True:
             logger.info("Cold start: system_settings/seed_complete is True. Heavy startup seeding bypassed.")
-            await _refresh_catalog_maps()
+            # On Vercel serverless, skip eager 6-collection catalog sync at startup so cold health/auth/template requests return immediately;
+            # create_case / update_case lazily call _refresh_catalog_maps() on demand.
+            if not os.environ.get("VERCEL"):
+                await _refresh_catalog_maps()
             # In serverless production, super_admin is already seeded; avoid cold-start queries.
             if not os.environ.get("VERCEL") and not _PRODUCTION:
                 try:

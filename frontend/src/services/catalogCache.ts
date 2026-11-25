@@ -30,6 +30,8 @@ import {
 } from "./catalogSeed";
 
 const STORAGE_PREFIX = "nyaysetu_cat_v2:";
+const REVALIDATE_COOLDOWN_MS = 30000;
+let lastTemplatesRevalidatedAt = 0;
 const memoryCache = new Map<string, any>();
 const inFlightRequests = new Map<string, Promise<any>>();
 const listeners = new Map<string, Set<(data: any) => void>>();
@@ -506,6 +508,11 @@ export const catalogCache = {
   },
 
   revalidateTemplates: async () => {
+    const now = Date.now();
+    if (now - lastTemplatesRevalidatedAt < REVALIDATE_COOLDOWN_MS) {
+      return;
+    }
+    lastTemplatesRevalidatedAt = now;
     try {
       await catalogCache.getActiveTemplatePairs(true);
     } catch {

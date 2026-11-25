@@ -516,6 +516,71 @@ class TestStartupSafetyAndQuota(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("ResourceExhausted", detail_str)
         self.assertNotIn("429 Quota exceeded", detail_str)
 
+    async def test_22_vercel_cold_start_skips_catalog_sync(self):
+        """When VERCEL is set and seed_complete=True, startup skips heavy _refresh_catalog_maps."""
+        mock_snap = MagicMock()
+        mock_snap.exists = True
+        mock_snap.to_dict.return_value = {"value": True}
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get = AsyncMock(return_value=mock_snap)
+        server.db = mock_db
+
+        with patch.dict(os.environ, {"VERCEL": "1"}), \
+             patch.object(server, "_refresh_catalog_maps", new=AsyncMock()) as mock_refresh:
+            await server.create_indexes()
+            mock_refresh.assert_not_awaited()
+
+        env_no_vercel = {k: v for k, v in os.environ.items() if k != "VERCEL"}
+        with patch.dict(os.environ, env_no_vercel, clear=True), \
+             patch.object(server, "_refresh_catalog_maps", new=AsyncMock()) as mock_refresh:
+            await server.create_indexes()
+            mock_refresh.assert_awaited_once()
+
+    async def test_23_tombstone_cache_and_edge_cache_headers(self):
+        """Tombstone cache serves within TTL without re-streaming DB; edge headers skip auth requests."""
+        from starlette.testclient import TestClient
+
+        stream_calls = 0
+
+        class _EmptyStream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+        class _TtlDb:
+            def collection(self, _name):
+                coll = MagicMock()
+                def _stream():
+                    nonlocal stream_calls
+                    stream_calls += 1
+                    return _EmptyStream()
+                coll.stream = _stream
+                coll.where.return_value.stream = _stream
+                return coll
+
+        server.db = _TtlDb()
+        server._invalidate_catalog_cache()
+        env_patch = {k: v for k, v in os.environ.items() if k != "PYTEST_CURRENT_TEST"}
+        with patch.dict(os.environ, env_patch, clear=True):
+            ids1 = await server._get_deleted_template_ids()
+            calls_after_first = stream_calls
+            ids2 = await server._get_deleted_template_ids()
+            self.assertEqual(ids1, ids2)
+            self.assertEqual(stream_calls, calls_after_first)
+
+        # Edge cache header check on public vs authorized requests
+        tc = TestClient(server.app)
+        server._CATALOG_CACHE["districts"] = [{"id": "ahmedabad", "en": "Ahmedabad", "gu": "અમદાવાદ"}]
+        res_anon = tc.get("/api/catalog/districts")
+        self.assertEqual(res_anon.status_code, 200)
+        self.assertIn("public, max-age=15", res_anon.headers.get("cache-control", ""))
+
+        res_auth = tc.get("/api/catalog/districts", headers={"Authorization": "Bearer dummy"})
+        self.assertEqual(res_auth.status_code, 200)
+        self.assertEqual(res_auth.headers.get("cache-control", ""), "")
+
 
 if __name__ == "__main__":
     unittest.main()

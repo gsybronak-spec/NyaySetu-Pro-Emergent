@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -34,6 +34,7 @@ export default function Cases() {
   const insets = useSafeAreaInsets();
   const [cases, setCases] = useState<any[]>([]);
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const { keyboardHeight } = useKeyboardHeight();
   const [filter, setFilter] = useState("All");
   const [showArchived, setShowArchived] = useState(false);
@@ -41,9 +42,20 @@ export default function Cases() {
   const [sortOpen, setSortOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  useEffect(() => {
+    const trimmed = q.trim();
+    if (!trimmed) {
+      setDebouncedQ("");
+      return;
+    }
+    const timer = setTimeout(() => setDebouncedQ(trimmed), 200);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   const load = useCallback(async (query: string, cat: string, archived: boolean, sortBy: string) => {
-    setLoading(true);
+    if (!hasLoadedRef.current) setLoading(true);
     setError(null);
     try {
       const c = await api.listCases({
@@ -53,6 +65,7 @@ export default function Cases() {
         sort: sortBy,
       });
       setCases(Array.isArray(c) ? c : []);
+      hasLoadedRef.current = true;
     } catch (e: any) {
       setCases([]);
       setError(e?.message || "Could not load your cases.");
@@ -61,11 +74,11 @@ export default function Cases() {
     }
   }, []);
 
-  useEffect(() => {
-    load(q, filter, showArchived, sort);
-  }, [load, q, filter, showArchived, sort]);
-
-  useFocusEffect(useCallback(() => { load(q, filter, showArchived, sort); }, [load, q, filter, showArchived, sort]));
+  useFocusEffect(
+    useCallback(() => {
+      load(debouncedQ, filter, showArchived, sort);
+    }, [load, debouncedQ, filter, showArchived, sort])
+  );
 
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {

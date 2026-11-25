@@ -246,16 +246,40 @@ export default function TemplateApplication() {
       const effectiveId = resolveTemplateId(templateId, language) || templateId;
       const baseId = templateId.replace(/_(gu|en)$/, "");
 
-      // Parallelize ALL data fetching concurrently for sub-second load times
+      // Reuse already-fetched full template from catalogCache (has fields) to open instantaneously
+      const cachedTpl = catalogCache.peekPublishedTemplates().find(
+        (x: any) =>
+          (x?.id === effectiveId || x?.id === baseId || x?.id === templateId) &&
+          Array.isArray(x?.fields) &&
+          x.fields.length > 0
+      );
+      const cachedWalletOk = typeof user?.wallet_balance === "number";
+
+      // Parallelize remaining data fetching concurrently for sub-second load times
       const [t, me, dists, cts, cs, w, drafts] = await Promise.all([
-        api.template(effectiveId).catch(() => api.template(baseId)).catch(() => api.template(templateId)),
+        cachedTpl
+          ? Promise.resolve(cachedTpl)
+          : api.template(effectiveId).catch(() => api.template(baseId)).catch(() => api.template(templateId)),
         user ? Promise.resolve(user) : api.me().catch(() => null),
         catalogCache.getDistricts(),
         catalogCache.getCaseTypes(),
         caseId ? api.getCase(caseId).catch(() => null) : Promise.resolve(null),
-        api.wallet().catch(() => ({ balance: user?.wallet_balance ?? 0 })),
+        cachedWalletOk
+          ? Promise.resolve({
+              balance: user!.wallet_balance,
+              unlimited: Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner),
+            })
+          : api.wallet().catch(() => ({ balance: user?.wallet_balance ?? 0 })),
         params.draft === "1" ? api.drafts().catch(() => []) : Promise.resolve([]),
       ]);
+
+      if (cachedWalletOk) {
+        api.wallet()
+          .then((freshW: any) => {
+            if (typeof freshW?.balance === "number") setWalletBalance(freshW.balance);
+          })
+          .catch(() => {});
+      }
 
       if (!t) {
         throw new Error("Template data not found");
