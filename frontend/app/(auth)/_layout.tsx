@@ -5,7 +5,7 @@ import { useAuth } from "@/src/context/AuthContext";
 import { Spacing } from "@/src/theme/tokens";
 
 export default function AuthLayout() {
-  const { ready, user } = useAuth();
+  const { ready, user, profileSkipped } = useAuth();
 
   // If auth is still resolving, render branded splash screen (Zero-Flicker)
   if (!ready) {
@@ -25,7 +25,7 @@ export default function AuthLayout() {
 
   // If already authenticated, redirect away from login/auth screens immediately
   if (user) {
-    const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? true;
+    const isComplete = (user?.profile_completed ?? user?.is_profile_complete ?? true) || profileSkipped;
     return <Redirect href={isComplete ? "/(tabs)/home" : ("/profile-completion" as any)} />;
   }
 

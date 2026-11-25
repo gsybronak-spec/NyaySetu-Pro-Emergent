@@ -10,7 +10,7 @@ import { Spacing } from "@/src/theme/tokens";
 import { storage } from "@/src/utils/storage";
 
 export default function Index() {
-  const { ready, user } = useAuth();
+  const { ready, user, profileSkipped } = useAuth();
   const { colors } = useTheme();
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function Index() {
     );
   }
 
-  const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? true;
+  const isComplete = (user?.profile_completed ?? user?.is_profile_complete ?? true) || profileSkipped;
   let target = user ? (isComplete ? "/(tabs)/home" : "/profile-completion" as any) : "/(auth)/login";
   if (!user && Platform.OS === "web" && typeof window !== "undefined") {
     try {

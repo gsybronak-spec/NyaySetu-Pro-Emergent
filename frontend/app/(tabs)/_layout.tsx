@@ -15,7 +15,7 @@ import { Spacing } from "@/src/theme/tokens";
 
 export default function TabsLayout() {
   const { colors } = useTheme();
-  const { ready, user } = useAuth();
+  const { ready, user, profileSkipped } = useAuth();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
 
@@ -54,7 +54,7 @@ export default function TabsLayout() {
 
   // Once ready: redirect to login if no session, or profile completion if incomplete
   if (!user) return <Redirect href="/(auth)/login" />;
-  const isComplete = user?.profile_completed ?? user?.is_profile_complete ?? false;
+  const isComplete = (user?.profile_completed ?? user?.is_profile_complete ?? false) || profileSkipped;
   if (!isComplete) return <Redirect href={"/profile-completion" as any} />;
 
   const bottomInset = insets.bottom;

@@ -36,15 +36,15 @@ interface ProfileFormProps {
 
 export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   const { colors, isDark } = useTheme();
-  const { user, refresh, signOut, ready } = useAuth();
+  const { user, refresh, signOut, ready, profileSkipped, skipProfileCompletion } = useAuth();
   const { isDesktop } = useResponsive();
 
-  // If in onboarding mode and user is already completed, route directly to home
+  // If in onboarding mode and user is already completed or skipped, route directly to home
   useEffect(() => {
-    if (mode === "onboarding" && ready && user && (user.profile_completed || user.is_profile_complete)) {
+    if (mode === "onboarding" && ready && user && (user.profile_completed || user.is_profile_complete || profileSkipped)) {
       router.replace("/(tabs)/home");
     }
-  }, [mode, ready, user]);
+  }, [mode, ready, user, profileSkipped]);
 
   // Split Google / existing name into First, Middle, Last names
   const parsedNames = useMemo(() => {
@@ -254,6 +254,11 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSkip = async () => {
+    await skipProfileCompletion();
+    router.replace("/(tabs)/home");
   };
 
   const handleCancel = () => {
@@ -589,6 +594,17 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
               onPress={handleSave}
               style={{ marginTop: Spacing.md }}
             />
+
+            {!isEdit && (
+              <Button
+                testID="setup-skip-button"
+                title="Skip for now"
+                variant="outline"
+                disabled={loading}
+                onPress={handleSkip}
+                style={{ marginTop: Spacing.sm }}
+              />
+            )}
 
             {isEdit && (
               <Button

@@ -65,6 +65,8 @@ interface AuthCtx {
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (u: User | null) => void;
+  profileSkipped: boolean;
+  skipProfileCompletion: () => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx>(null as any);
@@ -73,6 +75,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [profileSkipped, setProfileSkipped] = useState(false);
+
+  const syncSkippedState = useCallback(async (uid?: string | null) => {
+    if (!uid) {
+      setProfileSkipped(false);
+      return;
+    }
+    try {
+      const skipped = await storage.get<boolean>(`nyaysetu_profile_skipped_${uid}`, false);
+      setProfileSkipped(Boolean(skipped));
+    } catch {
+      setProfileSkipped(false);
+    }
+  }, []);
+
+  const skipProfileCompletion = useCallback(async () => {
+    setProfileSkipped(true);
+    if (user?.id) {
+      await storage.set(`nyaysetu_profile_skipped_${user.id}`, true).catch(() => {});
+    }
+  }, [user?.id]);
 
   const refresh = useCallback(async () => {
     // Load cached profile immediately for instant UI render
@@ -81,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cachedUser = await storage.get("nyaysetu_user_profile", null as any);
       if (cachedUser && typeof cachedUser === "object" && cachedUser.id) {
         setUser(cachedUser);
+        await syncSkippedState(cachedUser.id);
         // Stale-While-Revalidate: allow immediate paint with cached profile
         setReady(true);
       }
@@ -122,6 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const u = await api.me();
       if (u && typeof u === "object") {
         setUser(u);
+        await syncSkippedState(u.id);
         await storage.set("nyaysetu_user_profile", u);
       }
     } catch (err: any) {
@@ -369,6 +394,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  useEffect(() => {
+    syncSkippedState(user?.id);
+  }, [user?.id, syncSkippedState]);
+
   const signOut = async () => {
     try {
       const refreshToken = await getRefreshToken();
@@ -378,6 +407,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     await setTokens(null, null);
     setUser(null);
+    setProfileSkipped(false);
     await storage.remove("nyaysetu_user_profile");
     await catalogCache.clearCache();
     // Clear the Firebase client session too (no-op when Firebase is not
@@ -386,7 +416,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, firebaseExchange, refresh, signOut, setUser }}>
+    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, firebaseExchange, refresh, signOut, setUser, profileSkipped, skipProfileCompletion }}>
       {children}
     </Ctx.Provider>
   );
