@@ -23,6 +23,7 @@ import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
 import { saveDocument } from "@/src/utils/download";
+import { safeBack } from "@/src/utils/navigation";
 
 type VaultTab = "all" | "documents" | "drafts";
 
@@ -672,6 +673,8 @@ export default function DocumentVault() {
   if (isDesktop) {
     return (
       <DesktopPage
+        sidebarOffset={false}
+        onBack={() => safeBack("/(tabs)/home")}
         title="Document Vault"
         subtitle="Manage generated legal documents, download history, and unfinished drafts"
       >
@@ -683,7 +686,7 @@ export default function DocumentVault() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.mobileHeader, { borderBottomColor: colors.border }]}>
-        <Pressable testID="vault-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="vault-back" onPress={() => safeBack("/(tabs)/home")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.mobileTitle, { color: colors.onSurface }]}>Document Vault</Text>

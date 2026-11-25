@@ -8,6 +8,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { safeBack } from "@/src/utils/navigation";
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
@@ -81,7 +82,7 @@ export default function Transactions() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable testID="txn-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="txn-back" onPress={() => safeBack("/(tabs)/profile")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.h1, { color: colors.onSurface }]}>Transaction History</Text>

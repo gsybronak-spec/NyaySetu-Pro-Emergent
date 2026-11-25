@@ -18,6 +18,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { storage } from "@/src/utils/storage";
 import { UserGuideModal } from "@/src/components/UserGuideModal";
+import { safeBack } from "@/src/utils/navigation";
 
 type GuideTab = "quickstart" | "cases" | "templates" | "pdf" | "wallet" | "faq";
 
@@ -56,7 +57,7 @@ export default function UserGuideScreen() {
         <View style={styles.topBarLeft}>
           <Pressable
             testID="guide-back-button"
-            onPress={() => router.back()}
+            onPress={() => safeBack("/(tabs)/profile")}
             style={[styles.backBtn, { backgroundColor: colors.surfaceSecondary }]}
             hitSlop={10}
           >

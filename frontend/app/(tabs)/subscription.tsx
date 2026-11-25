@@ -10,6 +10,7 @@ import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopPage } from "@/src/components/DesktopPage";
+import { safeBack } from "@/src/utils/navigation";
 import { useAuth } from "@/src/context/AuthContext";
 import { getCachedPlans, setCachedPlans, getCachedWallet, setCachedWallet } from "@/src/constants/plans";
 import {
@@ -244,6 +245,7 @@ export default function Subscription() {
       <DesktopPage
         title="Plans & Wallet"
         subtitle="Credit packs — valid until consumed"
+        onBack={() => safeBack("/(tabs)/home")}
       >
         <LinearGradient
           colors={isDark ? ["#0B1B3D", "#061024"] : ["#0B1B3D", "#112240"]}
@@ -304,6 +306,23 @@ export default function Subscription() {
   // ------------------------- MOBILE (unchanged) -------------------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: Spacing.md,
+          paddingVertical: 12,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.border,
+        }}
+      >
+        <Pressable testID="sub-back" onPress={() => safeBack("/(tabs)/home")} hitSlop={12}>
+          <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+        </Pressable>
+        <Text style={{ fontSize: 17, fontWeight: "700", color: colors.onSurface }}>Plans & Wallet</Text>
+        <View style={{ width: 24 }} />
+      </View>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}

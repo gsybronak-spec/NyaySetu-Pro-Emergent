@@ -33,6 +33,7 @@ import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
 import { PlanPurchaseModal } from "@/src/components/PlanPurchaseModal";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 import { ActualPdfViewer } from "@/src/components/ActualPdfViewer";
+import { safeBack } from "@/src/utils/navigation";
 
 type Step = "fields" | "preview" | "output";
 
@@ -1610,8 +1611,21 @@ export default function TemplateApplication() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator size="large" color={colors.brandPrimary} />
+      <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Pressable
+            testID="tpl-loading-back"
+            onPress={() => safeBack(caseId ? `/case/${caseId}` : "/(tabs)/home")}
+            hitSlop={12}
+          >
+            <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
+          </Pressable>
+          <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>Loading...</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator size="large" color={colors.brandPrimary} />
+        </View>
       </SafeAreaView>
     );
   }
@@ -1629,7 +1643,7 @@ export default function TemplateApplication() {
         <View style={{ flexDirection: "row", gap: Spacing.md, marginTop: Spacing.xl }}>
           <Pressable
             testID="tpl-error-back"
-            onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+            onPress={() => safeBack(caseId ? `/case/${caseId}` : "/(tabs)/home")}
             style={{ paddingHorizontal: Spacing.lg, paddingVertical: 12, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}
           >
             <Text style={{ color: colors.onSurface, fontWeight: "600" }}>
@@ -1656,7 +1670,11 @@ export default function TemplateApplication() {
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           {/* Header */}
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Pressable testID="tpl-back" onPress={() => (step === "fields" ? (router.canGoBack() ? router.back() : router.replace("/(tabs)/home")) : setStep("fields"))} hitSlop={12}>
+            <Pressable
+              testID="tpl-back"
+              onPress={() => (step === "fields" ? safeBack(caseId ? `/case/${caseId}` : "/(tabs)/home") : setStep("fields"))}
+              hitSlop={12}
+            >
               <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
             </Pressable>
             <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>

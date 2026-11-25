@@ -62,6 +62,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      backBehavior="history"
       tabBar={(props) =>
         isDesktop ? <DesktopSidebar {...props} /> : <BottomTabBar {...props} />
       }

@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
+import { safeBack } from "@/src/utils/navigation";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 
@@ -264,10 +265,8 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
-    } else if (router.canGoBack()) {
-      router.back();
     } else {
-      router.replace("/(tabs)/profile" as any);
+      safeBack("/(tabs)/profile");
     }
   };
 

@@ -8,18 +8,13 @@ import { router } from "expo-router";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { safeBack } from "@/src/utils/navigation";
 
 export default function AboutScreen() {
   const { colors, isDark } = useTheme();
   const { isDesktop } = useResponsive();
 
-  const handleBack = () => {
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace("/(tabs)/profile" as any);
-    }
-  };
+  const handleBack = () => safeBack("/(tabs)/profile");
 
   const features = [
     {

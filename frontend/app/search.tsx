@@ -20,6 +20,7 @@ import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { searchTemplatePairs, SearchMatchedPair } from "@/src/utils/templateSearch";
 import { getActiveTemplatePairs, PERMANENTLY_DELETED_BASE_KEYS } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
+import { safeBack } from "@/src/utils/navigation";
 
 interface SearchResults {
   cases: any[];
@@ -175,7 +176,7 @@ export default function Search() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable testID="search-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="search-back" onPress={() => safeBack("/(tabs)/home")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <View style={[styles.inputWrap, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>

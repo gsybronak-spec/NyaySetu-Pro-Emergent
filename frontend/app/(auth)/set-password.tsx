@@ -11,6 +11,7 @@ import { api } from "@/src/api/client";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { Spacing } from "@/src/theme/tokens";
+import { safeBack } from "@/src/utils/navigation";
 
 export default function SetPassword() {
   const { colors } = useTheme();
@@ -36,7 +37,7 @@ export default function SetPassword() {
     try {
       await api.setPassword(password);
       await refresh();
-      router.back();
+      safeBack("/(auth)/login");
     } catch (e: any) {
       setErr(e?.message || "Could not save password. Please try again.");
     } finally {
@@ -48,7 +49,7 @@ export default function SetPassword() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => router.back()} hitSlop={8} testID="set-password-back">
+          <Pressable onPress={() => safeBack("/(auth)/login")} hitSlop={8} testID="set-password-back">
             <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
           </Pressable>
           <Text style={[styles.h1, { color: colors.onSurface }]}>{isFirst ? "Set Password" : "Change Password"}</Text>

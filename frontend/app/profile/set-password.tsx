@@ -12,6 +12,7 @@ import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { safeBack } from "@/src/utils/navigation";
 
 export default function SetPassword() {
   const { colors } = useTheme();
@@ -41,16 +42,10 @@ export default function SetPassword() {
       await refresh();
       setSuccess(true);
       if (Platform.OS === "web") {
-        setTimeout(() => {
-          if (router.canGoBack()) router.back();
-          else router.replace("/(tabs)/profile" as any);
-        }, 1200);
+        setTimeout(() => safeBack("/(tabs)/profile"), 1200);
       } else {
         Alert.alert("Success", "Password updated successfully!", [
-          { text: "OK", onPress: () => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)/profile" as any);
-          }},
+          { text: "OK", onPress: () => safeBack("/(tabs)/profile") },
         ]);
       }
     } catch (e: any) {
@@ -64,10 +59,7 @@ export default function SetPassword() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable onPress={() => {
-            if (router.canGoBack()) router.back();
-            else router.replace("/(tabs)/profile" as any);
-          }} hitSlop={8} testID="set-password-back">
+          <Pressable onPress={() => safeBack("/(tabs)/profile")} hitSlop={8} testID="set-password-back">
             <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
           </Pressable>
           <Text style={[styles.h1, { color: colors.onSurface }]}>{isFirst ? "Set Password" : "Change Password"}</Text>

@@ -14,6 +14,7 @@ import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
+import { safeBack } from "@/src/utils/navigation";
 
 export interface CaseFormValues {
   language: "en" | "gu";
@@ -604,7 +605,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
         <KeyboardAvoidingView style={{ flex: 1 }}>
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Pressable testID="case-form-back" onPress={() => router.back()} hitSlop={12}>
+            <Pressable testID="case-form-back" onPress={() => safeBack("/(tabs)/cases")} hitSlop={12}>
               <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
             </Pressable>
             <Text style={[styles.h1, { color: colors.onSurface }]}>{title}</Text>
@@ -873,7 +874,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top", "bottom"]}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Pressable testID="case-form-back" onPress={() => router.back()} hitSlop={12}>
+          <Pressable testID="case-form-back" onPress={() => safeBack("/(tabs)/cases")} hitSlop={12}>
             <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
           </Pressable>
           <Text style={[styles.h1, { color: colors.onSurface }]}>{title}</Text>

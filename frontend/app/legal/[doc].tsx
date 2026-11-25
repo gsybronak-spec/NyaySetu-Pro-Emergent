@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Spacing } from "@/src/theme/tokens";
+import { safeBack } from "@/src/utils/navigation";
 
 const DOCS: Record<string, { title: string; sections: { h: string; body: string }[] }> = {
   privacy: {
@@ -80,7 +81,7 @@ export default function LegalDoc() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable testID="legal-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="legal-back" onPress={() => safeBack("/(tabs)/profile")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.h1, { color: colors.onSurface }]}>{data.title}</Text>

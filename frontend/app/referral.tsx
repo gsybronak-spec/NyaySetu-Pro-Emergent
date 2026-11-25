@@ -9,6 +9,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
+import { safeBack } from "@/src/utils/navigation";
 
 export default function Referral() {
   const { colors, isDark } = useTheme();
@@ -39,7 +40,7 @@ export default function Referral() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable testID="referral-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="referral-back" onPress={() => safeBack("/(tabs)/profile")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.h1, { color: colors.onSurface }]}>Refer & Earn</Text>

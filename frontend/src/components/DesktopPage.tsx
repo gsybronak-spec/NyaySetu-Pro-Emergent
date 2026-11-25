@@ -20,6 +20,8 @@ interface Props {
   scroll?: boolean;
   /** Stack screens (case detail, application form) have no sidebar — no left offset. */
   sidebarOffset?: boolean;
+  /** Optional back handler for desktop screens outside the sidebar tabs. */
+  onBack?: () => void;
 }
 
 /**
@@ -28,12 +30,25 @@ interface Props {
  * content column. Mobile screens do NOT use this — they keep their app-like
  * SafeAreaView layout.
  */
-export function DesktopPage({ title, subtitle, actions, children, maxWidth = 1200, scroll = true, sidebarOffset = true }: Props) {
+export function DesktopPage({ title, subtitle, actions, children, maxWidth = 1200, scroll = true, sidebarOffset = true, onBack }: Props) {
   const { colors } = useTheme();
 
   const header = (
     <View style={[styles.header, { borderBottomColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.headerInner}>
+        {onBack ? (
+          <Pressable
+            testID="desktop-page-back"
+            onPress={onBack}
+            hitSlop={10}
+            style={({ pressed }: any) => [
+              styles.backBtn,
+              { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, opacity: pressed ? 0.8 : 1 },
+            ]}
+          >
+            <Ionicons name="arrow-back" size={18} color={colors.onSurface} />
+          </Pressable>
+        ) : null}
         <View style={{ flex: 1, minWidth: 200, paddingRight: Spacing.lg }}>
           <Text style={[styles.title, { color: colors.onSurface }]} numberOfLines={2}>{title}</Text>
           {subtitle ? (
@@ -152,6 +167,15 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   title: { fontSize: 24, fontWeight: "800", fontFamily: "serif" },
+  backBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: Spacing.md,
+  },
   actions: { flexDirection: "row", alignItems: "center", gap: Spacing.md, flexShrink: 1, minWidth: 0, flexWrap: "wrap" },
   content: { gap: Spacing.lg },
   noScroll: { flex: 1, paddingBottom: Spacing.xxxl },

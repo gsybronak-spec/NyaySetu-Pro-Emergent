@@ -12,6 +12,7 @@ import { DesktopPage } from "@/src/components/DesktopPage";
 import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
+import { safeBack } from "@/src/utils/navigation";
 import { TemplateLogicalPair, getActiveTemplatePairs } from "@/src/data/templateCatalogPairs";
 import { catalogCache } from "@/src/services/catalogCache";
 
@@ -156,7 +157,7 @@ export default function CaseDetail() {
             <View style={{ flexDirection: "row", gap: 12, marginTop: Spacing.lg }}>
               <Pressable
                 testID="case-error-back"
-                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/cases"))}
+                onPress={() => safeBack("/(tabs)/cases")}
                 style={{ paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}
               >
                 <Text style={{ color: colors.onSurface, fontWeight: "600" }}>Back / પાછા જાઓ</Text>
@@ -215,6 +216,7 @@ export default function CaseDetail() {
       <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
         <DesktopPage
         sidebarOffset={false}
+        onBack={() => safeBack("/(tabs)/cases")}
         title={c.nickname || c.party_name || "Case Details"}
         subtitle={c.case_number ? `${c.case_number} • ${c.case_type_label || "Case"}` : c.case_type_label || "Case details"}
         actions={
@@ -398,7 +400,7 @@ export default function CaseDetail() {
     <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Pressable testID="case-back" onPress={() => router.back()} hitSlop={12}>
+        <Pressable testID="case-back" onPress={() => safeBack("/(tabs)/cases")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>

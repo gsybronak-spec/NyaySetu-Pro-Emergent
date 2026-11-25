@@ -2,7 +2,7 @@ import React, { Component, ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router } from "expo-router";
+import { safeBack } from "@/src/utils/navigation";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -51,7 +51,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <View style={styles.btnRow}>
               <Pressable
                 testID="boundary-back-btn"
-                onPress={() => (router.canGoBack() ? router.back() : router.replace("/(tabs)/home"))}
+                onPress={() => safeBack("/(tabs)/home")}
                 style={styles.backBtn}
               >
                 <Text style={styles.backBtnTxt}>Back / પાછા જાઓ</Text>
