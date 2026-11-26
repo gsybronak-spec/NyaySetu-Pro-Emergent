@@ -154,6 +154,14 @@ class TestAccountDeletion(unittest.IsolatedAsyncioTestCase):
             fresh_wallet = next(w for w in self.store["wallets"].values() if w["user_id"] == fresh_user["id"])
             self.assertEqual(fresh_wallet["balance"], 5)
 
+    async def test_partial_child_failure_does_not_orphan_user(self):
+        with patch.object(server, "db", self.mem_db), \
+             patch.object(server, "_delete_collection_by_user", side_effect=RuntimeError("transient error")):
+            with self.assertRaises(HTTPException) as ctx:
+                await server.delete_my_account(response=MagicMock(), user=dict(self.store["users"]["u1"]))
+            self.assertEqual(ctx.exception.status_code, 503)
+            self.assertIn("u1", self.store["users"])
+
 
 if __name__ == "__main__":
     unittest.main()

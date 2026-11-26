@@ -2286,16 +2286,21 @@ async def delete_my_account(response: Response = None, user=Depends(get_user)):
                 merge=True,
             )
 
-    delete_tasks = [
+    child_tasks = [
         *marker_tasks,
         _anonymize_coupon_claims(),
         *(_delete_collection_by_user(c, uid) for c in ("cases", "drafts", "applications", "notifications", "user_sessions", "wallets")),
-        db.collection("users").document(uid).delete(),
     ]
     if user.get("mobile"):
-        delete_tasks.append(db.collection("otps").document(user["mobile"]).delete())
+        child_tasks.append(db.collection("otps").document(user["mobile"]).delete())
 
-    await asyncio.gather(*delete_tasks, return_exceptions=True)
+    results = await asyncio.gather(*child_tasks, return_exceptions=True)
+    failures = [r for r in results if isinstance(r, Exception)]
+    if failures:
+        logger.error(f"[delete-account] Aborted deleting user doc {uid} due to child cleanup failures: {failures}")
+        raise HTTPException(503, "Could not complete account deletion. Please try again.")
+
+    await db.collection("users").document(uid).delete()
     invalidate_user_session_cache(uid)
 
     fb_uid = user.get("firebase_uid")
