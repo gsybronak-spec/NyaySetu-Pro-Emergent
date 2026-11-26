@@ -20,7 +20,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { formatDateDisplay, isISODate } from "@/src/utils/date";
 import { formatAdvocateName } from "@/src/utils/advocate";
-import { saveDocument } from "@/src/utils/download";
+import { saveDocument, shareDocumentFile } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
@@ -167,9 +167,13 @@ export default function TemplateApplication() {
   const { colors } = useTheme();
   const { user } = useAuth();
   const { isDesktop } = useResponsive();
-  const params = useLocalSearchParams<{ id: string; case_id?: string; lang?: string; draft?: string }>();
+  const params = useLocalSearchParams<{ id: string; case_id?: string; lang?: string; draft?: string; application_id?: string }>();
   const templateId = String(params.id);
   const caseId = params.case_id && params.case_id !== "" ? String(params.case_id) : undefined;
+  const initialApplicationId =
+    params.application_id && params.application_id !== "" ? String(params.application_id) : undefined;
+  const [activeApplicationId, setActiveApplicationId] = useState<string | undefined>(initialApplicationId);
+  const [savingApplication, setSavingApplication] = useState(false);
 
   const [template, setTemplate] = useState<any>(null);
   const [caseData, setCaseData] = useState<any>(null);
@@ -189,7 +193,8 @@ export default function TemplateApplication() {
     params.lang === "en" ||
     templateId.endsWith("_gu") ||
     templateId.endsWith("_en") ||
-    params.draft === "1"
+    params.draft === "1" ||
+    initialApplicationId
   );
   const [showLanguageModal, setShowLanguageModal] = useState<boolean>(!hasExplicitLang);
   const [values, setValues] = useState<Record<string, any>>({});
@@ -257,7 +262,7 @@ export default function TemplateApplication() {
       const cachedWalletOk = typeof user?.wallet_balance === "number";
 
       // Parallelize remaining data fetching concurrently for sub-second load times
-      const [t, me, dists, cts, cs, w, drafts] = await Promise.all([
+      const [t, me, dists, cts, cs, w, drafts, savedApp] = await Promise.all([
         cachedTpl
           ? Promise.resolve(cachedTpl)
           : api.template(effectiveId).catch(() => api.template(baseId)).catch(() => api.template(templateId)),
@@ -272,6 +277,7 @@ export default function TemplateApplication() {
             })
           : api.wallet().catch(() => ({ balance: user?.wallet_balance ?? 0 })),
         params.draft === "1" ? api.drafts().catch(() => []) : Promise.resolve([]),
+        initialApplicationId ? api.getApplication(initialApplicationId).catch(() => null) : Promise.resolve(null),
       ]);
 
       if (cachedWalletOk) {
@@ -295,7 +301,10 @@ export default function TemplateApplication() {
         setWalletBalance(w.balance);
       }
       const enName = t.name_en || t.name_gu || "Document";
-      setFilename(`${enName.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
+      const restoredFilename = savedApp?.filename
+        ? String(savedApp.filename).replace(/\.(pdf|docx|odt|png|zip)$/i, "")
+        : "";
+      setFilename(restoredFilename || `${enName.replace(/\s+/g, "_")}_${Date.now().toString().slice(-5)}`);
 
       const initialValues: Record<string, any> = {};
 
@@ -437,7 +446,20 @@ export default function TemplateApplication() {
       }
       if (!initialValues["date"]) initialValues["date"] = new Date().toISOString().slice(0, 10);
 
-      setValues((prev) => ({ ...initialValues, ...prev }));
+      const savedAppValues =
+        savedApp && typeof savedApp === "object"
+          ? savedApp.form_values || savedApp.values || {}
+          : null;
+
+      setValues((prev) => ({
+        ...initialValues,
+        ...(savedAppValues || {}),
+        ...prev,
+      }));
+
+      if (savedApp?.language && !params.lang) {
+        setLanguage(savedApp.language === "en" ? "en" : "gu");
+      }
 
       if (params.draft === "1" && Array.isArray(drafts) && drafts.length > 0) {
         const baseKey = templateId.replace(/_(gu|en)$/, "");
@@ -459,7 +481,11 @@ export default function TemplateApplication() {
     } finally {
       setLoading(false);
     }
-  }, [templateId, caseId, params.draft]);
+  }, [templateId, caseId, params.draft, initialApplicationId]);
+
+  useEffect(() => {
+    setActiveApplicationId(initialApplicationId);
+  }, [initialApplicationId]);
 
   useEffect(() => {
     loadData();
@@ -484,9 +510,9 @@ export default function TemplateApplication() {
     return () => unsub();
   }, [values.district]);
 
-  // Autosave draft when values change with visual feedback
+  // Autosave draft only for new/draft flows (never create duplicate drafts when editing a Vault application)
   useEffect(() => {
-    if (loading || Object.keys(values).length === 0) return;
+    if (loading || activeApplicationId || Object.keys(values).length === 0) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
     setAutosaveStatus("saving");
     draftTimer.current = setTimeout(async () => {
@@ -499,7 +525,7 @@ export default function TemplateApplication() {
       }
     }, 1200);
     return () => draftTimer.current && clearTimeout(draftTimer.current);
-  }, [values, language, loading, templateId, caseId]);
+  }, [values, language, loading, templateId, caseId, activeApplicationId]);
 
   const update = (k: string, v: any) => {
     setValues((prev) => {
@@ -1046,63 +1072,52 @@ export default function TemplateApplication() {
     return missing;
   }, [caseId, values, appSpecificFields, templateId, hasRepresentingParty, isVakalatnama]);
 
-  const genPreview = async () => {
+  const validateCustomReasons = (): boolean => {
+    const showMissing = (gu: string, en: string) => {
+      Alert.alert(language === "gu" ? "અધૂરી વિગત" : "Missing Information", language === "gu" ? gu : en);
+      return false;
+    };
+    const isOtherVal = (v: any) => v === "અન્ય" || v === "other" || v === "Other";
+    if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (isOtherVal(values.reason) || isOtherVal(values.reopen_reason)) && !(values.custom_reason || values.reopen_reason_other)?.trim()) {
+      return showMissing("કૃપા કરીને ઉલટ-તપાસ ન થઈ શકવાનું અન્ય કારણ દાખલ કરો.", "Please enter the custom reason for cross-examination.");
+    }
+    if (templateId === "warrant_rad_karvani_arji" && isOtherVal(values.absence_reason) && !(values.absence_reason_custom || values.absence_reason_other)?.trim()) {
+      return showMissing("કૃપા કરીને ગેરહાજરીનું અન્ય કારણ દાખલ કરો.", "Please enter the custom reason for absence.");
+    }
+    if (templateId === "kam_board_par_levani_arji" && isOtherVal(values.urgent_reason) && !values.urgent_reason_custom?.trim()) {
+      return showMissing("કૃપા કરીને કામ બોર્ડ પર લેવાનું અન્ય કારણ દાખલ કરો.", "Please enter the custom reason for taking the matter on board.");
+    }
+    if (templateId === "fs_right_reopen_application" && isOtherVal(values.fs_failure_reason) && !values.fs_failure_reason_custom?.trim()) {
+      return showMissing("કૃપા કરીને એફ.એસ. ન થઈ શકવાનું અન્ય કારણ દાખલ કરો.", "Please enter the custom reason for not completing F.S.");
+    }
+    if (templateId === "dd_karavani_arji" && isOtherVal(values.dismissal_reason) && !values.dismissal_reason_custom?.trim()) {
+      return showMissing("કૃપા કરીને અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો.", "Please enter the custom reason for dismissal.");
+    }
+    if (templateId === "mudat_arji" && isOtherVal(values.adjournment_reason) && !(values.other_adjournment_reason || values.adjournment_reason_custom)?.trim()) {
+      return showMissing("કૃપા કરીને અન્ય મુદ્દત માંગવાનું કારણ દાખલ કરો.", "Please enter the other reason for adjournment.");
+    }
+    if (templateId === "certified_copy_application" && isOtherVal(values.copy_request_purpose) && !(values.other_copy_request_purpose || values.copy_request_purpose_custom)?.trim()) {
+      return showMissing("કૃપા કરીને અન્ય કારણ દાખલ કરો.", "Please enter the custom reason for copy request.");
+    }
+    return true;
+  };
+
+  const validateFormReady = (): boolean => {
     if (missingRequired.length > 0) {
       Alert.alert(
         language === "gu" ? "અધૂરી વિગત" : "Missing Information",
         language === "gu" ? "કૃપા કરીને બધી જરૂરી વિગતો ભરો." : "Please fill all required fields before continuing."
       );
-      return;
+      return false;
     }
-    if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (values.reason === "અન્ય" || values.reason === "other" || values.reason === "Other" || values.reopen_reason === "અન્ય" || values.reopen_reason === "other" || values.reopen_reason === "Other") && !(values.custom_reason || values.reopen_reason_other)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને ઉલટ-તપાસ ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for cross-examination."
-      );
-      return;
-    }
-    if (templateId === "warrant_rad_karvani_arji" && (values.absence_reason === "અન્ય" || values.absence_reason === "other" || values.absence_reason === "Other") && !(values.absence_reason_custom || values.absence_reason_other)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને ગેરહાજરીનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for absence."
-      );
-      return;
-    }
-    if (templateId === "kam_board_par_levani_arji" && (values.urgent_reason === "અન્ય" || values.urgent_reason === "other" || values.urgent_reason === "Other") && !values.urgent_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને કામ બોર્ડ પર લેવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for taking the matter on board."
-      );
-      return;
-    }
-    if (templateId === "fs_right_reopen_application" && (values.fs_failure_reason === "અન્ય" || values.fs_failure_reason === "other" || values.fs_failure_reason === "Other") && !values.fs_failure_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને એફ.એસ. ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for not completing F.S."
-      );
-      return;
-    }
-    if (templateId === "dd_karavani_arji" && (values.dismissal_reason === "અન્ય" || values.dismissal_reason === "other" || values.dismissal_reason === "Other") && !values.dismissal_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો." : "Please enter the custom reason for dismissal."
-      );
-      return;
-    }
-    if (templateId === "mudat_arji" && (values.adjournment_reason === "અન્ય" || values.adjournment_reason === "other" || values.adjournment_reason === "Other") && !(values.other_adjournment_reason || values.adjournment_reason_custom)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય મુદ્દત માંગવાનું કારણ દાખલ કરો." : "Please enter the other reason for adjournment."
-      );
-      return;
-    }
-    if (templateId === "certified_copy_application" && (values.copy_request_purpose === "અન્ય" || values.copy_request_purpose === "other" || values.copy_request_purpose === "Other") && !(values.other_copy_request_purpose || values.copy_request_purpose_custom)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for copy request."
-      );
-      return;
-    }
+    return validateCustomReasons();
+  };
+
+  const getCleanBaseFilename = () =>
+    (filename || "document").replace(/\.(pdf|docx|odt|png|zip)$/i, "").trim() || "document";
+
+  const genPreview = async () => {
+    if (!validateFormReady()) return;
     setBusy(true);
     try {
       const res = await api.previewApp({ template_id: resolveTemplateId(templateId, language) || templateId, case_id: caseId, language, values: toDocValues(values) });
@@ -1116,6 +1131,43 @@ export default function TemplateApplication() {
       Alert.alert("Error", e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const saveApplicationChanges = async () => {
+    if (!activeApplicationId || !validateFormReady()) return;
+    setSavingApplication(true);
+    try {
+      await api.updateApplication(activeApplicationId, {
+        template_id: resolveTemplateId(templateId, language) || templateId,
+        case_id: caseId,
+        language,
+        values: toDocValues(values),
+        form_values: values,
+        filename: getCleanBaseFilename(),
+      });
+      Alert.alert(
+        language === "gu" ? "અરજી અપડેટ થઈ" : "Application Updated",
+        language === "gu"
+          ? "તમારી સેવ કરેલી અરજી Documents Vault માં અપડેટ થઈ ગઈ છે (નવી ડુપ્લીકેટ અરજી બની નથી)."
+          : "Your saved application has been updated in Documents Vault without creating a duplicate.",
+        [
+          {
+            text: language === "gu" ? "પ્રીવ્યૂ / ડાઉનલોડ" : "Preview / Download",
+            onPress: () => {
+              genPreview();
+            },
+          },
+          {
+            text: language === "gu" ? "Vault પર જાઓ" : "Back to Vault",
+            onPress: () => router.replace({ pathname: "/vault", params: { tab: "documents" } }),
+          },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Could not update saved application.");
+    } finally {
+      setSavingApplication(false);
     }
   };
 
@@ -1168,59 +1220,11 @@ export default function TemplateApplication() {
   }, [values, step]);
 
   const download = async (format: "pdf" | "docx" | "odt" | "png") => {
-    if (!isUnlimited && walletBalance <= 0) {
+    if (!activeApplicationId && !isUnlimited && walletBalance <= 0) {
       setShowPurchaseModal(true);
       return;
     }
-    if (templateId === "ulat_tapas_no_haq_kholvani_arji" && (values.reason === "અન્ય" || values.reason === "other" || values.reason === "Other" || values.reopen_reason === "અન્ય" || values.reopen_reason === "other" || values.reopen_reason === "Other") && !(values.custom_reason || values.reopen_reason_other)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને ઉલટ-તપાસ ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for cross-examination."
-      );
-      return;
-    }
-    if (templateId === "warrant_rad_karvani_arji" && (values.absence_reason === "અન્ય" || values.absence_reason === "other" || values.absence_reason === "Other") && !(values.absence_reason_custom || values.absence_reason_other)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને ગેરહાજરીનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for absence."
-      );
-      return;
-    }
-    if (templateId === "kam_board_par_levani_arji" && (values.urgent_reason === "અન્ય" || values.urgent_reason === "other" || values.urgent_reason === "Other") && !values.urgent_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને કામ બોર્ડ પર લેવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for taking the matter on board."
-      );
-      return;
-    }
-    if (templateId === "fs_right_reopen_application" && (values.fs_failure_reason === "અન્ય" || values.fs_failure_reason === "other" || values.fs_failure_reason === "Other") && !values.fs_failure_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને એફ.એસ. ન થઈ શકવાનું અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for not completing F.S."
-      );
-      return;
-    }
-    if (templateId === "dd_karavani_arji" && (values.dismissal_reason === "અન્ય" || values.dismissal_reason === "other" || values.dismissal_reason === "Other") && !values.dismissal_reason_custom?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય કેસ ડિસમીસ કરવાનું કારણ દાખલ કરો." : "Please enter the custom reason for dismissal."
-      );
-      return;
-    }
-    if (templateId === "mudat_arji" && (values.adjournment_reason === "અન્ય" || values.adjournment_reason === "other" || values.adjournment_reason === "Other") && !(values.other_adjournment_reason || values.adjournment_reason_custom)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય મુદ્દત માંગવાનું કારણ દાખલ કરો." : "Please enter the other reason for adjournment."
-      );
-      return;
-    }
-    if (templateId === "certified_copy_application" && (values.copy_request_purpose === "અન્ય" || values.copy_request_purpose === "other" || values.copy_request_purpose === "Other") && !(values.other_copy_request_purpose || values.copy_request_purpose_custom)?.trim()) {
-      Alert.alert(
-        language === "gu" ? "અધૂરી વિગત" : "Missing Information",
-        language === "gu" ? "કૃપા કરીને અન્ય કારણ દાખલ કરો." : "Please enter the custom reason for copy request."
-      );
-      return;
-    }
+    if (!validateCustomReasons()) return;
     if (draftTimer.current) {
       clearTimeout(draftTimer.current);
       draftTimer.current = null;
@@ -1228,34 +1232,71 @@ export default function TemplateApplication() {
     setBusy(true);
     setDownloading(format);
     setNotice(null);
+    const wasUpdate = Boolean(activeApplicationId);
     try {
       const res = await api.downloadApp({
+        application_id: activeApplicationId,
         template_id: resolveTemplateId(templateId, language) || templateId,
         case_id: caseId,
         language,
         values: toDocValues(values),
+        form_values: values,
         format,
-        filename: `${filename}.${format}`,
+        filename: `${getCleanBaseFilename()}.${format}`,
       });
       if (!res?.base64) {
         throw new Error("The server returned an empty document. Please try again.");
       }
-      if (!isUnlimited) {
+      if (!isUnlimited && !wasUpdate) {
         setWalletBalance((prev) => Math.max(0, prev - 1));
       }
-      await saveDocument({ filename: res.filename, mime_type: res.mime_type, base64: res.base64 }, format);
-      const okText = isUnlimited
-        ? `${res.filename} generated successfully.`
-        : `${res.filename} generated successfully. 1 template credit consumed.`;
-      setNotice({ tone: "ok", text: isUnlimited ? `Download started — ${res.filename}.` : `Download started — ${res.filename}. 1 template credit consumed.` });
-      Alert.alert(
-        "Document Ready",
-        okText,
-        [{ text: "Done", onPress: () => (caseId ? router.replace({ pathname: "/case/[id]", params: { id: caseId } }) : router.replace("/(tabs)/home")) }]
-      );
+      if (res?.application_id) {
+        setActiveApplicationId(String(res.application_id));
+      }
+      const dlPayload = { filename: res.filename, mime_type: res.mime_type, base64: res.base64 };
+      try {
+        await saveDocument(dlPayload, format);
+      } catch (saveErr: any) {
+        const saveMsg = saveErr?.message || "Could not save file to device.";
+        setNotice({ tone: "err", text: saveMsg });
+        Alert.alert(language === "gu" ? "ફાઇલ સેવ ન થઈ" : "Unable to Save File", saveMsg);
+        return;
+      }
+
+      const creditNote = isUnlimited || wasUpdate ? "" : " 1 template credit consumed.";
+      const okText =
+        Platform.OS !== "web"
+          ? `${res.filename} saved to your device folder.${creditNote}`
+          : `${res.filename} generated successfully.${creditNote}`;
+      setNotice({ tone: "ok", text: `Saved — ${res.filename}.${creditNote}` });
+
+      const doneDestination = () =>
+        caseId
+          ? router.replace({ pathname: "/case/[id]", params: { id: caseId } })
+          : wasUpdate
+          ? router.replace({ pathname: "/vault", params: { tab: "documents" } })
+          : router.replace("/(tabs)/home");
+
+      if (Platform.OS !== "web") {
+        Alert.alert(
+          language === "gu" ? "ફાઇલ ડિવાઇસમાં સેવ થઈ ગઈ" : "Saved to Device",
+          okText,
+          [
+            {
+              text: language === "gu" ? "શેર / ખોલો" : "Share / Open",
+              onPress: () => {
+                shareDocumentFile(dlPayload, format).catch(() => {});
+              },
+            },
+            { text: language === "gu" ? "પૂર્ણ" : "Done", onPress: doneDestination },
+          ]
+        );
+      } else {
+        Alert.alert("Document Ready", okText, [{ text: "Done", onPress: doneDestination }]);
+      }
     } catch (e: any) {
       const msg = e?.message || "Unknown error";
-      if ((msg.toLowerCase().includes("insufficient") || msg.includes("402")) && !isUnlimited) {
+      if ((msg.toLowerCase().includes("insufficient") || msg.includes("402")) && !isUnlimited && !wasUpdate) {
         setNotice({ tone: "err", text: "You have no templates remaining. Please purchase a plan." });
         setShowPurchaseModal(true);
       } else if (msg.includes("429") || msg.toLowerCase().includes("too many")) {
@@ -1265,15 +1306,15 @@ export default function TemplateApplication() {
         setNotice({ tone: "err", text: msg });
         Alert.alert("Unable to download the document", `${msg}`);
       } else if (format === "pdf") {
-        setNotice({ tone: "err", text: isUnlimited ? "PDF generation failed — try Download as Image." : "PDF generation failed. Your credit was refunded — try Download as Image." });
-        Alert.alert("PDF generation failed", isUnlimited ? "PDF generation failed. Try downloading the same document as an image instead." : "Your credit has been refunded. Try downloading the same document as an image instead.", [
+        setNotice({ tone: "err", text: isUnlimited || wasUpdate ? "PDF generation failed — try Download as Image." : "PDF generation failed. Your credit was refunded — try Download as Image." });
+        Alert.alert("PDF generation failed", isUnlimited || wasUpdate ? "PDF generation failed. Try downloading the same document as an image instead." : "Your credit has been refunded. Try downloading the same document as an image instead.", [
           { text: "Cancel", style: "cancel" },
           { text: "Download as Image", onPress: () => download("png") },
         ]);
         console.warn("[download] pdf generation failed", msg);
       } else {
-        setNotice({ tone: "err", text: isUnlimited ? "Unable to download the document. Please try again." : "Unable to download the document. Please try again. Failed generations are refunded automatically." });
-        Alert.alert("Unable to download the document", isUnlimited ? "Please try again." : "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
+        setNotice({ tone: "err", text: isUnlimited || wasUpdate ? "Unable to download the document. Please try again." : "Unable to download the document. Please try again. Failed generations are refunded automatically." });
+        Alert.alert("Unable to download the document", isUnlimited || wasUpdate ? "Please try again." : "Please try again. Your credit has not been lost — failed generations are refunded automatically.");
         console.warn("[download] generation failed", msg);
       }
     } finally {
@@ -1672,7 +1713,7 @@ export default function TemplateApplication() {
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
             <Pressable
               testID="tpl-back"
-              onPress={() => (step === "fields" ? safeBack(caseId ? `/case/${caseId}` : "/(tabs)/home") : setStep("fields"))}
+              onPress={() => (step === "fields" ? safeBack(caseId ? `/case/${caseId}` : initialApplicationId ? "/vault" : "/(tabs)/home") : setStep("fields"))}
               hitSlop={12}
             >
               <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
@@ -2451,7 +2492,11 @@ export default function TemplateApplication() {
             <View style={[styles.note, { backgroundColor: colors.surfaceSecondary }]}>
               <Ionicons name="information-circle-outline" size={16} color={colors.muted} />
               <Text style={{ color: colors.muted, fontSize: 11, flex: 1, marginLeft: 6 }}>
-                {isUnlimited
+                {activeApplicationId
+                  ? (language === "gu"
+                      ? "સેવ કરેલી અરજી અપડેટ થશે — નવી ડુપ્લીકેટ અરજી બનશે નહીં અને વધારાની ક્રેડિટ કપાશે નહીં."
+                      : "Updating your saved Vault application — no duplicate entry or extra credit consumed.")
+                  : isUnlimited
                   ? (language === "gu"
                       ? "ઓનર/પાર્ટનર અમર્યાદિત ઍક્સેસ સક્રિય છે. કોઈ ક્રેડિટ કપાશે નહીં."
                       : "Owner/Partner Unlimited Access active. No credits consumed.")
@@ -2468,13 +2513,42 @@ export default function TemplateApplication() {
         {/* Footer CTA */}
         {step === "fields" && (
           <View style={[styles.footer, { backgroundColor: colors.surface, borderTopColor: colors.border }]}>
-            <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
-              <Button
-                testID="continue-preview-btn"
-                title={language === "gu" ? "અરજીનું પ્રીવ્યૂ જુઓ" : "Preview Document"}
-                loading={busy}
-                onPress={genPreview}
-              />
+            <View
+              style={[
+                isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined,
+                activeApplicationId ? { flexDirection: "row", gap: Spacing.sm } : undefined,
+              ]}
+            >
+              {activeApplicationId ? (
+                <>
+                  <Button
+                    testID="save-application-changes-btn"
+                    variant="outline"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    title={language === "gu" ? "ફેરફાર સેવ કરો" : "Save Changes"}
+                    loading={savingApplication}
+                    disabled={busy}
+                    onPress={saveApplicationChanges}
+                  />
+                  <Button
+                    testID="continue-preview-btn"
+                    fullWidth={false}
+                    style={{ flex: 1 }}
+                    title={language === "gu" ? "પ્રીવ્યૂ જુઓ" : "Preview Document"}
+                    loading={busy}
+                    disabled={savingApplication}
+                    onPress={genPreview}
+                  />
+                </>
+              ) : (
+                <Button
+                  testID="continue-preview-btn"
+                  title={language === "gu" ? "અરજીનું પ્રીવ્યૂ જુઓ" : "Preview Document"}
+                  loading={busy}
+                  onPress={genPreview}
+                />
+              )}
             </View>
           </View>
         )}

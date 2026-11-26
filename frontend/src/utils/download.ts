@@ -1,27 +1,23 @@
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import { storage } from "@/src/utils/storage";
+
+const ANDROID_DOWNLOAD_DIR_KEY = "@nyaysetu_android_download_dir_v1";
 
 /**
  * Centralized document-delivery helper.
  *
- * The backend returns `{ filename, mime_type, base64 }` (JSON) for both PDF
- * and DOCX. Delivering that to the user is a PLATFORM concern:
+ * The backend returns `{ filename, mime_type, base64 }` (JSON) for PDF, DOCX,
+ * ODT, and PNG/ZIP exports.
  *
- *  - Web: decode the base64, verify the bytes are actually the requested file
- *    type (PDF magic `%PDF`, DOCX zip magic `PK`), build a Blob and trigger a
- *    real browser download via a temporary <a download> element. This is the
- *    ONLY reliable path on desktop browsers — `expo-sharing` is a no-op there
- *    (its web `isAvailableAsync` returns `navigator.share ? true : false`,
- *    which is false on Chrome/Edge desktop), and `expo-file-system` writes to
- *    an in-memory virtual FS on web, never to a real file.
- *
- *  - Native: write the base64 to the cache directory and open the share sheet
- *    (real file on disk, shareable).
- *
- * The function NEVER resolves with a success that did not happen: it throws a
- * user-readable Error if the response is empty, not decodable, or not the
- * expected file type.
+ *  - Web: decode the base64, validate format magic bytes, build a Blob and
+ *    trigger a real browser download via a temporary `<a download>` element.
+ *  - Android: save directly into the user-selected device folder (defaulting
+ *    the native folder picker to Downloads) via Storage Access Framework (SAF)
+ *    with persistable directory permission — no legacy storage permissions
+ *    required and the file actually lands visibly on the device.
+ *  - iOS: write to the app's Documents directory and present Save/Share sheet.
  */
 
 export type DownloadPayload = {
@@ -29,6 +25,18 @@ export type DownloadPayload = {
   mime_type: string;
   base64: string;
 };
+
+export function sanitizeFilename(filename: string | undefined, format: "pdf" | "docx" | "odt" | "png"): string {
+  const cleaned = String(filename || "")
+    .replace(/[\\/:*?"<>|\x00-\x1F]/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  if (!cleaned) return `legal_document.${format}`;
+  const lower = cleaned.toLowerCase();
+  if (format === "png" && (lower.endsWith(".png") || lower.endsWith(".zip"))) return cleaned;
+  if (lower.endsWith(`.${format}`)) return cleaned;
+  return `${cleaned}.${format}`;
+}
 
 export function decodeBase64(base64: string): Uint8Array {
   if (!base64 || typeof base64 !== "string" || base64.length === 0) {
@@ -94,33 +102,83 @@ function triggerBrowserDownload(blob: Blob, filename: string): void {
   }, 4000);
 }
 
+async function writeSafFile(dirUri: string, filename: string, mimeType: string, base64: string): Promise<string> {
+  const destUri = await FileSystem.StorageAccessFramework.createFileAsync(dirUri, filename, mimeType);
+  await FileSystem.writeAsStringAsync(destUri, base64, { encoding: "base64" });
+  return destUri;
+}
+
 /**
- * Saves/generates the document for the user.
- * Returns "downloaded" (web download or native cache save) or "shared"
- * (native share sheet used). Throws a user-readable Error on any failure —
- * it never silently drops the file.
+ * Shares a locally cached copy on native devices (used optionally after saving).
+ */
+export async function shareDocumentFile(res: DownloadPayload, format: "pdf" | "docx" | "odt" | "png"): Promise<void> {
+  const safeName = sanitizeFilename(res.filename, format);
+  const baseDir = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+  if (!baseDir) throw new Error("Local temporary storage unavailable.");
+  const path = `${baseDir}${safeName}`;
+  await FileSystem.writeAsStringAsync(path, res.base64, { encoding: "base64" });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(path, { mimeType: res.mime_type, dialogTitle: "Open or Share Document" });
+  }
+}
+
+/**
+ * Saves the document directly to the user's device:
+ *  - Web: triggers browser download (`<a download>`) and returns `"downloaded"`.
+ *  - Android: saves directly into the user's chosen device folder (defaulting
+ *    to Downloads via Storage Access Framework) and returns `"downloaded"`.
+ *    Throws a readable error if folder permission is cancelled or save fails.
+ *  - iOS: writes into the app's Documents directory and presents Save/Share sheet.
  */
 export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt" | "png"): Promise<"downloaded" | "shared"> {
   const bytes = decodeBase64(res.base64);
   const invalid = validateFileBytes(bytes, format);
   if (invalid) throw new Error(invalid);
 
+  const safeName = sanitizeFilename(res.filename, format);
+  const mimeType = res.mime_type || "application/octet-stream";
+
   if (Platform.OS === "web") {
-    // decodeBase64 allocates an exact-size buffer, so the view IS the whole
-    // buffer — safe to hand to Blob as an ArrayBuffer.
-    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: res.mime_type });
-    triggerBrowserDownload(blob, res.filename);
+    const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mimeType });
+    triggerBrowserDownload(blob, safeName);
     return "downloaded";
   }
 
-  // Native: real file in the cache directory, then open the share sheet.
-  const path = `${FileSystem.cacheDirectory}${res.filename}`;
+  if (Platform.OS === "android" && FileSystem.StorageAccessFramework) {
+    const cachedDir = await storage.getItem<string>(ANDROID_DOWNLOAD_DIR_KEY, "");
+    if (cachedDir) {
+      try {
+        await writeSafFile(cachedDir, safeName, mimeType, res.base64);
+        return "downloaded";
+      } catch {
+        // Permission may have been revoked or folder removed; prompt again cleanly.
+        await storage.removeItem(ANDROID_DOWNLOAD_DIR_KEY);
+      }
+    }
+
+    let initialUri: string | null = null;
+    try {
+      initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Download");
+    } catch {
+      initialUri = null;
+    }
+    const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+    if (!perm.granted || !perm.directoryUri) {
+      throw new Error("Download cancelled. Please choose a device folder (e.g., Downloads) to save the document.");
+    }
+    await storage.setItem(ANDROID_DOWNLOAD_DIR_KEY, perm.directoryUri);
+    await writeSafFile(perm.directoryUri, safeName, mimeType, res.base64);
+    return "downloaded";
+  }
+
+  // iOS / non-SAF native fallback: write to persistent documentDirectory first, then offer Save/Share sheet.
+  const baseDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
+  if (!baseDir) throw new Error("Unable to access device storage.");
+  const path = `${baseDir}${safeName}`;
   await FileSystem.writeAsStringAsync(path, res.base64, { encoding: "base64" });
-  const canShare = await Sharing.isAvailableAsync();
-  if (canShare) {
-    await Sharing.shareAsync(path, { mimeType: res.mime_type, dialogTitle: "Save or Share Document" });
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(path, { mimeType, dialogTitle: "Save or Share Document" });
     return "shared";
   }
-  // No share sheet (rare) — the file is still safely on disk in the cache.
   return "downloaded";
 }

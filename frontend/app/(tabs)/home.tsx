@@ -477,24 +477,24 @@ export default function Home() {
 
 
 
-        {/* Categories */}
+        {/* Quick Access: Documents Vault & Drafts */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Categories</Text>
+          <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Quick Access</Text>
           <View style={{ flexDirection: "row", gap: Spacing.md }}>
             {[
-              { key: "Civil", icon: "business", color: "#C5A059" },
-              { key: "Criminal", icon: "shield", color: "#C5A059" },
+              { key: "documents-vault", label: "Documents Vault", icon: "file-tray-full", color: "#C5A059", tab: "documents" },
+              { key: "drafts", label: "Drafts", icon: "create", color: "#C5A059", tab: "drafts" },
             ].map((c) => (
               <Pressable
                 key={c.key}
-                testID={`cat-${c.key.toLowerCase()}`}
-                onPress={() => router.push({ pathname: "/(tabs)/templates", params: { cat: c.key } })}
+                testID={`cat-${c.key}`}
+                onPress={() => router.push({ pathname: "/vault", params: { tab: c.tab } })}
                 style={[styles.catCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <View style={[styles.catIcon, { backgroundColor: c.color + "20" }]}>
                   <Ionicons name={c.icon as any} size={22} color={c.color} />
                 </View>
-                <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{c.key}</Text>
+                <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{c.label}</Text>
               </Pressable>
             ))}
           </View>

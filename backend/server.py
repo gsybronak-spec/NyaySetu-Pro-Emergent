@@ -652,10 +652,22 @@ class DownloadReq(BaseModel):
     case_id: Optional[str] = Field(None, max_length=50)
     language: str = "en"
     values: dict = {}
+    form_values: Optional[dict] = None
+    application_id: Optional[str] = Field(None, max_length=64)
     format: str = "pdf"  # pdf | docx | odt
     filename: Optional[str] = Field(None, max_length=200)
     page_size: Optional[str] = Field(None, max_length=10)  # A4 | Legal
     consume_credit: bool = True  # DEPRECATED: ignored server-side — always consumes 1 credit
+
+
+class ApplicationUpdateReq(BaseModel):
+    template_id: Optional[str] = Field(None, max_length=50)
+    template_version: Optional[int] = None
+    case_id: Optional[str] = Field(None, max_length=50)
+    language: Optional[str] = "gu"
+    values: dict = {}
+    form_values: Optional[dict] = None
+    filename: Optional[str] = Field(None, max_length=200)
 
 class PurchaseReq(BaseModel):
     plan_id: str = Field(..., max_length=50)
@@ -8191,6 +8203,8 @@ async def preview_application(req: GenerateReq, user=Depends(get_user)):
 @api.post("/applications/download")
 async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_values_size(req.values)
+    if req.form_values is not None:
+        validate_values_size(req.form_values)
     _validate_page_size(req.page_size)
     if req.format not in ("pdf", "docx", "odt", "png"):
         raise HTTPException(422, "format must be 'pdf', 'docx', 'odt' or 'png'")
@@ -8207,6 +8221,14 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     page_size = req.page_size or tpl_ps or await _get_setting("default_page_size")
     _validate_page_size(page_size)
 
+    target_template_id = t.get("template_id", t["id"])
+    existing_ref = None
+    existing_app = None
+    if req.application_id and db is not None:
+        existing_ref, existing_app = await _resolve_user_application(req.application_id, user["id"])
+        _assert_application_update_compatible(existing_app, target_template_id, req.case_id)
+    is_existing_update = existing_app is not None
+
     case = None
     if req.case_id and db is not None:
         _case_snap = await db.collection("cases").document(req.case_id).get()
@@ -8215,9 +8237,10 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     validate_template_requirements(t, ctx, req.language)
 
     # SERVER-CONTROLLED: Unlimited Owner/Partner users bypass credit consumption completely.
-    # Regular users consume exactly 1 credit for final downloads.
+    # Regular users consume exactly 1 credit for new application generations; updating or
+    # re-downloading an existing verified Vault application reuses that application_id.
     unlimited = is_unlimited_user(user)
-    if not unlimited and db is not None:
+    if not unlimited and not is_existing_update and db is not None:
         _snap = await db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).get()
         if not _snap:
             raise HTTPException(402, "Insufficient template credits. Please purchase a plan.")
@@ -8234,7 +8257,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         })
 
     # Generate document — if this fails, refund the credit
-    app_id = str(uuid.uuid4())
+    app_id = existing_ref.id if is_existing_update else str(uuid.uuid4())
     gen_meta = {}
     try:
         tpl = t["content_gu"] if req.language == "gu" else t["content_en"]
@@ -8274,7 +8297,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             b64, gen_meta = generate_pdf_detailed(blocks, req.language, doc_settings, template_id=t["id"], raw_content=rendered, ctx=ctx)
             mime = "application/pdf"
     except Exception as e:
-        if not unlimited and db is not None:
+        if not unlimited and not is_existing_update and db is not None:
             # Refund credit on generation failure — user must not be unfairly charged
             wallet_doc = None
             async for _d in db.collection("wallets").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(1).stream():
@@ -8318,10 +8341,16 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
     except Exception:
         raw_size = 0
         artifact_sha = ""
+    now_iso = now().isoformat()
+    created_at_iso = (
+        existing_app.get("created_at")
+        if is_existing_update and existing_app and existing_app.get("created_at")
+        else now_iso
+    )
     _doc = {
         "id": app_id,
         "user_id": user["id"],
-        "template_id": t.get("template_id", t["id"]),
+        "template_id": target_template_id,
         "template_version": t.get("version", 1),
         "template_name": t.get("name_en", ""),
         "case_id": req.case_id,
@@ -8334,7 +8363,10 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "engine": (gen_meta or {}).get("engine"),
         "font_family": (gen_meta or {}).get("font_family"),
         "font_version": (gen_meta or {}).get("font_version"),
-        "created_at": now().isoformat(),
+        "values": req.values,
+        "form_values": req.form_values if req.form_values is not None else req.values,
+        "created_at": created_at_iso,
+        "updated_at": now_iso,
     }
     
     tx_doc = {
@@ -8346,7 +8378,7 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
         "amount": 0,
         "status": "success",
         "reference": app_id,
-        "created_at": now().isoformat(),
+        "created_at": now_iso,
     }
 
     # Parallelize post-generation persistence tasks to reduce latency by ~1-1.5 seconds
@@ -8358,20 +8390,21 @@ async def download_application(req: DownloadReq, user=Depends(get_user)):
             draft_keys.add(f"draft_{user['id']}_{base_req_tid}_{req.case_id or 'none'}")
         post_gen_tasks = [
             db.collection('applications').document(app_id).set(_doc),
-            db.collection('transactions').document(tx_doc["id"]).set(tx_doc),
             *[db.collection('drafts').document(dk).delete() for dk in draft_keys],
         ]
-        if req.case_id:
+        if not is_existing_update:
+            post_gen_tasks.append(db.collection('transactions').document(tx_doc["id"]).set(tx_doc))
+        if req.case_id and not is_existing_update:
             post_gen_tasks.append(
                 db.collection("cases").document(req.case_id).set({
                     "last_used_template": t["name_en"],
-                    "updated_at": now().isoformat(),
+                    "updated_at": now_iso,
                     "application_count": firestore.Increment(1)
                 }, merge=True)
             )
         await asyncio.gather(*post_gen_tasks, return_exceptions=True)
 
-    resp = {"filename": filename, "mime_type": mime, "base64": b64}
+    resp = {"filename": filename, "mime_type": mime, "base64": b64, "application_id": app_id}
     if gen_meta:
         resp["artifact"] = gen_meta
     return resp
@@ -8382,6 +8415,36 @@ def _normalize_user_doc(doc_snap) -> dict:
     if not data.get("id"):
         data["id"] = data.get("_id") or doc_snap.id
     return data
+
+
+async def _resolve_user_application(app_id: str, user_id: str):
+    """Resolve an owned application document by Firestore doc.id or body id/_id."""
+    if db is None or not app_id or app_id == "undefined":
+        raise HTTPException(404, "Application not found")
+    direct_ref = db.collection("applications").document(app_id)
+    direct_snap = await direct_ref.get()
+    if direct_snap.exists:
+        data = _normalize_user_doc(direct_snap)
+        if data.get("user_id") != user_id:
+            raise HTTPException(403, "Not authorized to access this application")
+        return direct_ref, data
+
+    async for snap in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user_id)).limit(500).stream():
+        data = _normalize_user_doc(snap)
+        if snap.id == app_id or data.get("id") == app_id or data.get("_id") == app_id:
+            return db.collection("applications").document(snap.id), data
+
+    raise HTTPException(404, "Application not found")
+
+
+def _assert_application_update_compatible(existing_doc: dict, target_template_id: Optional[str], target_case_id: Optional[str]) -> None:
+    if target_template_id:
+        existing_base = re.sub(r"_(gu|en)$", "", str(existing_doc.get("template_id") or ""))
+        target_base = re.sub(r"_(gu|en)$", "", str(target_template_id or ""))
+        if existing_base and target_base and existing_base != target_base:
+            raise HTTPException(400, "Cannot update an existing application with a different template type.")
+    if (existing_doc.get("case_id") or None) != (target_case_id or None):
+        raise HTTPException(400, "Cannot reassign an existing application to a different case.")
 
 
 async def _delete_user_doc(collection_name: str, target_id: str, user_id: str) -> int:
@@ -8419,8 +8482,48 @@ async def application_history(user=Depends(get_user)):
         items = [_normalize_user_doc(d) async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).order_by("created_at", direction=firestore.Query.DESCENDING).limit(200).stream()]
     except Exception:
         items = [_normalize_user_doc(d) async for d in db.collection("applications").where(filter=firestore.FieldFilter("user_id", "==", user["id"])).limit(200).stream()]
-        items.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+    items.sort(key=lambda a: a.get("updated_at") or a.get("created_at", ""), reverse=True)
     return items
+
+
+@api.get("/applications/{app_id}")
+async def get_application(app_id: str, user=Depends(get_user)):
+    _, data = await _resolve_user_application(app_id, user["id"])
+    return data
+
+
+@api.put("/applications/{app_id}")
+async def update_application(app_id: str, req: ApplicationUpdateReq, user=Depends(get_user)):
+    validate_values_size(req.values)
+    if req.form_values is not None:
+        validate_values_size(req.form_values)
+    doc_ref, existing = await _resolve_user_application(app_id, user["id"])
+    target_template_id = req.template_id or existing.get("template_id")
+    target_case_id = req.case_id if req.case_id is not None else existing.get("case_id")
+    _assert_application_update_compatible(existing, target_template_id, target_case_id)
+
+    now_iso = now().isoformat()
+    lang = req.language or existing.get("language") or "gu"
+    fmt = existing.get("format") or "pdf"
+    base_name = (req.filename or existing.get("filename") or "legal_document").strip()
+    if fmt == "png":
+        final_name = base_name if base_name.lower().endswith((".png", ".zip")) else f"{base_name}.png"
+    elif not base_name.lower().endswith(f".{fmt}"):
+        final_name = f"{base_name}.{fmt}"
+    else:
+        final_name = base_name
+
+    updates = {
+        "id": doc_ref.id,
+        "template_id": target_template_id,
+        "language": lang,
+        "values": req.values,
+        "form_values": req.form_values if req.form_values is not None else req.values,
+        "filename": final_name,
+        "updated_at": now_iso,
+    }
+    await doc_ref.set(updates, merge=True)
+    return {"success": True, "application": {**existing, **updates}}
 
 
 @api.delete("/applications/{app_id}")

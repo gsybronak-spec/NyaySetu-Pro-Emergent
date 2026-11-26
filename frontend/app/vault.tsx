@@ -22,7 +22,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
-import { saveDocument } from "@/src/utils/download";
+import { saveDocument, shareDocumentFile } from "@/src/utils/download";
 import { safeBack } from "@/src/utils/navigation";
 
 type VaultTab = "all" | "documents" | "drafts";
@@ -218,28 +218,72 @@ export default function DocumentVault() {
   };
 
   const handleReDownload = async (doc: any) => {
-    setDownloadingId(doc.id);
+    const docId = doc.id || doc._id;
+    setDownloadingId(docId);
+    const savedValues = doc.values || doc.form_values || {};
+    const hasSavedValues = Object.keys(savedValues).length > 0;
     try {
       const payload: any = {
+        application_id: docId,
         template_id: doc.template_id,
+        template_version: doc.template_version,
         case_id: doc.case_id || undefined,
         language: doc.language || "gu",
         format: doc.format || "pdf",
         filename: doc.filename || "legal_document",
-        values: doc.values || {},
+        values: savedValues,
+        form_values: doc.form_values || undefined,
       };
       const res = await api.downloadApp(payload);
       if (res && res.base64) {
-        await saveDocument(
-          { filename: res.filename || doc.filename, mime_type: res.mime_type, base64: res.base64 },
-          doc.format || "pdf"
-        );
+        const dlPayload = {
+          filename: res.filename || doc.filename,
+          mime_type: res.mime_type,
+          base64: res.base64,
+        };
+        const fmt = (doc.format || "pdf") as "pdf" | "docx" | "odt" | "png";
+        await saveDocument(dlPayload, fmt);
+        if (Platform.OS !== "web") {
+          Alert.alert(
+            "Saved to Device",
+            `${dlPayload.filename} has been saved to your device folder.`,
+            [
+              {
+                text: "Share / Open",
+                onPress: () => {
+                  shareDocumentFile(dlPayload, fmt).catch(() => {});
+                },
+              },
+              { text: "OK" },
+            ]
+          );
+        } else {
+          Alert.alert("Download Complete", `${dlPayload.filename} has been downloaded.`);
+        }
       } else {
-        Alert.alert("Notice", "Document downloaded successfully.");
+        throw new Error("The server returned an empty document. Please try again.");
       }
     } catch (err: any) {
-      // If re-download via direct values is not supported, navigate to template
-      router.push(`/template/${doc.template_id}?case_id=${doc.case_id || ""}&lang=${doc.language || "gu"}` as any);
+      const msg = String(err?.message || "");
+      const looksMissingFields =
+        !hasSavedValues &&
+        (msg.toLowerCase().includes("missing") ||
+          msg.toLowerCase().includes("required") ||
+          msg.includes("400") ||
+          msg.includes("422"));
+      if (looksMissingFields) {
+        router.push({
+          pathname: "/template/[id]",
+          params: {
+            id: doc.template_id,
+            case_id: doc.case_id || "",
+            lang: doc.language || "gu",
+            application_id: docId,
+          },
+        } as any);
+      } else {
+        Alert.alert("Download Failed", msg || "Could not save document to your device.");
+      }
     } finally {
       setDownloadingId(null);
     }
@@ -368,14 +412,20 @@ export default function DocumentVault() {
             <Pressable
               testID={`vault-open-${docId}`}
               onPress={() =>
-                router.push(
-                  `/template/${doc.template_id}?case_id=${doc.case_id || ""}&lang=${doc.language || "gu"}` as any
-                )
+                router.push({
+                  pathname: "/template/[id]",
+                  params: {
+                    id: doc.template_id,
+                    case_id: doc.case_id || "",
+                    lang: doc.language || "gu",
+                    application_id: docId,
+                  },
+                } as any)
               }
               style={[styles.actionBtnSecondary, { borderColor: colors.border }]}
             >
               <Ionicons name="create-outline" size={14} color={colors.onSurface} />
-              <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>Open</Text>
+              <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>Edit</Text>
             </Pressable>
 
             <Pressable

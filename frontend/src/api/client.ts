@@ -541,6 +541,13 @@ export const api = {
     return res;
   },
   history: () => request("/applications/history"),
+  getApplication: (id: string) => request(`/applications/${encodeURIComponent(id)}`),
+  updateApplication: async (id: string, data: any) => {
+    const res = await request(`/applications/${encodeURIComponent(id)}`, "PUT", data);
+    invalidateApiCache("/applications/history");
+    invalidateApiCache(`/applications/${encodeURIComponent(id)}`);
+    return res;
+  },
   deleteApplication: async (id: string) => {
     const res = await request(`/applications/${encodeURIComponent(id)}`, "DELETE");
     invalidateApiCache("/applications/history");
