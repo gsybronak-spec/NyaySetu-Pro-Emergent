@@ -18,13 +18,14 @@ import {
   firebaseConfigured as fbConfigured,
   firebaseEmailPasswordLogin,
   firebaseSendPhoneOtp,
+  isFirebaseConfigured,
 } from "@/src/hooks/useFirebaseAuth";
 
 type Mode = "password" | "otp";
 
 export default function Login() {
   const { signInPassword, signInOtp, firebaseExchange, loading } = useAuth();
-  const { startGoogleLogin, googleBusy, googleError, setGoogleError } = useGoogleAuth();
+  const { startGoogleLogin, googleBusy, googleError, setGoogleError, isGoogleLoginSupported } = useGoogleAuth();
 
   const [mode, setMode] = useState<Mode>("password");
   const [identifier, setIdentifier] = useState("");
@@ -94,7 +95,7 @@ export default function Login() {
     // error. The single exception is auth/invalid-email (malformed input),
     // which gets a clearer message and never reaches the backend.
     const isEmail = id.includes("@");
-    if (isEmail && fbConfigured) {
+    if (isEmail && isFirebaseConfigured()) {
       try {
         const fb = await firebaseEmailPasswordLogin(id, password);
         if (fb) {
@@ -129,8 +130,8 @@ export default function Login() {
     }
     setOtpBusy(true);
     try {
-      if (fbConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
-        await firebaseSendPhoneOtp(m, recaptchaAnchorRef.current as any);
+      if (isFirebaseConfigured() && (Platform.OS !== "web" || recaptchaAnchorRef.current)) {
+        await firebaseSendPhoneOtp(m, Platform.OS === "web" ? (recaptchaAnchorRef.current as any) : null);
         router.push({ pathname: "/(auth)/otp", params: { mobile: m, referral: referral.trim(), firebase: "1" } });
         return;
       }
@@ -326,30 +327,34 @@ export default function Login() {
               </>
             )}
 
-            <View style={styles.dividerRow}>
-              <View style={styles.divLine} />
-              <Text style={styles.divTxt}>OR</Text>
-              <View style={styles.divLine} />
-            </View>
+            {isGoogleLoginSupported ? (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={styles.divLine} />
+                  <Text style={styles.divTxt}>OR</Text>
+                  <View style={styles.divLine} />
+                </View>
 
-            <Pressable
-              testID="login-google-button"
-              onPress={async () => {
-                setGoogleError("");
-                await startGoogleLogin(referral.trim() || undefined);
-              }}
-              disabled={googleBusy}
-              style={[styles.googleBtn, googleBusy && { opacity: 0.6 }]}
-            >
-              <Ionicons name="logo-google" size={20} color="#0B1B3D" />
-              <Text style={styles.googleTxt}>{googleBusy ? "Connecting..." : "Continue with Google"}</Text>
-            </Pressable>
+                <Pressable
+                  testID="login-google-button"
+                  onPress={async () => {
+                    setGoogleError("");
+                    await startGoogleLogin(referral.trim() || undefined);
+                  }}
+                  disabled={googleBusy}
+                  style={[styles.googleBtn, googleBusy && { opacity: 0.6 }]}
+                >
+                  <Ionicons name="logo-google" size={20} color="#0B1B3D" />
+                  <Text style={styles.googleTxt}>{googleBusy ? "Connecting..." : "Continue with Google"}</Text>
+                </Pressable>
 
-            {!!googleError && (
-              <Text testID="login-google-error" style={styles.googleError}>
-                {googleError}
-              </Text>
-            )}
+                {!!googleError && (
+                  <Text testID="login-google-error" style={styles.googleError}>
+                    {googleError}
+                  </Text>
+                )}
+              </>
+            ) : null}
 
             <Pressable
               testID="login-create-account"

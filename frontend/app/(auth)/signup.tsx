@@ -12,10 +12,10 @@ import { useAuth } from "@/src/context/AuthContext";
 import { api } from "@/src/api/client";
 import {
   destroyFirebaseRecaptcha,
-  firebaseConfigured,
   firebaseConfirmPhoneOtp,
   firebaseSendPhoneOtp,
   getPendingPhoneConfirmation,
+  isFirebaseConfigured,
 } from "@/src/hooks/useFirebaseAuth";
 import { Spacing } from "@/src/theme/tokens";
 
@@ -65,11 +65,10 @@ export default function Signup() {
     setOtpBusy(true);
     try {
       // Firebase Phone Auth sends the SMS and verifies the OTP (invisible
-      // reCAPTCHA attached to the Send OTP button). When Firebase is not
-      // configured (local dev / tests) we fall back to the legacy NyaySetu OTP
-      // flow so signup keeps working everywhere.
-      if (firebaseConfigured && Platform.OS === "web" && recaptchaAnchorRef.current) {
-        await firebaseSendPhoneOtp(mobile.trim(), recaptchaAnchorRef.current as any);
+      // reCAPTCHA on web; native Firebase Auth on Android/iOS). When Firebase
+      // is not configured (local dev / tests) we fall back cleanly.
+      if (isFirebaseConfigured() && (Platform.OS !== "web" || recaptchaAnchorRef.current)) {
+        await firebaseSendPhoneOtp(mobile.trim(), Platform.OS === "web" ? (recaptchaAnchorRef.current as any) : null);
         setUsedFirebase(true);
       } else {
         setUsedFirebase(false);

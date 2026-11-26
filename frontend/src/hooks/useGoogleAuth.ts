@@ -14,6 +14,8 @@ WebBrowser.maybeCompleteAuthSession();
 // Without EXPO_PUBLIC_GOOGLE_CLIENT_ID the flow is disabled (clear message),
 // never faked. The Emergent auth page is fully removed from this flow.
 const GOOGLE_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || "";
+const GOOGLE_ANDROID_ENABLED = process.env.EXPO_PUBLIC_ENABLE_ANDROID_GOOGLE_AUTH === "1";
+export const isGoogleLoginSupported = Platform.OS === "web" || (Platform.OS !== "android" && Boolean(GOOGLE_CLIENT_ID)) || (GOOGLE_ANDROID_ENABLED && Boolean(GOOGLE_CLIENT_ID));
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_SCOPES = "openid email profile";
 const PENDING_REF_KEY = "nyaysetu_pending_referral";
@@ -78,6 +80,7 @@ export function useGoogleAuth() {
 
   // Handle cold-start (mobile) and mount detection (web) with an auth code
   useEffect(() => {
+    if (!isGoogleLoginSupported) return;
     let sub: any;
     (async () => {
       if (Platform.OS === "web") {
@@ -106,6 +109,10 @@ export function useGoogleAuth() {
 
   const startGoogleLogin = useCallback(
     async (referralCode?: string) => {
+      if (!isGoogleLoginSupported) {
+        setGoogleError("Google login is disabled on this release. Please use OTP or Password login.");
+        return false;
+      }
       if (!GOOGLE_CLIENT_ID) {
         setGoogleError(
           "Google login is not configured yet. Please use OTP or contact support."
@@ -158,5 +165,5 @@ export function useGoogleAuth() {
     [exchange]
   );
 
-  return { startGoogleLogin, googleBusy: busy, googleError, setGoogleError };
+  return { startGoogleLogin, googleBusy: busy, googleError, setGoogleError, isGoogleLoginSupported };
 }
