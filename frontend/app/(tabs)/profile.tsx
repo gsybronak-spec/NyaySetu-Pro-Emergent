@@ -60,7 +60,7 @@ export default function Profile() {
 
   const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
 
-  const rows: { icon: any; label: string; onPress?: () => void; right?: React.ReactNode }[] = [
+  const rows: { icon: any; label: string; danger?: boolean; onPress?: () => void; right?: React.ReactNode }[] = [
     { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/profile/edit" as any) },
     {
       icon: "book-outline",
@@ -101,6 +101,7 @@ export default function Profile() {
     { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy" as any) },
     { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms" as any) },
     { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund" as any) },
+    { icon: "trash-outline", label: "Delete Account", danger: true, onPress: () => router.push("/delete-account" as any) },
   ];
 
   // ------------------------- DESKTOP -------------------------
@@ -171,10 +172,10 @@ export default function Profile() {
                 key={i}
                 testID={`profile-row-${i}`}
                 onPress={r.onPress}
-                style={[styles.dRow, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+                style={[styles.dRow, { backgroundColor: colors.surfaceSecondary, borderColor: r.danger ? colors.error + "40" : colors.border }]}
               >
-                <Ionicons name={r.icon} size={20} color={colors.onSurface} />
-                <Text style={{ color: colors.onSurface, flex: 1, marginLeft: Spacing.md, fontSize: 14 }}>{r.label}</Text>
+                <Ionicons name={r.icon} size={20} color={r.danger ? colors.error : colors.onSurface} />
+                <Text style={{ color: r.danger ? colors.error : colors.onSurface, flex: 1, marginLeft: Spacing.md, fontSize: 14, fontWeight: r.danger ? "600" : "400" }}>{r.label}</Text>
                 {r.right || <Ionicons name="chevron-forward" size={18} color={colors.muted} />}
               </Pressable>
             ))}
@@ -234,10 +235,10 @@ export default function Profile() {
               key={i}
               testID={`profile-row-${i}`}
               onPress={r.onPress}
-              style={[styles.row, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
+              style={[styles.row, { backgroundColor: colors.surfaceSecondary, borderColor: r.danger ? colors.error + "40" : colors.border }]}
             >
-              <Ionicons name={r.icon} size={20} color={colors.onSurface} />
-              <Text style={{ color: colors.onSurface, flex: 1, marginLeft: Spacing.md, fontSize: 14 }}>{r.label}</Text>
+              <Ionicons name={r.icon} size={20} color={r.danger ? colors.error : colors.onSurface} />
+              <Text style={{ color: r.danger ? colors.error : colors.onSurface, flex: 1, marginLeft: Spacing.md, fontSize: 14, fontWeight: r.danger ? "600" : "400" }}>{r.label}</Text>
               {r.right || <Ionicons name="chevron-forward" size={18} color={colors.muted} />}
             </Pressable>
           ))}

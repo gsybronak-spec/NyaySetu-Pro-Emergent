@@ -24,6 +24,10 @@ const DOCS: Record<string, { title: string; sections: { h: string; body: string 
         body: "Your data is stored securely and access is limited to your own account. You remain responsible for the accuracy of every document you generate and file.",
       },
       {
+        h: "Account & Data Deletion",
+        body: "You can permanently delete your account and all associated personal data (profile, cases, drafts, document history, and notifications) anytime inside the app under Profile → Delete Account or via nyaysetupro.in/delete-account.",
+      },
+      {
         h: "Status",
         body: "Pending legal review. This policy will be finalized with our legal counsel before going into effect.",
       },

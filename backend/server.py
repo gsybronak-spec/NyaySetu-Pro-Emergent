@@ -1002,6 +1002,8 @@ async def create_new_user(*, mobile: Optional[str] = None, email: Optional[str] 
     __doc['id'] = __doc_id
     await db.collection('users').document(__doc_id).set(__doc)
     signup_credits = await _get_setting("signup_credits")
+    if await _was_identity_previously_deleted(mobile=mobile, email=email):
+        signup_credits = 0
     __doc = {
         "user_id": user_id,
         "balance": signup_credits,
@@ -2208,6 +2210,38 @@ async def firebase_auth(req: FirebaseAuthReq, request: Request = None, response:
 # PROFILE
 # ============================================================
 
+def _identity_marker_id(kind: str, value: Optional[str]) -> Optional[str]:
+    clean = (value or "").strip().lower()
+    if not clean:
+        return None
+    return f"{kind}_{hashlib.sha256(clean.encode('utf-8')).hexdigest()}"
+
+
+async def _was_identity_previously_deleted(*, mobile: Optional[str] = None, email: Optional[str] = None) -> bool:
+    if db is None:
+        return False
+    for kind, val in (("mobile", mobile), ("email", email)):
+        marker_id = _identity_marker_id(kind, val)
+        if marker_id:
+            try:
+                snap = await db.collection("deleted_account_markers").document(marker_id).get()
+                if snap.exists:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+async def _delete_collection_by_user(coll_name: str, user_id: str) -> int:
+    if db is None:
+        return 0
+    deleted = 0
+    async for doc in db.collection(coll_name).where(filter=firestore.FieldFilter("user_id", "==", user_id)).limit(500).stream():
+        await db.collection(coll_name).document(doc.id).delete()
+        deleted += 1
+    return deleted
+
+
 @api.get("/profile/me")
 async def me(user=Depends(get_user)):
     pub = _public_user(user)
@@ -2224,6 +2258,58 @@ async def me(user=Depends(get_user)):
         pub["wallet_balance"] = 0
         pub["total_credits_used"] = 0
     return pub
+
+
+@api.delete("/profile/me")
+@api.post("/auth/delete-account")
+async def delete_my_account(response: Response = None, user=Depends(get_user)):
+    """Permanently delete the authenticated user's account and personal data."""
+    if db is None:
+        raise HTTPException(503, "Database service unavailable")
+    uid = user["id"]
+
+    # Record non-PII SHA-256 identity markers so re-registration cannot farm free signup credits.
+    now_iso = now().isoformat()
+    marker_tasks = []
+    for kind, val in (("mobile", user.get("mobile")), ("email", user.get("email"))):
+        marker_id = _identity_marker_id(kind, val)
+        if marker_id:
+            marker_tasks.append(
+                db.collection("deleted_account_markers").document(marker_id).set({"created_at": now_iso})
+            )
+
+    # Strip PII fields from any coupon claims while preserving claim counts.
+    async def _anonymize_coupon_claims():
+        async for doc in db.collection("coupon_claims").where(filter=firestore.FieldFilter("user_id", "==", uid)).limit(50).stream():
+            await db.collection("coupon_claims").document(doc.id).set(
+                {"user_name": None, "user_mobile": None, "user_email": None, "anonymized_at": now_iso},
+                merge=True,
+            )
+
+    delete_tasks = [
+        *marker_tasks,
+        _anonymize_coupon_claims(),
+        *(_delete_collection_by_user(c, uid) for c in ("cases", "drafts", "applications", "notifications", "user_sessions", "wallets")),
+        db.collection("users").document(uid).delete(),
+    ]
+    if user.get("mobile"):
+        delete_tasks.append(db.collection("otps").document(user["mobile"]).delete())
+
+    await asyncio.gather(*delete_tasks, return_exceptions=True)
+    invalidate_user_session_cache(uid)
+
+    fb_uid = user.get("firebase_uid")
+    if fb_uid:
+        try:
+            from firebase_admin import auth as fb_admin_auth
+            fb_admin_auth.delete_user(fb_uid)
+        except Exception as e:
+            logger.warning(f"[delete-account] Firebase Auth cleanup notice for {uid}: {e}")
+
+    if response:
+        response.delete_cookie(key="nyaysetu_refresh_token", path="/")
+
+    return {"success": True, "message": "Account and personal data permanently deleted."}
 
 @api.post("/profile/update")
 @api.put("/profile/update")

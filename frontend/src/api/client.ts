@@ -436,6 +436,11 @@ export const api = {
     invalidateApiCache("/profile/me");
     return res;
   },
+  deleteAccount: async () => {
+    const res = await request("/profile/me", "DELETE");
+    invalidateApiCache();
+    return res;
+  },
   lookupClient: (mobile: string) => request(`/clients/lookup?mobile=${encodeURIComponent(mobile)}`),
   caseFormConfig: (id: string) => request(`/catalog/case-forms/${id}`),
   listCaseForms: () => request("/catalog/case-forms"),

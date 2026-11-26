@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { AppState, Platform } from "react-native";
 import { onAuthStateChanged } from "firebase/auth";
-import { api, getRefreshToken, getToken, setOnUnauthorized, setTokens } from "@/src/api/client";
+import { api, getRefreshToken, getToken, invalidateApiCache, setOnUnauthorized, setTokens } from "@/src/api/client";
 import { firebaseSignOutClient } from "@/src/hooks/useFirebaseAuth";
 import { getFirebaseAuth } from "@/src/firebase/config";
 import { storage } from "@/src/utils/storage";
@@ -64,6 +64,7 @@ interface AuthCtx {
   firebaseExchange: (idToken: string, referralCode?: string) => Promise<AuthResult>;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   setUser: (u: User | null) => void;
   profileSkipped: boolean;
   skipProfileCompletion: () => Promise<void>;
@@ -398,13 +399,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     syncSkippedState(user?.id);
   }, [user?.id, syncSkippedState]);
 
-  const signOut = async () => {
-    try {
-      const refreshToken = await getRefreshToken();
-      await api.logout(refreshToken || undefined);
-    } catch (e) {
-      console.warn("[AuthContext] Logout API call error (proceeding with local cleanup)", e);
-    }
+  const clearLocalSession = async () => {
+    invalidateApiCache();
     await setTokens(null, null);
     setUser(null);
     setProfileSkipped(false);
@@ -415,8 +411,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await firebaseSignOutClient();
   };
 
+  const signOut = async () => {
+    try {
+      const refreshToken = await getRefreshToken();
+      await api.logout(refreshToken || undefined);
+    } catch (e) {
+      console.warn("[AuthContext] Logout API call error (proceeding with local cleanup)", e);
+    }
+    await clearLocalSession();
+  };
+
+  const deleteAccount = async () => {
+    await api.deleteAccount();
+    await clearLocalSession();
+  };
+
   return (
-    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, firebaseExchange, refresh, signOut, setUser, profileSkipped, skipProfileCompletion }}>
+    <Ctx.Provider value={{ user, ready, loading, signInOtp, verifyOtp, signInPassword, registerAccount, completeGoogleCode, firebaseExchange, refresh, signOut, deleteAccount, setUser, profileSkipped, skipProfileCompletion }}>
       {children}
     </Ctx.Provider>
   );
