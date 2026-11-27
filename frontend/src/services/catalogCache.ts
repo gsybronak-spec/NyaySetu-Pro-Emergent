@@ -30,20 +30,33 @@ import {
 } from "./catalogSeed";
 
 const STORAGE_PREFIX = "nyaysetu_cat_v2:";
-const REVALIDATE_COOLDOWN_MS = 30000;
+const REVALIDATE_COOLDOWN_MS = 120000;
 let lastTemplatesRevalidatedAt = 0;
 const memoryCache = new Map<string, any>();
 const inFlightRequests = new Map<string, Promise<any>>();
 const listeners = new Map<string, Set<(data: any) => void>>();
+const CATALOG_FIELD_OPTION_KEYS = new Set(["district", "taluka", "court", "court_name", "case_type"]);
 
 function sanitizeTemplates(list: any[]): any[] {
   if (!Array.isArray(list)) return [];
-  return list.filter((t: any) => {
+  const out: any[] = [];
+  for (const t of list) {
     const id = t?.id || t?.template_id;
-    if (!id || typeof id !== "string") return false;
+    if (!id || typeof id !== "string") continue;
     const base = id.trim().replace(/_(gu|en)$/, "");
-    return !PERMANENTLY_DELETED_BASE_KEYS.has(base) && !PERMANENTLY_DELETED_BASE_KEYS.has(id.trim());
-  });
+    if (PERMANENTLY_DELETED_BASE_KEYS.has(base) || PERMANENTLY_DELETED_BASE_KEYS.has(id.trim())) continue;
+    if (Array.isArray(t.fields)) {
+      const compactFields = t.fields.map((f: any) =>
+        f && CATALOG_FIELD_OPTION_KEYS.has(f.key) && Array.isArray(f.options)
+          ? { ...f, options: undefined }
+          : f
+      );
+      out.push({ ...t, fields: compactFields });
+    } else {
+      out.push(t);
+    }
+  }
+  return out;
 }
 
 function sanitizeOrder(order: string[]): string[] {
@@ -361,7 +374,7 @@ export const catalogCache = {
       "published_templates",
       async () => {
         try {
-          const res = await api.templates();
+          const res = await api.templates(undefined, undefined, true);
           return Array.isArray(res) ? res : [];
         } catch {
           return null as any;

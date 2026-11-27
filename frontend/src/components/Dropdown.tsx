@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -51,19 +51,25 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const { keyboardHeight } = useKeyboardHeight();
-  const selected = options.find(
-    (o) =>
-      o.id === value ||
-      (value &&
-        (o.id?.toLowerCase() === String(value).toLowerCase() ||
-          o.label === value ||
-          o.label?.toLowerCase() === String(value).toLowerCase() ||
-          o.sublabel === value))
-  );
+  const showSearch = searchable ?? (Array.isArray(options) && options.length > 8);
+  const selected = useMemo(() => {
+    const valStr = value ? String(value).toLowerCase() : "";
+    return options.find(
+      (o) =>
+        o.id === value ||
+        (value &&
+          (o.id?.toLowerCase() === valStr ||
+            o.label === value ||
+            o.label?.toLowerCase() === valStr ||
+            o.sublabel === value))
+    );
+  }, [options, value]);
+
+  const favSet = useMemo(() => new Set(favouriteIds || []), [favouriteIds]);
 
   const filtered = useMemo(() => {
     let list = Array.isArray(options) ? options : [];
-    if (searchable && query.trim()) {
+    if (showSearch && query.trim()) {
       const q = query.toLowerCase().trim();
       list = list.filter(
         (o) =>
@@ -73,15 +79,12 @@ export function Dropdown({
       );
     }
     if (favouriteIds && favouriteIds.length) {
-      const favSetLocal = new Set(favouriteIds);
-      const favs = list.filter((o) => favSetLocal.has(o.id));
-      const rest = list.filter((o) => !favSetLocal.has(o.id));
+      const favs = list.filter((o) => favSet.has(o.id));
+      const rest = list.filter((o) => !favSet.has(o.id));
       list = [...favs, ...rest];
     }
     return list;
-  }, [options, query, searchable, favouriteIds]);
-
-  const favSet = new Set(favouriteIds || []);
+  }, [options, query, showSearch, favouriteIds, favSet]);
 
   const close = () => {
     setOpen(false);
@@ -144,7 +147,7 @@ export function Dropdown({
               </Pressable>
             </View>
 
-            {searchable ? (
+            {showSearch ? (
               <View
                 style={[
                   styles.searchRow,
@@ -169,48 +172,54 @@ export function Dropdown({
               </View>
             ) : null}
 
-            <ScrollView style={{ maxHeight: isDesktop ? 420 : (keyboardHeight > 0 ? 200 : 420) }} keyboardShouldPersistTaps="handled">
-              {loading ? (
-                <View style={styles.centerBox}>
-                  <ActivityIndicator size="small" color={colors.brandPrimary} />
-                  <Text style={{ color: colors.muted, marginTop: Spacing.sm, fontSize: 13 }}>
-                    માહિતી લોડ થઈ રહી છે... / Loading options...
-                  </Text>
-                </View>
-              ) : error ? (
-                <View style={styles.centerBox}>
-                  <Ionicons name="alert-circle-outline" size={28} color={colors.error} />
-                  <Text style={{ color: colors.error, fontSize: 13, marginTop: Spacing.xs, textAlign: "center" }}>
-                    {error}
-                  </Text>
-                  {onRetry ? (
-                    <Pressable
-                      onPress={onRetry}
-                      style={[styles.retryBtn, { backgroundColor: colors.brandPrimary }]}
-                      testID={`${testID}-retry-btn`}
-                    >
-                      <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>
-                        Retry / ફરી પ્રયાસ કરો
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                </View>
-              ) : filtered.length === 0 ? (
-                <View style={styles.centerBox}>
-                  <Text
-                    testID={testID ? `${testID}-empty-text` : undefined}
-                    style={{ color: colors.muted, textAlign: "center", fontSize: 14 }}
+            {loading ? (
+              <View style={styles.centerBox}>
+                <ActivityIndicator size="small" color={colors.brandPrimary} />
+                <Text style={{ color: colors.muted, marginTop: Spacing.sm, fontSize: 13 }}>
+                  માહિતી લોડ થઈ રહી છે... / Loading options...
+                </Text>
+              </View>
+            ) : error ? (
+              <View style={styles.centerBox}>
+                <Ionicons name="alert-circle-outline" size={28} color={colors.error} />
+                <Text style={{ color: colors.error, fontSize: 13, marginTop: Spacing.xs, textAlign: "center" }}>
+                  {error}
+                </Text>
+                {onRetry ? (
+                  <Pressable
+                    onPress={onRetry}
+                    style={[styles.retryBtn, { backgroundColor: colors.brandPrimary }]}
+                    testID={`${testID}-retry-btn`}
                   >
-                    {query.trim() ? "No matches found / કોઈ પરિણામ મળ્યું નથી" : (emptyMessage || "No options available")}
-                  </Text>
-                </View>
-              ) : (
-                filtered.map((o) => {
+                    <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>
+                      Retry / ફરી પ્રયાસ કરો
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : filtered.length === 0 ? (
+              <View style={styles.centerBox}>
+                <Text
+                  testID={testID ? `${testID}-empty-text` : undefined}
+                  style={{ color: colors.muted, textAlign: "center", fontSize: 14 }}
+                >
+                  {query.trim() ? "No matches found / કોઈ પરિણામ મળ્યું નથી" : (emptyMessage || "No options available")}
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filtered}
+                keyExtractor={(o, idx) => `${o.id}-${idx}`}
+                style={{ maxHeight: isDesktop ? 420 : (keyboardHeight > 0 ? 200 : 420) }}
+                keyboardShouldPersistTaps="handled"
+                initialNumToRender={16}
+                maxToRenderPerBatch={20}
+                windowSize={5}
+                renderItem={({ item: o }) => {
                   const isFav = favSet.has(o.id);
                   const showStar = onToggleFavourite && o.pinnable !== false && o.id !== "other";
                   return (
                     <Pressable
-                      key={o.id}
                       testID={`${testID}-opt-${o.id}`}
                       onPress={() => {
                         onChange(o.id);
@@ -252,9 +261,9 @@ export function Dropdown({
                       {value === o.id ? <Ionicons name="checkmark-circle" size={20} color={colors.brandPrimary} /> : null}
                     </Pressable>
                   );
-                })
-              )}
-            </ScrollView>
+                }}
+              />
+            )}
           </Pressable>
         </Pressable>
       </Modal>

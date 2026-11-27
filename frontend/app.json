@@ -20,7 +20,7 @@
       },
       "edgeToEdgeEnabled": true,
       "package": "com.emergent.nyaysetupro.l2myp0",
-      "versionCode": 1,
+      "versionCode": 3,
       "permissions": [
         "INTERNET",
         "VIBRATE"

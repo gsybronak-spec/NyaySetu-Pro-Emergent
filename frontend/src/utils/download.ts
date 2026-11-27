@@ -5,6 +5,50 @@ import { storage } from "@/src/utils/storage";
 
 const ANDROID_DOWNLOAD_DIR_KEY = "@nyaysetu_android_download_dir_v1";
 
+type NativeDownloadsBridge = {
+  saveToDownloads?: (
+    base64: string,
+    filename: string,
+    mimeType: string
+  ) => Promise<{ uri: string; displayPath: string }>;
+  openUri?: (uriString: string, mimeType: string) => Promise<boolean>;
+  renderPdfToImages?: (
+    base64: string
+  ) => Promise<{ uri: string; width: number; height: number }[]>;
+};
+
+let cachedRequireOptionalNativeModule: ((name: string) => any) | null = null;
+try {
+  const core = require("expo-modules-core");
+  if (core && typeof core.requireOptionalNativeModule === "function") {
+    cachedRequireOptionalNativeModule = core.requireOptionalNativeModule;
+  }
+} catch {
+  cachedRequireOptionalNativeModule = null;
+}
+
+function getNativeDownloads(): NativeDownloadsBridge | null {
+  if (Platform.OS !== "android" || !cachedRequireOptionalNativeModule) return null;
+  try {
+    return cachedRequireOptionalNativeModule("NyaySetuDownloads") || null;
+  } catch {
+    // Running in Expo Go, Jest/Node, or older binary without native helper
+    return null;
+  }
+}
+
+export type PdfPreviewPage = {
+  uri: string;
+  width: number;
+  height: number;
+};
+
+export type SaveDocumentResult = {
+  mode: "downloaded" | "shared";
+  uri?: string;
+  displayPath?: string;
+};
+
 /**
  * Centralized document-delivery helper.
  *
@@ -123,14 +167,54 @@ export async function shareDocumentFile(res: DownloadPayload, format: "pdf" | "d
 }
 
 /**
+ * Renders PDF pages to cached PNG images using Android's built-in PdfRenderer.
+ * Returns null on Web/iOS/Expo Go so callers fall back cleanly to blocks preview.
+ */
+export async function renderPdfPagesToImages(base64: string): Promise<PdfPreviewPage[] | null> {
+  if (!base64 || Platform.OS !== "android") return null;
+  const native = getNativeDownloads();
+  if (!native?.renderPdfToImages) return null;
+  try {
+    const pages = await native.renderPdfToImages(base64);
+    return Array.isArray(pages) && pages.length > 0 ? pages : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Opens a previously saved document URI in the device's default viewer (e.g., PDF Viewer)
+ * without triggering a Share sheet. Falls back to share/open sheet only if no viewer handles it.
+ */
+export async function openSavedDocument(
+  uri: string | undefined,
+  res: DownloadPayload,
+  format: "pdf" | "docx" | "odt" | "png"
+): Promise<boolean> {
+  const mimeType = res.mime_type || "application/octet-stream";
+  if (Platform.OS === "android" && uri) {
+    const native = getNativeDownloads();
+    if (native?.openUri) {
+      const opened = await native.openUri(uri, mimeType).catch(() => false);
+      if (opened) return true;
+    }
+  }
+  await shareDocumentFile(res, format);
+  return true;
+}
+
+/**
  * Saves the document directly to the user's device:
- *  - Web: triggers browser download (`<a download>`) and returns `"downloaded"`.
- *  - Android: saves directly into the user's chosen device folder (defaulting
- *    to Downloads via Storage Access Framework) and returns `"downloaded"`.
- *    Throws a readable error if folder permission is cancelled or save fails.
+ *  - Web: triggers browser download (`<a download>`) and returns `{ mode: "downloaded" }`.
+ *  - Android 10+: saves directly into `Download/NyaySetu Pro/<filename>` via MediaStore.Downloads
+ *    (no folder picker, no storage permissions, no share sheet); falls back to SAF on Android < 10
+ *    or Expo Go.
  *  - iOS: writes into the app's Documents directory and presents Save/Share sheet.
  */
-export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt" | "png"): Promise<"downloaded" | "shared"> {
+export async function saveDocumentDetailed(
+  res: DownloadPayload,
+  format: "pdf" | "docx" | "odt" | "png"
+): Promise<SaveDocumentResult> {
   const bytes = decodeBase64(res.base64);
   const invalid = validateFileBytes(bytes, format);
   if (invalid) throw new Error(invalid);
@@ -141,34 +225,52 @@ export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" 
   if (Platform.OS === "web") {
     const blob = new Blob([bytes.buffer as ArrayBuffer], { type: mimeType });
     triggerBrowserDownload(blob, safeName);
-    return "downloaded";
+    return { mode: "downloaded", displayPath: safeName };
   }
 
-  if (Platform.OS === "android" && FileSystem.StorageAccessFramework) {
-    const cachedDir = await storage.getItem<string>(ANDROID_DOWNLOAD_DIR_KEY, "");
-    if (cachedDir) {
+  if (Platform.OS === "android") {
+    const native = getNativeDownloads();
+    if (native?.saveToDownloads) {
       try {
-        await writeSafFile(cachedDir, safeName, mimeType, res.base64);
-        return "downloaded";
-      } catch {
-        // Permission may have been revoked or folder removed; prompt again cleanly.
-        await storage.removeItem(ANDROID_DOWNLOAD_DIR_KEY);
+        const saved = await native.saveToDownloads(res.base64, safeName, mimeType);
+        return {
+          mode: "downloaded",
+          uri: saved?.uri,
+          displayPath: saved?.displayPath || `Download/NyaySetu Pro/${safeName}`,
+        };
+      } catch (nativeErr: any) {
+        if (nativeErr?.code !== "LEGACY_ANDROID") {
+          // Only fall through to SAF if MediaStore wasn't usable; never auto-launch Share.
+        }
       }
     }
 
-    let initialUri: string | null = null;
-    try {
-      initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Download");
-    } catch {
-      initialUri = null;
+    if (FileSystem.StorageAccessFramework) {
+      const cachedDir = await storage.getItem<string>(ANDROID_DOWNLOAD_DIR_KEY, "");
+      if (cachedDir) {
+        try {
+          const uri = await writeSafFile(cachedDir, safeName, mimeType, res.base64);
+          return { mode: "downloaded", uri, displayPath: safeName };
+        } catch {
+          // Permission may have been revoked or folder removed; prompt again cleanly.
+          await storage.removeItem(ANDROID_DOWNLOAD_DIR_KEY);
+        }
+      }
+
+      let initialUri: string | null = null;
+      try {
+        initialUri = FileSystem.StorageAccessFramework.getUriForDirectoryInRoot("Download");
+      } catch {
+        initialUri = null;
+      }
+      const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
+      if (!perm.granted || !perm.directoryUri) {
+        throw new Error("Download cancelled. Please choose a device folder (e.g., Downloads) to save the document.");
+      }
+      await storage.setItem(ANDROID_DOWNLOAD_DIR_KEY, perm.directoryUri);
+      const uri = await writeSafFile(perm.directoryUri, safeName, mimeType, res.base64);
+      return { mode: "downloaded", uri, displayPath: safeName };
     }
-    const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync(initialUri);
-    if (!perm.granted || !perm.directoryUri) {
-      throw new Error("Download cancelled. Please choose a device folder (e.g., Downloads) to save the document.");
-    }
-    await storage.setItem(ANDROID_DOWNLOAD_DIR_KEY, perm.directoryUri);
-    await writeSafFile(perm.directoryUri, safeName, mimeType, res.base64);
-    return "downloaded";
   }
 
   // iOS / non-SAF native fallback: write to persistent documentDirectory first, then offer Save/Share sheet.
@@ -178,7 +280,12 @@ export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" 
   await FileSystem.writeAsStringAsync(path, res.base64, { encoding: "base64" });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(path, { mimeType, dialogTitle: "Save or Share Document" });
-    return "shared";
+    return { mode: "shared", uri: path, displayPath: safeName };
   }
-  return "downloaded";
+  return { mode: "downloaded", uri: path, displayPath: safeName };
+}
+
+export async function saveDocument(res: DownloadPayload, format: "pdf" | "docx" | "odt" | "png"): Promise<"downloaded" | "shared"> {
+  const result = await saveDocumentDetailed(res, format);
+  return result.mode;
 }

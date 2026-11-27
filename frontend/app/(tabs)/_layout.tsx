@@ -23,15 +23,17 @@ export default function TabsLayout() {
     // Setup automatic revalidation when returning to app (focus, visibilitychange, AppState)
     setupAppReturnRevalidation();
 
-    // Immediately fetch latest authoritative templates and order on app entry
-    catalogCache.getPublishedTemplates(true).catch(() => {});
-    catalogCache.getTemplateOrder(true).catch(() => {});
+    // Load cached templates & order immediately via SWR (background revalidation respects cooldown)
+    catalogCache.getActiveTemplatePairs(false).catch(() => {});
 
-    // Pre-warm master catalogs in background when entering main dashboard
+    // Pre-warm core master catalogs silently via SWR
     catalogCache.getDistricts().catch(() => {});
     catalogCache.getCaseTypes().catch(() => {});
-    catalogCache.getLaws().catch(() => {});
-    catalogCache.getCourts().catch(() => {});
+    const warmTimer = setTimeout(() => {
+      catalogCache.getLaws().catch(() => {});
+      catalogCache.getCourts().catch(() => {});
+    }, 600);
+    return () => clearTimeout(warmTimer);
   }, []);
 
   // Route guard (C4): while auth initializes, render branded splash to avoid premature renders/401s

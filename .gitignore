@@ -81,9 +81,10 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
-android/
-ios/
+/android/
+/ios/
 frontend/android/
+!frontend/modules/*/android/
 *google-services.json*
 .env
 .env.*

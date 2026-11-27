@@ -22,7 +22,7 @@ import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 import { ConfirmModal } from "@/src/components/ConfirmModal";
-import { saveDocument, shareDocumentFile } from "@/src/utils/download";
+import { openSavedDocument, saveDocumentDetailed, shareDocumentFile } from "@/src/utils/download";
 import { safeBack } from "@/src/utils/navigation";
 
 type VaultTab = "all" | "documents" | "drafts";
@@ -242,14 +242,21 @@ export default function DocumentVault() {
           base64: res.base64,
         };
         const fmt = (doc.format || "pdf") as "pdf" | "docx" | "odt" | "png";
-        await saveDocument(dlPayload, fmt);
+        const saved = await saveDocumentDetailed(dlPayload, fmt);
         if (Platform.OS !== "web") {
+          const where = saved.displayPath ? ` (${saved.displayPath})` : "";
           Alert.alert(
-            "Saved to Device",
-            `${dlPayload.filename} has been saved to your device folder.`,
+            "Saved to Phone",
+            `${dlPayload.filename} has been saved directly to your phone${where}.`,
             [
               {
-                text: "Share / Open",
+                text: "Open File",
+                onPress: () => {
+                  openSavedDocument(saved.uri, dlPayload, fmt).catch(() => {});
+                },
+              },
+              {
+                text: "Share",
                 onPress: () => {
                   shareDocumentFile(dlPayload, fmt).catch(() => {});
                 },

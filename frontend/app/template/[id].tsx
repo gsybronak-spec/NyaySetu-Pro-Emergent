@@ -20,7 +20,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { formatDateDisplay, isISODate } from "@/src/utils/date";
 import { formatAdvocateName } from "@/src/utils/advocate";
-import { saveDocument, shareDocumentFile } from "@/src/utils/download";
+import { openSavedDocument, saveDocumentDetailed, shareDocumentFile } from "@/src/utils/download";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
 import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
@@ -32,7 +32,7 @@ import { ErrorBoundary } from "@/src/components/ErrorBoundary";
 import { resolveTemplateId } from "@/src/data/templateCatalogPairs";
 import { PlanPurchaseModal } from "@/src/components/PlanPurchaseModal";
 import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
-import { ActualPdfViewer } from "@/src/components/ActualPdfViewer";
+import { ActualPdfViewer, BlocksPaperPreview } from "@/src/components/ActualPdfViewer";
 import { safeBack } from "@/src/utils/navigation";
 
 type Step = "fields" | "preview" | "output";
@@ -175,8 +175,6 @@ export default function TemplateApplication() {
   const [activeApplicationId, setActiveApplicationId] = useState<string | undefined>(initialApplicationId);
   const [savingApplication, setSavingApplication] = useState(false);
 
-  const [template, setTemplate] = useState<any>(null);
-  const [caseData, setCaseData] = useState<any>(null);
   const initialLang: "en" | "gu" =
     params.lang === "gu" || params.lang === "en"
       ? (params.lang as "en" | "gu")
@@ -185,6 +183,23 @@ export default function TemplateApplication() {
       : templateId.endsWith("_en")
       ? "en"
       : "gu";
+  const initialEffectiveId = resolveTemplateId(templateId, initialLang) || templateId;
+  const initialBaseId = templateId.replace(/_(gu|en)$/, "");
+  const syncCachedTemplate = useMemo(() => {
+    return catalogCache.peekPublishedTemplates().find(
+      (x: any) =>
+        (x?.id === initialEffectiveId || x?.id === initialBaseId || x?.id === templateId) &&
+        Array.isArray(x?.fields) &&
+        x.fields.length > 0
+    ) || null;
+  }, [initialEffectiveId, initialBaseId, templateId]);
+
+  const canRenderImmediately = Boolean(
+    syncCachedTemplate && !caseId && params.draft !== "1" && !initialApplicationId
+  );
+
+  const [template, setTemplate] = useState<any>(syncCachedTemplate);
+  const [caseData, setCaseData] = useState<any>(null);
   const [language, setLanguage] = useState<"en" | "gu">(initialLang);
 
   // If language was not explicitly specified via query param or template suffix, require user to pick
@@ -201,7 +216,7 @@ export default function TemplateApplication() {
   const [step, setStep] = useState<Step>("fields");
   const [preview, setPreview] = useState("");
   const [blocks, setBlocks] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!canRenderImmediately);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [downloading, setDownloading] = useState<"pdf" | "docx" | "odt" | "png" | null>(null);
@@ -245,30 +260,42 @@ export default function TemplateApplication() {
   const initialLoadDone = useRef<boolean>(false);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
+    const effectiveId = resolveTemplateId(templateId, language) || templateId;
+    const baseId = templateId.replace(/_(gu|en)$/, "");
+
+    // Reuse already-fetched full template from catalogCache (has fields) to open instantaneously
+    const cachedTpl = catalogCache.peekPublishedTemplates().find(
+      (x: any) =>
+        (x?.id === effectiveId || x?.id === baseId || x?.id === templateId) &&
+        Array.isArray(x?.fields) &&
+        x.fields.length > 0
+    );
+    const immediateMode = Boolean(cachedTpl && !caseId && params.draft !== "1" && !initialApplicationId);
+    if (!immediateMode) {
+      setLoading(true);
+    }
     setError(null);
     try {
-      // Resolve template ID safely (handle base keys or language-specific keys)
-      const effectiveId = resolveTemplateId(templateId, language) || templateId;
-      const baseId = templateId.replace(/_(gu|en)$/, "");
-
-      // Reuse already-fetched full template from catalogCache (has fields) to open instantaneously
-      const cachedTpl = catalogCache.peekPublishedTemplates().find(
-        (x: any) =>
-          (x?.id === effectiveId || x?.id === baseId || x?.id === templateId) &&
-          Array.isArray(x?.fields) &&
-          x.fields.length > 0
-      );
       const cachedWalletOk = typeof user?.wallet_balance === "number";
+      const peekedDists = catalogCache.peekDistricts();
+      const peekedCts = catalogCache.peekCaseTypes();
+
+      // Background refresh for cached catalogs instead of blocking form mount
+      if (peekedDists.length > 0) {
+        catalogCache.getDistricts().then((d) => Array.isArray(d) && setDistricts(d)).catch(() => {});
+      }
+      if (peekedCts.length > 0) {
+        catalogCache.getCaseTypes().then((c) => Array.isArray(c) && setCaseTypes(c)).catch(() => {});
+      }
 
       // Parallelize remaining data fetching concurrently for sub-second load times
       const [t, me, dists, cts, cs, w, drafts, savedApp] = await Promise.all([
         cachedTpl
           ? Promise.resolve(cachedTpl)
-          : api.template(effectiveId).catch(() => api.template(baseId)).catch(() => api.template(templateId)),
+          : api.template(effectiveId, true).catch(() => api.template(baseId, true)).catch(() => api.template(templateId, true)),
         user ? Promise.resolve(user) : api.me().catch(() => null),
-        catalogCache.getDistricts(),
-        catalogCache.getCaseTypes(),
+        peekedDists.length > 0 ? Promise.resolve(peekedDists) : catalogCache.getDistricts(),
+        peekedCts.length > 0 ? Promise.resolve(peekedCts) : catalogCache.getCaseTypes(),
         caseId ? api.getCase(caseId).catch(() => null) : Promise.resolve(null),
         cachedWalletOk
           ? Promise.resolve({
@@ -491,14 +518,17 @@ export default function TemplateApplication() {
     loadData();
   }, [loadData]);
 
-  // Load talukas & courts when district changes in No-Case mode
+  // Load talukas & courts immediately from cache + SWR when district changes in No-Case mode
   useEffect(() => {
     const key = values.district ? `courts:${values.district}` : "courts:all";
     if (values.district) {
+      setTalukas(catalogCache.peekTalukas(values.district));
+      setCourts(catalogCache.peekCourts(values.district));
       catalogCache.getTalukas(values.district).then(setTalukas);
       catalogCache.getCourts(values.district).then(setCourts);
     } else {
       setTalukas([]);
+      setCourts(catalogCache.peekCourts(undefined));
       catalogCache.getCourts(undefined).then(setCourts);
     }
 
@@ -514,8 +544,8 @@ export default function TemplateApplication() {
   useEffect(() => {
     if (loading || activeApplicationId || Object.keys(values).length === 0) return;
     if (draftTimer.current) clearTimeout(draftTimer.current);
-    setAutosaveStatus("saving");
     draftTimer.current = setTimeout(async () => {
+      setAutosaveStatus("saving");
       try {
         await api.saveDraft({ template_id: templateId, case_id: caseId, language, values });
         setAutosaveStatus("saved");
@@ -523,7 +553,7 @@ export default function TemplateApplication() {
       } catch {
         setAutosaveStatus("error");
       }
-    }, 1200);
+    }, 1500);
     return () => draftTimer.current && clearTimeout(draftTimer.current);
   }, [values, language, loading, templateId, caseId, activeApplicationId]);
 
@@ -603,9 +633,9 @@ export default function TemplateApplication() {
     languageRef.current = newLang;
     const effectiveId = resolveTemplateId(templateId, newLang) || templateId;
     const baseId = templateId.replace(/_(gu|en)$/, "");
-    api.template(effectiveId)
-      .catch(() => api.template(baseId))
-      .catch(() => api.template(templateId))
+    api.template(effectiveId, true)
+      .catch(() => api.template(baseId, true))
+      .catch(() => api.template(templateId, true))
       .then((newTpl) => {
         if (newTpl) setTemplate(newTpl);
       })
@@ -1202,7 +1232,7 @@ export default function TemplateApplication() {
   fetchPreviewPdfRef.current = fetchPreviewPdf;
 
   useEffect(() => {
-    if (step !== "preview" && !pdfBase64) return;
+    if (step !== "preview") return;
     if (missingRequired.length > 0) return;
 
     if (debounceTimerRef.current) {
@@ -1210,7 +1240,7 @@ export default function TemplateApplication() {
     }
     debounceTimerRef.current = setTimeout(() => {
       fetchPreviewPdf();
-    }, 400);
+    }, 450);
 
     return () => {
       if (debounceTimerRef.current) {
@@ -1254,8 +1284,9 @@ export default function TemplateApplication() {
         setActiveApplicationId(String(res.application_id));
       }
       const dlPayload = { filename: res.filename, mime_type: res.mime_type, base64: res.base64 };
+      let savedResult: { mode: "downloaded" | "shared"; uri?: string; displayPath?: string };
       try {
-        await saveDocument(dlPayload, format);
+        savedResult = await saveDocumentDetailed(dlPayload, format);
       } catch (saveErr: any) {
         const saveMsg = saveErr?.message || "Could not save file to device.";
         setNotice({ tone: "err", text: saveMsg });
@@ -1264,11 +1295,12 @@ export default function TemplateApplication() {
       }
 
       const creditNote = isUnlimited || wasUpdate ? "" : " 1 template credit consumed.";
+      const savedWhere = savedResult.displayPath ? ` (${savedResult.displayPath})` : "";
       const okText =
         Platform.OS !== "web"
-          ? `${res.filename} saved to your device folder.${creditNote}`
+          ? `${res.filename} ફોનમાં સેવ થઈ ગઈ${savedWhere}.${creditNote}`
           : `${res.filename} generated successfully.${creditNote}`;
-      setNotice({ tone: "ok", text: `Saved — ${res.filename}.${creditNote}` });
+      setNotice({ tone: "ok", text: `Saved to Phone — ${savedResult.displayPath || res.filename}.${creditNote}` });
 
       const doneDestination = () =>
         caseId
@@ -1279,11 +1311,17 @@ export default function TemplateApplication() {
 
       if (Platform.OS !== "web") {
         Alert.alert(
-          language === "gu" ? "ફાઇલ ડિવાઇસમાં સેવ થઈ ગઈ" : "Saved to Device",
+          language === "gu" ? "ફાઇલ ફોનમાં સેવ થઈ ગઈ" : "Saved to Phone",
           okText,
           [
             {
-              text: language === "gu" ? "શેર / ખોલો" : "Share / Open",
+              text: language === "gu" ? "ફાઇલ ખોલો" : "Open File",
+              onPress: () => {
+                openSavedDocument(savedResult.uri, dlPayload, format).catch(() => {});
+              },
+            },
+            {
+              text: language === "gu" ? "શેર કરો" : "Share",
               onPress: () => {
                 shareDocumentFile(dlPayload, format).catch(() => {});
               },
@@ -1322,6 +1360,44 @@ export default function TemplateApplication() {
       setDownloading(null);
     }
   };
+
+  const districtOptions = useMemo(
+    () =>
+      districts.map((d: any) => ({
+        id: d.id,
+        label: language === "gu" ? `${d.gu} (${d.en})` : `${d.en} (${d.gu})`,
+      })),
+    [districts, language]
+  );
+
+  const talukaOptions = useMemo(
+    () =>
+      talukas.map((t: any) => ({
+        id: t.id,
+        label: language === "gu" ? `${t.gu} (${t.en})` : `${t.en} (${t.gu})`,
+      })),
+    [talukas, language]
+  );
+
+  const directCourtOptions = useMemo(
+    () => [
+      ...courts.map((c: any) => ({
+        id: c.id,
+        label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
+      })),
+      { id: "other", label: "Other / અન્ય કોર્ટ" },
+    ],
+    [courts, language]
+  );
+
+  const caseTypeOptions = useMemo(
+    () =>
+      caseTypes.map((ct: any) => ({
+        id: ct.id,
+        label: language === "gu" ? `${ct.gu} (${ct.en})` : `${ct.en} (${ct.gu})`,
+      })),
+    [caseTypes, language]
+  );
 
   const renderFieldInput = (f: any) => {
     if (f.key === "other_copy_request_purpose" || f.key === "other_adjournment_reason" || (templateId === "ulat_tapas_no_haq_kholvani_arji" && (f.key === "custom_reason" || f.key === "reopen_reason_other"))) return null;
@@ -1933,13 +2009,11 @@ export default function TemplateApplication() {
 
                 <Dropdown
                   testID="field-district"
+                  searchable
                   label={(language === "gu" ? "જિલ્લો" : "District") + " *"}
                   placeholder={language === "gu" ? "જિલ્લો પસંદ કરો" : "Select district"}
                   value={values.district || null}
-                  options={districts.map((d: any) => ({
-                    id: d.id,
-                    label: language === "gu" ? `${d.gu} (${d.en})` : `${d.en} (${d.gu})`,
-                  }))}
+                  options={districtOptions}
                   onChange={(v) => {
                     update("district", v);
                     update("taluka", "");
@@ -1948,13 +2022,11 @@ export default function TemplateApplication() {
 
                 <Dropdown
                   testID="field-taluka"
+                  searchable
                   label={language === "gu" ? "તાલુકો (વૈકલ્પિક)" : "Taluka (Optional)"}
                   placeholder={language === "gu" ? "તાલુકો પસંદ કરો" : "Select taluka"}
                   value={values.taluka || null}
-                  options={talukas.map((t: any) => ({
-                    id: t.id,
-                    label: language === "gu" ? `${t.gu} (${t.en})` : `${t.en} (${t.gu})`,
-                  }))}
+                  options={talukaOptions}
                   onChange={(v) => update("taluka", v)}
                 />
 
@@ -1964,17 +2036,12 @@ export default function TemplateApplication() {
                     <View>
                       <Dropdown
                         testID="field-court"
+                        searchable
                         label={(language === "gu" ? "કોર્ટનું નામ" : "Court Name") + " *"}
                         placeholder={language === "gu" ? "કોર્ટ પસંદ કરો" : "Select court"}
                         value={isOther ? "other" : (values.court || values.court_name || null)}
                         emptyMessage={language === "gu" ? "કોઈ કોર્ટ ઉપલબ્ધ નથી. કૃપા કરીને એડમિનિસ્ટ્રેટરનો સંપર્ક કરો." : "No courts available. Please contact administrator."}
-                        options={[
-                          ...courts.map((c: any) => ({
-                            id: c.id,
-                            label: language === "gu" ? `${c.gu} (${c.en})` : `${c.en} (${c.gu})`,
-                          })),
-                          { id: "other", label: "Other / અન્ય કોર્ટ" },
-                        ]}
+                        options={directCourtOptions}
                         onChange={(v) => {
                           if (v === "other") {
                             update("court", "other");
@@ -2013,13 +2080,11 @@ export default function TemplateApplication() {
 
                 <Dropdown
                   testID="field-case_type"
+                  searchable
                   label={(language === "gu" ? "કેસનો પ્રકાર" : "Case Type") + " *"}
                   placeholder={language === "gu" ? "કેસનો પ્રકાર પસંદ કરો" : "Select case type"}
                   value={values.case_type || null}
-                  options={caseTypes.map((ct: any) => ({
-                    id: ct.id,
-                    label: language === "gu" ? `${ct.gu} (${ct.en})` : `${ct.en} (${ct.gu})`,
-                  }))}
+                  options={caseTypeOptions}
                   onChange={(v) => update("case_type", v)}
                 />
 
@@ -2206,6 +2271,20 @@ export default function TemplateApplication() {
           <ScrollView contentContainerStyle={isDesktop ? { alignItems: "center", padding: Spacing.xl, paddingBottom: 140 } : { padding: Spacing.lg, paddingBottom: 120 }}>
             <View
               style={[
+                styles.previewHintBanner,
+                isDesktop && { maxWidth: 780, width: "100%" },
+                { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+              ]}
+            >
+              <Ionicons name="eye-outline" size={16} color={colors.brandPrimary} />
+              <Text style={{ color: colors.onSurface, fontSize: 12, fontWeight: "600", flex: 1, marginLeft: 8 }}>
+                {language === "gu"
+                  ? "દસ્તાવેજ પ્રીવ્યૂ — ફોનમાં સેવ કરતા પહેલાં અરજીની બધી વિગતો તપાસો."
+                  : "Document Preview — Review your formatted application before saving to your phone."}
+              </Text>
+            </View>
+            <View
+              style={[
                 styles.previewContainer,
                 isDesktop && styles.previewContainerDesktop,
               ]}
@@ -2214,129 +2293,19 @@ export default function TemplateApplication() {
               {pdfBase64 ? (
                 <ActualPdfViewer
                   base64={pdfBase64}
+                  blocks={blocks}
                   loading={busy || previewLoading}
+                  language={language}
+                  isDesktop={isDesktop}
+                  borderColor={colors.border}
                   testID="actual-pdf-viewer"
                 />
               ) : (
-                <View
-                  style={[
-                    styles.doc,
-                    isDesktop && styles.docDesktop,
-                    { backgroundColor: "#FFFFFF", borderColor: colors.border },
-                  ]}
-                >
-              {blocks.map((b, i) => {
-                if (b.section === "table" && Array.isArray(b.rows) && b.rows.length > 0) {
-                  const metaCols = b.meta?.cols || [];
-                  const totalColWidth = metaCols.reduce((acc: number, val: number) => acc + val, 0) || 100;
-                  const defaultAligns = b.meta?.align || [];
-
-                  return (
-                    <View
-                      key={i}
-                      testID={`preview-table-${i}`}
-                      style={[
-                        styles.previewTable,
-                        { borderColor: "#000000" },
-                      ]}
-                    >
-                      {b.rows.map((row: string[], rIdx: number) => {
-                        const rMeta = b.row_meta?.[rIdx] || {};
-                        const isHeader = !!rMeta.is_header;
-                        const isSpan = (row.length === 1 && metaCols.length > 1);
-
-                        return (
-                          <View
-                            key={rIdx}
-                            style={[
-                              styles.previewTableRow,
-                              isHeader && { backgroundColor: "#F3F4F6" },
-                            ]}
-                          >
-                            {row.map((cellText: string, cIdx: number) => {
-                              const cellAlign = (rMeta.align?.[cIdx] || (isHeader ? "center" : defaultAligns[cIdx]) || (isSpan ? (defaultAligns[0] || "right") : "left")) as ("left" | "right" | "center");
-                              const cellBold = isHeader || !!rMeta.bold?.[cIdx];
-
-                              let colWidthPercent = "100%";
-                              if (!isSpan && metaCols.length > cIdx) {
-                                colWidthPercent = `${(metaCols[cIdx] / totalColWidth) * 100}%`;
-                              } else if (!isSpan && metaCols.length === 0 && row.length > 0) {
-                                colWidthPercent = `${100 / row.length}%`;
-                              }
-
-                              return (
-                                <View
-                                  key={cIdx}
-                                  testID={`preview-table-cell-${rIdx}-${cIdx}`}
-                                  style={[
-                                    styles.previewTableCell,
-                                    {
-                                      width: colWidthPercent as any,
-                                      borderColor: "#000000",
-                                      alignItems: cellAlign === "right" ? "flex-end" : cellAlign === "center" ? "center" : "flex-start",
-                                      justifyContent: "center",
-                                    },
-                                  ]}
-                                >
-                                  <Text
-                                    selectable
-                                    style={[
-                                      styles.docText,
-                                      {
-                                        textAlign: cellAlign,
-                                        fontWeight: cellBold ? "700" : "400",
-                                        fontSize: 13,
-                                        color: "#111111",
-                                        lineHeight: 20,
-                                      },
-                                    ]}
-                                  >
-                                    {cellText || " "}
-                                  </Text>
-                                </View>
-                              );
-                            })}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                }
-
-                if (b.section === "page_break") {
-                  return (
-                    <View
-                      key={i}
-                      style={{
-                        borderBottomWidth: 1,
-                        borderBottomColor: "#D1D5DB",
-                        borderStyle: "dashed",
-                        marginVertical: 14,
-                      }}
-                    />
-                  );
-                }
-
-                return (
-                  <Text
-                    key={i}
-                    selectable
-                    style={[
-                      styles.docText,
-                      {
-                        textAlign: b.align === "center" ? "center" : b.align === "right" ? "right" : "left",
-                        fontWeight: b.bold ? "700" : "400",
-                        fontSize: b.bold ? 15 : 13,
-                        textDecorationLine: (b.underline || b.section === "title") ? "underline" : "none",
-                        marginBottom: b.text ? 6 : 10,
-                      },
-                    ]}
-                  >
-                    {b.text || " "}
-                  </Text>
-                );
-              })}
-                </View>
+                <BlocksPaperPreview
+                  blocks={blocks}
+                  isDesktop={isDesktop}
+                  borderColor={colors.border}
+                />
               )}
             </View>
             <Pressable
@@ -2557,7 +2526,7 @@ export default function TemplateApplication() {
             <View style={isDesktop ? { maxWidth: 780, width: "100%", alignSelf: "center" } : undefined}>
               <Button
                 testID="to-output-btn"
-                title={language === "gu" ? "ખાતરી કરો અને ડાઉનલોડ કરો" : "Confirm & Download"}
+                title={language === "gu" ? "ખાતરી કરો અને ફોનમાં સેવ કરો" : "Confirm & Save to Phone"}
                 onPress={() => setStep("output")}
               />
             </View>
@@ -2606,6 +2575,16 @@ const styles = StyleSheet.create({
   previewContainer: {
     width: "100%",
     alignItems: "center",
+  },
+  previewHintBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+    width: "100%",
   },
   previewContainerDesktop: {
     maxWidth: 780,

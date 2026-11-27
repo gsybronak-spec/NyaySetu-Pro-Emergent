@@ -502,10 +502,11 @@ export const api = {
     invalidateApiCache("/cases");
     return res;
   },
-  templates: (q?: string, category?: string) => {
+  templates: (q?: string, category?: string, compact?: boolean) => {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (category) params.set("category", category);
+    if (compact) params.set("compact", "1");
     const qs = params.toString();
     return request(`/templates${qs ? `?${qs}` : ""}`);
   },
@@ -527,7 +528,7 @@ export const api = {
     return res;
   },
   catalogTemplateOrder: () => request("/catalog/template-order"),
-  template: (id: string) => request(`/templates/${id}`),
+  template: (id: string, compact?: boolean) => request(`/templates/${id}${compact ? "?compact=1" : ""}`),
   previewApp: (data: any) => request("/applications/preview", "POST", data),
   // Downloads may need longer: document generation + a cold Render instance can
   // exceed the 30s default timeout for large legal PDFs. 90s keeps the request

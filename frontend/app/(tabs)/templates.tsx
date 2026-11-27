@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -438,6 +438,9 @@ export default function Templates() {
           data={displayedPairs}
           keyExtractor={(item) => item.pair.baseKey}
           numColumns={2}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           removeClippedSubviews={Platform.OS !== "web"}
           columnWrapperStyle={styles.mobileColWrapper}
           keyboardShouldPersistTaps="handled"
@@ -447,60 +450,14 @@ export default function Templates() {
             paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) + (keyboardHeight > 0 ? keyboardHeight : 0),
             gap: Spacing.sm,
           }}
-          renderItem={({ item }) => {
-            const { pair, is_favorite } = item;
-            return (
-              <Pressable
-                testID={`tpl-pair-${pair.baseKey}`}
-                onPress={() => setSelectedPair(pair)}
-                style={[
-                  styles.card,
-                  { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
-                ]}
-              >
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-                    <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
-                    </View>
-                    <Pressable
-                      testID={`tpl-fav-${pair.baseKey}`}
-                      hitSlop={8}
-                      onPress={(e) => toggleFavorite(pair, e)}
-                      style={styles.favBtn}
-                    >
-                      <Ionicons
-                        name={is_favorite ? "star" : "star-outline"}
-                        size={20}
-                        color={is_favorite ? "#E5A93C" : colors.muted}
-                      />
-                    </Pressable>
-                  </View>
-
-                  {/* Clean Gujarati Title */}
-                  <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }}>
-                    {pair.name_gu}
-                  </Text>
-
-                  {/* Clean English Subtitle */}
-                  <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "600" }}>
-                    {pair.name_en}
-                  </Text>
-
-                  {/* Description */}
-                  <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={2}>
-                    {pair.description_gu}
-                  </Text>
-                </View>
-
-                {/* Subtle Action Cue */}
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                  <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
-                </View>
-              </Pressable>
-            );
-          }}
+          renderItem={({ item }) => (
+            <MobileTemplateCard
+              item={item}
+              colors={colors}
+              onSelect={setSelectedPair}
+              onToggleFav={toggleFavorite}
+            />
+          )}
           ListFooterComponent={
             hasMore ? (
               <View style={styles.seeMoreContainerMobile}>
@@ -544,6 +501,65 @@ export default function Templates() {
     </SafeAreaView>
   );
 }
+
+const MobileTemplateCard = memo(function MobileTemplateCard({
+  item,
+  colors,
+  onSelect,
+  onToggleFav,
+}: {
+  item: SearchMatchedPair;
+  colors: any;
+  onSelect: (pair: TemplateLogicalPair) => void;
+  onToggleFav: (pair: TemplateLogicalPair, e?: any) => void;
+}) {
+  const { pair, is_favorite } = item;
+  return (
+    <Pressable
+      testID={`tpl-pair-${pair.baseKey}`}
+      onPress={() => onSelect(pair)}
+      style={[
+        styles.card,
+        { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+      ]}
+    >
+      <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+          <View style={[styles.catPill, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={{ color: colors.brandPrimary, fontSize: 10, fontWeight: "700" }}>{pair.category}</Text>
+          </View>
+          <Pressable
+            testID={`tpl-fav-${pair.baseKey}`}
+            hitSlop={8}
+            onPress={(e) => onToggleFav(pair, e)}
+            style={styles.favBtn}
+          >
+            <Ionicons
+              name={is_favorite ? "star" : "star-outline"}
+              size={20}
+              color={is_favorite ? "#E5A93C" : colors.muted}
+            />
+          </Pressable>
+        </View>
+
+        <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: Spacing.xs, fontSize: 15, lineHeight: 21 }}>
+          {pair.name_gu}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2, fontWeight: "600" }}>
+          {pair.name_en}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 11, marginTop: 4, opacity: 0.85 }} numberOfLines={2}>
+          {pair.description_gu}
+        </Text>
+      </View>
+
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
+        <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+        <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
+      </View>
+    </Pressable>
+  );
+});
 
 const styles = StyleSheet.create({
   header: {
