@@ -13,13 +13,38 @@ import {
 
 import { firebaseConfigured, getFirebaseAuth } from '@/src/firebase/config';
 
-let nativeAuth: any = null;
+let nativeAuthMod: any = null;
 if (Platform.OS !== 'web') {
   try {
-    nativeAuth = require('@react-native-firebase/auth').default;
+    nativeAuthMod = require('@react-native-firebase/auth');
   } catch (e) {
     console.warn('React Native Firebase Auth not available', e);
   }
+}
+
+function getNativeAuth(): any | null {
+  if (Platform.OS === 'web' || !nativeAuthMod) return null;
+  try {
+    if (typeof nativeAuthMod.getAuth === 'function') {
+      return nativeAuthMod.getAuth();
+    }
+    if (typeof nativeAuthMod.default === 'function') {
+      return nativeAuthMod.default();
+    }
+  } catch (e) {
+    console.warn('Native Firebase Auth not initialized', e);
+  }
+  return null;
+}
+
+function callNativeAuth(fnName: string, authInstance: any, ...args: any[]) {
+  if (typeof nativeAuthMod?.[fnName] === 'function') {
+    return nativeAuthMod[fnName](authInstance, ...args);
+  }
+  if (typeof authInstance?.[fnName] === 'function') {
+    return authInstance[fnName](...args);
+  }
+  throw new Error(`Native Firebase Auth method ${fnName} is unavailable`);
 }
 
 export { firebaseConfigured };
@@ -84,7 +109,7 @@ export function clearPendingPhoneConfirmation() {
 
 export function isFirebaseConfigured(): boolean {
   if (Platform.OS !== 'web') {
-    return !!nativeAuth;
+    return Boolean(getNativeAuth());
   }
   return firebaseConfigured;
 }
@@ -99,9 +124,14 @@ export async function firebaseEmailPasswordLogin(
     const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
     return { idToken: await cred.user.getIdToken(), firebaseUser: cred.user };
   } else {
-    if (!nativeAuth) return null;
-    const cred = await nativeAuth().signInWithEmailAndPassword(email.trim(), password);
-    return { idToken: await cred.user.getIdToken(), firebaseUser: cred.user };
+    const auth = getNativeAuth();
+    if (!auth) return null;
+    const cred = await callNativeAuth('signInWithEmailAndPassword', auth, email.trim(), password);
+    const idToken =
+      typeof cred.user?.getIdToken === 'function'
+        ? await cred.user.getIdToken()
+        : await nativeAuthMod.getIdToken(cred.user);
+    return { idToken, firebaseUser: cred.user };
   }
 }
 
@@ -194,8 +224,9 @@ export async function firebaseSendPhoneOtp(
       throw e;
     }
   } else {
-    if (!nativeAuth) return null;
-    const result = await nativeAuth().signInWithPhoneNumber(`+91${mobile10}`);
+    const auth = getNativeAuth();
+    if (!auth) return null;
+    const result = await callNativeAuth('signInWithPhoneNumber', auth, `+91${mobile10}`);
     pendingConfirmation = result;
     return result;
   }
@@ -210,7 +241,10 @@ export async function firebaseConfirmPhoneOtp(
   otp: string
 ): Promise<string> {
   const cred = await confirmation.confirm(otp);
-  const idToken = await cred.user.getIdToken();
+  const idToken =
+    typeof cred.user?.getIdToken === 'function'
+      ? await cred.user.getIdToken()
+      : await nativeAuthMod.getIdToken(cred.user);
   pendingConfirmation = null;
   return idToken;
 }
@@ -222,8 +256,9 @@ export async function firebaseSendPasswordReset(email: string): Promise<boolean>
     await sendPasswordResetEmail(auth, email.trim());
     return true;
   } else {
-    if (!nativeAuth) return false;
-    await nativeAuth().sendPasswordResetEmail(email.trim());
+    const auth = getNativeAuth();
+    if (!auth) return false;
+    await callNativeAuth('sendPasswordResetEmail', auth, email.trim());
     return true;
   }
 }
@@ -234,8 +269,9 @@ export async function firebaseVerifyPasswordResetCode(code: string): Promise<str
     if (!auth) return null;
     return await verifyPasswordResetCode(auth, code);
   } else {
-    if (!nativeAuth) return null;
-    return await nativeAuth().verifyPasswordResetCode(code);
+    const auth = getNativeAuth();
+    if (!auth) return null;
+    return await callNativeAuth('verifyPasswordResetCode', auth, code);
   }
 }
 
@@ -245,8 +281,9 @@ export async function firebaseConfirmPasswordReset(code: string, newPassword: st
     if (!auth) throw new Error('Firebase Auth not available');
     await confirmPasswordReset(auth, code, newPassword);
   } else {
-    if (!nativeAuth) throw new Error('Firebase Auth not available');
-    await nativeAuth().confirmPasswordReset(code, newPassword);
+    const auth = getNativeAuth();
+    if (!auth) throw new Error('Firebase Auth not available');
+    await callNativeAuth('confirmPasswordReset', auth, code, newPassword);
   }
 }
 
@@ -258,9 +295,10 @@ export async function firebaseSignOutClient(): Promise<void> {
       await fbSignOut(auth);
     } catch {}
   } else {
-    if (!nativeAuth) return;
+    const auth = getNativeAuth();
+    if (!auth) return;
     try {
-      await nativeAuth().signOut();
+      await callNativeAuth('signOut', auth);
     } catch {}
   }
   pendingConfirmation = null;
