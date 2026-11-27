@@ -3558,7 +3558,10 @@ _AUTO_FILL_FIELDS = {
     "place", "date",
 }
 
-def public_template(t: dict) -> dict:
+_COMPACT_OMIT_FIELD_OPTIONS_KEYS = frozenset({"district", "taluka", "court", "court_name", "case_type"})
+
+
+def public_template(t: dict, compact: bool = False) -> dict:
     """Return the public-facing template shape (unchanged for backward compat)."""
     fields = t.get("fields", [])
     clean_fields = []
@@ -3570,7 +3573,7 @@ def public_template(t: dict) -> dict:
             "type": f.get("type", "text"),
             "required": f.get("required", True),
         }
-        if "options" in f and f["options"]:
+        if "options" in f and f["options"] and not (compact and f["key"] in _COMPACT_OMIT_FIELD_OPTIONS_KEYS):
             field_dict["options"] = f["options"]
         if "default_value" in f and f["default_value"] is not None:
             field_dict["default_value"] = f["default_value"]
@@ -6452,7 +6455,12 @@ async def resolve_template_for_draft(template_id: Union[str, dict], template_ver
 
 
 @api.get("/templates")
-async def list_templates(q: Optional[str] = None, category: Optional[str] = None, authorization: Optional[str] = Header(None)):
+async def list_templates(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    compact: bool = False,
+    authorization: Optional[str] = Header(None),
+):
     user = None
     if authorization and authorization.startswith("Bearer "):
         try:
@@ -6465,7 +6473,7 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
 
     items = []
     for t in all_templates:
-        p = public_template(t)
+        p = public_template(t, compact=compact)
         if user is not None:
             p["is_favorite"] = p["id"] in fav_set
         items.append(p)
@@ -6482,7 +6490,7 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
         for t in all_templates:
             all_aliases = [t["name_en"].lower(), t["name_gu"].lower()] + [a.lower() for a in t.get("aliases", [])]
             if any(ql in a for a in all_aliases):
-                p = public_template(t)
+                p = public_template(t, compact=compact)
                 if user is not None:
                     p["is_favorite"] = p["id"] in fav_set
                 matched.append(p)
@@ -6497,14 +6505,14 @@ async def list_templates(q: Optional[str] = None, category: Optional[str] = None
 
 
 @api.get("/templates/{template_id}")
-async def get_template(template_id: str):
+async def get_template(template_id: str, compact: bool = False):
     t = await _get_template_by_id(template_id)
     if not t and template_id.endswith(("_gu", "_en")):
         t = await _get_template_by_id(template_id[:-3])
     if not t:
         raise HTTPException(404, "Template not found")
     return {
-        **public_template(t),
+        **public_template(t, compact=compact),
         "content_en": t.get("content_en", ""),
         "content_gu": t.get("content_gu", ""),
         "aliases": t.get("aliases", []),
@@ -6690,10 +6698,10 @@ async def resolve_court_label(raw_court: Optional[str], language: str, case: Opt
             if resolved:
                 return resolved
 
-    # Fallback to direct Firestore document lookup if newly added in DB and not yet cached
+    # Fallback to direct Firestore document lookup ONLY for plausible ASCII catalog IDs
     if db is not None:
         for cand in candidates:
-            if cand == "other":
+            if cand == "other" or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", cand):
                 continue
             try:
                 doc_snap = await db.collection("courts").document(cand).get()
