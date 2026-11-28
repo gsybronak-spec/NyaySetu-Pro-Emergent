@@ -7,12 +7,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { safeBack } from "@/src/utils/navigation";
 
 export default function Referral() {
   const { colors, isDark } = useTheme();
+  const { ui } = useAppLanguage();
   const [data, setData] = useState<any>(null);
   const [copied, setCopied] = useState(false);
 
@@ -23,7 +25,10 @@ export default function Referral() {
   const code = data?.referral_code || "…";
   const reward = data?.reward_per_referral || 10;
 
-  const shareMessage = `I'm using NyaySetu Pro to draft court applications in seconds\n\nUse my referral code *${code}* when you sign up.\n\nThe New Era of Advocacy.`;
+  const shareMessage = ui(
+    `I'm using NyaySetu Pro to draft court applications in seconds\n\nUse my referral code *${code}* when you sign up.\n\nThe New Era of Advocacy.`,
+    `હું સેકન્ડમાં કોર્ટ અરજીઓ બનાવવા માટે NyaySetu Pro વાપરું છું\n\nસાઇન અપ કરતી વખતે મારો રેફરલ કોડ *${code}* વાપરો.\n\nવકીલાતનો નવો યુગ.`
+  );
 
   const copy = async () => {
     await Clipboard.setStringAsync(code);
@@ -43,7 +48,7 @@ export default function Referral() {
         <Pressable testID="referral-back" onPress={() => safeBack("/(tabs)/profile")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>Refer & Earn</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{ui("Refer & Earn", "રેફર કરો અને કમાઓ")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -52,24 +57,29 @@ export default function Referral() {
           <View style={styles.giftBadge}>
             <Ionicons name="gift" size={34} color="#C5A059" />
           </View>
-          <Text style={styles.heroBig}>Give & Get {reward} Templates</Text>
+          <Text style={styles.heroBig}>{ui(`Give & Get ${reward} Templates`, `${reward} મફત અરજીઓ મેળવો`)}</Text>
           <Text style={styles.heroSub}>
-            Invite a fellow Advocate. When they sign up with your code, you get {reward} free templates.
+            {ui(
+              `Invite a fellow Advocate. When they sign up with your code, you get ${reward} free templates.`,
+              `સાથી એડવોકેટને આમંત્રણ આપો. જ્યારે તેઓ તમારા કોડથી સાઇન અપ કરશે, ત્યારે તમને ${reward} મફત અરજીઓ મળશે.`
+            )}
           </Text>
         </LinearGradient>
 
         {/* Code card */}
         <View style={[styles.codeCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.brandPrimary }]}>
-          <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 1 }}>YOUR REFERRAL CODE</Text>
+          <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700", letterSpacing: 1 }}>{ui("YOUR REFERRAL CODE", "તમારો રેફરલ કોડ")}</Text>
           <Text style={[styles.code, { color: colors.onSurface }]}>{code}</Text>
           <View style={{ flexDirection: "row", gap: Spacing.md, marginTop: Spacing.md }}>
             <Pressable testID="referral-copy" onPress={copy} style={[styles.actBtn, { borderColor: colors.brandPrimary }]}>
               <Ionicons name={copied ? "checkmark" : "copy-outline"} size={18} color={colors.brandPrimary} />
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", marginLeft: 6 }}>{copied ? "Copied" : "Copy"}</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", marginLeft: 6 }}>
+                {copied ? ui("Copied", "કૉપિ થયું") : ui("Copy", "કૉપિ કરો")}
+              </Text>
             </Pressable>
             <Pressable testID="referral-share" onPress={share} style={[styles.actBtn, { backgroundColor: colors.brandPrimary, borderColor: colors.brandPrimary }]}>
               <Ionicons name="share-social" size={18} color={colors.onBrandPrimary} />
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", marginLeft: 6 }}>Share</Text>
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", marginLeft: 6 }}>{ui("Share", "શેર કરો")}</Text>
             </Pressable>
           </View>
         </View>
@@ -78,11 +88,11 @@ export default function Referral() {
         <View style={styles.statsRow}>
           <View style={[styles.stat, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Text style={[styles.statVal, { color: colors.onSurface }]}>{data?.total_referred ?? 0}</Text>
-            <Text style={{ color: colors.muted, fontSize: 12 }}>Advocates Invited</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>{ui("Advocates Invited", "આમંત્રિત એડવોકેટ્સ")}</Text>
           </View>
           <View style={[styles.stat, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Text style={[styles.statVal, { color: colors.brandPrimary }]}>{data?.total_reward_credits ?? 0}</Text>
-            <Text style={{ color: colors.muted, fontSize: 12 }}>Templates Earned</Text>
+            <Text style={{ color: colors.muted, fontSize: 12 }}>{ui("Templates Earned", "મેળવેલી અરજીઓ")}</Text>
           </View>
         </View>
       </View>

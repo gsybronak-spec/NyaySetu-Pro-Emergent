@@ -6,12 +6,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { safeBack } from "@/src/utils/navigation";
 
 export default function AboutScreen() {
   const { colors, isDark } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
 
   const handleBack = () => safeBack("/(tabs)/profile");
@@ -19,23 +21,35 @@ export default function AboutScreen() {
   const features = [
     {
       icon: "document-text",
-      title: "21 Authoritative Court Templates",
-      desc: "Pre-configured according to authoritative Gujarat judiciary practices with 100% legal verbatim accuracy in Gujarati and English.",
+      title: ui("21 Authoritative Court Templates", "૨૧ અધિકૃત કોર્ટ અરજીઓ"),
+      desc: ui(
+        "Pre-configured according to authoritative Gujarat judiciary practices with 100% legal verbatim accuracy in Gujarati and English.",
+        "ગુજરાતની કોર્ટ કાર્યપદ્ધતિ મુજબ ૧૦૦% ચોકસાઈ સાથે ગુજરાતી અને અંગ્રેજીમાં તૈયાર અરજીઓ."
+      ),
     },
     {
       icon: "file-tray-full",
-      title: "Case Master Data Management",
-      desc: "Enter case numbers, parties, and court details once. Every routine application automatically inherits all relevant details.",
+      title: ui("Case Master Data Management", "કેસ માસ્ટર ડેટા મેનેજમેન્ટ"),
+      desc: ui(
+        "Enter case numbers, parties, and court details once. Every routine application automatically inherits all relevant details.",
+        "કેસ નંબર, પક્ષકારો અને કોર્ટની વિગતો એકવાર દાખલ કરો — દરેક અરજીમાં આપોઆપ ભરાઈ જશે."
+      ),
     },
     {
       icon: "print",
-      title: "High-Fidelity Document Generation",
-      desc: "Export court-ready printouts in PDF, Microsoft Word (.docx), LibreOffice (.odt), and high-resolution images.",
+      title: ui("High-Fidelity Document Generation", "ઉચ્ચ ગુણવત્તાવાળા દસ્તાવેજો"),
+      desc: ui(
+        "Export court-ready printouts in PDF, Microsoft Word (.docx), LibreOffice (.odt), and high-resolution images.",
+        "PDF, Microsoft Word (.docx), LibreOffice (.odt) અને ઉચ્ચ રિઝોલ્યુશન ઈમેજમાં પ્રિન્ટ-રેડી ફાઇલો."
+      ),
     },
     {
       icon: "shield-checkmark",
-      title: "Bank-Grade Privacy & Security",
-      desc: "Client documents and case files are encrypted in transit and at rest with role-based access control.",
+      title: ui("Bank-Grade Privacy & Security", "બેંક-ગ્રેડ ગોપનીયતા અને સુરક્ષા"),
+      desc: ui(
+        "Client documents and case files are encrypted in transit and at rest with role-based access control.",
+        "અસીલોના દસ્તાવેજો અને કેસ ફાઇલો સંપૂર્ણ સુરક્ષિત અને એન્ક્રિપ્ટેડ રાખવામાં આવે છે."
+      ),
     },
   ];
 
@@ -45,7 +59,7 @@ export default function AboutScreen() {
         <Pressable onPress={handleBack} hitSlop={8} testID="about-back-btn">
           <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>About NyaySetu Pro</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{ui("About NyaySetu Pro", "ન્યાયસેતુ પ્રો વિશે")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -58,23 +72,25 @@ export default function AboutScreen() {
             contentFit="contain"
            accessibilityLabel="NyaySetu Pro Logo" />
           <Text style={[styles.appName, { color: colors.onSurface }]}>NyaySetu Pro</Text>
-          <Text style={[styles.tagline, { color: colors.brandPrimary }]}>The New Era of Advocacy</Text>
+          <Text style={[styles.tagline, { color: colors.brandPrimary }]}>{t("tagline")}</Text>
           <View style={[styles.versionBadge, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700" }}>Version 2.5 Production</Text>
+            <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "700" }}>{ui("Version 2.5 Production", "વર્ઝન 2.5 પ્રોડક્શન")}</Text>
           </View>
         </View>
 
         {/* Mission Statement */}
         <View style={[styles.card, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.brandPrimary }]}>OUR MISSION</Text>
+          <Text style={[styles.sectionTitle, { color: colors.brandPrimary }]}>{ui("OUR MISSION", "અમારું ધ્યેય")}</Text>
           <Text style={[styles.bodyText, { color: colors.onSurface }]}>
-            NyaySetu Pro is India's dedicated legal productivity platform built specifically for practicing advocates in Gujarat and across India.
-            We eliminate repetitive manual drafting, formatting delays, and typographical errors so advocates can focus on legal strategy, client advocacy, and courtroom presentation.
+            {ui(
+              "NyaySetu Pro is India's dedicated legal productivity platform built specifically for practicing advocates in Gujarat and across India. We eliminate repetitive manual drafting, formatting delays, and typographical errors so advocates can focus on legal strategy, client advocacy, and courtroom presentation.",
+              "NyaySetu Pro ખાસ ગુજરાત અને ભારતના પ્રેક્ટિસિંગ એડવોકેટ્સ માટે બનાવેલું કાનૂની ડ્રાફ્ટિંગ પ્લેટફોર્મ છે. અમે વારંવારની ટાઇપિંગ અને ફોર્મેટિંગની ઝંઝટ દૂર કરીએ છીએ જેથી વકીલો કોર્ટ દલીલો અને કેસની રણનીતિ પર ધ્યાન આપી શકે."
+            )}
           </Text>
         </View>
 
         {/* Key Features */}
-        <Text style={[styles.sectionHeading, { color: colors.onSurfaceSecondary }]}>CORE CAPABILITIES</Text>
+        <Text style={[styles.sectionHeading, { color: colors.onSurfaceSecondary }]}>{ui("CORE CAPABILITIES", "મુખ્ય સુવિધાઓ")}</Text>
         <View style={{ gap: Spacing.sm }}>
           {features.map((f, i) => (
             <View key={i} style={[styles.featureCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
@@ -90,7 +106,7 @@ export default function AboutScreen() {
         </View>
 
         {/* Legal & Compliance Links */}
-        <Text style={[styles.sectionHeading, { color: colors.onSurfaceSecondary, marginTop: Spacing.xl }]}>LEGAL & POLICIES</Text>
+        <Text style={[styles.sectionHeading, { color: colors.onSurfaceSecondary, marginTop: Spacing.xl }]}>{ui("LEGAL & POLICIES", "કાયદાકીય નીતિઓ")}</Text>
         <View style={[styles.linksCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
           <Pressable
             testID="about-link-privacy"
@@ -98,7 +114,7 @@ export default function AboutScreen() {
             style={styles.linkRow}
           >
             <Ionicons name="document-lock-outline" size={18} color={colors.onSurface} />
-            <Text style={[styles.linkText, { color: colors.onSurface }]}>Privacy Policy</Text>
+            <Text style={[styles.linkText, { color: colors.onSurface }]}>{ui("Privacy Policy", "ગોપનીયતા નીતિ")}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -108,7 +124,7 @@ export default function AboutScreen() {
             style={styles.linkRow}
           >
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.onSurface} />
-            <Text style={[styles.linkText, { color: colors.onSurface }]}>Terms & Conditions</Text>
+            <Text style={[styles.linkText, { color: colors.onSurface }]}>{ui("Terms & Conditions", "નિયમો અને શરતો")}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
@@ -118,13 +134,16 @@ export default function AboutScreen() {
             style={styles.linkRow}
           >
             <Ionicons name="refresh-outline" size={18} color={colors.onSurface} />
-            <Text style={[styles.linkText, { color: colors.onSurface }]}>Refund Policy</Text>
+            <Text style={[styles.linkText, { color: colors.onSurface }]}>{ui("Refund Policy", "રિફંડ નીતિ")}</Text>
             <Ionicons name="chevron-forward" size={16} color={colors.muted} />
           </Pressable>
         </View>
 
         <Text style={[styles.footerText, { color: colors.muted }]}>
-          © {new Date().getFullYear()} NyaySetu Pro. All rights reserved. Made with pride for Indian Advocates.
+          {ui(
+            `© ${new Date().getFullYear()} NyaySetu Pro. All rights reserved. Made with pride for Indian Advocates.`,
+            `© ${new Date().getFullYear()} NyaySetu Pro. સર્વ હક્ક અનામત. ભારતીય એડવોકેટ્સ માટે ગૌરવ સાથે નિર્મિત.`
+          )}
         </Text>
         <View style={{ height: Spacing.xxl }} />
       </ScrollView>

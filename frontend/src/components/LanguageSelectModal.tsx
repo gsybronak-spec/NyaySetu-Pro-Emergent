@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 
 interface LanguageSelectModalProps {
@@ -28,6 +29,7 @@ export function LanguageSelectModal({
   category,
 }: LanguageSelectModalProps) {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
 
   return (
     <Modal
@@ -48,10 +50,7 @@ export function LanguageSelectModal({
           <View style={styles.header}>
             <View style={{ flex: 1 }}>
               <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-                Select Document Language
-              </Text>
-              <Text style={[styles.headerSub, { color: colors.muted }]}>
-                દસ્તાવેજની ભાષા પસંદ કરો
+                {ui("Select Document Language", "દસ્તાવેજની ભાષા પસંદ કરો")}
               </Text>
             </View>
             <Pressable
@@ -167,7 +166,7 @@ export function LanguageSelectModal({
               pressed && { opacity: 0.7 },
             ]}
           >
-            <Text style={[styles.cancelBtnText, { color: colors.muted }]}>Cancel / રદ કરો</Text>
+            <Text style={[styles.cancelBtnText, { color: colors.muted }]}>{t("cancel")}</Text>
           </Pressable>
         </Pressable>
       </Pressable>

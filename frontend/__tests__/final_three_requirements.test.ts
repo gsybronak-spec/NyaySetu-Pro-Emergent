@@ -25,9 +25,11 @@ export function runFinalThreeRequirementsFrontendTests() {
     }));
 
   const activePairsAfterDelete = getActiveTemplatePairs(allExceptMudat, null);
+  const expectedUniqueAfterDelete = new Set(allExceptMudat.map((p) => p.id)).size;
+  assert.strictEqual(expectedUniqueAfterDelete, 26, "27 unique catalog keys minus deleted mudat_arji must equal 26");
   assert.strictEqual(
     activePairsAfterDelete.length,
-    TEMPLATE_LOGICAL_PAIRS.length - 1,
+    expectedUniqueAfterDelete,
     "Deleted template must be excluded from active template pairs"
   );
   assert.ok(
@@ -182,13 +184,13 @@ export function runFinalThreeRequirementsFrontendTests() {
   const rawFallback = getActiveTemplatePairs(null, null);
   const safeFallback = rawFallback.filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
   assert.ok(!safeFallback.some((p) => PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)), "Deleted templates must never appear in safe fallback");
-  assert.strictEqual(safeFallback.length, 23, "Fallback must contain exactly 23 templates excluding deleted ones");
+  assert.strictEqual(safeFallback.length, 26, "Fallback (28 pairs minus 2 deleted) must exclude deleted templates");
 
-  // If stale localStorage has old 25-template list containing deleted templates, filter removes them
+  // If stale storage has full catalog containing deleted templates, deduplication + deletion filter removes them
   const staleServerTemplates = TEMPLATE_LOGICAL_PAIRS.map((p) => ({ id: p.baseKey, template_id: p.baseKey, name_en: p.name_en, name_gu: p.name_gu }));
   const renderedFromStaleCache = getActiveTemplatePairs(staleServerTemplates, null).filter((p) => !PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey));
   assert.ok(!renderedFromStaleCache.some((p) => PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)), "Deleted templates must never appear from stale cache");
-  assert.strictEqual(renderedFromStaleCache.length, 23);
+  assert.strictEqual(renderedFromStaleCache.length, 25, "Deduplicated active catalog (27 unique minus 2 deleted) must equal 25");
 
   console.log("PASS Req 3E: Initial-load freshness and deleted template exclusion verified");
   console.log("=== ALL FINAL THREE REQUIREMENTS FRONTEND TESTS PASSED ===");

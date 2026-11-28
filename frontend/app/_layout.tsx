@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
 import { ThemeProvider } from "@/src/theme/ThemeContext";
 import { AuthProvider } from "@/src/context/AuthContext";
+import { AppLanguageProvider } from "@/src/context/AppLanguageContext";
 import { initWebKeyboardManager } from "@/src/utils/webKeyboardManager";
 
 LogBox.ignoreAllLogs(true);
@@ -36,9 +37,11 @@ export default function RootLayout() {
     <GestureContainer style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
-          <AuthProvider>
-            <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
-          </AuthProvider>
+          <AppLanguageProvider>
+            <AuthProvider>
+              <Stack screenOptions={{ headerShown: false, animation: "fade" }} />
+            </AuthProvider>
+          </AppLanguageProvider>
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureContainer>

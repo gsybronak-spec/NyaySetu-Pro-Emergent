@@ -41,9 +41,11 @@ const { runInstantStartupCacheTests } = require("./test_instant_startup_cache.te
 runInstantStartupCacheTests();
 const { runDraftBulkDeleteTests } = require("./test_draft_bulk_delete.test.ts");
 const { runFinalUIFixesTests } = require("./test_final_ui_fixes.test.ts");
+const { runAppLanguageToggleTests } = require("./test_app_language_toggle.test.ts");
 (async () => {
   await runDraftBulkDeleteTests();
   await runFinalUIFixesTests();
+  await runAppLanguageToggleTests();
   require("./verify_browser_behavior.js");
 })().catch((err) => {
   console.error("Test runner failed:", err);

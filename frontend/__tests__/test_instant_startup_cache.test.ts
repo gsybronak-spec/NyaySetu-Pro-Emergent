@@ -14,19 +14,9 @@ import {
 export function runInstantStartupCacheTests() {
   console.log("=== EXECUTING INSTANT STARTUP & CACHE BENCHMARK TEST SUITE ===");
 
-  // 1. Authoritative production order
-  const authoritativeAdminOrder = [
-    "vakilatnama_criminal",
-    "vakilatnama_civil",
-    "exemption_arji",
-    "mudat_arji",
-    "certified_copy_application",
-    "document_exhibit_application",
-    "closing_purshish",
-    "closing_argument_right_application",
-    "reopen_right_to_argue_application",
-    "dd_karavani_arji",
-  ];
+  // 1. Authoritative baseline production order from catalogSeed (18 active templates)
+  const authoritativeAdminOrder = [...SEED_TEMPLATE_ORDER];
+  assert.strictEqual(authoritativeAdminOrder.length, 18, "Authoritative seed order must contain 18 active templates");
 
   // Benchmark Metric 1: Time to first template render with warm cache
   const simulatedStorage = new Map<string, string>();
@@ -45,7 +35,7 @@ export function runInstantStartupCacheTests() {
 
   console.log(`[MEASUREMENT] Warm cache time-to-first-render: ${warmDurationMs.toFixed(3)} ms`);
   assert.ok(warmDurationMs < 5.0, "Warm cache time-to-first-render must be under 5ms (instant)");
-  assert.strictEqual(warmPairs.length, 10, "Warm cache must render exactly 10 active templates");
+  assert.strictEqual(warmPairs.length, 18, "Warm cache must render all 18 active seed templates");
   assert.deepStrictEqual(
     warmPairs.map((p) => p.baseKey),
     authoritativeAdminOrder,
@@ -63,7 +53,7 @@ export function runInstantStartupCacheTests() {
 
   console.log(`[MEASUREMENT] Cold cache (authoritative seed) time-to-first-render: ${coldDurationMs.toFixed(3)} ms`);
   assert.ok(coldDurationMs < 5.0, "Cold startup with seed must be under 5ms");
-  assert.strictEqual(coldPairs.length, 10, "Cold cache must render exactly 10 active templates");
+  assert.strictEqual(coldPairs.length, 18, "Cold cache must render all 18 active seed templates");
   assert.deepStrictEqual(
     coldPairs.map((p) => p.baseKey),
     authoritativeAdminOrder,

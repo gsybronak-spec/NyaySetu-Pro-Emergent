@@ -6,14 +6,14 @@ export function runCatalogPaginationTests() {
   console.log("=== EXECUTING TEMPLATE CATALOG PAGINATION TESTS ===");
   const PAGE_SIZE = 10;
 
-  // 1. Verifies total active templates in catalog is 25 unique bilingual pairs
+  // 1. Verifies total active templates in catalog is 28 catalog pairs (27 unique logical baseKeys)
   const pairs = getActiveTemplatePairs();
-  assert.strictEqual(pairs.length, 25, `Expected 25 pairs, got ${pairs.length}`);
+  assert.strictEqual(pairs.length, 28, `Expected 28 pairs, got ${pairs.length}`);
 
   const baseKeys = pairs.map((p) => p.baseKey);
   const uniqueKeys = new Set(baseKeys);
-  assert.strictEqual(uniqueKeys.size, 25, `Expected 25 unique baseKeys, got ${uniqueKeys.size}`);
-  console.log("Test 1 PASS: Total active templates = 25 unique bilingual pairs");
+  assert.strictEqual(uniqueKeys.size, 27, `Expected 27 unique baseKeys, got ${uniqueKeys.size}`);
+  console.log("Test 1 PASS: Total active templates = 28 pairs (27 unique bilingual baseKeys)");
 
   // 2. Verifies initial batch displays exactly 10 templates
   let visibleCount = PAGE_SIZE;
@@ -26,17 +26,17 @@ export function runCatalogPaginationTests() {
   visibleCount += PAGE_SIZE;
   const secondBatch = pairs.slice(0, visibleCount);
   assert.strictEqual(secondBatch.length, 20, `Expected 20 in second batch, got ${secondBatch.length}`);
-  assert.strictEqual(visibleCount < pairs.length, true, "hasMore should still be true (5 remaining)");
-  assert.strictEqual(pairs.length - visibleCount, 5, `Expected 5 remaining, got ${pairs.length - visibleCount}`);
-  console.log("Test 3 PASS: First 'See More' click reveals 20 templates (5 remaining, hasMore = true)");
+  assert.strictEqual(visibleCount < pairs.length, true, "hasMore should still be true (8 remaining)");
+  assert.strictEqual(pairs.length - visibleCount, 8, `Expected 8 remaining, got ${pairs.length - visibleCount}`);
+  console.log("Test 3 PASS: First 'See More' click reveals 20 templates (8 remaining, hasMore = true)");
 
-  // 4. Verifies second click on 'See More' reveals all 25 templates and disables/hides button
+  // 4. Verifies second click on 'See More' reveals all 28 templates and disables/hides button
   visibleCount += PAGE_SIZE;
   const finalBatch = pairs.slice(0, visibleCount);
-  assert.strictEqual(finalBatch.length, 25, `Expected 25 in final batch, got ${finalBatch.length}`);
+  assert.strictEqual(finalBatch.length, 28, `Expected 28 in final batch, got ${finalBatch.length}`);
   const hasMore = visibleCount < pairs.length;
   assert.strictEqual(hasMore, false, "hasMore should be false once all templates revealed");
-  console.log("Test 4 PASS: Second 'See More' click reveals all 25 templates (hasMore = false, button hides)");
+  console.log("Test 4 PASS: Second 'See More' click reveals all 28 templates (hasMore = false, button hides)");
 
   // 5. Verifies pagination resets to 10 when category or search filter changes
   const cat = "Criminal";

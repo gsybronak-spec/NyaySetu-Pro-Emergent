@@ -5,12 +5,14 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { safeBack } from "@/src/utils/navigation";
 
 export default function SupportScreen() {
   const { colors, isDark } = useTheme();
+  const { ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
 
   const handleEmail = () => {
@@ -20,11 +22,11 @@ export default function SupportScreen() {
         if (supported) {
           Linking.openURL(url);
         } else {
-          Alert.alert("Contact Support", "Please send an email to: support@nyaysetupro.in");
+          Alert.alert(ui("Contact Support", "સહાય સંપર્ક"), ui("Please send an email to: support@nyaysetupro.in", "કૃપા કરીને આ ઈમેલ પર સંપર્ક કરો: support@nyaysetupro.in"));
         }
       })
       .catch(() => {
-        Alert.alert("Contact Support", "Please send an email to: support@nyaysetupro.in");
+        Alert.alert(ui("Contact Support", "સહાય સંપર્ક"), ui("Please send an email to: support@nyaysetupro.in", "કૃપા કરીને આ ઈમેલ પર સંપર્ક કરો: support@nyaysetupro.in"));
       });
   };
 
@@ -32,16 +34,25 @@ export default function SupportScreen() {
 
   const faqs = [
     {
-      q: "How do template credits work?",
-      a: "Each time you download a completed court application (PDF, DOCX, ODT, or Image), 1 credit is consumed. Incomplete drafts and previewing do not consume credits.",
+      q: ui("How do template credits work?", "ટેમ્પલેટ ક્રેડિટ્સ કેવી રીતે કામ કરે છે?"),
+      a: ui(
+        "Each time you download a completed court application (PDF, DOCX, ODT, or Image), 1 credit is consumed. Incomplete drafts and previewing do not consume credits.",
+        "જ્યારે પણ તમે પૂર્ણ કરેલી કોર્ટ અરજી (PDF, DOCX, ODT અથવા ઈમેજ) ડાઉનલોડ કરો છો ત્યારે ૧ ક્રેડિટ વપરાય છે. અધૂરા ડ્રાફ્ટ અને પ્રિવ્યુ માટે કોઈ ક્રેડિટ કપાતી નથી."
+      ),
     },
     {
-      q: "How do I choose Gujarati or English?",
-      a: "When you open any template from the library or from a case, you can select whether you wish to draft in Gujarati (અધિકૃત કોર્ટ અરજી) or English.",
+      q: ui("How do I choose Gujarati or English?", "ગુજરાતી અથવા અંગ્રેજી ભાષા કેવી રીતે પસંદ કરવી?"),
+      a: ui(
+        "When you open any template from the library or from a case, you can select whether you wish to draft in Gujarati or English.",
+        "જ્યારે તમે લાયબ્રેરી અથવા કેસમાંથી કોઈપણ અરજી ખોલો છો, ત્યારે તમે ગુજરાતી અથવા અંગ્રેજી ભાષામાં અરજી બનાવવાનું પસંદ કરી શકો છો."
+      ),
     },
     {
-      q: "How do advocate names work on documents?",
-      a: "Your profile stores both your Gujarati and English advocate names. Gujarati documents automatically apply your Gujarati name, and English documents automatically apply your English name.",
+      q: ui("How do advocate names work on documents?", "દસ્તાવેજો પર એડવોકેટનું નામ કેવી રીતે આવે છે?"),
+      a: ui(
+        "Your profile stores both your Gujarati and English advocate names. Gujarati documents automatically apply your Gujarati name, and English documents automatically apply your English name.",
+        "તમારી પ્રોફાઇલમાં ગુજરાતી અને અંગ્રેજી બંને નામ સાચવેલા છે. ગુજરાતી અરજીમાં આપોઆપ ગુજરાતી નામ અને અંગ્રેજી અરજીમાં અંગ્રેજી નામ પ્રિન્ટ થાય છે."
+      ),
     },
   ];
 
@@ -51,7 +62,7 @@ export default function SupportScreen() {
         <Pressable onPress={handleBack} hitSlop={8} testID="support-back-btn">
           <Ionicons name="arrow-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>Contact Support</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{ui("Contact Support", "સહાય સંપર્ક")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -61,14 +72,17 @@ export default function SupportScreen() {
           <View style={[styles.iconCircle, { backgroundColor: colors.brandPrimary + "20" }]}>
             <Ionicons name="headset" size={32} color={colors.brandPrimary} />
           </View>
-          <Text style={[styles.heroTitle, { color: colors.onSurface }]}>How can we assist you?</Text>
+          <Text style={[styles.heroTitle, { color: colors.onSurface }]}>{ui("How can we assist you?", "અમે તમને કેવી રીતે મદદ કરી શકીએ?")}</Text>
           <Text style={[styles.heroSub, { color: colors.muted }]}>
-            Our legal tech support team is available Monday to Saturday (9:00 AM – 7:00 PM IST) to assist Indian Advocates.
+            {ui(
+              "Our legal tech support team is available Monday to Saturday (9:00 AM – 7:00 PM IST) to assist Indian Advocates.",
+              "અમારી સપોર્ટ ટીમ સોમવારથી શનિવાર (સવારે 9:00 થી સાંજે 7:00 IST) એડવોકેટ્સની મદદ માટે ઉપલબ્ધ છે."
+            )}
           </Text>
         </View>
 
         {/* Primary Contact Channel */}
-        <Text style={[styles.sectionTitle, { color: colors.onSurfaceSecondary }]}>DIRECT SUPPORT CHANNELS</Text>
+        <Text style={[styles.sectionTitle, { color: colors.onSurfaceSecondary }]}>{ui("DIRECT SUPPORT CHANNELS", "સીધો સંપર્ક")}</Text>
 
         <Pressable
           testID="support-email-card"
@@ -83,12 +97,12 @@ export default function SupportScreen() {
             <Ionicons name="mail" size={24} color="#3B82F6" />
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>Email Support</Text>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{ui("Email Support", "ઈમેલ સપોર્ટ")}</Text>
             <Text style={{ color: colors.brandPrimary, fontSize: 14, fontWeight: "600", marginTop: 2 }}>
               support@nyaysetupro.in
             </Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4 }}>
-              Tap to compose email — Average response under 2 hours
+              {ui("Tap to compose email — Average response under 2 hours", "ઈમેલ મોકલવા ટૅપ કરો — સરેરાશ ૨ કલાકમાં જવાબ")}
             </Text>
           </View>
           <Ionicons name="open-outline" size={20} color={colors.muted} />
@@ -96,7 +110,7 @@ export default function SupportScreen() {
 
         {/* FAQs */}
         <Text style={[styles.sectionTitle, { color: colors.onSurfaceSecondary, marginTop: Spacing.xl }]}>
-          FREQUENTLY ASKED QUESTIONS
+          {ui("FREQUENTLY ASKED QUESTIONS", "વારંવાર પૂછાતા પ્રશ્નો")}
         </Text>
 
         <View style={{ gap: Spacing.sm }}>

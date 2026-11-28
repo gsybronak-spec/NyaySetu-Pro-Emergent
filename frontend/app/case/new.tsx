@@ -4,8 +4,10 @@ import { router } from "expo-router";
 
 import { CaseForm, CaseFormValues } from "@/src/components/CaseForm";
 import { api } from "@/src/api/client";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 
 export default function NewCase() {
+  const { t, ui } = useAppLanguage();
   const [saving, setSaving] = useState(false);
 
   const save = async (values: CaseFormValues) => {
@@ -15,20 +17,20 @@ export default function NewCase() {
       router.replace("/(tabs)/cases");
       setTimeout(() => {
         if (Platform.OS !== "web") {
-          Alert.alert("Success", "Case created successfully.");
+          Alert.alert(t("successTitle"), ui("Case created successfully.", "કેસ સફળતાપૂર્વક બની ગયો છે."));
         }
       }, 300);
     } catch (e: any) {
-      const msg = e?.message || "Failed to create case";
+      const msg = e?.message || ui("Failed to create case", "કેસ બનાવવામાં નિષ્ફળતા");
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(`Error: ${msg}`);
+        window.alert(`${t("errorTitle")}: ${msg}`);
       } else {
-        Alert.alert("Error", msg);
+        Alert.alert(t("errorTitle"), msg);
       }
     } finally {
       setSaving(false);
     }
   };
 
-  return <CaseForm title="New Case" submitLabel="Save Case" saving={saving} onSubmit={save} />;
+  return <CaseForm title={t("newCaseBtn")} submitLabel={ui("Save Case", "કેસ સાચવો")} saving={saving} onSubmit={save} />;
 }

@@ -22,6 +22,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -37,6 +38,7 @@ interface ProfileFormProps {
 
 export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
   const { colors, isDark } = useTheme();
+  const { ui } = useAppLanguage();
   const { user, refresh, signOut, ready, profileSkipped, skipProfileCompletion } = useAuth();
   const { isDesktop } = useResponsive();
 
@@ -171,7 +173,12 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
         return;
       }
       if (!advocateNameGu.trim()) {
-        setErr("એડવોકેટનું પૂરું નામ ગુજરાતીમાં દાખલ કરવું ફરજિયાત છે (Advocate Full Name in Gujarati is required, e.g. એડવોકેટ રમેશ પટેલ).");
+        setErr(
+          ui(
+            "Advocate Full Name in Gujarati is required (e.g. એડવોકેટ રમેશ પટેલ).",
+            "એડવોકેટનું પૂરું નામ ગુજરાતીમાં દાખલ કરવું ફરજિયાત છે (દા.ત. એડવોકેટ રમેશ પટેલ)."
+          )
+        );
         return;
       }
       if (!qualification.trim()) {
@@ -518,7 +525,7 @@ export function ProfileForm({ mode, onSuccess, onCancel }: ProfileFormProps) {
                 />
                 <Field
                   testID="setup-advocate-name-gu"
-                  label="એડવોકેટનું પૂરું નામ - ગુજરાતી / Advocate Full Name - Gujarati *"
+                  label={ui("Advocate Full Name - Gujarati *", "એડવોકેટનું પૂરું નામ - ગુજરાતી *")}
                   labelColor="#D1D8E5"
                   placeholder="દા.ત. એડવોકેટ રમેશ બી. પટેલ"
                   value={advocateNameGu}

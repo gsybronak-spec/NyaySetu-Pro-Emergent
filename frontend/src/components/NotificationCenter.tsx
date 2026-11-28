@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 
@@ -27,6 +28,7 @@ function fmtDate(iso?: string) {
 
 export function NotificationCenter() {
   const { colors } = useTheme();
+  const { ui } = useAppLanguage();
   const [visible, setVisible] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -120,11 +122,11 @@ export function NotificationCenter() {
             <View style={[styles.header, { borderBottomColor: colors.border }]}>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Ionicons name="notifications" size={18} color={colors.brandPrimary} />
-                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>Notifications</Text>
+                <Text style={[styles.headerTitle, { color: colors.onSurface }]}>{ui("Notifications", "સૂચનાઓ")}</Text>
                 {unreadCount > 0 && (
                   <View style={[styles.pill, { backgroundColor: colors.brandPrimary + "20" }]}>
                     <Text style={[styles.pillText, { color: colors.brandPrimary }]}>
-                      {unreadCount} new
+                      {ui(`${unreadCount} new`, `${unreadCount} નવી`)}
                     </Text>
                   </View>
                 )}
@@ -139,7 +141,7 @@ export function NotificationCenter() {
                     hitSlop={8}
                   >
                     <Text style={[styles.markAllText, { color: colors.brandPrimary }]}>
-                      Mark all read
+                      {ui("Mark all read", "બધું વાંચેલું કરો")}
                     </Text>
                   </Pressable>
                 )}
@@ -158,7 +160,7 @@ export function NotificationCenter() {
                 <View style={styles.empty}>
                   <Ionicons name="notifications-off-outline" size={40} color={colors.muted} />
                   <Text style={[styles.emptyText, { color: colors.muted }]}>
-                    No notifications right now
+                    {ui("No notifications right now", "હાલમાં કોઈ સૂચના નથી")}
                   </Text>
                 </View>
               ) : (

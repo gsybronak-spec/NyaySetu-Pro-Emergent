@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -17,6 +18,7 @@ import { LanguageSelectModal } from "@/src/components/LanguageSelectModal";
 
 export default function Templates() {
   const { colors } = useTheme();
+  const { appLang, t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ cat?: string }>();
@@ -143,6 +145,17 @@ export default function Templates() {
   };
 
   const cats = ["All", "Favorites", "Civil", "Criminal", "General", "Bail"];
+  const catLabel = (c: string) => {
+    const guMap: Record<string, string> = {
+      All: "બધા",
+      Favorites: "મનપસંદ",
+      Civil: "સિવિલ",
+      Criminal: "ક્રિમિનલ",
+      General: "સામાન્ય",
+      Bail: "જામીન",
+    };
+    return appLang === "gu" ? guMap[c] || c : c;
+  };
 
   const openTemplate = (id: string, e?: any) => {
     if (e && typeof e.stopPropagation === "function") {
@@ -155,18 +168,21 @@ export default function Templates() {
   if (isDesktop) {
     return (
       <DesktopPage
-        title="Legal Templates"
+        title={t("legalTemplates")}
         subtitle={
           orderedBasePairs.length === 0
-            ? "0 Authoritative Court Applications"
-            : `Showing ${displayedPairs.length} of ${matchedPairs.length} Authoritative Court Applications — ગુજરાતી & English`
+            ? ui("0 Authoritative Court Applications", "0 અધિકૃત કોર્ટ અરજીઓ")
+            : ui(
+                `Showing ${displayedPairs.length} of ${matchedPairs.length} Authoritative Court Applications`,
+                `કુલ ${matchedPairs.length} માંથી ${displayedPairs.length} અધિકૃત કોર્ટ અરજીઓ`
+              )
         }
         actions={
           <View style={[styles.dSearch, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
             <Ionicons name="search" size={16} color={colors.muted} />
             <TextInput
               testID="tpl-search"
-              placeholder="Search: mudat, warrant, jamin, મુદત, વોરંટ..."
+              placeholder={ui("Search templates (mudat, warrant, jamin...)", "અરજી શોધો (મુદત, વોરંટ, જામીન...)")}
               placeholderTextColor={colors.muted}
               value={q}
               onChangeText={setQ}
@@ -198,7 +214,7 @@ export default function Templates() {
               >
                 <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>
                   {c === "Favorites" ? "⭐ " : ""}
-                  {c}
+                  {catLabel(c)}
                 </Text>
               </Pressable>
             );
@@ -213,19 +229,18 @@ export default function Templates() {
               color={colors.muted}
             />
             <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-              {orderedBasePairs.length === 0 ? "કોઈ અરજી ઉપલબ્ધ નથી" : "કોઈ સંબંધિત અરજી મળી નથી"}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-              {orderedBasePairs.length === 0 ? "No legal templates available" : "No related application found"}
+              {orderedBasePairs.length === 0
+                ? t("noTemplatesAvailable")
+                : ui("No related application found", "કોઈ સંબંધિત અરજી મળી નથી")}
             </Text>
             {orderedBasePairs.length === 0 ? (
               <Text style={[styles.emptyHint, { color: colors.muted }]}>
-                સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી — No applications published currently
+                {ui("No applications published currently.", "સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી.")}
               </Text>
             ) : (
               <>
                 <Text style={[styles.emptyHint, { color: colors.muted }]}>
-                  કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+                  {ui("Try searching with different keywords.", "કૃપા કરીને બીજો શબ્દ શોધો.")}
                 </Text>
                 <Pressable
                   testID="tpl-empty-reset"
@@ -235,7 +250,7 @@ export default function Templates() {
                   }}
                   style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
                 >
-                  <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
+                  <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{ui("View All Templates", "બધી અરજીઓ જુઓ")}</Text>
                 </Pressable>
               </>
             )}
@@ -287,7 +302,7 @@ export default function Templates() {
 
                   {/* Subtle Action Cue */}
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                    <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                    <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>{t("draftActionCue")}</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
                   </View>
                 </Pressable>
@@ -306,12 +321,12 @@ export default function Templates() {
                   ]}
                 >
                   <Text style={styles.seeMoreBtnText}>
-                    See More / વધુ જુઓ ({nextBatchSize} more)
+                    {t("seeMoreCount", { batch: nextBatchSize })}
                   </Text>
                   <Ionicons name="chevron-down" size={18} color="#FFF" />
                 </Pressable>
                 <Text style={[styles.paginationHint, { color: colors.muted }]}>
-                  Showing {displayedPairs.length} of {matchedPairs.length} applications
+                  {ui(`Showing ${displayedPairs.length} of ${matchedPairs.length} applications`, `${matchedPairs.length} માંથી ${displayedPairs.length} અરજીઓ`)}
                 </Text>
               </View>
             ) : null}
@@ -339,11 +354,11 @@ export default function Templates() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>Legal Templates</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{t("legalTemplates")}</Text>
         <Text style={{ color: colors.muted, fontSize: 12 }}>
           {orderedBasePairs.length === 0
-            ? "0 applications"
-            : `Showing ${displayedPairs.length} of ${matchedPairs.length} applications`}
+            ? ui("0 applications", "0 અરજીઓ")
+            : ui(`${displayedPairs.length} of ${matchedPairs.length} applications`, `${matchedPairs.length} માંથી ${displayedPairs.length} અરજીઓ`)}
         </Text>
       </View>
 
@@ -352,7 +367,7 @@ export default function Templates() {
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           testID="tpl-search"
-          placeholder="Search: mudat, warrant, jamin, મુદત..."
+          placeholder={ui("Search templates (mudat, warrant, jamin...)", "અરજી શોધો (મુદત, વોરંટ, જામીન...)")}
           placeholderTextColor={colors.muted}
           value={q}
           onChangeText={setQ}
@@ -389,7 +404,7 @@ export default function Templates() {
             >
               <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 12, fontWeight: "700" }}>
                 {c === "Favorites" ? "⭐ " : ""}
-                {c}
+                {catLabel(c)}
               </Text>
             </Pressable>
           );
@@ -405,19 +420,18 @@ export default function Templates() {
             color={colors.muted}
           />
           <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-            {orderedBasePairs.length === 0 ? "કોઈ અરજી ઉપલબ્ધ નથી" : "કોઈ સંબંધિત અરજી મળી નથી"}
-          </Text>
-          <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
-            {orderedBasePairs.length === 0 ? "No legal templates available" : "No related application found"}
+            {orderedBasePairs.length === 0
+              ? t("noTemplatesAvailable")
+              : ui("No related application found", "કોઈ સંબંધિત અરજી મળી નથી")}
           </Text>
           {orderedBasePairs.length === 0 ? (
             <Text style={[styles.emptyHint, { color: colors.muted }]}>
-              સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી — No applications published currently
+              {ui("No applications published currently.", "સંચાલક દ્વારા હાલમાં કોઈ અરજી પ્રકાશિત કરવામાં આવી નથી.")}
             </Text>
           ) : (
             <>
               <Text style={[styles.emptyHint, { color: colors.muted }]}>
-                કૃપા કરીને બીજો શબ્દ શોધો — Try searching with different keywords
+                {ui("Try searching with different keywords.", "કૃપા કરીને બીજો શબ્દ શોધો.")}
               </Text>
               <Pressable
                 testID="tpl-empty-reset"
@@ -427,7 +441,7 @@ export default function Templates() {
                 }}
                 style={[styles.clearBtn, { backgroundColor: colors.brandPrimary }]}
               >
-                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>બધી અરજીઓ જુઓ (View All)</Text>
+                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{ui("View All Templates", "બધી અરજીઓ જુઓ")}</Text>
               </Pressable>
             </>
           )}
@@ -454,6 +468,7 @@ export default function Templates() {
             <MobileTemplateCard
               item={item}
               colors={colors}
+              draftLabel={t("draftActionCue")}
               onSelect={setSelectedPair}
               onToggleFav={toggleFavorite}
             />
@@ -471,12 +486,12 @@ export default function Templates() {
                   ]}
                 >
                   <Text style={styles.seeMoreBtnText}>
-                    See More / વધુ જુઓ ({nextBatchSize} more)
+                    {t("seeMoreCount", { batch: nextBatchSize })}
                   </Text>
                   <Ionicons name="chevron-down" size={16} color="#FFF" />
                 </Pressable>
                 <Text style={[styles.paginationHint, { color: colors.muted }]}>
-                  Showing {displayedPairs.length} of {matchedPairs.length} applications
+                  {ui(`Showing ${displayedPairs.length} of ${matchedPairs.length} applications`, `${matchedPairs.length} માંથી ${displayedPairs.length} અરજીઓ`)}
                 </Text>
               </View>
             ) : null
@@ -505,11 +520,13 @@ export default function Templates() {
 const MobileTemplateCard = memo(function MobileTemplateCard({
   item,
   colors,
+  draftLabel,
   onSelect,
   onToggleFav,
 }: {
   item: SearchMatchedPair;
   colors: any;
+  draftLabel: string;
   onSelect: (pair: TemplateLogicalPair) => void;
   onToggleFav: (pair: TemplateLogicalPair, e?: any) => void;
 }) {
@@ -554,7 +571,7 @@ const MobileTemplateCard = memo(function MobileTemplateCard({
       </View>
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-        <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+        <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>{draftLabel}</Text>
         <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
       </View>
     </Pressable>

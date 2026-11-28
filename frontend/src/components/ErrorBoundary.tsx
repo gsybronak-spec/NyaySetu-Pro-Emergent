@@ -3,6 +3,52 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { safeBack } from "@/src/utils/navigation";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
+
+function ErrorFallback({
+  fallbackTitle,
+  errorMessage,
+  onReset,
+}: {
+  fallbackTitle?: string;
+  errorMessage?: string;
+  onReset: () => void;
+}) {
+  const { t, ui } = useAppLanguage();
+  return (
+    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+      <View style={styles.card}>
+        <View style={styles.iconCircle}>
+          <Ionicons name="alert-circle-outline" size={36} color="#B91C1C" />
+        </View>
+        <Text style={styles.title}>{fallbackTitle || t("somethingWentWrong")}</Text>
+        <Text style={styles.message}>
+          {errorMessage ||
+            ui(
+              "An unexpected display error occurred. Please try reloading.",
+              "અનપેક્ષિત ડિસ્પ્લે ભૂલ આવી છે. કૃપા કરીને ફરી લોડ કરો."
+            )}
+        </Text>
+        <View style={styles.btnRow}>
+          <Pressable
+            testID="boundary-back-btn"
+            onPress={() => safeBack("/(tabs)/home")}
+            style={styles.backBtn}
+          >
+            <Text style={styles.backBtnTxt}>{t("back")}</Text>
+          </Pressable>
+          <Pressable
+            testID="boundary-retry-btn"
+            onPress={onReset}
+            style={styles.retryBtn}
+          >
+            <Text style={styles.retryBtnTxt}>{t("retry")}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -37,35 +83,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       return (
-        <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-          <View style={styles.card}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="alert-circle-outline" size={36} color="#B91C1C" />
-            </View>
-            <Text style={styles.title}>
-              {this.props.fallbackTitle || "Something went wrong / કંઈક ખોટું થયું"}
-            </Text>
-            <Text style={styles.message}>
-              {this.state.error?.message || "An unexpected display error occurred. Please try reloading."}
-            </Text>
-            <View style={styles.btnRow}>
-              <Pressable
-                testID="boundary-back-btn"
-                onPress={() => safeBack("/(tabs)/home")}
-                style={styles.backBtn}
-              >
-                <Text style={styles.backBtnTxt}>Back / પાછા જાઓ</Text>
-              </Pressable>
-              <Pressable
-                testID="boundary-retry-btn"
-                onPress={this.reset}
-                style={styles.retryBtn}
-              >
-                <Text style={styles.retryBtnTxt}>Retry / ફરી પ્રયાસ કરો</Text>
-              </Pressable>
-            </View>
-          </View>
-        </SafeAreaView>
+        <ErrorFallback
+          fallbackTitle={this.props.fallbackTitle}
+          errorMessage={this.state.error?.message}
+          onReset={this.reset}
+        />
       );
     }
 

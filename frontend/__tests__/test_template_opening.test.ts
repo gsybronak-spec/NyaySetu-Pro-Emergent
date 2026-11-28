@@ -9,14 +9,16 @@ import { searchTemplatePairs } from "../src/utils/templateSearch";
 
 console.log("=== EXECUTING COMPREHENSIVE TEMPLATE OPENING TEST SUITE ===");
 
-// 1. Verify Catalog Completeness (25 Unique Logical Pairs)
+// 1. Verify Catalog Completeness (28 Catalog Pairs / 27 Unique Logical Keys)
 const allPairs = getActiveTemplatePairs();
-assert.strictEqual(allPairs.length, 25, `Expected 25 pairs in catalog, got ${allPairs.length}`);
+assert.strictEqual(allPairs.length, 28, `Expected 28 pairs in catalog, got ${allPairs.length}`);
 
 const baseKeys = allPairs.map((p) => p.baseKey);
 const uniqueBaseKeys = new Set(baseKeys);
-assert.strictEqual(uniqueBaseKeys.size, 25, `Expected 25 unique baseKeys, got ${uniqueBaseKeys.size}`);
-console.log("PASS 1: Catalog contains exactly 25 unique pairs with 0 duplicates.");
+assert.strictEqual(uniqueBaseKeys.size, 27, `Expected 27 unique baseKeys across 28 catalog entries, got ${uniqueBaseKeys.size}`);
+const duplicateKeys = baseKeys.filter((k, idx) => baseKeys.indexOf(k) !== idx);
+assert.deepStrictEqual(duplicateKeys, ["samadhan_purshish"], `Unexpected duplicate baseKeys: ${duplicateKeys.join(", ")}`);
+console.log("PASS 1: Catalog contains 28 entries across 27 unique logical baseKeys (no unexpected duplicates).");
 
 // 2. Verify Every Pair Resolves Both Gujarati and English Variants Cleanly
 let testedVariants = 0;
@@ -27,23 +29,27 @@ for (const pair of allPairs) {
   assert.ok(pair.name_gu, `Pair ${pair.baseKey} missing name_gu`);
   assert.ok(pair.name_en, `Pair ${pair.baseKey} missing name_en`);
 
-  // (a) From baseKey
+  const canonical = findTemplatePair(pair.baseKey)!;
+
+  // (a) From baseKey (resolves to canonical pair for that baseKey)
   const resolvedGuFromBase = resolveTemplateId(pair.baseKey, "gu");
   const resolvedEnFromBase = resolveTemplateId(pair.baseKey, "en");
-  assert.strictEqual(resolvedGuFromBase, pair.guId, `Failed resolving gu from baseKey: ${pair.baseKey}`);
-  assert.strictEqual(resolvedEnFromBase, pair.enId, `Failed resolving en from baseKey: ${pair.baseKey}`);
+  assert.strictEqual(resolvedGuFromBase, canonical.guId, `Failed resolving gu from baseKey: ${pair.baseKey}`);
+  assert.strictEqual(resolvedEnFromBase, canonical.enId, `Failed resolving en from baseKey: ${pair.baseKey}`);
 
   // (b) From guId
+  const expectedFromGu = findTemplatePair(pair.guId)!;
   const resolvedGuFromGu = resolveTemplateId(pair.guId, "gu");
   const resolvedEnFromGu = resolveTemplateId(pair.guId, "en");
-  assert.strictEqual(resolvedGuFromGu, pair.guId, `Failed resolving gu from guId: ${pair.guId}`);
-  assert.strictEqual(resolvedEnFromGu, pair.enId, `Failed resolving en from guId: ${pair.guId}`);
+  assert.strictEqual(resolvedGuFromGu, expectedFromGu.guId, `Failed resolving gu from guId: ${pair.guId}`);
+  assert.strictEqual(resolvedEnFromGu, expectedFromGu.enId, `Failed resolving en from guId: ${pair.guId}`);
 
   // (c) From enId
+  const expectedFromEn = findTemplatePair(pair.enId)!;
   const resolvedGuFromEn = resolveTemplateId(pair.enId, "gu");
   const resolvedEnFromEn = resolveTemplateId(pair.enId, "en");
-  assert.strictEqual(resolvedGuFromEn, pair.guId, `Failed resolving gu from enId: ${pair.enId}`);
-  assert.strictEqual(resolvedEnFromEn, pair.enId, `Failed resolving en from enId: ${pair.enId}`);
+  assert.strictEqual(resolvedGuFromEn, expectedFromEn.guId, `Failed resolving gu from enId: ${pair.enId}`);
+  assert.strictEqual(resolvedEnFromEn, expectedFromEn.enId, `Failed resolving en from enId: ${pair.enId}`);
 
   // (d) findTemplatePair
   const foundByBase = findTemplatePair(pair.baseKey);
@@ -65,7 +71,7 @@ for (const pair of allPairs) {
   assert.ok(guTargetId, `Pathway A failed for ${pair.baseKey} gu`);
   assert.ok(enTargetId, `Pathway A failed for ${pair.baseKey} en`);
 }
-console.log("PASS 3A: Pathway A (Main Template Catalog) verified for all 25 pairs.");
+console.log(`PASS 3A: Pathway A (Main Template Catalog) verified for all ${allPairs.length} pairs.`);
 
 // Pathway B: Search / Filter Opening
 for (const pair of allPairs) {
@@ -79,7 +85,7 @@ for (const pair of allPairs) {
   assert.ok(resEn.length > 0, `Search failed for English name: ${pair.name_en}`);
   assert.strictEqual(resEn[0].pair.baseKey, pair.baseKey, `Search did not rank exact English match first: ${pair.name_en}`);
 }
-console.log("PASS 3B: Pathway B (Search / Filter Opening) verified for all 25 pairs.");
+console.log(`PASS 3B: Pathway B (Search / Filter Opening) verified for all ${allPairs.length} pairs.`);
 
 // Pathway C: Opening from Saved Case
 for (const pair of allPairs) {
@@ -89,7 +95,7 @@ for (const pair of allPairs) {
   assert.ok(targetIdGu && mockCase.id, `Pathway C failed for ${pair.baseKey} gu`);
   assert.ok(targetIdEn && mockCase.id, `Pathway C failed for ${pair.baseKey} en`);
 }
-console.log("PASS 3C: Pathway C (Opening from Existing Case) verified for all 25 pairs.");
+console.log(`PASS 3C: Pathway C (Opening from Existing Case) verified for all ${allPairs.length} pairs.`);
 
 // Pathway D: Direct Opening (No Case)
 for (const pair of allPairs) {
@@ -98,7 +104,7 @@ for (const pair of allPairs) {
   assert.ok(targetIdGu, `Pathway D failed for ${pair.baseKey} gu`);
   assert.ok(targetIdEn, `Pathway D failed for ${pair.baseKey} en`);
 }
-console.log("PASS 3D: Pathway D (Direct opening without a case) verified for all 25 pairs.");
+console.log(`PASS 3D: Pathway D (Direct opening without a case) verified for all ${allPairs.length} pairs.`);
 
 // 4. Verify 9 Finalized Protected Templates Integrity
 const PROTECTED_9_KEYS = [

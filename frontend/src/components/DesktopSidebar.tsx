@@ -6,15 +6,16 @@ import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { useAppLanguage, UiKey } from "@/src/context/AppLanguageContext";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
 import { DESKTOP_SIDEBAR_WIDTH } from "@/src/components/DesktopPage";
 
-const NAV_ITEMS: { route: string; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-  { route: "home", label: "Home", icon: "home" },
-  { route: "cases", label: "My Cases", icon: "folder-open" },
-  { route: "templates", label: "Templates", icon: "document-text" },
-  { route: "subscription", label: "Plans & Wallet", icon: "diamond" },
-  { route: "profile", label: "Profile", icon: "person-circle" },
+const NAV_ITEMS: { route: string; labelKey: UiKey; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { route: "home", labelKey: "tabHome", icon: "home" },
+  { route: "cases", labelKey: "tabMyCases", icon: "folder-open" },
+  { route: "templates", labelKey: "tabTemplates", icon: "document-text" },
+  { route: "subscription", labelKey: "tabPlansWallet", icon: "diamond" },
+  { route: "profile", labelKey: "tabProfile", icon: "person-circle" },
 ];
 
 /**
@@ -25,6 +26,7 @@ const NAV_ITEMS: { route: string; label: string; icon: keyof typeof Ionicons.gly
 export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
   const { user, signOut } = useAuth();
+  const { appLang, t, ui } = useAppLanguage();
 
   const activeRoute = state.routes[state.index]?.name;
 
@@ -43,7 +45,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
           <Text style={styles.brandName}>
             NyaySetu <Text style={{ color: "#C5A059" }}>Pro</Text>
           </Text>
-          <Text style={styles.brandTag}>Legal Workspace</Text>
+          <Text style={styles.brandTag}>{t("legalWorkspace")}</Text>
         </View>
       </View>
 
@@ -54,7 +56,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         style={({ pressed }) => [styles.cta, pressed && { opacity: 0.85 }]}
       >
         <Ionicons name="add" size={18} color="#0B1B3D" />
-        <Text style={styles.ctaText}>New Case</Text>
+        <Text style={styles.ctaText}>{t("newCaseBtn")}</Text>
       </Pressable>
 
       {/* Nav */}
@@ -73,7 +75,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
               ]}
             >
               <Ionicons name={item.icon} size={19} color={active ? "#C5A059" : "#A6B1C2"} />
-              <Text style={[styles.navLabel, { color: active ? "#FDFDFD" : "#A6B1C2" }]}>{item.label}</Text>
+              <Text style={[styles.navLabel, { color: active ? "#FDFDFD" : "#A6B1C2" }]}>{t(item.labelKey)}</Text>
               {active ? <View style={styles.activeDot} /> : null}
             </Pressable>
           );
@@ -85,7 +87,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
           style={({ pressed }) => [styles.navItem, pressed && { opacity: 0.8 }]}
         >
           <Ionicons name="search" size={19} color={"#A6B1C2"} />
-          <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>Search</Text>
+          <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>{t("tabSearch")}</Text>
         </Pressable>
 
         <Pressable
@@ -94,7 +96,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
           style={({ pressed }) => [styles.navItem, pressed && { opacity: 0.8 }]}
         >
           <Ionicons name="file-tray-full" size={19} color={"#A6B1C2"} />
-          <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>Document Vault</Text>
+          <Text style={[styles.navLabel, { color: "#A6B1C2" }]}>{t("tabDocVault")}</Text>
         </Pressable>
       </View>
 
@@ -119,11 +121,11 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <Ionicons name="diamond" size={16} color="#C5A059" />
           <Text style={{ fontSize: 12, fontWeight: "700", color: "#FDFDFD" }}>
-            Credits
+            {t("credits")}
           </Text>
         </View>
         <Text style={{ fontSize: 13, fontWeight: "800", color: "#C5A059" }}>
-          {user?.unlimited_access || user?.is_owner || user?.is_partner ? "Unlimited" : (user?.wallet_balance ?? 0)}
+          {user?.unlimited_access || user?.is_owner || user?.is_partner ? t("unlimited") : (user?.wallet_balance ?? 0)}
         </Text>
       </Pressable>
 
@@ -134,7 +136,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         </View>
         <View style={{ flex: 1, marginLeft: 10, minWidth: 0 }}>
           <Text style={styles.userName} numberOfLines={1}>
-            {formatDisplayName(user, "Advocate")}
+            {formatDisplayName(user, t("advocate"), appLang)}
           </Text>
           <Text style={styles.userMobile} numberOfLines={1}>
             {user?.mobile ? `+91 ${user.mobile}` : user?.email || ""}
@@ -143,7 +145,7 @@ export function DesktopSidebar({ state, navigation }: BottomTabBarProps) {
         <Pressable
           testID="desktop-signout"
           onPress={() => {
-            if (typeof window !== "undefined" && window.confirm("Sign out? You will need to login again to continue.")) {
+            if (typeof window !== "undefined" && window.confirm(ui("Sign out? You will need to login again to continue.", "લૉગ આઉટ કરવું છે? આગળ વધવા માટે ફરી લૉગિન કરવું પડશે."))) {
               signOut().then(() => router.replace("/(auth)/login")).catch(() => router.replace("/(auth)/login"));
             }
           }}

@@ -8,6 +8,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
@@ -23,6 +24,7 @@ import { storage } from "@/src/utils/storage";
 export default function Home() {
   const { colors, isDark } = useTheme();
   const { user } = useAuth();
+  const { appLang, setAppLang, t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const [quote, setQuote] = useState("Justice begins with preparation.");
@@ -128,31 +130,76 @@ export default function Home() {
   };
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good Morning" : hour < 18 ? "Good Afternoon" : "Good Evening";
-  const advocateName = formatDisplayName(user, "Advocate");
+  const greeting = hour < 12 ? t("goodMorning") : hour < 18 ? t("goodAfternoon") : t("goodEvening");
+  const advocateName = formatDisplayName(user, t("advocate"), appLang);
+  const displayQuote = appLang === "gu" && !/[\u0A80-\u0AFF]/.test(quote) ? t("defaultQuote") : quote;
+
+  const renderLanguageToggle = (onDarkHero = false) => (
+    <View
+      testID="home-language-toggle"
+      style={[
+        styles.langTogglePill,
+        onDarkHero
+          ? { backgroundColor: "rgba(255,255,255,0.08)", borderColor: "rgba(197,160,89,0.4)" }
+          : { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+      ]}
+    >
+      {(["en", "gu"] as const).map((code) => {
+        const active = appLang === code;
+        return (
+          <Pressable
+            key={code}
+            testID={`home-lang-${code}`}
+            onPress={() => setAppLang(code)}
+            hitSlop={6}
+            style={[
+              styles.langToggleOption,
+              active && { backgroundColor: colors.brandPrimary },
+            ]}
+          >
+            <Text
+              style={[
+                styles.langToggleTxt,
+                {
+                  color: active
+                    ? colors.onBrandPrimary
+                    : onDarkHero
+                      ? "#E2E8F0"
+                      : colors.onSurface,
+                },
+              ]}
+            >
+              {code === "en" ? "English" : "ગુજરાતી"}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
 
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
     const quickActions = [
-      { label: "Create Case", icon: "add-circle", href: "/case/new" as const, tone: "#C5A059" },
-      { label: "Browse Templates", icon: "document-text", href: "/(tabs)/templates" as const, tone: "#0B1B3D" },
-      { label: "View Cases", icon: "folder-open", href: "/(tabs)/cases" as const, tone: "#112240" },
-      { label: "Plans & Wallet", icon: "diamond", href: "/(tabs)/subscription" as const, tone: "#7A1C1C" },
+      { key: "create-case", label: t("createCaseBtn"), icon: "add-circle", href: "/case/new" as const, tone: "#C5A059" },
+      { key: "browse-templates", label: t("browseTemplates"), icon: "document-text", href: "/(tabs)/templates" as const, tone: "#0B1B3D" },
+      { key: "view-cases", label: t("viewCases"), icon: "folder-open", href: "/(tabs)/cases" as const, tone: "#112240" },
+      { key: "plans-wallet", label: t("tabPlansWallet"), icon: "diamond", href: "/(tabs)/subscription" as const, tone: "#7A1C1C" },
     ];
 
     return (
       <DesktopPage
-        title={`${greeting}, ${advocateName || "Advocate"}`}
-        subtitle="Your legal workspace — pick up where you left off."
+        title={`${greeting}, ${advocateName || t("advocate")}`}
+        subtitle={ui("Your legal workspace — pick up where you left off.", "તમારું કાનૂની કાર્યક્ષેત્ર — જ્યાંથી અટક્યા હતા ત્યાંથી આગળ વધો.")}
         actions={
-          <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+          <View style={{ flexDirection: "row", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {renderLanguageToggle(false)}
             <Pressable
               testID="desktop-guide-btn"
               onPress={() => router.push("/user-guide" as any)}
-              style={[styles.desktopSearch, { borderColor: colors.brandPrimary + "40", backgroundColor: colors.surfaceSecondary }]}
+              style={[styles.desktopGuideBtn, { borderColor: colors.brandPrimary + "40", backgroundColor: colors.surfaceSecondary }]}
             >
               <Ionicons name="book-outline" size={16} color={colors.brandPrimary} />
-              <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", marginLeft: 6 }}>User Guide (માર્ગદર્શિકા)</Text>
+              <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "600", marginLeft: 6 }}>{t("userGuide")}</Text>
             </Pressable>
             <Pressable
               testID="home-search-btn"
@@ -160,7 +207,7 @@ export default function Home() {
               style={[styles.desktopSearch, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
             >
               <Ionicons name="search" size={16} color={colors.muted} />
-              <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 6 }}>Search cases & templates</Text>
+              <Text style={{ color: colors.muted, fontSize: 13, marginLeft: 6 }} numberOfLines={1}>{t("searchCasesTemplatesPlaceholder")}</Text>
             </Pressable>
           </View>
         }
@@ -169,10 +216,10 @@ export default function Home() {
           <View style={[styles.desktopError, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "50" }]}>
             <Ionicons name="cloud-offline-outline" size={16} color={colors.error} />
             <Text style={{ color: colors.error, fontSize: 13, flex: 1, marginLeft: 8 }}>
-              Couldn't refresh your data. Check your connection.
+              {t("refreshError")}
             </Text>
             <Pressable testID="home-error-retry" onPress={load}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Retry</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>{t("retry")}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -183,21 +230,23 @@ export default function Home() {
           style={styles.desktopWelcome}
         >
           <View style={{ flex: 1, paddingRight: Spacing.xl }}>
-            <Text style={styles.desktopQuote}>"{quote}"</Text>
+            <Text style={styles.desktopQuote}>"{displayQuote}"</Text>
             <Text style={styles.desktopWelcomeSub}>
-              Draft court applications in minutes — not hours. Your case data flows into every document automatically.
+              {t("heroSub")}
             </Text>
           </View>
           <View style={styles.desktopWalletChip}>
             <Ionicons name="wallet" size={16} color="#C5A059" />
-            <Text style={styles.desktopWalletTxt}>{isUnlimited ? "Unlimited Templates" : `${wallet.balance} Templates Remaining`}</Text>
+            <Text style={styles.desktopWalletTxt}>
+              {isUnlimited ? t("unlimitedTemplates") : t("templatesRemainingCount", { n: wallet.balance })}
+            </Text>
           </View>
         </LinearGradient>
 
         {/* Real metrics */}
         <View style={styles.statGrid}>
           <StatCard
-            label="Active Cases"
+            label={t("activeCases")}
             value={cases.length}
             icon="folder-open"
             tone="navy"
@@ -205,7 +254,7 @@ export default function Home() {
             testID="stat-card-active-cases"
           />
           <StatCard
-            label="Drafts"
+            label={t("drafts")}
             value={drafts.length}
             icon="create"
             tone="gold"
@@ -213,7 +262,7 @@ export default function Home() {
             testID="stat-card-drafts"
           />
           <StatCard
-            label="Applications Generated"
+            label={t("applicationsGenerated")}
             value={applications.length}
             icon="document-text"
             tone="green"
@@ -221,8 +270,8 @@ export default function Home() {
             testID="stat-card-applications-generated"
           />
           <StatCard
-            label="Credits Remaining"
-            value={isUnlimited ? "Unlimited" : wallet.balance}
+            label={t("creditsRemaining")}
+            value={isUnlimited ? t("unlimited") : wallet.balance}
             icon="wallet"
             tone="red"
             onPress={() => router.push("/(tabs)/subscription")}
@@ -232,12 +281,12 @@ export default function Home() {
 
         {/* Quick actions */}
         <View style={styles.desktopSection}>
-          <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Quick Actions</Text>
+          <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>{t("quickActions")}</Text>
           <View style={styles.quickGrid}>
             {quickActions.map((a) => (
               <Pressable
-                key={a.label}
-                testID={`desktop-quick-${a.label.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+                key={a.key}
+                testID={`desktop-quick-${a.key}`}
                 onPress={() => router.push(a.href)}
                 style={({ pressed }) => [
                   styles.quickCard,
@@ -260,9 +309,9 @@ export default function Home() {
         {cases.length > 0 && (
           <View style={styles.desktopSection}>
             <View style={styles.desktopRowBetween}>
-              <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Recent Cases</Text>
+              <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>{t("recentCases")}</Text>
               <Pressable testID="see-all-cases" onPress={() => router.push("/(tabs)/cases")}>
-                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All</Text>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>{t("seeAll")}</Text>
               </Pressable>
             </View>
             <View style={styles.recentGrid}>
@@ -275,16 +324,16 @@ export default function Home() {
                 >
                   <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
                     <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14, flex: 1 }} numberOfLines={1}>
-                      {c.nickname || c.party_name || c.case_number || "Case"}
+                      {c.nickname || c.party_name || c.case_number || ui("Case", "કેસ")}
                     </Text>
                     <View style={[styles.recentPill, { backgroundColor: c.category === "Criminal" ? "#7A1C1C20" : colors.brandTertiary }]}>
                       <Text style={{ color: c.category === "Criminal" ? "#7A1C1C" : colors.onBrandTertiary, fontSize: 10, fontWeight: "700" }}>
-                        {c.category || "Other"}
+                        {c.category || ui("Other", "અન્ય")}
                       </Text>
                     </View>
                   </View>
                   <Text style={{ color: colors.muted, fontSize: 12, marginTop: 6 }} numberOfLines={1}>
-                    {c.case_number ? `${c.case_number} • ` : ""}{c.case_type_label || "Case"}
+                    {c.case_number ? `${c.case_number} • ` : ""}{c.case_type_label || ui("Case", "કેસ")}
                   </Text>
                   {c.party_name ? (
                     <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
@@ -300,18 +349,17 @@ export default function Home() {
         {/* Most used templates / Top 10 Ordered Templates */}
         <View style={styles.desktopSection}>
           <View style={styles.desktopRowBetween}>
-            <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
+            <Text style={[styles.desktopSectionTitle, { color: colors.onSurface }]}>{t("legalTemplates")}</Text>
             {totalTemplateCount > 0 ? (
               <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All ({totalTemplateCount}) / બધા જુઓ</Text>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>{t("seeAllCount", { n: totalTemplateCount })}</Text>
               </Pressable>
             ) : null}
           </View>
           {totalTemplateCount === 0 ? (
             <View style={{ padding: Spacing.xl, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
               <Ionicons name="document-text-outline" size={36} color={colors.muted} />
-              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.sm }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
-              <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>No legal templates available currently</Text>
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.sm }}>{t("noTemplatesAvailable")}</Text>
             </View>
           ) : (
             <>
@@ -342,7 +390,7 @@ export default function Home() {
                       </Text>
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.md, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "600" }}>{t("draftActionCue")}</Text>
                       <Ionicons name="chevron-forward" size={16} color={colors.brandPrimary} />
                     </View>
                   </Pressable>
@@ -355,7 +403,7 @@ export default function Home() {
                   style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
                 >
                   <Text style={styles.seeMoreBtnText}>
-                    See More / વધુ જુઓ ({nextHomeBatchSize} more — {remainingHomeCount} remaining)
+                    {t("seeMoreBatch", { batch: nextHomeBatchSize, remaining: remainingHomeCount })}
                   </Text>
                   <Ionicons name="chevron-down" size={18} color="#FFF" />
                 </Pressable>
@@ -366,7 +414,7 @@ export default function Home() {
                   style={[styles.seeMoreBtn, { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
                 >
                   <Text style={[styles.seeMoreBtnText, { color: colors.onSurface }]}>
-                    All {totalTemplateCount} Templates Loaded • View Catalog / સંપૂર્ણ કેટલોગ જુઓ
+                    {t("allLoadedViewCatalog", { n: totalTemplateCount })}
                   </Text>
                   <Ionicons name="arrow-forward" size={18} color={colors.brandPrimary} />
                 </Pressable>
@@ -429,10 +477,10 @@ export default function Home() {
           <View style={[styles.errorBanner, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "50" }]}>
             <Ionicons name="cloud-offline-outline" size={16} color={colors.error} />
             <Text style={{ color: colors.error, fontSize: 12, flex: 1, marginLeft: 6 }}>
-              Couldn't refresh your data. Check your connection.
+              {t("refreshError")}
             </Text>
             <Pressable testID="home-error-retry" onPress={load} hitSlop={8}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>Retry</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>{t("retry")}</Text>
             </Pressable>
           </View>
         )}
@@ -441,15 +489,20 @@ export default function Home() {
           colors={isDark ? ["#0B1B3D", "#112240"] : ["#0B1B3D", "#1D2D50"]}
           style={styles.welcome}
         >
-          <Text style={styles.welcomeGreet}>{greeting},</Text>
+          <View style={styles.welcomeTopRow}>
+            <Text style={styles.welcomeGreet}>{greeting},</Text>
+            {renderLanguageToggle(true)}
+          </View>
           <Text style={styles.welcomeName}>{advocateName}</Text>
           <View style={styles.quoteRow}>
             <View style={styles.quoteBar} />
-            <Text style={styles.quote}>"{quote}"</Text>
+            <Text style={styles.quote}>"{displayQuote}"</Text>
           </View>
           <View style={styles.walletChip}>
             <Ionicons name="wallet" size={14} color="#C5A059" />
-            <Text style={styles.walletTxt}>{isUnlimited ? "Unlimited Templates" : `${wallet.balance} Templates Remaining`}</Text>
+            <Text style={styles.walletTxt}>
+              {isUnlimited ? t("unlimitedTemplates") : t("templatesRemainingCount", { n: wallet.balance })}
+            </Text>
           </View>
         </LinearGradient>
 
@@ -461,8 +514,8 @@ export default function Home() {
             style={[styles.actionCard, { backgroundColor: colors.brandPrimary }]}
           >
             <Ionicons name="add-circle" size={26} color={colors.onBrandPrimary} />
-            <Text style={[styles.actionTitle, { color: colors.onBrandPrimary }]}>Add New Case</Text>
-            <Text style={[styles.actionSub, { color: colors.onBrandPrimary, opacity: 0.85 }]}>Create in seconds</Text>
+            <Text style={[styles.actionTitle, { color: colors.onBrandPrimary }]}>{t("addNewCase")}</Text>
+            <Text style={[styles.actionSub, { color: colors.onBrandPrimary, opacity: 0.85 }]}>{t("createCaseSub")}</Text>
           </Pressable>
           <Pressable
             testID="home-my-cases-card"
@@ -470,8 +523,8 @@ export default function Home() {
             style={[styles.actionCard, { backgroundColor: colors.brand }]}
           >
             <Ionicons name="folder-open" size={26} color="#FFF" />
-            <Text style={[styles.actionTitle, { color: "#FFF" }]}>My Cases</Text>
-            <Text style={[styles.actionSub, { color: "#FFF", opacity: 0.75 }]}>Manage all cases</Text>
+            <Text style={[styles.actionTitle, { color: "#FFF" }]}>{t("tabMyCases")}</Text>
+            <Text style={[styles.actionSub, { color: "#FFF", opacity: 0.75 }]}>{t("manageAllCases")}</Text>
           </Pressable>
         </View>
 
@@ -479,11 +532,11 @@ export default function Home() {
 
         {/* Quick Access: Documents Vault & Drafts */}
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Quick Access</Text>
+          <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>{t("quickAccess")}</Text>
           <View style={{ flexDirection: "row", gap: Spacing.md }}>
             {[
-              { key: "documents-vault", label: "Documents Vault", icon: "file-tray-full", color: "#C5A059", tab: "documents" },
-              { key: "drafts", label: "Drafts", icon: "create", color: "#C5A059", tab: "drafts" },
+              { key: "documents-vault", label: "Documents Vault", displayLabel: t("documentsVault"), icon: "file-tray-full", color: "#C5A059", tab: "documents" },
+              { key: "drafts", label: "Drafts", displayLabel: t("drafts"), icon: "create", color: "#C5A059", tab: "drafts" },
             ].map((c) => (
               <Pressable
                 key={c.key}
@@ -494,7 +547,7 @@ export default function Home() {
                 <View style={[styles.catIcon, { backgroundColor: c.color + "20" }]}>
                   <Ionicons name={c.icon as any} size={22} color={c.color} />
                 </View>
-                <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{c.label}</Text>
+                <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }}>{c.displayLabel}</Text>
               </Pressable>
             ))}
           </View>
@@ -503,18 +556,17 @@ export default function Home() {
         {/* Legal Templates - First 10 Templates (5 rows x 2 cards) */}
         <View style={styles.section}>
           <View style={styles.rowBetween}>
-            <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>Legal Templates / કોર્ટ અરજીઓ</Text>
+            <Text style={[styles.sectionTitle, { color: colors.onSurface, marginBottom: 0 }]}>{t("legalTemplates")}</Text>
             {totalTemplateCount > 0 ? (
               <Pressable testID="see-all-templates" onPress={() => router.push("/(tabs)/templates")}>
-                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>See All ({totalTemplateCount})</Text>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700" }}>{t("seeAllCount", { n: totalTemplateCount })}</Text>
               </Pressable>
             ) : null}
           </View>
           {totalTemplateCount === 0 ? (
             <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border, marginTop: Spacing.sm }}>
               <Ionicons name="document-text-outline" size={32} color={colors.muted} />
-              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
-              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No legal templates available currently</Text>
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>{t("noTemplatesAvailable")}</Text>
             </View>
           ) : (
             <>
@@ -545,7 +597,7 @@ export default function Home() {
                       </Text>
                     </View>
                     <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: Spacing.sm, paddingTop: Spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }}>
-                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>Draft / અરજી તૈયાર કરો</Text>
+                      <Text style={{ color: colors.brandPrimary, fontSize: 11, fontWeight: "600" }}>{t("draftActionCue")}</Text>
                       <Ionicons name="chevron-forward" size={14} color={colors.brandPrimary} />
                     </View>
                   </Pressable>
@@ -558,7 +610,7 @@ export default function Home() {
                   style={[styles.seeMoreBtn, { backgroundColor: colors.brandPrimary }]}
                 >
                   <Text style={styles.seeMoreBtnText}>
-                    See More / વધુ જુઓ ({nextHomeBatchSize} more — {remainingHomeCount} remaining)
+                    {t("seeMoreBatch", { batch: nextHomeBatchSize, remaining: remainingHomeCount })}
                   </Text>
                   <Ionicons name="chevron-down" size={18} color="#FFF" />
                 </Pressable>
@@ -569,7 +621,7 @@ export default function Home() {
                   style={[styles.seeMoreBtn, { backgroundColor: colors.surfaceSecondary, borderWidth: 1, borderColor: colors.border }]}
                 >
                   <Text style={[styles.seeMoreBtnText, { color: colors.onSurface }]}>
-                    All {totalTemplateCount} Templates Loaded • View Catalog / સંપૂર્ણ કેટલોગ જુઓ
+                    {t("allLoadedViewCatalog", { n: totalTemplateCount })}
                   </Text>
                   <Ionicons name="arrow-forward" size={18} color={colors.brandPrimary} />
                 </Pressable>
@@ -618,7 +670,33 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(197,160,89,0.2)",
   },
-  welcomeGreet: { color: "#C5A059", fontSize: 12, letterSpacing: 1.5, textTransform: "uppercase", fontWeight: "700" },
+  welcomeTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
+    marginBottom: 4,
+  },
+  langTogglePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 2,
+    flexShrink: 0,
+  },
+  langToggleOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  langToggleTxt: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  welcomeGreet: { color: "#C5A059", fontSize: 12, letterSpacing: 1.2, textTransform: "uppercase", fontWeight: "700", flexShrink: 1 },
   welcomeName: { color: "#FDFDFD", fontSize: 24, fontFamily: "serif", fontWeight: "700", marginTop: 4 },
   quoteRow: { flexDirection: "row", alignItems: "center", marginTop: Spacing.md },
   quoteBar: { width: 3, height: 20, backgroundColor: "#C5A059", marginRight: Spacing.sm },
@@ -720,10 +798,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   // Desktop
+  desktopGuideBtn: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: Spacing.md, paddingVertical: 8, borderRadius: 999, borderWidth: 1,
+  },
   desktopSearch: {
     flexDirection: "row", alignItems: "center",
-    paddingHorizontal: Spacing.md, paddingVertical: 10, borderRadius: 999, borderWidth: 1,
-    minWidth: 240,
+    paddingHorizontal: Spacing.md, paddingVertical: 9, borderRadius: 999, borderWidth: 1,
+    minWidth: 190,
   },
   desktopError: {
     flexDirection: "row", alignItems: "center",

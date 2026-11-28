@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { storage } from "@/src/utils/storage";
 
@@ -26,6 +27,7 @@ interface UserGuideModalProps {
 interface GuideSlide {
   id: number;
   badge: string;
+  badgeEn: string;
   titleGu: string;
   titleEn: string;
   descGu: string;
@@ -36,6 +38,7 @@ interface GuideSlide {
 
 export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalProps) {
   const { colors, isDark } = useTheme();
+  const { isGujarati, ui } = useAppLanguage();
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
   const [currentSlide, setCurrentSlide] = useState(0);
@@ -44,6 +47,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
     {
       id: 1,
       badge: "પગલું ૧: પ્રોફાઇલ સેટઅપ",
+      badgeEn: "Step 1: Profile Setup",
       titleGu: "વકીલ પ્રોફાઇલ સેટઅપ કરો",
       titleEn: "Step 1: Advocate Profile Setup",
       descGu: "આપનું નામ, સનદ નંબર અને ચેમ્બરનું સરનામું સેટ કરો. આ વિગતો આપોઆપ દરેક કાનૂની અરજીના અંતે પ્રિન્ટ થઈ જશે.",
@@ -82,6 +86,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
     {
       id: 2,
       badge: "પગલું ૨: કેસ મેનેજમેન્ટ",
+      badgeEn: "Step 2: Case Management",
       titleGu: "કોર્ટ કેસ ઉમેરો અને સાચવો",
       titleEn: "Step 2: Add & Manage Cases",
       descGu: "જિલ્લો, કોર્ટનું નામ, કેસ નંબર અને બંને પક્ષકારોની વિગત એકવાર ભરો. કેસ હિસ્ટ્રી અને આગામી મુદ્દત પણ ટ્રેક કરી શકાશે.",
@@ -113,6 +118,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
     {
       id: 3,
       badge: "પગલું ૩: કાનૂની નમૂનાઓ",
+      badgeEn: "Step 3: Legal Templates",
       titleGu: "૨૬ દ્વિભાષી કાનૂની અરજીઓ",
       titleEn: "Step 3: 26 Bilingual Legal Templates",
       descGu: "વકાલતનામું, હાજરી મુક્તિ, વોરંટ રદ, એફ.એસ. હક બંધ, મુદ્દત અરજી, દસ્તાવેજ પરત જેવા તમામ પ્રમાણિત નમૂનાઓ ૧ મિનિટમાં તૈયાર કરો.",
@@ -148,6 +154,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
     {
       id: 4,
       badge: "પગલું ૪: રિયલ-ટાઇમ ઓટોસેવ",
+      badgeEn: "Step 4: Real-time Auto-save",
       titleGu: "ડ્રાફ્ટ ઓટો-સેવ & ડેટા સુરક્ષા",
       titleEn: "Step 4: Real-time Auto-save",
       descGu: "તમે ટાઈપ કરો એટલે વિગતો આપોઆપ સર્વર પર સેવ થઈ જાય છે. એપ બંધ થઈ જાય તો પણ અધૂરી અરજી હંમેશા સાચવેલી રહેશે.",
@@ -158,14 +165,14 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
           <View style={[styles.autoSaveIndicator, { backgroundColor: "rgba(16,185,129,0.15)" }]}>
             <Ionicons name="checkmark-circle" size={14} color="#10B981" />
             <Text style={{ color: "#10B981", fontSize: 11, fontWeight: "700", marginLeft: 4 }}>
-              ડ્રાફ્ટ આપોઆપ સુરક્ષિત સેવ થયો (Autosaved)
+              {ui("Draft autosaved", "ડ્રાફ્ટ આપોઆપ સુરક્ષિત સેવ થયો")}
             </Text>
           </View>
           <View style={styles.mockBody}>
             <Text style={{ color: c.muted, fontSize: 10, fontWeight: "600" }}>કોના તરફે એડવોકેટ:</Text>
             <View style={[styles.mockInputPill, { backgroundColor: c.surface, borderColor: c.brandPrimary }]}>
               <Ionicons name="checkmark" size={13} color={c.brandPrimary} />
-              <Text style={{ color: c.onSurface, fontSize: 11, fontWeight: "700", marginLeft: 4 }}>આરોપી તરફે (Accused)</Text>
+              <Text style={{ color: c.onSurface, fontSize: 11, fontWeight: "700", marginLeft: 4 }}>આરોપી તરફે</Text>
             </View>
             <Text style={{ color: c.muted, fontSize: 10, fontWeight: "600", marginTop: 6 }}>ગેરહાજર રહેવાનું કારણ:</Text>
             <View style={[styles.mockInputPill, { backgroundColor: c.surface, borderColor: c.border }]}>
@@ -178,6 +185,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
     {
       id: 5,
       badge: "પગલું ૫: કોર્ટ-માન્ય PDF",
+      badgeEn: "Step 5: Court-Compliant PDF",
       titleGu: "કોર્ટ નિયમ અનુસાર ૧-ક્લિક PDF",
       titleEn: "Step 5: Court-Compliant PDF Generation",
       descGu: "ગુજરાત કોર્ટના નિયમ મુજબ ૪૦mm ડાબો માર્જિન, લીગલ સાઈઝ પેપર, કાનૂની ફોન્ટ્સ અને સહી લાઇન સાથે સીધી પ્રિન્ટ કાઢો કે WhatsApp કરો.",
@@ -268,8 +276,12 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
                 <Ionicons name="school-outline" size={18} color="#FFF" />
               </LinearGradient>
               <View style={{ marginLeft: Spacing.sm }}>
-                <Text style={[styles.mainTitle, { color: colors.onSurface }]}>ન્યાયસેતુ પ્રો માર્ગદર્શિકા</Text>
-                <Text style={[styles.subTitle, { color: colors.muted }]}>How to use NyaaySetu Pro</Text>
+                <Text style={[styles.mainTitle, { color: colors.onSurface }]}>
+                  {ui("NyaySetu Pro Guide", "ન્યાયસેતુ પ્રો માર્ગદર્શિકા")}
+                </Text>
+                <Text style={[styles.subTitle, { color: colors.muted }]}>
+                  {ui("How to use NyaySetu Pro", "એપ કેવી રીતે વાપરવી")}
+                </Text>
               </View>
             </View>
             <Pressable
@@ -288,7 +300,9 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
             <View style={styles.badgeRow}>
               <View style={[styles.stepBadge, { backgroundColor: colors.brandTertiary }]}>
                 <Ionicons name={slide.icon} size={14} color={colors.onBrandTertiary} />
-                <Text style={[styles.stepBadgeText, { color: colors.onBrandTertiary }]}>{slide.badge}</Text>
+                <Text style={[styles.stepBadgeText, { color: colors.onBrandTertiary }]}>
+                  {isGujarati ? slide.badge : slide.badgeEn}
+                </Text>
               </View>
               <Text style={{ color: colors.muted, fontSize: 12, fontWeight: "600" }}>
                 {currentSlide + 1} / {slides.length}
@@ -296,8 +310,9 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
             </View>
 
             {/* Slide Title */}
-            <Text style={[styles.slideHeadingGu, { color: colors.onSurface }]}>{slide.titleGu}</Text>
-            <Text style={[styles.slideHeadingEn, { color: colors.muted }]}>{slide.titleEn}</Text>
+            <Text style={[styles.slideHeadingGu, { color: colors.onSurface }]}>
+              {isGujarati ? slide.titleGu : slide.titleEn}
+            </Text>
 
             {/* Visual Mockup Card / Simulated Screenshot */}
             <View style={styles.mockupWrapper}>
@@ -306,8 +321,9 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
 
             {/* Explanation Prose */}
             <View style={[styles.descBox, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.descGu, { color: colors.onSurface }]}>{slide.descGu}</Text>
-              <Text style={[styles.descEn, { color: colors.muted }]}>{slide.descEn}</Text>
+              <Text style={[styles.descGu, { color: colors.onSurface }]}>
+                {isGujarati ? slide.descGu : slide.descEn}
+              </Text>
             </View>
           </ScrollView>
 
@@ -338,7 +354,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
                   style={[styles.navBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
                 >
                   <Ionicons name="arrow-back" size={15} color={colors.onSurface} />
-                  <Text style={[styles.navBtnText, { color: colors.onSurface, marginLeft: 4 }]}>પાછળ</Text>
+                  <Text style={[styles.navBtnText, { color: colors.onSurface, marginLeft: 4 }]}>{ui("Previous", "પાછળ")}</Text>
                 </Pressable>
               )}
 
@@ -347,7 +363,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
                 style={[styles.textLinkBtn]}
               >
                 <Text style={{ color: colors.brandPrimary, fontSize: 12, fontWeight: "700" }}>
-                  વિગતવાર ગાઇડ 📖
+                  {ui("Full Guide", "વિગતવાર ગાઇડ")}
                 </Text>
               </Pressable>
 
@@ -356,7 +372,7 @@ export function UserGuideModal({ visible, onClose, onComplete }: UserGuideModalP
                 style={[styles.primaryNextBtn, { backgroundColor: colors.brandPrimary }]}
               >
                 <Text style={styles.primaryNextText}>
-                  {currentSlide === slides.length - 1 ? "શરૂ કરો (Finish)" : "આગળ (Next)"}
+                  {currentSlide === slides.length - 1 ? ui("Get Started", "શરૂ કરો") : ui("Next", "આગળ")}
                 </Text>
                 <Ionicons
                   name={currentSlide === slides.length - 1 ? "checkmark-circle" : "arrow-forward"}

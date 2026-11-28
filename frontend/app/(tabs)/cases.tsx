@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage, AppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -12,24 +13,38 @@ import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
 import { DesktopPage } from "@/src/components/DesktopPage";
 
 const FILTERS = ["All", "Civil", "Criminal", "Other"];
-const SORTS: { id: string; label: string; icon: any }[] = [
-  { id: "updated", label: "Recently Updated", icon: "time-outline" },
-  { id: "name", label: "Name (A-Z)", icon: "text-outline" },
-  { id: "type", label: "Case Type", icon: "pricetag-outline" },
+const SORTS: { id: string; labelEn: string; labelGu: string; icon: any }[] = [
+  { id: "updated", labelEn: "Recently Updated", labelGu: "તાજેતરમાં સુધારેલા", icon: "time-outline" },
+  { id: "name", labelEn: "Name (A-Z)", labelGu: "નામ પ્રમાણે (A-Z)", icon: "text-outline" },
+  { id: "type", labelEn: "Case Type", labelGu: "કેસનો પ્રકાર", icon: "pricetag-outline" },
 ];
 
-function timeAgo(iso?: string) {
+const FILTER_LABELS: Record<string, { en: string; gu: string }> = {
+  All: { en: "All", gu: "બધા" },
+  Civil: { en: "Civil", gu: "સિવિલ" },
+  Criminal: { en: "Criminal", gu: "ક્રિમિનલ" },
+  Other: { en: "Other", gu: "અન્ય" },
+};
+
+function timeAgo(iso?: string, lang: AppLanguage = "en") {
   if (!iso) return "";
   const d = new Date(iso);
   const diff = (Date.now() - d.getTime()) / 1000;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  if (diff < 60) return lang === "gu" ? "હમણાં જ" : "just now";
+  if (diff < 3600) {
+    const mins = Math.floor(diff / 60);
+    return lang === "gu" ? `${mins} મિ. પહેલાં` : `${mins}m ago`;
+  }
+  if (diff < 86400) {
+    const hrs = Math.floor(diff / 3600);
+    return lang === "gu" ? `${hrs} ક. પહેલાં` : `${hrs}h ago`;
+  }
   return d.toLocaleDateString();
 }
 
 export default function Cases() {
   const { colors } = useTheme();
+  const { appLang, t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const [cases, setCases] = useState<any[]>([]);
@@ -68,7 +83,7 @@ export default function Cases() {
       hasLoadedRef.current = true;
     } catch (e: any) {
       setCases([]);
-      setError(e?.message || "Could not load your cases.");
+      setError(e?.message || ui("Could not load your cases.", "તમારા કેસ લોડ કરી શકાયા નથી."));
     } finally {
       setLoading(false);
     }
@@ -84,8 +99,12 @@ export default function Cases() {
   if (isDesktop) {
     return (
       <DesktopPage
-        title="My Cases"
-        subtitle={showArchived ? "Archived cases — restore or delete" : "Manage your matters and generate applications"}
+        title={t("tabMyCases")}
+        subtitle={
+          showArchived
+            ? ui("Archived cases — restore or delete", "આર્કાઇવ કરેલા કેસ — પુનઃસ્થાપિત કરો અથવા કાઢી નાખો")
+            : ui("Manage your matters and generate applications", "તમારા કેસ મેનેજ કરો અને કોર્ટ અરજીઓ તૈયાર કરો")
+        }
         actions={
           <>
             <Pressable
@@ -95,7 +114,7 @@ export default function Cases() {
             >
               <Ionicons name="archive-outline" size={16} color={showArchived ? colors.onBrandTertiary : colors.muted} />
               <Text style={{ color: showArchived ? colors.onBrandTertiary : colors.muted, fontWeight: "700", fontSize: 13 }}>
-                {showArchived ? "Active" : "Archived"}
+                {showArchived ? ui("Active", "સક્રિય") : ui("Archived", "આર્કાઇવ")}
               </Text>
             </Pressable>
             <Pressable
@@ -104,7 +123,7 @@ export default function Cases() {
               style={[styles.dPrimaryBtn, { backgroundColor: colors.brandPrimary }]}
             >
               <Ionicons name="add" size={18} color={colors.onBrandPrimary} />
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>New Case</Text>
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>{t("newCaseBtn")}</Text>
             </Pressable>
           </>
         }
@@ -115,7 +134,7 @@ export default function Cases() {
             <Ionicons name="search" size={16} color={colors.muted} />
             <TextInput
               testID="cases-search-input"
-              placeholder="Search by nickname, party, number, type..."
+              placeholder={ui("Search by nickname, party, number, type...", "ઉપનામ, પક્ષકાર, કેસ નંબર, પ્રકારથી શોધો...")}
               placeholderTextColor={colors.muted}
               value={q}
               onChangeText={setQ}
@@ -132,7 +151,9 @@ export default function Cases() {
                   onPress={() => setFilter(f)}
                   style={[styles.dChip, { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border }]}
                 >
-                  <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{f}</Text>
+                  <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>
+                    {appLang === "gu" ? FILTER_LABELS[f]?.gu || f : FILTER_LABELS[f]?.en || f}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -143,7 +164,10 @@ export default function Cases() {
             >
               <Ionicons name="swap-vertical" size={14} color={colors.onSurface} />
               <Text style={{ color: colors.onSurface, fontSize: 13, fontWeight: "700", marginLeft: 4 }}>
-                {SORTS.find((s) => s.id === sort)?.label}
+                {(() => {
+                  const found = SORTS.find((s) => s.id === sort);
+                  return found ? (appLang === "gu" ? found.labelGu : found.labelEn) : "";
+                })()}
               </Text>
             </Pressable>
           </View>
@@ -152,7 +176,7 @@ export default function Cases() {
         <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
           <Pressable style={styles.backdrop} onPress={() => setSortOpen(false)}>
             <Pressable style={[styles.sortSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={(e) => e.stopPropagation()}>
-              <Text style={[styles.sortTitle, { color: colors.onSurface }]}>Sort Cases By</Text>
+              <Text style={[styles.sortTitle, { color: colors.onSurface }]}>{ui("Sort Cases By", "કેસ ક્રમબદ્ધ કરો")}</Text>
               {SORTS.map((s) => {
                 const active = sort === s.id;
                 return (
@@ -163,7 +187,9 @@ export default function Cases() {
                     style={[styles.sortOpt, { borderBottomColor: colors.divider }]}
                   >
                     <Ionicons name={s.icon} size={18} color={active ? colors.brandPrimary : colors.muted} />
-                    <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: active ? "700" : "500", flex: 1, marginLeft: Spacing.md }}>{s.label}</Text>
+                    <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: active ? "700" : "500", flex: 1, marginLeft: Spacing.md }}>
+                      {appLang === "gu" ? s.labelGu : s.labelEn}
+                    </Text>
                     {active ? <Ionicons name="checkmark" size={20} color={colors.brandPrimary} /> : null}
                   </Pressable>
                 );
@@ -175,25 +201,25 @@ export default function Cases() {
         {error ? (
           <View style={styles.dEmpty}>
             <Ionicons name="cloud-offline-outline" size={40} color={colors.muted} />
-            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load cases</Text>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>{ui("Couldn't load cases", "કેસ લોડ કરી શકાયા નથી")}</Text>
             <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>{error}</Text>
             <Pressable testID="cases-error-retry" onPress={() => load(q, filter, showArchived, sort)} style={[styles.dEmptyBtn, { backgroundColor: colors.brandPrimary }]}>
-              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+              <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("retry")}</Text>
             </Pressable>
           </View>
         ) : cases.length === 0 ? (
           <View style={styles.dEmpty}>
             <Ionicons name={showArchived ? "archive-outline" : "folder-open-outline"} size={44} color={colors.muted} />
             <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>
-              {showArchived ? "No archived cases" : "No cases yet"}
+              {showArchived ? ui("No archived cases", "કોઈ આર્કાઇવ કરેલા કેસ નથી") : ui("No cases yet", "હજી સુધી કોઈ કેસ નથી")}
             </Text>
             {!showArchived && (
               <>
                 <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4 }}>
-                  Create your first case to start generating court applications.
+                  {ui("Create your first case to start generating court applications.", "કોર્ટ અરજીઓ બનાવવા માટે તમારો પહેલો કેસ ઉમેરો.")}
                 </Text>
                 <Pressable testID="empty-add-case" onPress={() => router.push("/case/new")} style={[styles.dEmptyBtn, { backgroundColor: colors.brandPrimary }]}>
-                  <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Add New Case</Text>
+                  <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("addNewCase")}</Text>
                 </Pressable>
               </>
             )}
@@ -201,12 +227,12 @@ export default function Cases() {
         ) : (
           <View style={[styles.table, { borderColor: colors.border }]}>
             <View style={[styles.tableHead, { backgroundColor: colors.surfaceSecondary, borderBottomColor: colors.border }]}>
-              <Text style={[styles.th, { color: colors.muted }]}>Case</Text>
-              <Text style={[styles.th, { color: colors.muted }]}>Number</Text>
-              <Text style={[styles.th, { color: colors.muted }]}>Party / Client</Text>
-              <Text style={[styles.th, { color: colors.muted }]}>Type</Text>
-              <Text style={[styles.th, { color: colors.muted }]}>Updated</Text>
-              <Text style={[styles.th, { color: colors.muted }]}>Category</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Case", "કેસ")}</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Number", "નંબર")}</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Party / Client", "પક્ષકાર / અસીલ")}</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Type", "પ્રકાર")}</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Updated", "સુધારેલ")}</Text>
+              <Text style={[styles.th, { color: colors.muted }]}>{ui("Category", "શ્રેણી")}</Text>
               <View style={{ width: 32 }} />
             </View>
             {cases.map((item) => (
@@ -220,7 +246,7 @@ export default function Cases() {
                 ]}
               >
                 <Text style={[styles.td, { color: colors.onSurface, fontWeight: "700" }]} numberOfLines={1}>
-                  {item.nickname || item.party_name || "Untitled Case"}
+                  {item.nickname || item.party_name || ui("Untitled Case", "શીર્ષક વગરનો કેસ")}
                 </Text>
                 <Text style={[styles.td, { color: colors.onSurfaceSecondary }]} numberOfLines={1}>
                   {item.case_number || "—"}
@@ -231,11 +257,11 @@ export default function Cases() {
                 <Text style={[styles.td, { color: colors.onSurfaceSecondary }]} numberOfLines={1}>
                   {item.case_type_label || "—"}
                 </Text>
-                <Text style={[styles.td, { color: colors.muted }]}>{timeAgo(item.updated_at) || "—"}</Text>
+                <Text style={[styles.td, { color: colors.muted }]}>{timeAgo(item.updated_at, appLang) || "—"}</Text>
                 <View>
                   <View style={[styles.dPill, { backgroundColor: item.category === "Criminal" ? "#7A1C1C20" : colors.brandTertiary }]}>
                     <Text style={{ color: item.category === "Criminal" ? "#7A1C1C" : colors.onBrandTertiary, fontSize: 11, fontWeight: "700" }}>
-                      {item.category || "Other"}
+                      {appLang === "gu" ? FILTER_LABELS[item.category || "Other"]?.gu || item.category || "અન્ય" : item.category || "Other"}
                     </Text>
                   </View>
                 </View>
@@ -252,7 +278,7 @@ export default function Cases() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>My Cases</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{t("tabMyCases")}</Text>
         <View style={{ flexDirection: "row", gap: Spacing.sm }}>
           <Pressable
             testID="archive-toggle"
@@ -275,7 +301,7 @@ export default function Cases() {
         <Ionicons name="search" size={18} color={colors.muted} />
         <TextInput
           testID="cases-search-input"
-          placeholder="Search by nickname, party, number, type..."
+          placeholder={ui("Search by nickname, party, number, type...", "ઉપનામ, પક્ષકાર, કેસ નંબર, પ્રકારથી શોધો...")}
           placeholderTextColor={colors.muted}
           value={q}
           onChangeText={setQ}
@@ -302,7 +328,9 @@ export default function Cases() {
                   { backgroundColor: active ? colors.brandPrimary : colors.surfaceSecondary, borderColor: active ? colors.brandPrimary : colors.border, flexShrink: 0 },
                 ]}
               >
-                <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>{f}</Text>
+                <Text style={{ color: active ? colors.onBrandPrimary : colors.onSurface, fontSize: 13, fontWeight: "700" }}>
+                  {appLang === "gu" ? FILTER_LABELS[f]?.gu || f : FILTER_LABELS[f]?.en || f}
+                </Text>
               </Pressable>
             );
           })}
@@ -313,14 +341,14 @@ export default function Cases() {
           style={[styles.sortBtn, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
         >
           <Ionicons name="swap-vertical" size={16} color={colors.onSurface} />
-          <Text style={{ color: colors.onSurface, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>Sort</Text>
+          <Text style={{ color: colors.onSurface, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>{ui("Sort", "ક્રમ")}</Text>
         </Pressable>
       </View>
 
       <Modal visible={sortOpen} transparent animationType="fade" onRequestClose={() => setSortOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setSortOpen(false)}>
           <Pressable style={[styles.sortSheet, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={(e) => e.stopPropagation()}>
-            <Text style={[styles.sortTitle, { color: colors.onSurface }]}>Sort Cases By</Text>
+            <Text style={[styles.sortTitle, { color: colors.onSurface }]}>{ui("Sort Cases By", "કેસ ક્રમબદ્ધ કરો")}</Text>
             {SORTS.map((s) => {
               const active = sort === s.id;
               return (
@@ -331,7 +359,9 @@ export default function Cases() {
                   style={[styles.sortOpt, { borderBottomColor: colors.divider }]}
                 >
                   <Ionicons name={s.icon} size={18} color={active ? colors.brandPrimary : colors.muted} />
-                  <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: active ? "700" : "500", flex: 1, marginLeft: Spacing.md }}>{s.label}</Text>
+                  <Text style={{ color: active ? colors.brandPrimary : colors.onSurface, fontWeight: active ? "700" : "500", flex: 1, marginLeft: Spacing.md }}>
+                    {appLang === "gu" ? s.labelGu : s.labelEn}
+                  </Text>
                   {active ? <Ionicons name="checkmark" size={20} color={colors.brandPrimary} /> : null}
                 </Pressable>
               );
@@ -343,7 +373,7 @@ export default function Cases() {
       {error ? (
         <View style={styles.empty}>
           <Ionicons name="cloud-offline-outline" size={44} color={colors.muted} />
-          <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>Couldn't load cases</Text>
+          <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>{ui("Couldn't load cases", "કેસ લોડ કરી શકાયા નથી")}</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center", paddingHorizontal: Spacing.xl }}>
             {error}
           </Text>
@@ -352,7 +382,7 @@ export default function Cases() {
             onPress={() => load(q, filter, showArchived, sort)}
             style={[styles.emptyBtn, { backgroundColor: colors.brandPrimary }]}
           >
-            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("retry")}</Text>
           </Pressable>
         </View>
       ) : (
@@ -372,19 +402,19 @@ export default function Cases() {
             <View style={styles.empty}>
               <Ionicons name={showArchived ? "archive-outline" : "folder-open-outline"} size={44} color={colors.muted} />
               <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12 }}>
-                {showArchived ? "No archived cases" : "No cases yet"}
+                {showArchived ? ui("No archived cases", "કોઈ આર્કાઇવ કરેલા કેસ નથી") : ui("No cases yet", "હજી સુધી કોઈ કેસ નથી")}
               </Text>
               {!showArchived && (
                 <>
                   <Text style={{ color: colors.muted, fontSize: 12, marginTop: 4, textAlign: "center" }}>
-                    Create your first case to start generating court applications.
+                    {ui("Create your first case to start generating court applications.", "કોર્ટ અરજીઓ બનાવવા માટે તમારો પહેલો કેસ ઉમેરો.")}
                   </Text>
                   <Pressable
                     testID="empty-add-case"
                     onPress={() => router.push("/case/new")}
                     style={[styles.emptyBtn, { backgroundColor: colors.brandPrimary }]}
                   >
-                    <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Add New Case</Text>
+                    <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("addNewCase")}</Text>
                   </Pressable>
                 </>
               )}
@@ -400,15 +430,15 @@ export default function Cases() {
             <View style={styles.cardTop}>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 15 }} numberOfLines={1}>
-                  {item.nickname || item.party_name || item.case_type_label || "Untitled Case"}
+                  {item.nickname || item.party_name || item.case_type_label || ui("Untitled Case", "શીર્ષક વગરનો કેસ")}
                 </Text>
                 <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }} numberOfLines={1}>
-                  {item.case_number ? `${item.case_number} • ` : ""}{item.case_type_label || "Case"}
+                  {item.case_number ? `${item.case_number} • ` : ""}{item.case_type_label || ui("Case", "કેસ")}
                 </Text>
               </View>
               <View style={[styles.catPill, { backgroundColor: item.category === "Criminal" ? "#7A1C1C20" : colors.brandTertiary }]}>
                 <Text style={{ color: item.category === "Criminal" ? "#7A1C1C" : colors.onBrandTertiary, fontSize: 10, fontWeight: "700" }}>
-                  {item.category || "Other"}
+                  {appLang === "gu" ? FILTER_LABELS[item.category || "Other"]?.gu || item.category || "અન્ય" : item.category || "Other"}
                 </Text>
               </View>
             </View>
@@ -421,7 +451,7 @@ export default function Cases() {
               ) : null}
               <View style={styles.metaItem}>
                 <Ionicons name="time-outline" size={12} color={colors.muted} />
-                <Text style={{ color: colors.muted, fontSize: 11, marginLeft: 4 }}>{timeAgo(item.updated_at)}</Text>
+                <Text style={{ color: colors.muted, fontSize: 11, marginLeft: 4 }}>{timeAgo(item.updated_at, appLang)}</Text>
               </View>
               <View style={[styles.langPill, { backgroundColor: colors.surfaceTertiary }]}>
                 <Text style={{ color: colors.onSurfaceTertiary, fontSize: 10, fontWeight: "700" }}>{item.language === "gu" ? "ગુ" : "EN"}</Text>
@@ -429,7 +459,7 @@ export default function Cases() {
             </View>
             {item.last_used_template ? (
               <Text style={{ color: colors.brandPrimary, fontSize: 11, marginTop: Spacing.sm }} numberOfLines={1}>
-                Last application: {item.last_used_template}
+                {ui("Last application:", "છેલ્લી અરજી:")} {item.last_used_template}
               </Text>
             ) : null}
           </Pressable>

@@ -54,7 +54,7 @@ async function runBrowserVerification() {
 
   console.log(`  1A. Cold app startup render time: ${coldDurationMs.toFixed(3)} ms (Target: <5ms)`);
   assert.ok(coldDurationMs < 5.0, "Cold startup must render within 5ms");
-  assert.strictEqual(coldPairs.length, 10, "Must render exactly 10 active production templates");
+  assert.strictEqual(coldPairs.length, SEED_TEMPLATE_ORDER.length, `Must render all ${SEED_TEMPLATE_ORDER.length} active production seed templates`);
   assert.deepStrictEqual(
     coldPairs.map((p) => p.baseKey),
     SEED_TEMPLATE_ORDER,
@@ -64,7 +64,7 @@ async function runBrowserVerification() {
     !coldPairs.some((p) => PERMANENTLY_DELETED_BASE_KEYS.has(p.baseKey)),
     "Cold startup must NOT include deleted templates"
   );
-  console.log("      PASS: Instant cold startup with 10 templates, 0 deleted templates.");
+  console.log(`      PASS: Instant cold startup with ${coldPairs.length} templates, 0 deleted templates.`);
 
   // Scenario 1B: Warm Browser Startup (Subsequent opens, populated localStorage)
   const customAdminOrder = [
@@ -78,6 +78,20 @@ async function runBrowserVerification() {
     "closing_argument_right_application",
     "closing_purshish",
     "dd_karavani_arji",
+    ...SEED_TEMPLATE_ORDER.filter(
+      (k) => ![
+        "vakilatnama_civil",
+        "vakilatnama_criminal",
+        "mudat_arji",
+        "exemption_arji",
+        "document_exhibit_application",
+        "certified_copy_application",
+        "reopen_right_to_argue_application",
+        "closing_argument_right_application",
+        "closing_purshish",
+        "dd_karavani_arji",
+      ].includes(k)
+    ),
   ];
   global.window.localStorage.setItem("nyaysetu_cat_v2:active_template_pairs", JSON.stringify(
     getActiveTemplatePairs(SEED_PUBLISHED_TEMPLATES, customAdminOrder)
@@ -91,7 +105,7 @@ async function runBrowserVerification() {
 
   console.log(`  1B. Warm app startup render time: ${warmDurationMs.toFixed(3)} ms (Target: <5ms)`);
   assert.ok(warmDurationMs < 5.0, "Warm startup must render within 5ms");
-  assert.strictEqual(warmPairs.length, 10, "Warm startup must render 10 templates");
+  assert.strictEqual(warmPairs.length, customAdminOrder.length, `Warm startup must render all ${customAdminOrder.length} templates`);
   assert.deepStrictEqual(
     warmPairs.map((p) => p.baseKey),
     customAdminOrder,

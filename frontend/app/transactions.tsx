@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -20,6 +21,7 @@ function fmtDate(iso?: string) {
 
 export default function Transactions() {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const [items, setItems] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export default function Transactions() {
       setItems(Array.isArray(txs) ? txs : []);
       setError(null);
     } catch (e: any) {
-      setError(e?.message || "Could not load transactions.");
+      setError(e?.message || ui("Could not load transactions.", "વ્યવહાર ઇતિહાસ લોડ થઈ શક્યો નથી."));
       setItems([]);
     }
   }, []);
@@ -54,12 +56,12 @@ export default function Transactions() {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 14 }} numberOfLines={1}>
-              {item.plan_name || "Template Credits"}
+              {item.plan_name || ui("Template Credits", "અરજી ક્રેડિટ્સ")}
             </Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>{fmtDate(item.created_at)}</Text>
             {item.reference ? (
               <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }} numberOfLines={1}>
-                Ref: {item.reference}
+                {ui("Ref:", "સંદર્ભ:")} {item.reference}
               </Text>
             ) : null}
           </View>
@@ -68,7 +70,7 @@ export default function Transactions() {
               ₹{(item.amount ?? 0).toLocaleString("en-IN")}
             </Text>
             <Text style={{ color: positive ? colors.brandPrimary : colors.muted, fontSize: 12, marginTop: 2 }}>
-              {positive ? "+" : ""}{item.credits ?? 0} credits
+              {positive ? "+" : ""}{item.credits ?? 0} {ui("credits", "ક્રેડિટ્સ")}
             </Text>
             <Text style={{ color: item.status === "success" ? "#1B7F4D" : colors.error, fontSize: 11, marginTop: 2, fontWeight: "600" }}>
               {(item.status || "unknown").toUpperCase()}
@@ -85,14 +87,14 @@ export default function Transactions() {
         <Pressable testID="txn-back" onPress={() => safeBack("/(tabs)/profile")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={[styles.h1, { color: colors.onSurface }]}>Transaction History</Text>
+        <Text style={[styles.h1, { color: colors.onSurface }]}>{ui("Transaction History", "વ્યવહાર ઇતિહાસ")}</Text>
         <View style={{ width: 24 }} />
       </View>
 
       {items === null ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.brandPrimary} size="large" />
-          <Text style={{ color: colors.muted, marginTop: Spacing.md }}>Loading transactions…</Text>
+          <Text style={{ color: colors.muted, marginTop: Spacing.md }}>{ui("Loading transactions…", "વ્યવહારો લોડ થઈ રહ્યા છે…")}</Text>
         </View>
       ) : error ? (
         <View style={styles.center}>
@@ -103,15 +105,15 @@ export default function Transactions() {
             onPress={load}
             style={[styles.retry, { backgroundColor: colors.brandPrimary }]}
           >
-            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("retry")}</Text>
           </Pressable>
         </View>
       ) : items.length === 0 ? (
         <View style={styles.center}>
           <Ionicons name="receipt-outline" size={40} color={colors.muted} />
-          <Text style={[styles.msg, { color: colors.onSurface }]}>No transactions yet.</Text>
+          <Text style={[styles.msg, { color: colors.onSurface }]}>{ui("No transactions yet.", "હજી સુધી કોઈ વ્યવહાર નથી.")}</Text>
           <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            Your wallet and purchase activity will appear here.
+            {ui("Your wallet and purchase activity will appear here.", "તમારા વૉલેટ અને ખરીદીની વિગતો અહીં દેખાશે.")}
           </Text>
         </View>
       ) : (

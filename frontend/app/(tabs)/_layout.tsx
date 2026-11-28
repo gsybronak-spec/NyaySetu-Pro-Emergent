@@ -8,6 +8,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { DesktopSidebar } from "@/src/components/DesktopSidebar";
 import { catalogCache, setupAppReturnRevalidation } from "@/src/services/catalogCache";
@@ -16,6 +17,7 @@ import { Spacing } from "@/src/theme/tokens";
 export default function TabsLayout() {
   const { colors } = useTheme();
   const { ready, user, profileSkipped } = useAuth();
+  const { t } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
 
@@ -48,7 +50,7 @@ export default function TabsLayout() {
           accessibilityLabel="NyaySetu Pro Logo"
         />
         <Text style={splashStyles.title}>NyaySetu Pro</Text>
-        <Text style={splashStyles.tagline}>The New Era of Advocacy</Text>
+        <Text style={splashStyles.tagline}>{t("tagline")}</Text>
         <ActivityIndicator color="#C5A059" style={{ marginTop: Spacing.xl }} />
       </LinearGradient>
     );
@@ -96,21 +98,24 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: "Home",
+          title: t("tabHome"),
+          tabBarLabel: t("tabHome"),
           tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="cases"
         options={{
-          title: "My Cases",
+          title: t("tabMyCases"),
+          tabBarLabel: t("tabMyCases"),
           tabBarIcon: ({ color, size }) => <Ionicons name="folder-open" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="templates"
         options={{
-          title: "Templates",
+          title: t("tabTemplates"),
+          tabBarLabel: t("tabTemplates"),
           tabBarIcon: ({ color, size }) => <Ionicons name="document-text" size={size} color={color} />,
         }}
       />
@@ -118,14 +123,16 @@ export default function TabsLayout() {
         name="subscription"
         options={{
           href: null,
-          title: "Plans",
+          title: t("tabPlans"),
+          tabBarLabel: t("tabPlans"),
           tabBarIcon: ({ color, size }) => <Ionicons name="diamond" size={size} color={color} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: "Profile",
+          title: t("tabProfile"),
+          tabBarLabel: t("tabProfile"),
           tabBarIcon: ({ color, size }) => <Ionicons name="person-circle" size={size} color={color} />,
         }}
       />

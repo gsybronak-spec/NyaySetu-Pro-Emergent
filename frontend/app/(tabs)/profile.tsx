@@ -6,6 +6,7 @@ import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
 import { useAuth } from "@/src/context/AuthContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { formatAdvocateName, formatDisplayName } from "@/src/utils/advocate";
@@ -17,6 +18,7 @@ import { preloadRazorpayScript } from "@/src/utils/razorpay";
 
 export default function Profile() {
   const { colors, isDark, setMode } = useTheme();
+  const { appLang, t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
@@ -47,45 +49,51 @@ export default function Profile() {
 
   const logout = () => {
     if (Platform.OS === "web") {
-      if (typeof window !== "undefined" && window.confirm("Sign out? You will need to login again to continue.")) {
+      if (typeof window !== "undefined" && window.confirm(ui("Sign out? You will need to login again to continue.", "લૉગ આઉટ કરવું છે? આગળ વધવા માટે ફરી લૉગિન કરવું પડશે."))) {
         signOut().then(() => router.replace("/(auth)/login")).catch(() => router.replace("/(auth)/login"));
       }
       return;
     }
-    Alert.alert("Sign out?", "You will need to verify OTP again to sign in.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: async () => { await signOut(); router.replace("/(auth)/login"); } },
-    ]);
+    Alert.alert(
+      ui("Sign out?", "લૉગ આઉટ કરવું છે?"),
+      ui("You will need to verify OTP again to sign in.", "ફરી સાઇન ઇન કરવા માટે OTP ચકાસવો પડશે."),
+      [
+        { text: t("cancel"), style: "cancel" },
+        { text: ui("Sign out", "લૉગ આઉટ"), style: "destructive", onPress: async () => { await signOut(); router.replace("/(auth)/login"); } },
+      ]
+    );
   };
 
   const isUnlimited = Boolean(user?.unlimited_access || user?.is_owner || user?.is_partner || (wallet as any)?.unlimited || (wallet as any)?.unlimited_access);
 
   const rows: { icon: any; label: string; danger?: boolean; onPress?: () => void; right?: React.ReactNode }[] = [
-    { icon: "person-outline", label: "Edit Profile", onPress: () => router.push("/profile/edit" as any) },
+    { icon: "person-outline", label: ui("Edit Profile", "પ્રોફાઇલ સુધારો"), onPress: () => router.push("/profile/edit" as any) },
     {
       icon: "book-outline",
-      label: "વપરાશકર્તા માર્ગદર્શિકા / User Guide",
+      label: t("userGuideFull"),
       onPress: () => router.push("/user-guide" as any),
     },
     {
       icon: "key-outline",
-      label: user?.has_password ? "Change Password" : "Set Password",
+      label: user?.has_password ? ui("Change Password", "પાસવર્ડ બદલો") : ui("Set Password", "પાસવર્ડ સેટ કરો"),
       onPress: () => router.push("/profile/set-password" as any),
     },
-    { icon: "diamond-outline", label: "Plans & Subscription", onPress: () => router.push("/(tabs)/subscription" as any) },
+    { icon: "diamond-outline", label: ui("Plans & Subscription", "પ્લાન્સ અને સબ્સ્ક્રિપ્શન"), onPress: () => router.push("/(tabs)/subscription" as any) },
     {
       icon: "wallet-outline",
       label: isUnlimited
-        ? (user?.is_owner ? "Credit Balance: Unlimited (Owner Access)" : "Credit Balance: Unlimited (Partner Access)")
-        : `Credit Balance: ${wallet.balance} templates (Buy Credits)`,
+        ? (user?.is_owner
+            ? ui("Credit Balance: Unlimited (Owner Access)", "ક્રેડિટ બેલેન્સ: અમર્યાદિત (માલિક ઍક્સેસ)")
+            : ui("Credit Balance: Unlimited (Partner Access)", "ક્રેડિટ બેલેન્સ: અમર્યાદિત (પાર્ટનર ઍક્સેસ)"))
+        : ui(`Credit Balance: ${wallet.balance} templates (Buy Credits)`, `ક્રેડિટ બેલેન્સ: ${wallet.balance} અરજીઓ (ક્રેડિટ ખરીદો)`),
       onPress: () => router.push("/(tabs)/subscription" as any),
     },
-    { icon: "receipt-outline", label: "Transaction History", onPress: () => router.push("/transactions" as any) },
-    { icon: "file-tray-full-outline", label: "Document Vault & History", onPress: () => router.push("/vault" as any) },
-    { icon: "share-social-outline", label: "Refer & Earn", onPress: () => router.push("/referral" as any) },
+    { icon: "receipt-outline", label: ui("Transaction History", "વ્યવહાર ઇતિહાસ"), onPress: () => router.push("/transactions" as any) },
+    { icon: "file-tray-full-outline", label: ui("Document Vault & History", "ડોક્યુમેન્ટ વૉલ્ટ અને ઇતિહાસ"), onPress: () => router.push("/vault" as any) },
+    { icon: "share-social-outline", label: ui("Refer & Earn", "રેફર કરો અને કમાઓ"), onPress: () => router.push("/referral" as any) },
     {
       icon: "moon-outline",
-      label: "Dark Mode",
+      label: ui("Dark Mode", "ડાર્ક મોડ"),
       right: (
         <Switch
           testID="dark-mode-switch"
@@ -96,20 +104,20 @@ export default function Profile() {
         />
       ),
     },
-    { icon: "mail-outline", label: "Contact Support", onPress: () => router.push("/support" as any) },
-    { icon: "information-circle-outline", label: "About Us", onPress: () => router.push("/about" as any) },
-    { icon: "document-lock-outline", label: "Privacy Policy", onPress: () => router.push("/legal/privacy" as any) },
-    { icon: "shield-checkmark-outline", label: "Terms & Conditions", onPress: () => router.push("/legal/terms" as any) },
-    { icon: "refresh-outline", label: "Refund Policy", onPress: () => router.push("/legal/refund" as any) },
-    { icon: "trash-outline", label: "Delete Account", danger: true, onPress: () => router.push("/delete-account" as any) },
+    { icon: "mail-outline", label: ui("Contact Support", "સહાય સંપર્ક"), onPress: () => router.push("/support" as any) },
+    { icon: "information-circle-outline", label: ui("About Us", "અમારા વિશે"), onPress: () => router.push("/about" as any) },
+    { icon: "document-lock-outline", label: ui("Privacy Policy", "ગોપનીયતા નીતિ"), onPress: () => router.push("/legal/privacy" as any) },
+    { icon: "shield-checkmark-outline", label: ui("Terms & Conditions", "નિયમો અને શરતો"), onPress: () => router.push("/legal/terms" as any) },
+    { icon: "refresh-outline", label: ui("Refund Policy", "રિફંડ નીતિ"), onPress: () => router.push("/legal/refund" as any) },
+    { icon: "trash-outline", label: ui("Delete Account", "એકાઉન્ટ કાઢી નાખો"), danger: true, onPress: () => router.push("/delete-account" as any) },
   ];
 
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
     return (
       <DesktopPage
-        title="Profile"
-        subtitle="Manage your account and preferences"
+        title={t("tabProfile")}
+        subtitle={ui("Manage your account and preferences", "તમારું એકાઉન્ટ અને પસંદગીઓ મેનેજ કરો")}
       >
         <View style={styles.dGrid}>
           <View style={[styles.dUserCard, { backgroundColor: colors.brand }]}>
@@ -119,7 +127,7 @@ export default function Profile() {
               </Text>
             </View>
             <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700", marginTop: Spacing.md }}>
-              {formatDisplayName(user, "User")}
+              {formatDisplayName(user, t("user"), appLang)}
             </Text>
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 14, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
@@ -139,21 +147,24 @@ export default function Profile() {
             {user?.bar_council_no ? (
               <View style={styles.dBarChip}>
                 <Ionicons name="ribbon" size={13} color="#C5A059" />
-                <Text style={{ color: "#C5A059", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>Bar: {user.bar_council_no}</Text>
+                <Text style={{ color: "#C5A059", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>{ui("Bar:", "સનદ:")} {user.bar_council_no}</Text>
               </View>
             ) : null}
             {isUnlimited ? (
               <View style={[styles.dBarChip, { backgroundColor: "rgba(16,185,129,0.15)", marginTop: Spacing.sm }]}>
                 <Ionicons name="shield-checkmark" size={13} color="#10B981" />
                 <Text style={{ color: "#10B981", fontSize: 12, fontWeight: "700", marginLeft: 6 }}>
-                  {user?.is_owner ? "Owner Unlimited Access" : "Partner Unlimited Access"}
+                  {user?.is_owner ? ui("Owner Unlimited Access", "માલિક અમર્યાદિત ઍક્સેસ") : ui("Partner Unlimited Access", "પાર્ટનર અમર્યાદિત ઍક્સેસ")}
                 </Text>
               </View>
             ) : null}
             <View style={[styles.dWalletLine, { borderTopColor: "rgba(255,255,255,0.1)" }]}>
               <Ionicons name="wallet" size={18} color="#C5A059" />
               <Text style={{ color: "#FDFDFD", fontWeight: "800", fontSize: 16, marginLeft: 8 }}>
-                {isUnlimited ? "Unlimited" : wallet.balance} <Text style={{ color: "#A6B1C2", fontSize: 12, fontWeight: "500" }}>{isUnlimited ? "templates access" : "templates remaining"}</Text>
+                {isUnlimited ? t("unlimited") : wallet.balance}{" "}
+                <Text style={{ color: "#A6B1C2", fontSize: 12, fontWeight: "500" }}>
+                  {isUnlimited ? ui("templates access", "અરજીઓનો ઍક્સેસ") : ui("templates remaining", "અરજીઓ બાકી")}
+                </Text>
               </Text>
             </View>
             <Pressable
@@ -162,7 +173,7 @@ export default function Profile() {
               style={styles.dLogout}
             >
               <Ionicons name="log-out-outline" size={18} color="#FDFDFD" />
-              <Text style={{ color: "#FDFDFD", fontWeight: "700", marginLeft: 8 }}>Sign Out</Text>
+              <Text style={{ color: "#FDFDFD", fontWeight: "700", marginLeft: 8 }}>{ui("Sign Out", "લૉગ આઉટ")}</Text>
             </Pressable>
           </View>
 
@@ -193,7 +204,7 @@ export default function Profile() {
         contentContainerStyle={{ paddingBottom: Math.max(90, 60 + insets.bottom + Spacing.xl) }}
       >
         <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.h1, { color: colors.onSurface }]}>Profile</Text>
+          <Text style={[styles.h1, { color: colors.onSurface }]}>{t("tabProfile")}</Text>
         </View>
 
         <View style={[styles.userCard, { backgroundColor: colors.brand }]}>
@@ -203,7 +214,7 @@ export default function Profile() {
             </Text>
           </View>
           <View style={{ flex: 1, marginLeft: Spacing.md }}>
-            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatDisplayName(user, "User")}</Text>
+            <Text style={{ color: "#FFF", fontSize: 17, fontWeight: "700" }}>{formatDisplayName(user, t("user"), appLang)}</Text>
             {user?.advocate_name_gu ? (
               <Text style={{ color: "#E2E8F0", fontSize: 13, marginTop: 1 }}>{formatAdvocateName(user.advocate_name_gu, "gu")}</Text>
             ) : null}
@@ -219,11 +230,11 @@ export default function Profile() {
               </Text>
             ) : null}
             {user?.bar_council_no ? (
-              <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>Bar: {user.bar_council_no}</Text>
+              <Text style={{ color: "#C5A059", fontSize: 11, marginTop: 2 }}>{ui("Bar:", "સનદ:")} {user.bar_council_no}</Text>
             ) : null}
             {isUnlimited ? (
               <Text style={{ color: "#10B981", fontSize: 11, fontWeight: "700", marginTop: 2 }}>
-                {user?.is_owner ? "Owner Unlimited Access" : "Partner Unlimited Access"}
+                {user?.is_owner ? ui("Owner Unlimited Access", "માલિક અમર્યાદિત ઍક્સેસ") : ui("Partner Unlimited Access", "પાર્ટનર અમર્યાદિત ઍક્સેસ")}
               </Text>
             ) : null}
           </View>
@@ -249,7 +260,7 @@ export default function Profile() {
             style={[styles.row, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "40", marginTop: Spacing.md }]}
           >
             <Ionicons name="log-out-outline" size={20} color={colors.error} />
-            <Text style={{ color: colors.error, flex: 1, marginLeft: Spacing.md, fontSize: 14, fontWeight: "700" }}>Sign Out</Text>
+            <Text style={{ color: colors.error, flex: 1, marginLeft: Spacing.md, fontSize: 14, fontWeight: "700" }}>{ui("Sign Out", "લૉગ આઉટ")}</Text>
           </Pressable>
         </View>
       </ScrollView>

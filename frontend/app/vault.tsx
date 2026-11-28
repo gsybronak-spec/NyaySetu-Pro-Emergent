@@ -16,6 +16,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api, invalidateApiCache } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -47,6 +48,7 @@ function fmtFileSize(bytes?: number) {
 
 export default function DocumentVault() {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const params = useLocalSearchParams<{ tab?: string; filter?: string }>();
 
@@ -131,15 +133,15 @@ export default function DocumentVault() {
     const docId = doc.id || doc._id;
     if (!docId) return;
     setConfirmModal({
-      title: "Delete Document",
-      message: "Remove this generated/downloaded application from your Vault?",
-      confirmLabel: "Delete",
+      title: ui("Delete Document", "દસ્તાવેજ કાઢી નાખો"),
+      message: ui("Remove this generated/downloaded application from your Vault?", "તમારા વૉલ્ટમાંથી આ તૈયાર થયેલી/ડાઉનલોડ કરેલી અરજી દૂર કરવી છે?"),
+      confirmLabel: t("delete"),
       onConfirm: async () => {
         try {
           await api.deleteApplication(docId);
           setDocuments((prev) => prev.filter((d) => (d.id || d._id) !== docId));
         } catch (err: any) {
-          Alert.alert("Error", err?.message || "Could not delete document");
+          Alert.alert(t("errorTitle"), err?.message || ui("Could not delete document", "દસ્તાવેજ કાઢી શકાયો નથી"));
         }
       },
     });
@@ -149,9 +151,9 @@ export default function DocumentVault() {
     const draftId = draft.id || draft._id;
     if (!draftId) return;
     setConfirmModal({
-      title: "Delete Draft",
-      message: "Are you sure you want to permanently delete this saved draft?",
-      confirmLabel: "Delete",
+      title: ui("Delete Draft", "ડ્રાફ્ટ કાઢી નાખો"),
+      message: ui("Are you sure you want to permanently delete this saved draft?", "શું તમે ખરેખર આ સાચવેલ ડ્રાફ્ટ કાયમ માટે કાઢી નાખવા માંગો છો?"),
+      confirmLabel: t("delete"),
       onConfirm: async () => {
         try {
           await api.deleteDraft(draftId);
@@ -162,7 +164,7 @@ export default function DocumentVault() {
             return next;
           });
         } catch (err: any) {
-          Alert.alert("Error", err?.message || "Could not delete draft");
+          Alert.alert(t("errorTitle"), err?.message || ui("Could not delete draft", "ડ્રાફ્ટ કાઢી શકાયો નથી"));
         }
       },
     });
@@ -200,8 +202,11 @@ export default function DocumentVault() {
 
     if (failedIds.length > 0) {
       Alert.alert(
-        "Partial Failure",
-        `Deleted ${successfulIds.length} draft(s). Failed to delete ${failedIds.length} draft(s). Please try again.`
+        ui("Partial Failure", "આંશિક નિષ્ફળતા"),
+        ui(
+          `Deleted ${successfulIds.length} draft(s). Failed to delete ${failedIds.length} draft(s). Please try again.`,
+          `${successfulIds.length} ડ્રાફ્ટ કાઢી નાખ્યા. ${failedIds.length} ડ્રાફ્ટ કાઢવામાં નિષ્ફળતા. કૃપા કરીને ફરી પ્રયાસ કરો.`
+        )
       );
     }
   };
@@ -210,9 +215,12 @@ export default function DocumentVault() {
     const count = selectedDraftIds.size;
     if (count === 0) return;
     setConfirmModal({
-      title: "Delete Selected Drafts",
-      message: `Are you sure you want to permanently delete ${count} selected draft(s)? This action cannot be undone.`,
-      confirmLabel: `Delete (${count})`,
+      title: ui("Delete Selected Drafts", "પસંદ કરેલા ડ્રાફ્ટ્સ કાઢી નાખો"),
+      message: ui(
+        `Are you sure you want to permanently delete ${count} selected draft(s)? This action cannot be undone.`,
+        `શું તમે પસંદ કરેલા ${count} ડ્રાફ્ટ્સ કાયમ માટે કાઢી નાખવા માંગો છો? આ ક્રિયા પૂર્વવત્ કરી શકાતી નથી.`
+      ),
+      confirmLabel: ui(`Delete (${count})`, `કાઢી નાખો (${count})`),
       onConfirm: executeBulkDelete,
     });
   };
@@ -246,29 +254,35 @@ export default function DocumentVault() {
         if (Platform.OS !== "web") {
           const where = saved.displayPath ? ` (${saved.displayPath})` : "";
           Alert.alert(
-            "Saved to Phone",
-            `${dlPayload.filename} has been saved directly to your phone${where}.`,
+            ui("Saved to Phone", "ફોનમાં સેવ થયું"),
+            ui(
+              `${dlPayload.filename} has been saved directly to your phone${where}.`,
+              `${dlPayload.filename} સીધું તમારા ફોનમાં સેવ થઈ ગયું છે${where}.`
+            ),
             [
               {
-                text: "Open File",
+                text: ui("Open File", "ફાઇલ ખોલો"),
                 onPress: () => {
                   openSavedDocument(saved.uri, dlPayload, fmt).catch(() => {});
                 },
               },
               {
-                text: "Share",
+                text: t("share"),
                 onPress: () => {
                   shareDocumentFile(dlPayload, fmt).catch(() => {});
                 },
               },
-              { text: "OK" },
+              { text: t("ok") },
             ]
           );
         } else {
-          Alert.alert("Download Complete", `${dlPayload.filename} has been downloaded.`);
+          Alert.alert(
+            ui("Download Complete", "ડાઉનલોડ પૂર્ણ"),
+            ui(`${dlPayload.filename} has been downloaded.`, `${dlPayload.filename} ડાઉનલોડ થઈ ગયું છે.`)
+          );
         }
       } else {
-        throw new Error("The server returned an empty document. Please try again.");
+        throw new Error(ui("The server returned an empty document. Please try again.", "સર્વર તરફથી ખાલી દસ્તાવેજ મળ્યો. કૃપા કરીને ફરી પ્રયાસ કરો."));
       }
     } catch (err: any) {
       const msg = String(err?.message || "");
@@ -289,7 +303,7 @@ export default function DocumentVault() {
           },
         } as any);
       } else {
-        Alert.alert("Download Failed", msg || "Could not save document to your device.");
+        Alert.alert(ui("Download Failed", "ડાઉનલોડ નિષ્ફળ"), msg || ui("Could not save document to your device.", "દસ્તાવેજ તમારા ડિવાઇસમાં સેવ થઈ શક્યો નથી."));
       }
     } finally {
       setDownloadingId(null);
@@ -370,7 +384,7 @@ export default function DocumentVault() {
         <View style={{ flex: 1, minWidth: 0, marginHorizontal: Spacing.sm }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <Text style={[styles.cardTitle, { color: colors.onSurface }]} numberOfLines={1}>
-              {doc.template_name || doc.filename || "Legal Document"}
+              {doc.template_name || doc.filename || ui("Legal Document", "કાનૂની દસ્તાવેજ")}
             </Text>
             <View style={[styles.pill, { backgroundColor: iconColor + "20" }]}>
               <Text style={[styles.pillText, { color: iconColor }]}>
@@ -390,7 +404,7 @@ export default function DocumentVault() {
 
           {doc.case_id ? (
             <Text style={[styles.cardCase, { color: colors.brandPrimary }]} numberOfLines={1}>
-              Linked Case: {doc.case_id}
+              {ui("Linked Case:", "સંબંધિત કેસ:")} {doc.case_id}
             </Text>
           ) : null}
         </View>
@@ -410,7 +424,7 @@ export default function DocumentVault() {
             ) : (
               <>
                 <Ionicons name="cloud-download-outline" size={15} color={colors.onBrandPrimary} />
-                <Text style={[styles.actionBtnText, { color: colors.onBrandPrimary }]}>Download</Text>
+                <Text style={[styles.actionBtnText, { color: colors.onBrandPrimary }]}>{t("download")}</Text>
               </>
             )}
           </Pressable>
@@ -432,7 +446,7 @@ export default function DocumentVault() {
               style={[styles.actionBtnSecondary, { borderColor: colors.border }]}
             >
               <Ionicons name="create-outline" size={14} color={colors.onSurface} />
-              <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>Edit</Text>
+              <Text style={[styles.actionBtnSecondaryText, { color: colors.onSurface }]}>{t("edit")}</Text>
             </Pressable>
 
             <Pressable
@@ -487,20 +501,20 @@ export default function DocumentVault() {
         <View style={{ flex: 1, minWidth: 0, marginHorizontal: Spacing.sm }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <Text style={[styles.cardTitle, { color: colors.onSurface }]} numberOfLines={1}>
-              {draft.template_name || draft.template_id || "Unfinished Draft"}
+              {draft.template_name || draft.template_id || ui("Unfinished Draft", "અધૂરો ડ્રાફ્ટ")}
             </Text>
             <View style={[styles.pill, { backgroundColor: "#FEF3C7" }]}>
-              <Text style={[styles.pillText, { color: "#B45309" }]}>DRAFT</Text>
+              <Text style={[styles.pillText, { color: "#B45309" }]}>{ui("DRAFT", "ડ્રાફ્ટ")}</Text>
             </View>
           </View>
 
           <Text style={[styles.cardMeta, { color: colors.muted }]} numberOfLines={1}>
-            Last edited: {fmtDate(draft.updated_at || draft.created_at)}
+            {ui("Last edited:", "છેલ્લો સુધારો:")} {fmtDate(draft.updated_at || draft.created_at)}
           </Text>
 
           {draft.case_number || draft.case_id ? (
             <Text style={[styles.cardCase, { color: colors.brandPrimary }]} numberOfLines={1}>
-              Case: {draft.case_number || draft.case_id}
+              {ui("Case:", "કેસ:")} {draft.case_number || draft.case_id}
             </Text>
           ) : null}
         </View>
@@ -521,7 +535,7 @@ export default function DocumentVault() {
             ]}
           >
             <Ionicons name="arrow-forward" size={15} color={colors.onBrandPrimary} />
-            <Text style={[styles.actionBtnText, { color: colors.onBrandPrimary }]}>Resume</Text>
+            <Text style={[styles.actionBtnText, { color: colors.onBrandPrimary }]}>{t("resume")}</Text>
           </Pressable>
 
           <Pressable
@@ -551,7 +565,7 @@ export default function DocumentVault() {
             testID="vault-search-input"
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search documents, drafts, cases..."
+            placeholder={ui("Search documents, drafts, cases...", "દસ્તાવેજો, ડ્રાફ્ટ્સ, કેસ શોધો...")}
             placeholderTextColor={colors.muted}
             style={[styles.searchInput, { color: colors.onSurface }]}
           />
@@ -565,16 +579,16 @@ export default function DocumentVault() {
         {/* Tab Pills */}
         <View style={styles.tabRow}>
           {[
-            { id: "all", label: `All (${documents.length + drafts.length})` },
-            { id: "documents", label: `Generated (${documents.length})` },
-            { id: "drafts", label: `Drafts (${drafts.length})` },
-          ].map((t) => {
-            const active = activeTab === t.id;
+            { id: "all", label: ui(`All (${documents.length + drafts.length})`, `બધા (${documents.length + drafts.length})`) },
+            { id: "documents", label: ui(`Generated (${documents.length})`, `તૈયાર થયેલ (${documents.length})`) },
+            { id: "drafts", label: ui(`Drafts (${drafts.length})`, `ડ્રાફ્ટ્સ (${drafts.length})`) },
+          ].map((tabItem) => {
+            const active = activeTab === tabItem.id;
             return (
               <Pressable
-                key={t.id}
-                testID={`vault-tab-${t.id}`}
-                onPress={() => setActiveTab(t.id as VaultTab)}
+                key={tabItem.id}
+                testID={`vault-tab-${tabItem.id}`}
+                onPress={() => setActiveTab(tabItem.id as VaultTab)}
                 style={[
                   styles.tabChip,
                   {
@@ -589,7 +603,7 @@ export default function DocumentVault() {
                     { color: active ? colors.onBrandPrimary : colors.onSurface },
                   ]}
                 >
-                  {t.label}
+                  {tabItem.label}
                 </Text>
               </Pressable>
             );
@@ -601,7 +615,7 @@ export default function DocumentVault() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.brandPrimary} />
-          <Text style={{ color: colors.muted, marginTop: Spacing.md }}>Loading vault...</Text>
+          <Text style={{ color: colors.muted, marginTop: Spacing.md }}>{ui("Loading vault...", "વૉલ્ટ લોડ થઈ રહ્યું છે...")}</Text>
         </View>
       ) : (
         <ScrollView
@@ -620,7 +634,7 @@ export default function DocumentVault() {
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <Ionicons name="time-outline" size={16} color={colors.brandPrimary} />
                   <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
-                    Unsaved Drafts ({filteredDrafts.length})
+                    {ui(`Unsaved Drafts (${filteredDrafts.length})`, `અધૂરા ડ્રાફ્ટ્સ (${filteredDrafts.length})`)}
                   </Text>
                 </View>
 
@@ -640,7 +654,7 @@ export default function DocumentVault() {
                         color={isAllSelected ? colors.brandPrimary : colors.muted}
                       />
                       <Text style={[styles.bulkActionText, { color: colors.onSurface }]}>
-                        {isAllSelected ? "Deselect All" : "Select All"}
+                        {isAllSelected ? ui("Deselect All", "પસંદગી રદ કરો") : ui("Select All", "બધા પસંદ કરો")}
                       </Text>
                     </Pressable>
 
@@ -660,7 +674,7 @@ export default function DocumentVault() {
                           <>
                             <Ionicons name="trash-outline" size={14} color="#FFFFFF" />
                             <Text style={styles.bulkDeleteText}>
-                              Delete Selected ({selectedDraftIds.size})
+                              {ui(`Delete Selected (${selectedDraftIds.size})`, `પસંદ કરેલા કાઢી નાખો (${selectedDraftIds.size})`)}
                             </Text>
                           </>
                         )}
@@ -678,7 +692,7 @@ export default function DocumentVault() {
               <View style={styles.sectionHeader}>
                 <Ionicons name="document-text-outline" size={16} color={colors.brandPrimary} />
                 <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>
-                  Generated Documents & Downloads ({filteredDocs.length})
+                  {ui(`Generated Documents & Downloads (${filteredDocs.length})`, `તૈયાર થયેલા દસ્તાવેજો અને ડાઉનલોડ્સ (${filteredDocs.length})`)}
                 </Text>
               </View>
               {filteredDocs.map(renderDocumentCard)}
@@ -689,12 +703,12 @@ export default function DocumentVault() {
             <View style={styles.emptyState}>
               <Ionicons name="file-tray-outline" size={54} color={colors.muted} />
               <Text style={[styles.emptyTitle, { color: colors.onSurface }]}>
-                {searchQuery ? "No matching records found" : "Your Vault is empty"}
+                {searchQuery ? ui("No matching records found", "કોઈ મળતો રેકોર્ડ મળ્યો નથી") : ui("Your Vault is empty", "તમારું વૉલ્ટ ખાલી છે")}
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.muted }]}>
                 {searchQuery
-                  ? "Try searching for a different keyword or check spelling."
-                  : "All documents you generate or draft will automatically appear here for quick access."}
+                  ? ui("Try searching for a different keyword or check spelling.", "કૃપા કરીને બીજો શબ્દ શોધો અથવા સ્પેલિંગ તપાસો.")
+                  : ui("All documents you generate or draft will automatically appear here for quick access.", "તમે બનાવેલી અથવા અધૂરી અરજીઓ ઝડપી ઍક્સેસ માટે અહીં આપોઆપ દેખાશે.")}
               </Text>
               <Pressable
                 testID="vault-goto-templates"
@@ -705,7 +719,7 @@ export default function DocumentVault() {
                 ]}
               >
                 <Text style={[styles.emptyBtnText, { color: colors.onBrandPrimary }]}>
-                  Explore Templates
+                  {ui("Explore Templates", "અરજીઓ જુઓ")}
                 </Text>
               </Pressable>
             </View>
@@ -732,8 +746,8 @@ export default function DocumentVault() {
       <DesktopPage
         sidebarOffset={false}
         onBack={() => safeBack("/(tabs)/home")}
-        title="Document Vault"
-        subtitle="Manage generated legal documents, download history, and unfinished drafts"
+        title={t("tabDocVault")}
+        subtitle={ui("Manage generated legal documents, download history, and unfinished drafts", "તૈયાર થયેલા કાનૂની દસ્તાવેજો, ડાઉનલોડ ઇતિહાસ અને અધૂરા ડ્રાફ્ટ્સ મેનેજ કરો")}
       >
         {content}
       </DesktopPage>
@@ -746,7 +760,7 @@ export default function DocumentVault() {
         <Pressable testID="vault-back" onPress={() => safeBack("/(tabs)/home")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={[styles.mobileTitle, { color: colors.onSurface }]}>Document Vault</Text>
+        <Text style={[styles.mobileTitle, { color: colors.onSurface }]}>{t("tabDocVault")}</Text>
         <View style={{ width: 24 }} />
       </View>
       {content}

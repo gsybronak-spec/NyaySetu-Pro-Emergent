@@ -1,11 +1,18 @@
 import { TEMPLATE_LOGICAL_PAIRS } from "@/src/data/templateCatalogPairs";
 import { searchTemplatePairs } from "@/src/utils/templateSearch";
 
-// 21 Authoritative base keys
-const AUTHORITATIVE_21_BASE_KEYS = new Set([
+// 27 Authoritative unique base keys across the 28-entry catalog
+const AUTHORITATIVE_27_BASE_KEYS = new Set([
+  "document_exhibit_application",
+  "aanke_padvani_arji",
+  "certified_copy_application",
   "certified_report",
   "closing_purshish",
+  "closing_argument_right_application",
+  "reopen_right_to_argue_application",
   "dd_karavani_arji",
+  "fs_right_closure_application",
+  "fs_right_reopen_application",
   "document_parat_levani_arji",
   "document_swikaravani_arji",
   "exemption_arji",
@@ -25,10 +32,13 @@ const AUTHORITATIVE_21_BASE_KEYS = new Set([
   "warrant_rad_karvani_arji",
 ]);
 
-const AUTHORITATIVE_42_TEMPLATE_IDS = new Set<string>();
-for (const k of AUTHORITATIVE_21_BASE_KEYS) {
-  AUTHORITATIVE_42_TEMPLATE_IDS.add(`${k}_gu`);
-  AUTHORITATIVE_42_TEMPLATE_IDS.add(`${k}_en`);
+const AUTHORITATIVE_GU_IDS = new Set<string>();
+const AUTHORITATIVE_EN_IDS = new Set<string>();
+for (const k of AUTHORITATIVE_27_BASE_KEYS) {
+  AUTHORITATIVE_GU_IDS.add(k);
+  AUTHORITATIVE_GU_IDS.add(`${k}_gu`);
+  AUTHORITATIVE_EN_IDS.add(k);
+  AUTHORITATIVE_EN_IDS.add(`${k}_en`);
 }
 
 interface TestCase {
@@ -103,22 +113,33 @@ function runAllTests() {
   let failedCount = 0;
   let phantomIdCount = 0;
 
-  // Verify baseline metadata integrity
-  if (TEMPLATE_LOGICAL_PAIRS.length !== 21) {
-    console.error(`FAILURE: Expected exactly 21 logical pairs, got ${TEMPLATE_LOGICAL_PAIRS.length}`);
+  // Verify baseline metadata integrity (28 catalog entries across 27 unique baseKeys)
+  if (TEMPLATE_LOGICAL_PAIRS.length !== 28) {
+    console.error(`FAILURE: Expected exactly 28 logical pairs, got ${TEMPLATE_LOGICAL_PAIRS.length}`);
     process.exit(1);
+  }
+  const presentKeys = new Set(TEMPLATE_LOGICAL_PAIRS.map((p) => p.baseKey));
+  if (presentKeys.size !== 27) {
+    console.error(`FAILURE: Expected 27 unique baseKeys, got ${presentKeys.size}`);
+    process.exit(1);
+  }
+  for (const k of AUTHORITATIVE_27_BASE_KEYS) {
+    if (!presentKeys.has(k)) {
+      console.error(`MISSING AUTHORITATIVE KEY: ${k}`);
+      phantomIdCount++;
+    }
   }
 
   for (const pair of TEMPLATE_LOGICAL_PAIRS) {
-    if (!AUTHORITATIVE_21_BASE_KEYS.has(pair.baseKey)) {
+    if (!AUTHORITATIVE_27_BASE_KEYS.has(pair.baseKey)) {
       console.error(`PHANTOM BASE KEY: ${pair.baseKey}`);
       phantomIdCount++;
     }
-    if (!AUTHORITATIVE_42_TEMPLATE_IDS.has(pair.guId)) {
+    if (!AUTHORITATIVE_GU_IDS.has(pair.guId)) {
       console.error(`PHANTOM GUID: ${pair.guId}`);
       phantomIdCount++;
     }
-    if (!AUTHORITATIVE_42_TEMPLATE_IDS.has(pair.enId)) {
+    if (!AUTHORITATIVE_EN_IDS.has(pair.enId)) {
       console.error(`PHANTOM ENID: ${pair.enId}`);
       phantomIdCount++;
     }
@@ -129,9 +150,9 @@ function runAllTests() {
 
     // Verify all returned matches belong to authoritative catalog
     for (const m of matches) {
-      if (!AUTHORITATIVE_21_BASE_KEYS.has(m.pair.baseKey) ||
-          !AUTHORITATIVE_42_TEMPLATE_IDS.has(m.pair.guId) ||
-          !AUTHORITATIVE_42_TEMPLATE_IDS.has(m.pair.enId)) {
+      if (!AUTHORITATIVE_27_BASE_KEYS.has(m.pair.baseKey) ||
+          !AUTHORITATIVE_GU_IDS.has(m.pair.guId) ||
+          !AUTHORITATIVE_EN_IDS.has(m.pair.enId)) {
         console.error(`Test #${t.id} query "${t.query}" returned phantom template: ${m.pair.baseKey}`);
         phantomIdCount++;
       }

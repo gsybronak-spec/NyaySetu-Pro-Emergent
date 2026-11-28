@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { api } from "@/src/api/client";
 import { getCachedPlans, setCachedPlans } from "@/src/constants/plans";
@@ -40,6 +41,7 @@ export function PlanPurchaseModal({
   currentBalance = 0,
 }: PlanPurchaseModalProps) {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   // Instant initial plans from in-memory cache — zero blank loading delay
   const [plans, setPlans] = useState<any[]>(() => getCachedPlans());
   const [loading, setLoading] = useState(false);
@@ -148,17 +150,20 @@ export function PlanPurchaseModal({
         balance = res.balance;
       }
 
-      const msg = `Payment Successful! ${plan.credits || ""} credits added. New balance: ${balance} credits.`;
+      const msg = ui(
+        `Payment Successful! ${plan.credits || ""} credits added. New balance: ${balance} credits.`,
+        `ચુકવણી સફળ! ${plan.credits || ""} ક્રેડિટ્સ ઉમેરાઈ. નવું બેલેન્સ: ${balance} ક્રેડિટ્સ.`
+      );
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.alert(msg);
       } else {
-        Alert.alert("Success", msg);
+        Alert.alert(t("successTitle"), msg);
       }
 
       if (onSuccess) onSuccess(balance);
       onClose();
     } catch (e: any) {
-      const msg = e?.message || "Purchase could not be completed.";
+      const msg = e?.message || ui("Purchase could not be completed.", "ખરીદી પૂર્ણ થઈ શકી નથી.");
       setError(msg);
     } finally {
       setBuyingId(null);
@@ -186,11 +191,11 @@ export function PlanPurchaseModal({
               <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                 <Ionicons name="diamond" size={20} color="#C5A059" />
                 <Text style={[styles.headerTitle, { color: colors.onSurface }]}>
-                  Purchase Template Credits
+                  {ui("Purchase Template Credits", "અરજી ક્રેડિટ્સ ખરીદો")}
                 </Text>
               </View>
               <Text style={[styles.headerSub, { color: colors.muted }]}>
-                તમારી પાસે ક્રેડિટ સમાપ્ત થઈ ગઈ છે • યોજના પસંદ કરો
+                {ui("You have run out of credits • Choose a plan", "તમારી પાસે ક્રેડિટ સમાપ્ત થઈ ગઈ છે • યોજના પસંદ કરો")}
               </Text>
             </View>
             <Pressable
@@ -212,9 +217,9 @@ export function PlanPurchaseModal({
           >
             <Ionicons name="wallet-outline" size={16} color={colors.muted} />
             <Text style={{ fontSize: 13, color: colors.muted }}>
-              Current Balance:{" "}
+              {ui("Current Balance:", "વર્તમાન બેલેન્સ:")}{" "}
               <Text style={{ fontWeight: "700", color: currentBalance > 0 ? "#10B981" : "#EF4444" }}>
-                {currentBalance} Credits
+                {currentBalance} {t("credits")}
               </Text>
             </Text>
           </View>
@@ -231,14 +236,14 @@ export function PlanPurchaseModal({
             <View style={{ padding: Spacing.xl, alignItems: "center" }}>
               <ActivityIndicator size="large" color={colors.brandPrimary} />
               <Text style={{ marginTop: Spacing.md, color: colors.muted, fontSize: 13 }}>
-                Loading plans...
+                {ui("Loading plans...", "પ્લાન્સ લોડ થઈ રહ્યા છે...")}
               </Text>
             </View>
           ) : (
             <ScrollView style={{ maxHeight: 380 }} contentContainerStyle={{ gap: Spacing.md }}>
               {plans.length === 0 ? (
                 <Text style={{ textAlign: "center", color: colors.muted, padding: Spacing.lg }}>
-                  No active plans available right now. Please contact support.
+                  {ui("No active plans available right now. Please contact support.", "હાલમાં કોઈ સક્રિય પ્લાન ઉપલબ્ધ નથી. કૃપા કરીને સપોર્ટનો સંપર્ક કરો.")}
                 </Text>
               ) : (
                 plans.map((p) => {
@@ -260,7 +265,7 @@ export function PlanPurchaseModal({
                       {p.popular && (
                         <View style={[styles.popularBadge, { backgroundColor: colors.brandPrimary }]}>
                           <Text style={[styles.popularText, { color: colors.onBrandPrimary }]}>
-                            MOST POPULAR
+                            {ui("MOST POPULAR", "સૌથી લોકપ્રિય")}
                           </Text>
                         </View>
                       )}
@@ -270,11 +275,11 @@ export function PlanPurchaseModal({
                             {p.name}
                           </Text>
                           <Text style={[styles.planCredits, { color: colors.brandPrimary }]}>
-                            {p.credits} Template Credits
+                            {p.credits} {ui("Template Credits", "અરજી ક્રેડિટ્સ")}
                           </Text>
                           {pricePerCredit > 0 && (
                             <Text style={{ fontSize: 11, color: colors.muted, marginTop: 2 }}>
-                              ₹{pricePerCredit} per document • Never expires
+                              {ui(`₹${pricePerCredit} per document • Never expires`, `₹${pricePerCredit} પ્રતિ અરજી • ક્યારેય એક્સપાયર નહીં`)}
                             </Text>
                           )}
                         </View>
@@ -296,7 +301,7 @@ export function PlanPurchaseModal({
                               <ActivityIndicator size="small" color={colors.onBrandPrimary} />
                             ) : (
                               <Text style={[styles.buyBtnText, { color: colors.onBrandPrimary }]}>
-                                Buy Now
+                                {ui("Buy Now", "હવે ખરીદો")}
                               </Text>
                             )}
                           </Pressable>
@@ -320,7 +325,7 @@ export function PlanPurchaseModal({
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={[styles.cancelBtnText, { color: colors.muted }]}>Close / બંધ કરો</Text>
+              <Text style={[styles.cancelBtnText, { color: colors.muted }]}>{t("close")}</Text>
             </Pressable>
           </View>
         </Pressable>

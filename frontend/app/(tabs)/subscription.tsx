@@ -6,6 +6,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -114,6 +115,7 @@ async function buyWithRazorpay(planId: string, user?: any): Promise<{ balance: n
 
 export default function Subscription() {
   const { colors, isDark } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -163,16 +165,21 @@ export default function Subscription() {
     try {
       const res = RAZORPAY_ENABLED ? await buyWithRazorpay(id, user) : await api.purchase(id);
       setWallet({ balance: res.balance, total_used: wallet.total_used });
+      const okMsg = ui(
+        `Credits added to your wallet. New balance: ${res.balance} templates.`,
+        `તમારા વૉલેટમાં ક્રેડિટ્સ ઉમેરાઈ ગઈ છે. નવું બેલેન્સ: ${res.balance} અરજીઓ.`
+      );
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(`Payment Successful — Credits added to your wallet. New balance: ${res.balance} templates.`);
+        window.alert(`${ui("Payment Successful", "ચુકવણી સફળ")} — ${okMsg}`);
       } else {
-        Alert.alert("Payment Successful", `Credits added to your wallet. New balance: ${res.balance} templates.`);
+        Alert.alert(ui("Payment Successful", "ચુકવણી સફળ"), okMsg);
       }
     } catch (e: any) {
+      const failMsg = e?.message || ui("Payment could not be completed", "ચુકવણી પૂર્ણ થઈ શકી નથી");
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(e?.message || "Payment could not be completed");
+        window.alert(failMsg);
       } else {
-        Alert.alert("Payment Failed", e?.message || "Payment could not be completed");
+        Alert.alert(ui("Payment Failed", "ચુકવણી નિષ્ફળ"), failMsg);
       }
     } finally {
       setBuying(null);
@@ -197,7 +204,7 @@ export default function Subscription() {
         {isPopular ? (
           <View style={[styles.popularBadge, { backgroundColor: colors.brandPrimary }]}>
             <Text style={{ color: colors.onBrandPrimary, fontWeight: "800", fontSize: 10, letterSpacing: 1 }}>
-              MOST POPULAR
+              {ui("MOST POPULAR", "સૌથી લોકપ્રિય")}
             </Text>
           </View>
         ) : null}
@@ -205,7 +212,7 @@ export default function Subscription() {
           <View style={{ flex: 1 }}>
             <Text style={{ color: colors.onSurface, fontSize: 16, fontWeight: "700" }}>{p.name}</Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
-              {isSingle ? "One-time payment" : `${p.credits} template credits`}
+              {isSingle ? ui("One-time payment", "એક વખતની ચુકવણી") : ui(`${p.credits} template credits`, `${p.credits} અરજી ક્રેડિટ્સ`)}
             </Text>
           </View>
           <View style={{ alignItems: "flex-end" }}>
@@ -213,7 +220,7 @@ export default function Subscription() {
               ₹{p.price}
             </Text>
             {!isSingle && (
-              <Text style={{ color: colors.muted, fontSize: 11 }}>≈ ₹{p.per_template}/template</Text>
+              <Text style={{ color: colors.muted, fontSize: 11 }}>{ui(`≈ ₹${p.per_template}/template`, `≈ ₹${p.per_template}/અરજી`)}</Text>
             )}
           </View>
         </View>
@@ -221,7 +228,7 @@ export default function Subscription() {
           <View style={[styles.savingRow, { backgroundColor: colors.brandTertiary }]}>
             <Ionicons name="trending-down" size={14} color={colors.onBrandTertiary} />
             <Text style={{ color: colors.onBrandTertiary, fontSize: 12, fontWeight: "700", marginLeft: 4 }}>
-              Save {Math.round((1 - p.per_template / 9) * 100)}% vs ₹9/template
+              {ui(`Save ${Math.round((1 - p.per_template / 9) * 100)}% vs ₹9/template`, `₹9/અરજીની સામે ${Math.round((1 - p.per_template / 9) * 100)}% બચત`)}
             </Text>
           </View>
         )}
@@ -232,7 +239,7 @@ export default function Subscription() {
           style={[styles.buyBtn, { backgroundColor: colors.brand, opacity: buying === p.id ? 0.6 : 1 }]}
         >
           <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 14 }}>
-            {buying === p.id ? "Processing..." : isSingle ? "Buy 1 Template" : "Purchase"}
+            {buying === p.id ? ui("Processing...", "પ્રક્રિયા ચાલુ છે...") : isSingle ? ui("Buy 1 Template", "૧ અરજી ખરીદો") : ui("Purchase", "ખરીદો")}
           </Text>
         </Pressable>
       </View>
@@ -243,8 +250,8 @@ export default function Subscription() {
   if (isDesktop) {
     return (
       <DesktopPage
-        title="Plans & Wallet"
-        subtitle="Credit packs — valid until consumed"
+        title={t("tabPlansWallet")}
+        subtitle={ui("Credit packs — valid until consumed", "ક્રેડિટ પેક — વપરાય ત્યાં સુધી માન્ય")}
         onBack={() => safeBack("/(tabs)/home")}
       >
         <LinearGradient
@@ -253,32 +260,36 @@ export default function Subscription() {
         >
           <View style={{ flex: 1 }}>
             <Text style={styles.heroLabel}>
-              {isUnlimited ? (user?.is_owner ? "OWNER UNLIMITED ACCESS" : "PARTNER UNLIMITED ACCESS") : "YOUR WALLET"}
+              {isUnlimited
+                ? (user?.is_owner ? ui("OWNER UNLIMITED ACCESS", "માલિક અમર્યાદિત ઍક્સેસ") : ui("PARTNER UNLIMITED ACCESS", "પાર્ટનર અમર્યાદિત ઍક્સેસ"))
+                : ui("YOUR WALLET", "તમારું વૉલેટ")}
             </Text>
             <View style={{ flexDirection: "row", alignItems: "baseline", marginTop: 8 }}>
-              <Text style={styles.heroBalance}>{isUnlimited ? "Unlimited" : wallet.balance}</Text>
-              <Text style={styles.heroSub}>{isUnlimited ? " Templates Access Active" : " Templates Remaining"}</Text>
+              <Text style={styles.heroBalance}>{isUnlimited ? t("unlimited") : wallet.balance}</Text>
+              <Text style={styles.heroSub}>
+                {isUnlimited ? ui(" Templates Access Active", " અરજીઓનો ઍક્સેસ સક્રિય") : ui(" Templates Remaining", " અરજીઓ બાકી")}
+              </Text>
             </View>
             <Text style={{ color: "#A6B1C2", fontSize: 13, marginTop: 8 }}>
               {isUnlimited
-                ? "You have permanent unlimited access to all templates. No credits are ever deducted."
-                : "Each generated document consumes 1 template credit. Credits never expire."}
+                ? ui("You have permanent unlimited access to all templates. No credits are ever deducted.", "તમારી પાસે બધી અરજીઓનો કાયમી અમર્યાદિત ઍક્સેસ છે. કોઈ ક્રેડિટ કપાશે નહીં.")
+                : ui("Each generated document consumes 1 template credit. Credits never expire.", "દરેક તૈયાર થતા દસ્તાવેજ માટે ૧ ક્રેડિટ વપરાય છે. ક્રેડિટ્સ ક્યારેય એક્સપાયર થતી નથી.")}
             </Text>
           </View>
           <View style={styles.dHeroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>{wallet.total_used}</Text>
-              <Text style={styles.heroStatLbl}>Used</Text>
+              <Text style={styles.heroStatLbl}>{ui("Used", "વપરાયેલ")}</Text>
             </View>
             <View style={styles.heroDivider} />
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>₹9</Text>
-              <Text style={styles.heroStatLbl}>Per Template</Text>
+              <Text style={styles.heroStatLbl}>{ui("Per Template", "પ્રતિ અરજી")}</Text>
             </View>
             <View style={styles.heroDivider} />
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>₹0</Text>
-              <Text style={styles.heroStatLbl}>Expiry</Text>
+              <Text style={styles.heroStatLbl}>{ui("Expiry", "અવધિ સમાપ્તિ")}</Text>
             </View>
           </View>
         </LinearGradient>
@@ -290,13 +301,13 @@ export default function Subscription() {
         <View style={[styles.info, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
           <Ionicons name="shield-checkmark" size={20} color={colors.brandPrimary} />
           <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>Secure Payment</Text>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>{ui("Secure Payment", "સુરક્ષિત ચુકવણી")}</Text>
             <Text style={{ color: colors.muted, fontSize: 12, marginTop: 2 }}>
-              Payments powered by Razorpay. Credits added after successful verification.
+              {ui("Payments powered by Razorpay. Credits added after successful verification.", "Razorpay દ્વારા સુરક્ષિત ચુકવણી. ચકાસણી બાદ તરત જ ક્રેડિટ ઉમેરાય છે.")}
             </Text>
           </View>
           <Pressable testID="txn-link" onPress={() => router.push("/transactions" as any)}>
-            <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Transaction History →</Text>
+            <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>{ui("Transaction History →", "વ્યવહાર ઇતિહાસ →")}</Text>
           </Pressable>
         </View>
       </DesktopPage>
@@ -320,7 +331,7 @@ export default function Subscription() {
         <Pressable testID="sub-back" onPress={() => safeBack("/(tabs)/home")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
-        <Text style={{ fontSize: 17, fontWeight: "700", color: colors.onSurface }}>Plans & Wallet</Text>
+        <Text style={{ fontSize: 17, fontWeight: "700", color: colors.onSurface }}>{t("tabPlansWallet")}</Text>
         <View style={{ width: 24 }} />
       </View>
       <ScrollView
@@ -332,26 +343,28 @@ export default function Subscription() {
           style={styles.hero}
         >
           <Text style={styles.heroLabel}>
-            {isUnlimited ? (user?.is_owner ? "OWNER UNLIMITED ACCESS" : "PARTNER UNLIMITED ACCESS") : "YOUR WALLET"}
+            {isUnlimited
+              ? (user?.is_owner ? ui("OWNER UNLIMITED ACCESS", "માલિક અમર્યાદિત ઍક્સેસ") : ui("PARTNER UNLIMITED ACCESS", "પાર્ટનર અમર્યાદિત ઍક્સેસ"))
+              : ui("YOUR WALLET", "તમારું વૉલેટ")}
           </Text>
-          <Text style={styles.heroBalance}>{isUnlimited ? "Unlimited" : wallet.balance}</Text>
-          <Text style={styles.heroSub}>{isUnlimited ? "Templates Access Active" : "Templates Remaining"}</Text>
+          <Text style={styles.heroBalance}>{isUnlimited ? t("unlimited") : wallet.balance}</Text>
+          <Text style={styles.heroSub}>{isUnlimited ? ui("Templates Access Active", "અરજીઓનો ઍક્સેસ સક્રિય") : ui("Templates Remaining", "અરજીઓ બાકી")}</Text>
           <View style={styles.heroStats}>
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>{wallet.total_used}</Text>
-              <Text style={styles.heroStatLbl}>Used</Text>
+              <Text style={styles.heroStatLbl}>{ui("Used", "વપરાયેલ")}</Text>
             </View>
             <View style={styles.heroDivider} />
             <View style={styles.heroStat}>
               <Text style={styles.heroStatVal}>₹9</Text>
-              <Text style={styles.heroStatLbl}>Per Template</Text>
+              <Text style={styles.heroStatLbl}>{ui("Per Template", "પ્રતિ અરજી")}</Text>
             </View>
           </View>
         </LinearGradient>
 
-        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>Choose your plan</Text>
+        <Text style={[styles.sectionTitle, { color: colors.onSurface }]}>{ui("Choose your plan", "તમારો પ્લાન પસંદ કરો")}</Text>
         <Text style={[styles.sectionSub, { color: colors.muted }]}>
-          Credit packs — valid until consumed
+          {ui("Credit packs — valid until consumed", "ક્રેડિટ પેક — વપરાય ત્યાં સુધી માન્ય")}
         </Text>
 
         <View style={{ paddingHorizontal: Spacing.lg, gap: Spacing.md }}>
@@ -361,9 +374,9 @@ export default function Subscription() {
         <View style={[styles.info, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
           <Ionicons name="shield-checkmark" size={20} color={colors.brandPrimary} />
           <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>Secure Payment</Text>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>{ui("Secure Payment", "સુરક્ષિત ચુકવણી")}</Text>
             <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
-              Payments powered by Razorpay. Credits added after successful verification.
+              {ui("Payments powered by Razorpay. Credits added after successful verification.", "Razorpay દ્વારા સુરક્ષિત ચુકવણી. ચકાસણી બાદ તરત જ ક્રેડિટ ઉમેરાય છે.")}
             </Text>
           </View>
         </View>

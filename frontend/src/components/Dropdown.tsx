@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
 import { useKeyboardHeight } from "@/src/hooks/useKeyboardHeight";
@@ -47,6 +48,7 @@ export function Dropdown({
   emptyMessage,
 }: Props) {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -157,7 +159,7 @@ export function Dropdown({
                 <Ionicons name="search" size={16} color={colors.muted} />
                 <TextInput
                   testID={`${testID}-search`}
-                  placeholder="Search in English or ગુજરાતી..."
+                  placeholder={ui("Search options...", "વિકલ્પ શોધો...")}
                   placeholderTextColor={colors.muted}
                   value={query}
                   onChangeText={setQuery}
@@ -176,7 +178,7 @@ export function Dropdown({
               <View style={styles.centerBox}>
                 <ActivityIndicator size="small" color={colors.brandPrimary} />
                 <Text style={{ color: colors.muted, marginTop: Spacing.sm, fontSize: 13 }}>
-                  માહિતી લોડ થઈ રહી છે... / Loading options...
+                  {ui("Loading options...", "માહિતી લોડ થઈ રહી છે...")}
                 </Text>
               </View>
             ) : error ? (
@@ -192,7 +194,7 @@ export function Dropdown({
                     testID={`${testID}-retry-btn`}
                   >
                     <Text style={{ color: colors.onBrandPrimary, fontWeight: "700", fontSize: 13 }}>
-                      Retry / ફરી પ્રયાસ કરો
+                      {t("retry")}
                     </Text>
                   </Pressable>
                 ) : null}
@@ -203,7 +205,7 @@ export function Dropdown({
                   testID={testID ? `${testID}-empty-text` : undefined}
                   style={{ color: colors.muted, textAlign: "center", fontSize: 14 }}
                 >
-                  {query.trim() ? "No matches found / કોઈ પરિણામ મળ્યું નથી" : (emptyMessage || "No options available")}
+                  {query.trim() ? ui("No matches found", "કોઈ પરિણામ મળ્યું નથી") : (emptyMessage || ui("No options available", "કોઈ વિકલ્પ ઉપલબ્ધ નથી"))}
                 </Text>
               </View>
             ) : (

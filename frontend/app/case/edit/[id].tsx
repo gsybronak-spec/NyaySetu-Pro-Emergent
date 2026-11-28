@@ -4,10 +4,12 @@ import { router, useLocalSearchParams } from "expo-router";
 
 import { CaseForm, CaseFormValues } from "@/src/components/CaseForm";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 
 export default function EditCase() {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { id } = useLocalSearchParams<{ id: string }>();
   const [initial, setInitial] = useState<Partial<CaseFormValues> | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,11 +50,11 @@ export default function EditCase() {
         client_address: c.client_address || "",
       });
     }).catch((e) => {
-      const msg = e?.message || "Failed to load case";
+      const msg = e?.message || ui("Failed to load case", "કેસ લોડ કરવામાં નિષ્ફળતા");
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(`Error: ${msg}`);
+        window.alert(`${t("errorTitle")}: ${msg}`);
       } else {
-        Alert.alert("Error", msg);
+        Alert.alert(t("errorTitle"), msg);
       }
     });
   }, [id]);
@@ -65,15 +67,15 @@ export default function EditCase() {
       router.replace({ pathname: "/case/[id]", params: { id: String(id), _refresh: String(Date.now()) } });
       setTimeout(() => {
         if (Platform.OS !== "web") {
-          Alert.alert("Saved", "Case updated successfully.");
+          Alert.alert(t("savedTitle"), ui("Case updated successfully.", "કેસની વિગતો સફળતાપૂર્વક અપડેટ થઈ ગઈ."));
         }
       }, 300);
     } catch (e: any) {
-      const msg = e?.message || "Failed to update case";
+      const msg = e?.message || ui("Failed to update case", "કેસ અપડેટ કરવામાં નિષ્ફળતા");
       if (Platform.OS === "web" && typeof window !== "undefined") {
-        window.alert(`Error: ${msg}`);
+        window.alert(`${t("errorTitle")}: ${msg}`);
       } else {
-        Alert.alert("Error", msg);
+        Alert.alert(t("errorTitle"), msg);
       }
     } finally {
       setSaving(false);
@@ -88,5 +90,5 @@ export default function EditCase() {
     );
   }
 
-  return <CaseForm title="Edit Case" submitLabel="Update Case" initial={initial} saving={saving} onSubmit={save} />;
+  return <CaseForm title={ui("Edit Case", "કેસ સુધારો")} submitLabel={ui("Update Case", "કેસ અપડેટ કરો")} initial={initial} saving={saving} onSubmit={save} />;
 }

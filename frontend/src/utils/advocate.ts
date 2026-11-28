@@ -18,10 +18,21 @@ export function formatAdvocateName(name?: string | null, language: "en" | "gu" =
 
 /** Formats a user display name cleanly without blindly adding "Adv." unless present in profile */
 export function formatDisplayName(
-  user?: { name?: string | null; advocate_name_en?: string | null; first_name?: string | null; last_name?: string | null; mobile?: string | null } | null,
-  fallback = "Advocate"
+  user?: {
+    name?: string | null;
+    advocate_name_en?: string | null;
+    advocate_name_gu?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+    mobile?: string | null;
+  } | null,
+  fallback = "Advocate",
+  language: "en" | "gu" = "en"
 ): string {
   if (!user) return fallback;
+  if (language === "gu" && user.advocate_name_gu && user.advocate_name_gu.trim()) {
+    return formatAdvocateName(user.advocate_name_gu, "gu", fallback);
+  }
   if (user.advocate_name_en && user.advocate_name_en.trim()) {
     return user.advocate_name_en.trim();
   }

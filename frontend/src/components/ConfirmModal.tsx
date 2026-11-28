@@ -2,6 +2,7 @@ import React from "react";
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { Radius, Spacing } from "@/src/theme/tokens";
 
 interface ConfirmModalProps {
@@ -18,12 +19,14 @@ export function ConfirmModal({
   visible,
   title,
   message,
-  confirmLabel = "Delete",
+  confirmLabel,
   busy = false,
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
   const { colors } = useTheme();
+  const { t } = useAppLanguage();
+  const effectiveConfirmLabel = confirmLabel || t("delete");
 
   return (
     <Modal
@@ -45,7 +48,7 @@ export function ConfirmModal({
               onPress={onCancel}
               style={[styles.btn, { borderColor: colors.border, backgroundColor: colors.surfaceSecondary }]}
             >
-              <Text style={{ color: colors.onSurface, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
+              <Text style={{ color: colors.onSurface, fontWeight: "600", fontSize: 13 }}>{t("cancel")}</Text>
             </Pressable>
             <Pressable
               testID="confirm-modal-confirm"
@@ -56,7 +59,7 @@ export function ConfirmModal({
               {busy ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>{confirmLabel}</Text>
+                <Text style={{ color: "#FFFFFF", fontWeight: "700", fontSize: 13 }}>{effectiveConfirmLabel}</Text>
               )}
             </Pressable>
           </View>

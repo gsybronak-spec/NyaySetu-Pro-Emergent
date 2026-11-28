@@ -13,6 +13,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -29,6 +30,7 @@ interface SearchResults {
 
 export default function Search() {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const [q, setQ] = useState("");
   const { keyboardHeight } = useKeyboardHeight();
@@ -58,7 +60,7 @@ export default function Search() {
         templatePairs: matchedPairs.slice(0, 10),
       });
     } catch (e: any) {
-      setError(e?.message || "Could not search. Please try again.");
+      setError(e?.message || ui("Could not search. Please try again.", "શોધ કરી શકાઈ નથી. કૃપા કરીને ફરી પ્રયાસ કરો."));
       setResults(null);
     } finally {
       setSearching(false);
@@ -184,7 +186,7 @@ export default function Search() {
           <TextInput
             ref={inputRef}
             testID="global-search-input"
-            placeholder="Search cases, templates, ગુજરાતી..."
+            placeholder={t("searchCasesTemplatesPlaceholder")}
             placeholderTextColor={colors.muted}
             value={q}
             onChangeText={onChange}
@@ -209,27 +211,30 @@ export default function Search() {
             onPress={() => run(q)}
             style={[styles.retry, { backgroundColor: colors.brandPrimary }]}
           >
-            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry</Text>
+            <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("retry")}</Text>
           </Pressable>
         </View>
       ) : !results ? (
         <View style={styles.center}>
           <Ionicons name="search-outline" size={40} color={colors.muted} />
           <Text style={[styles.msg, { color: colors.onSurface }]}>
-            Search your cases and legal templates
+            {ui("Search your cases and legal templates", "તમારા કેસ અને કોર્ટ અરજીઓ શોધો")}
           </Text>
           <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            Try a case number, party name, or template name like &quot;mudat&quot; / &quot;મુદત&quot;.
+            {ui(
+              'Try a case number, party name, or template name like "mudat" / "મુદત".',
+              'કેસ નંબર, પક્ષકારનું નામ અથવા અરજીનું નામ જેમ કે "મુદત" / "mudat" લખીને શોધો.'
+            )}
           </Text>
         </View>
       ) : total === 0 ? (
         <View style={styles.center}>
           <Ionicons name="file-tray-outline" size={40} color={colors.muted} />
           <Text style={[styles.msg, { color: colors.onSurface }]}>
-            કોઈ પરિણામ મળ્યા નથી &mdash; No results for &quot;{q.trim()}&quot;
+            {ui(`No results for "${q.trim()}"`, `"${q.trim()}" માટે કોઈ પરિણામ મળ્યું નથી`)}
           </Text>
           <Text style={{ color: colors.muted, fontSize: 13, textAlign: "center", paddingHorizontal: Spacing.xl }}>
-            કૃપા કરીને બીજો શબ્દ શોધો / Check the spelling or try a different term.
+            {ui("Check the spelling or try a different term.", "કૃપા કરીને બીજો શબ્દ શોધો અથવા જોડણી તપાસો.")}
           </Text>
         </View>
       ) : (
@@ -241,7 +246,7 @@ export default function Search() {
             <View style={isDesktop ? { maxWidth: 820, width: "100%", paddingBottom: 120 } : { paddingHorizontal: Spacing.lg, paddingBottom: 120 + keyboardHeight }}>
               {results.cases.length > 0 && (
                 <>
-                  {sectionHeader("Cases", results.cases.length)}
+                  {sectionHeader(ui("Cases", "કેસ"), results.cases.length)}
                   <View style={{ gap: Spacing.sm }}>
                     {results.cases.map((c) => (
                       <View key={c.id}>{renderCase({ item: c })}</View>
@@ -251,7 +256,7 @@ export default function Search() {
               )}
               {results.templatePairs.length > 0 && (
                 <>
-                  {sectionHeader("Legal Templates", results.templatePairs.length)}
+                  {sectionHeader(t("legalTemplates"), results.templatePairs.length)}
                   <View style={{ gap: Spacing.sm }}>
                     {results.templatePairs.map((t) => (
                       <View key={t.pair.baseKey}>{renderTemplatePair({ item: t })}</View>

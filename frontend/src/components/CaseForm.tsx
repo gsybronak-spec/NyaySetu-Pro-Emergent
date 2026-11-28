@@ -10,6 +10,7 @@ import { Dropdown } from "@/src/components/Dropdown";
 import { DateField } from "@/src/components/DateField";
 import { KeyboardAwareScrollView } from "@/src/components/KeyboardAwareScrollView";
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { catalogCache } from "@/src/services/catalogCache";
 import { Radius, Spacing } from "@/src/theme/tokens";
@@ -198,6 +199,7 @@ interface Props {
 
 export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Props) {
   const { colors } = useTheme();
+  const { ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const [form, setForm] = useState<CaseFormValues>(() => {
     const rawP = initial?.party_role || "";
@@ -302,7 +304,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
   const courtOptions = [
     ...historicalCourtOption,
     ...courts.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: language === "gu" ? c.en : c.gu })),
-    { id: "other", label: "Other / અન્ય કોર્ટ", sublabel: language === "gu" ? "અન્ય કોર્ટ દાખલ કરો" : "Enter custom court name", pinnable: false },
+    { id: "other", label: language === "gu" ? "અન્ય કોર્ટ" : "Other", sublabel: language === "gu" ? "અન્ય કોર્ટ દાખલ કરો" : "Enter custom court name", pinnable: false },
   ];
 
   const onCourtChange = (v: string | null) => {
@@ -347,7 +349,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
   const handleMobileLookup = async () => {
     if (!searchMobile || searchMobile.trim().length < 10) {
-      setLookupStatus({ type: "error", message: "Please enter a valid 10-digit mobile number." });
+      setLookupStatus({ type: "error", message: ui("Please enter a valid 10-digit mobile number.", "કૃપા કરીને માન્ય ૧૦-અંકનો મોબાઇલ નંબર દાખલ કરો.") });
       return;
     }
     setLookupLoading(true);
@@ -358,7 +360,10 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         const c = res.client;
         setLookupStatus({
           type: "success",
-          message: `Client found: ${c.name || "Registered User"} (${c.mobile})`,
+          message: ui(
+            `Client found: ${c.name || "Registered User"} (${c.mobile})`,
+            `અસીલ મળી ગયા: ${c.name || "નોંધાયેલ વપરાશકર્તા"} (${c.mobile})`
+          ),
         });
         // Autofill matching core fields
         if (c.name) update("party_name", c.name);
@@ -391,11 +396,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
       } else {
         setLookupStatus({
           type: "warning",
-          message: res.message || `Client with mobile '${searchMobile}' not found. You can enter details manually.`,
+          message: res.message || ui(
+            `Client with mobile '${searchMobile}' not found. You can enter details manually.`,
+            `મોબાઇલ નંબર '${searchMobile}' સાથે કોઈ અસીલ મળ્યા નથી. તમે વિગતો જાતે ભરી શકો છો.`
+          ),
         });
       }
     } catch (e: any) {
-      setLookupStatus({ type: "error", message: e.message || "Client lookup failed." });
+      setLookupStatus({ type: "error", message: e.message || ui("Client lookup failed.", "અસીલ શોધવામાં નિષ્ફળતા.") });
     } finally {
       setLookupLoading(false);
     }
@@ -621,13 +629,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
               <View style={{ flex: 1, minWidth: 0 }}>
                 {/* Client lookup */}
                 <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-                  <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
+                  <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Client Mobile Lookup & Autofill", "અસીલ મોબાઇલ શોધ અને ઓટોફિલ")}</Text>
                   <View style={{ flexDirection: "row", gap: Spacing.sm, alignItems: "center" }}>
                     <View style={{ flex: 1 }}>
                       <Field
                         testID="client-mobile-search"
                         label=""
-                        placeholder="Enter 10-digit Client Mobile Number"
+                        placeholder={ui("Enter 10-digit Client Mobile Number", "અસીલનો ૧૦-અંકનો મોબાઇલ નંબર દાખલ કરો")}
                         value={searchMobile}
                         onChangeText={setSearchMobile}
                       />
@@ -638,7 +646,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                       disabled={lookupLoading}
                       style={[styles.searchBtn, { backgroundColor: colors.brandPrimary }]}
                     >
-                      {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>Search</Text>}
+                      {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>{ui("Search", "શોધો")}</Text>}
                     </Pressable>
                   </View>
                   {lookupStatus && (
@@ -657,17 +665,17 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
 
                 <View style={{ height: Spacing.xl }} />
 
-                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Details</Text>
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Client Details", "અસીલની વિગતો")}</Text>
                 <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -6 }}>
-                  Auto-filled from client search. Name & district are set under Parties & Court below.
+                  {ui("Auto-filled from client search. Name & district are set under Parties & Court below.", "અસીલ શોધ પરથી આપોઆપ ભરાય છે. નામ અને જિલ્લો નીચે પક્ષકારો વિભાગમાં ભરાશે.")}
                 </Text>
-                <Field testID="client-mobile" label="Client Mobile" placeholder="10-digit mobile" keyboardType="phone-pad" maxLength={15} value={form.client_mobile} onChangeText={(v) => update("client_mobile", v)} />
-                <Field testID="client-email" label="Client Email (optional)" placeholder="client@example.com" keyboardType="email-address" autoCapitalize="none" value={form.client_email} onChangeText={(v) => update("client_email", v)} />
-                <Field testID="client-address" label="Client Address (optional)" placeholder="Full address" multiline value={form.client_address} onChangeText={(v) => update("client_address", v)} />
+                <Field testID="client-mobile" label={ui("Client Mobile", "અસીલ મોબાઇલ")} placeholder={ui("10-digit mobile", "૧૦-અંકનો મોબાઇલ")} keyboardType="phone-pad" maxLength={15} value={form.client_mobile} onChangeText={(v) => update("client_mobile", v)} />
+                <Field testID="client-email" label={ui("Client Email (optional)", "અસીલ ઈમેલ (વૈકલ્પિક)")} placeholder="client@example.com" keyboardType="email-address" autoCapitalize="none" value={form.client_email} onChangeText={(v) => update("client_email", v)} />
+                <Field testID="client-address" label={ui("Client Address (optional)", "અસીલનું સરનામું (વૈકલ્પિક)")} placeholder={ui("Full address", "પૂરું સરનામું")} multiline value={form.client_address} onChangeText={(v) => update("client_address", v)} />
 
                 <View style={{ height: Spacing.xl }} />
 
-                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Document Language</Text>
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Document Language", "દસ્તાવેજની ભાષા")}</Text>
                 <View style={styles.langRow}>
                   {[
                     { id: "en", label: "English", sub: "Please enter application details in English." },
@@ -692,34 +700,34 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 </View>
 
                 <View style={{ height: Spacing.xl }} />
-                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Case Information</Text>
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Case Information", "કેસની માહિતી")}</Text>
 
-                <Field testID="case-nickname" label="Case Nickname (optional)" placeholder="e.g. Patel Matter" value={form.nickname} onChangeText={(v) => update("nickname", v)} />
-                <Field testID="case-number" label="Case Number" placeholder="e.g. 12345/2024" value={form.case_number} onChangeText={(v) => update("case_number", v)} />
+                <Field testID="case-nickname" label={ui("Case Nickname (optional)", "કેસનું ઉપનામ (વૈકલ્પિક)")} placeholder={ui("e.g. Patel Matter", "દા.ત. પટેલ કેસ")} value={form.nickname} onChangeText={(v) => update("nickname", v)} />
+                <Field testID="case-number" label={ui("Case Number", "કેસ નંબર")} placeholder="e.g. 12345/2024" value={form.case_number} onChangeText={(v) => update("case_number", v)} />
 
                 <Dropdown
                   testID="case-type"
-                  label="Case Type"
-                  placeholder="Select case type"
+                  label={ui("Case Type", "કેસનો પ્રકાર")}
+                  placeholder={ui("Select case type", "કેસનો પ્રકાર પસંદ કરો")}
                   searchable
                   value={form.case_type_id}
                   options={caseTypes.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: c.cat }))}
                   onChange={(v) => update("case_type_id", v)}
                 />
                 {form.case_type_id === "other" && (
-                  <Field testID="case-type-custom" label="Other Case Type" placeholder="Enter case type" value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
+                  <Field testID="case-type-custom" label={ui("Other Case Type", "અન્ય કેસ પ્રકાર")} placeholder={ui("Enter case type", "કેસનો પ્રકાર લખો")} value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
                 )}
 
                 {showComplaint && (
                   <Dropdown
                     testID="complaint-type"
-                    label="Complaint Type"
-                    placeholder="Select complaint type"
+                    label={ui("Complaint Type", "ફરિયાદનો પ્રકાર")}
+                    placeholder={ui("Select complaint type", "ફરિયાદનો પ્રકાર પસંદ કરો")}
                     value={form.complaint_type}
                     options={[
-                      { id: "private", label: "Private Complaint" },
-                      { id: "police", label: "Police Complaint" },
-                      { id: "other", label: "Other" },
+                      { id: "private", label: ui("Private Complaint", "ખાનગી ફરિયાદ") },
+                      { id: "police", label: ui("Police Complaint", "પોલીસ ફરિયાદ") },
+                      { id: "other", label: ui("Other", "અન્ય") },
                     ]}
                     onChange={(v) => update("complaint_type", v)}
                   />
@@ -729,21 +737,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   <>
                     <Dropdown
                       testID="law"
-                      label="Applicable Law"
-                      placeholder="Select law"
+                      label={ui("Applicable Law", "લાગુ પડતો કાયદો")}
+                      placeholder={ui("Select law", "કાયદો પસંદ કરો")}
                       searchable
                       value={form.law_id}
                       options={laws.map((l) => ({ id: l.id, label: language === "gu" ? l.gu : l.en }))}
                       onChange={(v) => update("law_id", v)}
                     />
                     {form.law_id === "other_law" && (
-                      <Field testID="law-custom" label="Other Law" placeholder="Specify law" value={form.law_custom} onChangeText={(v) => update("law_custom", v)} />
+                      <Field testID="law-custom" label={ui("Other Law", "અન્ય કાયદો")} placeholder={ui("Specify law", "કાયદો લખો")} value={form.law_custom} onChangeText={(v) => update("law_custom", v)} />
                     )}
                     {sections.length > 0 && (
                       <Dropdown
                         testID="section"
-                        label="Section / Provision"
-                        placeholder="Select section"
+                        label={ui("Section / Provision", "કલમ / જોગવાઈ")}
+                        placeholder={ui("Select section", "કલમ પસંદ કરો")}
                         searchable
                         value={form.section_id}
                         options={sections.map((s: any) => ({ id: s.id, label: s.label }))}
@@ -757,30 +765,30 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   <>
                     <Dropdown
                       testID="police-station"
-                      label="Police Station"
-                      placeholder="Select police station"
+                      label={ui("Police Station", "પોલીસ સ્ટેશન")}
+                      placeholder={ui("Select police station", "પોલીસ સ્ટેશન પસંદ કરો")}
                       searchable
                       value={form.police_station_id}
                       options={[
                         ...policeStations.map((p) => ({ id: p.id, label: language === "gu" ? p.gu : p.en })),
-                        { id: "other", label: "Other (type manually)" },
+                        { id: "other", label: ui("Other (type manually)", "અન્ય (જાતે લખો)") },
                       ]}
                       onChange={(v) => update("police_station_id", v)}
                     />
                     {form.police_station_id === "other" && (
-                      <Field testID="police-station-custom" label="Enter Police Station" value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
+                      <Field testID="police-station-custom" label={ui("Enter Police Station", "પોલીસ સ્ટેશનનું નામ લખો")} value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
                     )}
                   </>
                 )}
 
                 {showOther && (
-                  <Field testID="complaint-custom" label="Other Complaint Type" placeholder="Describe complaint type" value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
+                  <Field testID="complaint-custom" label={ui("Other Complaint Type", "અન્ય ફરિયાદ પ્રકાર")} placeholder={ui("Describe complaint type", "ફરિયાદની વિગત લખો")} value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
                 )}
               </View>
 
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
-                <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
+                <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Parties & Court", "પક્ષકારો અને કોર્ટ")}</Text>
+                <Field testID="party-name" label={ui("Primary Party / Client Name", "મુખ્ય પક્ષકાર / અસીલનું નામ")} placeholder={ui("Applicant name", "અરજદારનું નામ")} value={form.party_name} onChangeText={(v) => update("party_name", v)} />
                 <RoleChips
                   label={form.language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
                   options={PARTY_1_ROLE_OPTIONS.map((o) => ({
@@ -790,7 +798,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                   value={form.party_role}
                   onChange={(v) => update("party_role", v)}
                 />
-                <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
+                <Field testID="opposite-party" label={ui("Opposite Party (optional)", "સામાવાળા પક્ષકાર (વૈકલ્પિક)")} value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
                 <RoleChips
                   label={form.language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
                   options={PARTY_2_ROLE_OPTIONS.map((o) => ({
@@ -802,8 +810,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 />
                 <Dropdown
                   testID="district"
-                  label="District"
-                  placeholder="Select district"
+                  label={ui("District", "જિલ્લો")}
+                  placeholder={ui("Select district", "જિલ્લો પસંદ કરો")}
                   searchable
                   value={form.district_id}
                   options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
@@ -811,8 +819,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 />
                 <Dropdown
                   testID="taluka"
-                  label="Taluka (Optional)"
-                  placeholder={form.district_id ? "Select Taluka (Optional)" : "Select District first"}
+                  label={ui("Taluka (Optional)", "તાલુકો (વૈકલ્પિક)")}
+                  placeholder={form.district_id ? ui("Select Taluka (Optional)", "તાલુકો પસંદ કરો (વૈકલ્પિક)") : ui("Select District first", "પહેલા જિલ્લો પસંદ કરો")}
                   searchable
                   disabled={!form.district_id}
                   value={form.taluka_id}
@@ -821,8 +829,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 />
                 <Dropdown
                   testID="court"
-                  label="Court"
-                  placeholder="Select court"
+                  label={ui("Court", "કોર્ટ")}
+                  placeholder={ui("Select court", "કોર્ટ પસંદ કરો")}
                   searchable
                   value={form.court_id}
                   favouriteIds={favCourts}
@@ -888,13 +896,13 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
         >
           {/* Client Mobile Lookup Header */}
           <View style={[styles.lookupCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-            <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Mobile Lookup & Autofill</Text>
+            <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Client Mobile Lookup & Autofill", "અસીલ મોબાઇલ શોધ અને ઓટોફિલ")}</Text>
             <View style={{ flexDirection: "row", gap: Spacing.sm, alignItems: "center" }}>
               <View style={{ flex: 1 }}>
                 <Field
                   testID="client-mobile-search"
                   label=""
-                  placeholder="Enter 10-digit Client Mobile Number"
+                  placeholder={ui("Enter 10-digit Client Mobile Number", "અસીલનો ૧૦-અંકનો મોબાઇલ નંબર દાખલ કરો")}
                   value={searchMobile}
                   onChangeText={setSearchMobile}
                 />
@@ -905,7 +913,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
                 disabled={lookupLoading}
                 style={[styles.searchBtn, { backgroundColor: colors.brandPrimary }]}
               >
-                {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>Search</Text>}
+                {lookupLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.searchBtnText}>{ui("Search", "શોધો")}</Text>}
               </Pressable>
             </View>
             {lookupStatus && (
@@ -934,14 +942,14 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <View style={{ height: Spacing.lg }} />
 
           {/* Client Details (flat fields, D3) — autofilled on lookup, editable */}
-          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Client Details</Text>
+          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Client Details", "અસીલની વિગતો")}</Text>
           <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -6 }}>
-            Auto-filled from client search. Name & district are set under Parties & Court below.
+            {ui("Auto-filled from client search. Name & district are set under Parties & Court below.", "અસીલ શોધ પરથી આપોઆપ ભરાય છે. નામ અને જિલ્લો નીચે પક્ષકારો વિભાગમાં ભરાશે.")}
           </Text>
           <Field
             testID="client-mobile"
-            label="Client Mobile"
-            placeholder="10-digit mobile"
+            label={ui("Client Mobile", "અસીલ મોબાઇલ")}
+            placeholder={ui("10-digit mobile", "૧૦-અંકનો મોબાઇલ")}
             keyboardType="phone-pad"
             maxLength={15}
             value={form.client_mobile}
@@ -949,7 +957,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           <Field
             testID="client-email"
-            label="Client Email (optional)"
+            label={ui("Client Email (optional)", "અસીલ ઈમેલ (વૈકલ્પિક)")}
             placeholder="client@example.com"
             keyboardType="email-address"
             autoCapitalize="none"
@@ -958,8 +966,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           <Field
             testID="client-address"
-            label="Client Address (optional)"
-            placeholder="Full address"
+            label={ui("Client Address (optional)", "અસીલનું સરનામું (વૈકલ્પિક)")}
+            placeholder={ui("Full address", "પૂરું સરનામું")}
             multiline
             value={form.client_address}
             onChangeText={(v) => update("client_address", v)}
@@ -968,7 +976,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           <View style={{ height: Spacing.lg }} />
 
           {/* Language toggle */}
-          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Document Language</Text>
+          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Document Language", "દસ્તાવેજની ભાષા")}</Text>
           <View style={styles.langRow}>
             {[
               { id: "en", label: "English", sub: "Please enter application details in English." },
@@ -993,34 +1001,34 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           </View>
 
           <View style={{ height: Spacing.lg }} />
-          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Case Information</Text>
+          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Case Information", "કેસની માહિતી")}</Text>
 
-          <Field testID="case-nickname" label="Case Nickname (optional)" placeholder="e.g. Patel Matter" value={form.nickname} onChangeText={(v) => update("nickname", v)} />
-          <Field testID="case-number" label="Case Number" placeholder="e.g. 12345/2024" value={form.case_number} onChangeText={(v) => update("case_number", v)} />
+          <Field testID="case-nickname" label={ui("Case Nickname (optional)", "કેસનું ઉપનામ (વૈકલ્પિક)")} placeholder={ui("e.g. Patel Matter", "દા.ત. પટેલ કેસ")} value={form.nickname} onChangeText={(v) => update("nickname", v)} />
+          <Field testID="case-number" label={ui("Case Number", "કેસ નંબર")} placeholder="e.g. 12345/2024" value={form.case_number} onChangeText={(v) => update("case_number", v)} />
 
           <Dropdown
             testID="case-type"
-            label="Case Type"
-            placeholder="Select case type"
+            label={ui("Case Type", "કેસનો પ્રકાર")}
+            placeholder={ui("Select case type", "કેસનો પ્રકાર પસંદ કરો")}
             searchable
             value={form.case_type_id}
             options={caseTypes.map((c) => ({ id: c.id, label: language === "gu" ? c.gu : c.en, sublabel: c.cat }))}
             onChange={(v) => update("case_type_id", v)}
           />
           {form.case_type_id === "other" && (
-            <Field testID="case-type-custom" label="Other Case Type" placeholder="Enter case type" value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
+            <Field testID="case-type-custom" label={ui("Other Case Type", "અન્ય કેસ પ્રકાર")} placeholder={ui("Enter case type", "કેસનો પ્રકાર લખો")} value={form.case_type_custom} onChangeText={(v) => update("case_type_custom", v)} />
           )}
 
           {showComplaint && (
             <Dropdown
               testID="complaint-type"
-              label="Complaint Type"
-              placeholder="Select complaint type"
+              label={ui("Complaint Type", "ફરિયાદનો પ્રકાર")}
+              placeholder={ui("Select complaint type", "ફરિયાદનો પ્રકાર પસંદ કરો")}
               value={form.complaint_type}
               options={[
-                { id: "private", label: "Private Complaint" },
-                { id: "police", label: "Police Complaint" },
-                { id: "other", label: "Other" },
+                { id: "private", label: ui("Private Complaint", "ખાનગી ફરિયાદ") },
+                { id: "police", label: ui("Police Complaint", "પોલીસ ફરિયાદ") },
+                { id: "other", label: ui("Other", "અન્ય") },
               ]}
               onChange={(v) => update("complaint_type", v)}
             />
@@ -1030,21 +1038,21 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             <>
               <Dropdown
                 testID="law"
-                label="Applicable Law"
-                placeholder="Select law"
+                label={ui("Applicable Law", "લાગુ પડતો કાયદો")}
+                placeholder={ui("Select law", "કાયદો પસંદ કરો")}
                 searchable
                 value={form.law_id}
                 options={laws.map((l) => ({ id: l.id, label: language === "gu" ? l.gu : l.en }))}
                 onChange={(v) => update("law_id", v)}
               />
               {form.law_id === "other_law" && (
-                <Field testID="law-custom" label="Other Law" placeholder="Specify law" value={form.law_custom} onChangeText={(v) => update("law_custom", v)} />
+                <Field testID="law-custom" label={ui("Other Law", "અન્ય કાયદો")} placeholder={ui("Specify law", "કાયદો લખો")} value={form.law_custom} onChangeText={(v) => update("law_custom", v)} />
               )}
               {sections.length > 0 && (
                 <Dropdown
                   testID="section"
-                  label="Section / Provision"
-                  placeholder="Select section"
+                  label={ui("Section / Provision", "કલમ / જોગવાઈ")}
+                  placeholder={ui("Select section", "કલમ પસંદ કરો")}
                   searchable
                   value={form.section_id}
                   options={sections.map((s: any) => ({ id: s.id, label: s.label }))}
@@ -1058,29 +1066,29 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             <>
               <Dropdown
                 testID="police-station"
-                label="Police Station"
-                placeholder="Select police station"
+                label={ui("Police Station", "પોલીસ સ્ટેશન")}
+                placeholder={ui("Select police station", "પોલીસ સ્ટેશન પસંદ કરો")}
                 searchable
                 value={form.police_station_id}
                 options={[
                   ...policeStations.map((p) => ({ id: p.id, label: language === "gu" ? p.gu : p.en })),
-                  { id: "other", label: "Other (type manually)" },
+                  { id: "other", label: ui("Other (type manually)", "અન્ય (જાતે લખો)") },
                 ]}
                 onChange={(v) => update("police_station_id", v)}
               />
               {form.police_station_id === "other" && (
-                <Field testID="police-station-custom" label="Enter Police Station" value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
+                <Field testID="police-station-custom" label={ui("Enter Police Station", "પોલીસ સ્ટેશનનું નામ લખો")} value={form.police_station_custom} onChangeText={(v) => update("police_station_custom", v)} />
               )}
             </>
           )}
 
           {showOther && (
-            <Field testID="complaint-custom" label="Other Complaint Type" placeholder="Describe complaint type" value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
+            <Field testID="complaint-custom" label={ui("Other Complaint Type", "અન્ય ફરિયાદ પ્રકાર")} placeholder={ui("Describe complaint type", "ફરિયાદની વિગત લખો")} value={form.complaint_custom} onChangeText={(v) => update("complaint_custom", v)} />
           )}
 
           <View style={{ height: Spacing.md }} />
-          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>Parties & Court</Text>
-          <Field testID="party-name" label="Primary Party / Client Name" placeholder="Applicant name" value={form.party_name} onChangeText={(v) => update("party_name", v)} />
+          <Text style={[styles.sectionLbl, { color: colors.onSurface }]}>{ui("Parties & Court", "પક્ષકારો અને કોર્ટ")}</Text>
+          <Field testID="party-name" label={ui("Primary Party / Client Name", "મુખ્ય પક્ષકાર / અસીલનું નામ")} placeholder={ui("Applicant name", "અરજદારનું નામ")} value={form.party_name} onChangeText={(v) => update("party_name", v)} />
           <RoleChips
             label={form.language === "gu" ? "પક્ષકાર ૧ ની ભૂમિકા" : "Party 1 Role"}
             options={PARTY_1_ROLE_OPTIONS.map((o) => ({
@@ -1090,7 +1098,7 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
             value={form.party_role}
             onChange={(v) => update("party_role", v)}
           />
-          <Field testID="opposite-party" label="Opposite Party (optional)" value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
+          <Field testID="opposite-party" label={ui("Opposite Party (optional)", "સામાવાળા પક્ષકાર (વૈકલ્પિક)")} value={form.opposite_party} onChangeText={(v) => update("opposite_party", v)} />
           <RoleChips
             label={form.language === "gu" ? "પક્ષકાર ૨ (સામાવાળા) ની ભૂમિકા" : "Party 2 (Opposite) Role"}
             options={PARTY_2_ROLE_OPTIONS.map((o) => ({
@@ -1102,8 +1110,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           <Dropdown
             testID="district"
-            label="District"
-            placeholder="Select district"
+            label={ui("District", "જિલ્લો")}
+            placeholder={ui("Select district", "જિલ્લો પસંદ કરો")}
             searchable
             value={form.district_id}
             options={districts.map((d) => ({ id: d.id, label: language === "gu" ? d.gu : d.en, sublabel: language === "gu" ? d.en : d.gu }))}
@@ -1111,8 +1119,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           <Dropdown
             testID="taluka"
-            label="Taluka (Optional)"
-            placeholder={form.district_id ? "Select Taluka (Optional)" : "Select District first"}
+            label={ui("Taluka (Optional)", "તાલુકો (વૈકલ્પિક)")}
+            placeholder={form.district_id ? ui("Select Taluka (Optional)", "તાલુકો પસંદ કરો (વૈકલ્પિક)") : ui("Select District first", "પહેલા જિલ્લો પસંદ કરો")}
             searchable
             disabled={!form.district_id}
             value={form.taluka_id}
@@ -1121,8 +1129,8 @@ export function CaseForm({ title, submitLabel, initial, saving, onSubmit }: Prop
           />
           <Dropdown
             testID="court"
-            label="Court"
-            placeholder="Select court"
+            label={ui("Court", "કોર્ટ")}
+            placeholder={ui("Select court", "કોર્ટ પસંદ કરો")}
             searchable
             value={form.court_id}
             favouriteIds={favCourts}

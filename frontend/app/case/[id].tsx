@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
 import { useTheme } from "@/src/theme/ThemeContext";
+import { useAppLanguage } from "@/src/context/AppLanguageContext";
 import { api } from "@/src/api/client";
 import { Radius, Spacing } from "@/src/theme/tokens";
 import { useResponsive } from "@/src/hooks/useResponsive";
@@ -18,6 +19,7 @@ import { catalogCache } from "@/src/services/catalogCache";
 
 export default function CaseDetail() {
   const { colors } = useTheme();
+  const { t, ui } = useAppLanguage();
   const { isDesktop } = useResponsive();
   const { id, _refresh } = useLocalSearchParams<{ id: string; _refresh?: string }>();
   const [c, setC] = useState<any>(null);
@@ -66,7 +68,7 @@ export default function CaseDetail() {
       setCaseDrafts((prev) => prev.filter((d) => (d.id || d._id) !== draftId));
       setDraftToDelete(null);
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Could not delete draft");
+      Alert.alert(t("errorTitle"), err?.message || ui("Could not delete draft", "ડ્રાફ્ટ કાઢી શકાયો નથી"));
     } finally {
       setDeletingDraft(false);
     }
@@ -97,7 +99,7 @@ export default function CaseDetail() {
           .catch(() => {});
       }
     } catch (e: any) {
-      setError(e?.message || "Could not load this case.");
+      setError(e?.message || ui("Could not load this case.", "આ કેસ લોડ કરી શકાયો નથી."));
     }
   }, [id]);
 
@@ -113,12 +115,16 @@ export default function CaseDetail() {
       router.replace("/(tabs)/cases");
     };
     if (typeof window !== "undefined" && window.confirm) {
-      if (window.confirm("Archive this case? You can restore it later from the archived view.")) run();
+      if (window.confirm(ui("Archive this case? You can restore it later from the archived view.", "આ કેસ આર્કાઇવ કરવો છે? તમે તેને પછીથી પુનઃસ્થાપિત કરી શકો છો."))) run();
     } else {
-      Alert.alert("Archive Case?", "You can restore it later from the archived view.", [
-        { text: "Cancel", style: "cancel" },
-        { text: "Archive", onPress: run },
-      ]);
+      Alert.alert(
+        ui("Archive Case?", "કેસ આર્કાઇવ કરવો છે?"),
+        ui("You can restore it later from the archived view.", "તમે તેને પછીથી આર્કાઇવ કરેલ વિભાગમાંથી પુનઃસ્થાપિત કરી શકો છો."),
+        [
+          { text: t("cancel"), style: "cancel" },
+          { text: ui("Archive", "આર્કાઇવ"), onPress: run },
+        ]
+      );
     }
   };
 
@@ -133,14 +139,14 @@ export default function CaseDetail() {
       router.replace("/(tabs)/cases");
     };
     if (typeof window !== "undefined" && window.confirm) {
-      if (window.confirm("Delete this case permanently? This cannot be undone. Consider archiving instead.")) run();
+      if (window.confirm(ui("Delete this case permanently? This cannot be undone. Consider archiving instead.", "આ કેસ કાયમ માટે કાઢી નાખવો છે? આ પૂર્વવત્ કરી શકાતું નથી. તેના બદલે આર્કાઇવ કરવાનું વિચારો."))) run();
     } else {
       Alert.alert(
-        "Delete Case?",
-        "This permanently deletes the case. This cannot be undone. Consider archiving instead.",
+        ui("Delete Case?", "કેસ કાઢી નાખવો છે?"),
+        ui("This permanently deletes the case. This cannot be undone. Consider archiving instead.", "આ કેસ કાયમ માટે કાઢી નાખવામાં આવશે. આ પૂર્વવત્ કરી શકાતું નથી. તેના બદલે આર્કાઇવ કરવાનું વિચારો."),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Delete", style: "destructive", onPress: run },
+          { text: t("cancel"), style: "cancel" },
+          { text: t("delete"), style: "destructive", onPress: run },
         ]
       );
     }
@@ -152,7 +158,9 @@ export default function CaseDetail() {
         {error ? (
           <>
             <Ionicons name="cloud-offline-outline" size={48} color={colors.error || "#B91C1C"} />
-            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12, fontSize: 17 }}>Couldn't load this case / કેસ લોડ કરી શકાયો નથી</Text>
+            <Text style={{ color: colors.onSurface, fontWeight: "700", marginTop: 12, fontSize: 17 }}>
+              {ui("Couldn't load this case", "આ કેસ લોડ કરી શકાયો નથી")}
+            </Text>
             <Text style={{ color: colors.muted, fontSize: 13, marginTop: 4, textAlign: "center", maxWidth: 380 }}>{error}</Text>
             <View style={{ flexDirection: "row", gap: 12, marginTop: Spacing.lg }}>
               <Pressable
@@ -160,14 +168,14 @@ export default function CaseDetail() {
                 onPress={() => safeBack("/(tabs)/cases")}
                 style={{ paddingHorizontal: Spacing.lg, paddingVertical: 10, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}
               >
-                <Text style={{ color: colors.onSurface, fontWeight: "600" }}>Back / પાછા જાઓ</Text>
+                <Text style={{ color: colors.onSurface, fontWeight: "600" }}>{t("back")}</Text>
               </Pressable>
               <Pressable
                 testID="case-error-retry"
                 onPress={load}
                 style={{ paddingHorizontal: Spacing.xl, paddingVertical: 10, borderRadius: Radius.md, backgroundColor: colors.brandPrimary }}
               >
-                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>Retry / ફરી પ્રયાસ કરો</Text>
+                <Text style={{ color: colors.onBrandPrimary, fontWeight: "700" }}>{t("retry")}</Text>
               </Pressable>
             </View>
           </>
@@ -181,27 +189,27 @@ export default function CaseDetail() {
   const isArchived = c.status === "archived";
 
   const rows: [string, string | undefined | null][] = [
-    ["Case Number", c.case_number],
-    ["Case Type", c.case_type_label],
-    ["Category", c.category],
-    ["Complaint", c.complaint_label || c.complaint_custom],
-    ["Applicable Law", c.law_label],
-    ["Section", c.section_label],
-    ["Party / Client", c.party_name],
-    ["Client Mobile", c.client_mobile],
-    ["Client Email", c.client_email],
-    ["Client Address", c.client_address],
+    [ui("Case Number", "કેસ નંબર"), c.case_number],
+    [ui("Case Type", "કેસનો પ્રકાર"), c.case_type_label],
+    [ui("Category", "શ્રેણી"), c.category],
+    [ui("Complaint", "ફરિયાદ"), c.complaint_label || c.complaint_custom],
+    [ui("Applicable Law", "લાગુ કાયદો"), c.law_label],
+    [ui("Section", "કલમ"), c.section_label],
+    [ui("Party / Client", "પક્ષકાર / અસીલ"), c.party_name],
+    [ui("Client Mobile", "અસીલ મોબાઇલ"), c.client_mobile],
+    [ui("Client Email", "અસીલ ઈમેલ"), c.client_email],
+    [ui("Client Address", "અસીલનું સરનામું"), c.client_address],
     [
-      "Court",
+      ui("Court", "કોર્ટ"),
       (c.court_source === "custom"
         ? (c.language === "gu" ? c.custom_court_name_gu : c.custom_court_name_en) || c.custom_court_name_gu || c.custom_court_name_en
         : null) || c.court_label || c.court,
     ],
-    ["District", c.district_label],
-    ["Taluka", c.taluka_label],
-    ["Police Station", c.police_station_label || c.police_station],
-    ["Language", c.language === "gu" ? "ગુજરાતી" : "English"],
-    ["Applications Generated", c.application_count ? String(c.application_count) : null],
+    [ui("District", "જિલ્લો"), c.district_label],
+    [ui("Taluka", "તાલુકો"), c.taluka_label],
+    [ui("Police Station", "પોલીસ સ્ટેશન"), c.police_station_label || c.police_station],
+    [ui("Language", "ભાષા"), c.language === "gu" ? "ગુજરાતી" : "English"],
+    [ui("Applications Generated", "તૈયાર કરેલી અરજીઓ"), c.application_count ? String(c.application_count) : null],
   ].filter(([, v]) => !!v) as any;
 
   const customFieldRows = Object.entries(c.custom_fields || {}).map(([k, v]) => ({
@@ -213,12 +221,12 @@ export default function CaseDetail() {
   // ------------------------- DESKTOP -------------------------
   if (isDesktop) {
     return (
-      <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
+      <ErrorBoundary fallbackTitle={ui("Case Details Error", "કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ")} onRetry={load}>
         <DesktopPage
         sidebarOffset={false}
         onBack={() => safeBack("/(tabs)/cases")}
-        title={c.nickname || c.party_name || "Case Details"}
-        subtitle={c.case_number ? `${c.case_number} • ${c.case_type_label || "Case"}` : c.case_type_label || "Case details"}
+        title={c.nickname || c.party_name || ui("Case Details", "કેસની વિગતો")}
+        subtitle={c.case_number ? `${c.case_number} • ${c.case_type_label || ui("Case", "કેસ")}` : c.case_type_label || ui("Case details", "કેસની વિગતો")}
         actions={
           <>
             <Pressable
@@ -227,7 +235,7 @@ export default function CaseDetail() {
               style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
             >
               <Ionicons name="create-outline" size={16} color={colors.onSurface} />
-              <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>Edit</Text>
+              <Text style={{ color: colors.onSurface, fontWeight: "700", fontSize: 13 }}>{t("edit")}</Text>
             </Pressable>
             {isArchived ? (
               <Pressable
@@ -236,7 +244,7 @@ export default function CaseDetail() {
                 style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <Ionicons name="refresh-outline" size={16} color={colors.brandPrimary} />
-                <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>Restore</Text>
+                <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 13 }}>{t("restore")}</Text>
               </Pressable>
             ) : (
               <Pressable
@@ -245,7 +253,7 @@ export default function CaseDetail() {
                 style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}
               >
                 <Ionicons name="archive-outline" size={16} color={colors.onSurfaceSecondary} />
-                <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "700", fontSize: 13 }}>Archive</Text>
+                <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "700", fontSize: 13 }}>{ui("Archive", "આર્કાઇવ")}</Text>
               </Pressable>
             )}
             <Pressable
@@ -254,7 +262,7 @@ export default function CaseDetail() {
               style={[styles.dBtn, { backgroundColor: colors.surfaceSecondary, borderColor: colors.error + "50" }]}
             >
               <Ionicons name="trash-outline" size={16} color={colors.error} />
-              <Text style={{ color: colors.error, fontWeight: "700", fontSize: 13 }}>Delete</Text>
+              <Text style={{ color: colors.error, fontWeight: "700", fontSize: 13 }}>{t("delete")}</Text>
             </Pressable>
           </>
         }
@@ -262,7 +270,7 @@ export default function CaseDetail() {
         <View style={{ flexDirection: "row", gap: Spacing.xl, alignItems: "flex-start" }}>
           <View style={{ flex: 1.2, minWidth: 0 }}>
             <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.section, { color: colors.brandPrimary }]}>CASE INFORMATION</Text>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>{ui("CASE INFORMATION", "કેસની માહિતી")}</Text>
               {rows.map(([k, v]) => (
                 <View key={k as string} style={styles.infoRow}>
                   <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{k}</Text>
@@ -272,7 +280,7 @@ export default function CaseDetail() {
               {customFieldRows.length > 0 && (
                 <>
                   <View style={{ height: Spacing.sm }} />
-                  <Text style={[styles.section, { color: colors.brandPrimary }]}>ADMIN CONFIGURED FIELDS</Text>
+                  <Text style={[styles.section, { color: colors.brandPrimary }]}>{ui("ADMIN CONFIGURED FIELDS", "વધારાની વિગતો")}</Text>
                   {customFieldRows.map((r) => (
                     <View key={r.k} style={styles.infoRow}>
                       <Text style={{ color: colors.muted, fontSize: 13, flex: 1 }}>{r.lbl}</Text>
@@ -287,7 +295,9 @@ export default function CaseDetail() {
           <View style={{ flex: 1, minWidth: 0 }}>
             {caseDrafts.length > 0 && (
               <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border, marginBottom: Spacing.lg }]}>
-                <Text style={[styles.section, { color: colors.brandPrimary }]}>INCOMPLETE DRAFT APPLICATIONS / અધૂરી અરજીઓ</Text>
+                <Text style={[styles.section, { color: colors.brandPrimary }]}>
+                  {ui("INCOMPLETE DRAFT APPLICATIONS", "અધૂરી અરજીઓ")}
+                </Text>
                 <View style={{ gap: Spacing.sm, marginTop: Spacing.xs }}>
                   {caseDrafts.map((d) => (
                     <View
@@ -307,7 +317,7 @@ export default function CaseDetail() {
                             {d.template_name || d.template_id}
                           </Text>
                           <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
-                            Last edited: {new Date(d.updated_at).toLocaleString()}
+                            {ui("Last edited:", "છેલ્લો સુધારો:")} {new Date(d.updated_at).toLocaleString()}
                           </Text>
                         </View>
                       </Pressable>
@@ -326,16 +336,15 @@ export default function CaseDetail() {
             )}
 
             <View style={[styles.dAppsCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-              <Text style={[styles.section, { color: colors.brandPrimary }]}>CREATE APPLICATION / અરજી તૈયાર કરો</Text>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>{ui("CREATE APPLICATION", "અરજી તૈયાર કરો")}</Text>
               <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md, marginTop: -4 }}>
-                Choose an application — select language and case data auto-fills.
+                {ui("Choose an application — select language and case data auto-fills.", "અરજી પસંદ કરો — ભાષા પસંદ કરતા કેસની વિગતો આપોઆપ ભરાઈ જશે.")}
               </Text>
               <View style={{ gap: Spacing.sm }}>
                 {templatePairs.length === 0 ? (
                   <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
                     <Ionicons name="document-text-outline" size={28} color={colors.muted} />
-                    <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
-                    <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No applications currently available.</Text>
+                    <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>{t("noTemplatesAvailable")}</Text>
                   </View>
                 ) : (
                   templatePairs.map((pair) => (
@@ -384,8 +393,8 @@ export default function CaseDetail() {
         />
         <ConfirmModal
           visible={draftToDelete !== null}
-          title="Delete Draft / ડ્રાફ્ટ કાઢી નાખો"
-          message="Are you sure you want to delete this draft application? This cannot be undone."
+          title={ui("Delete Draft", "ડ્રાફ્ટ કાઢી નાખો")}
+          message={ui("Are you sure you want to delete this draft application? This cannot be undone.", "શું તમે આ અધૂરી અરજી કાઢી નાખવા માંગો છો? આ ક્રિયા પૂર્વવત્ કરી શકાતી નથી.")}
           busy={deletingDraft}
           onCancel={() => { if (!deletingDraft) setDraftToDelete(null); }}
           onConfirm={confirmDeleteDraft}
@@ -397,14 +406,14 @@ export default function CaseDetail() {
 
   // ------------------------- MOBILE -------------------------
   return (
-    <ErrorBoundary fallbackTitle="Case Details Error / કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ" onRetry={load}>
+    <ErrorBoundary fallbackTitle={ui("Case Details Error", "કેસ વિગતો પ્રદર્શિત કરવામાં ક્ષતિ")} onRetry={load}>
       <SafeAreaView style={{ flex: 1, backgroundColor: colors.surface }} edges={["top"]}>
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Pressable testID="case-back" onPress={() => safeBack("/(tabs)/cases")} hitSlop={12}>
           <Ionicons name="chevron-back" size={24} color={colors.onSurface} />
         </Pressable>
         <Text style={[styles.h1, { color: colors.onSurface }]} numberOfLines={1}>
-          {c.nickname || c.party_name || "Case Details"}
+          {c.nickname || c.party_name || ui("Case Details", "કેસની વિગતો")}
         </Text>
         <Pressable testID="case-edit-btn" onPress={() => router.push({ pathname: "/case/edit/[id]", params: { id: c.id } })} hitSlop={12}>
           <Ionicons name="create-outline" size={22} color={colors.brandPrimary} />
@@ -415,16 +424,18 @@ export default function CaseDetail() {
         {isArchived && (
           <View style={[styles.archivedBanner, { backgroundColor: colors.brandTertiary, borderColor: colors.brandPrimary + "40" }]}>
             <Ionicons name="archive" size={16} color={colors.onBrandTertiary} />
-            <Text style={{ color: colors.onBrandTertiary, fontSize: 12, flex: 1, marginLeft: 8 }}>This case is archived.</Text>
+            <Text style={{ color: colors.onBrandTertiary, fontSize: 12, flex: 1, marginLeft: 8 }}>
+              {ui("This case is archived.", "આ કેસ આર્કાઇવ કરેલો છે.")}
+            </Text>
             <Pressable testID="restore-case-btn" onPress={restore}>
-              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>Restore</Text>
+              <Text style={{ color: colors.brandPrimary, fontWeight: "700", fontSize: 12 }}>{t("restore")}</Text>
             </Pressable>
           </View>
         )}
 
         {/* Case info */}
         <View style={[styles.infoCard, { backgroundColor: colors.surfaceSecondary, borderColor: colors.border }]}>
-          <Text style={[styles.section, { color: colors.brandPrimary }]}>CASE INFORMATION</Text>
+          <Text style={[styles.section, { color: colors.brandPrimary }]}>{ui("CASE INFORMATION", "કેસની માહિતી")}</Text>
           {rows.map(([k, v]) => (
             <View key={k as string} style={styles.infoRow}>
               <Text style={{ color: colors.muted, fontSize: 12, flex: 1 }}>{k}</Text>
@@ -434,7 +445,7 @@ export default function CaseDetail() {
           {customFieldRows.length > 0 && (
             <>
               <View style={{ height: Spacing.sm }} />
-              <Text style={[styles.section, { color: colors.brandPrimary }]}>ADMIN CONFIGURED FIELDS</Text>
+              <Text style={[styles.section, { color: colors.brandPrimary }]}>{ui("ADMIN CONFIGURED FIELDS", "વધારાની વિગતો")}</Text>
               {customFieldRows.map((r) => (
                 <View key={r.k} style={styles.infoRow}>
                   <Text style={{ color: colors.muted, fontSize: 12, flex: 1 }}>{r.lbl}</Text>
@@ -447,7 +458,9 @@ export default function CaseDetail() {
 
         {caseDrafts.length > 0 && (
           <View style={{ marginTop: Spacing.lg }}>
-            <Text style={[styles.section, { color: colors.onSurface, fontSize: 15 }]}>Incomplete Drafts / અધૂરી અરજીઓ</Text>
+            <Text style={[styles.section, { color: colors.onSurface, fontSize: 15 }]}>
+              {ui("Incomplete Drafts", "અધૂરી અરજીઓ")}
+            </Text>
             <View style={{ gap: Spacing.sm }}>
               {caseDrafts.map((d) => (
                 <View
@@ -467,7 +480,7 @@ export default function CaseDetail() {
                         {d.template_name || d.template_id}
                       </Text>
                       <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>
-                        Last edited: {new Date(d.updated_at).toLocaleString()}
+                        {ui("Last edited:", "છેલ્લો સુધારો:")} {new Date(d.updated_at).toLocaleString()}
                       </Text>
                     </View>
                   </Pressable>
@@ -485,15 +498,18 @@ export default function CaseDetail() {
           </View>
         )}
 
-        <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>Create Application / અરજી તૈયાર કરો</Text>
-        <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>Choose an application — select language and case data auto-fills.</Text>
+        <Text style={[styles.section, { color: colors.onSurface, marginTop: Spacing.lg, fontSize: 15 }]}>
+          {ui("Create Application", "અરજી તૈયાર કરો")}
+        </Text>
+        <Text style={{ color: colors.muted, fontSize: 12, marginBottom: Spacing.md }}>
+          {ui("Choose an application — select language and case data auto-fills.", "અરજી પસંદ કરો — ભાષા પસંદ કરતા કેસની વિગતો આપોઆપ ભરાઈ જશે.")}
+        </Text>
 
         <View style={{ gap: Spacing.sm }}>
           {templatePairs.length === 0 ? (
             <View style={{ padding: Spacing.lg, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceSecondary, borderRadius: Radius.md, borderWidth: 1, borderColor: colors.border }}>
               <Ionicons name="document-text-outline" size={28} color={colors.muted} />
-              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>કોઈ અરજી ઉપલબ્ધ નથી</Text>
-              <Text style={{ color: colors.muted, fontSize: 11, marginTop: 2 }}>No applications currently available.</Text>
+              <Text style={{ color: colors.onSurface, fontWeight: "600", marginTop: Spacing.xs, fontSize: 13 }}>{t("noTemplatesAvailable")}</Text>
             </View>
           ) : (
             templatePairs.map((pair) => (
@@ -525,12 +541,12 @@ export default function CaseDetail() {
           {!isArchived && (
             <Pressable testID="archive-case-btn" onPress={archive} style={[styles.actionRow, { borderColor: colors.border }]}>
               <Ionicons name="archive-outline" size={18} color={colors.onSurfaceSecondary} />
-              <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "700", marginLeft: Spacing.sm }}>Archive Case</Text>
+              <Text style={{ color: colors.onSurfaceSecondary, fontWeight: "700", marginLeft: Spacing.sm }}>{ui("Archive Case", "કેસ આર્કાઇવ કરો")}</Text>
             </Pressable>
           )}
           <Pressable testID="delete-case-btn" onPress={remove} style={[styles.actionRow, { borderColor: colors.error + "50" }]}>
             <Ionicons name="trash-outline" size={18} color={colors.error} />
-            <Text style={{ color: colors.error, fontWeight: "700", marginLeft: Spacing.sm }}>Delete Case</Text>
+            <Text style={{ color: colors.error, fontWeight: "700", marginLeft: Spacing.sm }}>{ui("Delete Case", "કેસ કાઢી નાખો")}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -554,8 +570,8 @@ export default function CaseDetail() {
       />
       <ConfirmModal
         visible={draftToDelete !== null}
-        title="Delete Draft / ડ્રાફ્ટ કાઢી નાખો"
-        message="Are you sure you want to delete this draft application? This cannot be undone."
+        title={ui("Delete Draft", "ડ્રાફ્ટ કાઢી નાખો")}
+        message={ui("Are you sure you want to delete this draft application? This cannot be undone.", "શું તમે આ અધૂરી અરજી કાઢી નાખવા માંગો છો? આ ક્રિયા પૂર્વવત્ કરી શકાતી નથી.")}
         busy={deletingDraft}
         onCancel={() => { if (!deletingDraft) setDraftToDelete(null); }}
         onConfirm={confirmDeleteDraft}
